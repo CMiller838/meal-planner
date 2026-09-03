@@ -6,19 +6,7 @@
   const LS_PLAN = "mp_plan";
   const SLOT_TYPES = ["breakfast", "lunch", "dinner", "snack"];
 
-  const BREAKFAST_CYCLE = ["porridge", "oats-yogurt-banana", "french-toast"];
-  const LUNCH_CYCLE = ["chicken-rice-veg-lunch", "toastie-ham-cheese", "toastie-chicken-cheese"];
-  const SNACK_ID = "egg-pb-toast-snack";
-  // Batch-cook / leftover-chain dinner sequence: roast chicken -> fajitas,
-  // chilli (3 servings = cook day + 2 leftover days), chorizo & pasta
-  // (cook day + 1 leftover day), rotated across both weeks with the
-  // existing-rotation dinners (beef mince, tuna) filling the gaps.
-  const DINNER_CYCLE = [
-    "roast-chicken", "chicken-fajitas", "chilli-con-carne", "chilli-con-carne",
-    "salmon-rice-broccoli", "chorizo-pasta", "chorizo-pasta",
-    "roast-chicken", "chicken-fajitas", "beef-mince-baked-beans", "tuna-rice-veg",
-    "chilli-con-carne", "chilli-con-carne", "chorizo-pasta",
-  ];
+  const WEEKDAY = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
   let library = [];
   let mealsById = {};
@@ -36,19 +24,7 @@
   }
 
   function generatePlan() {
-    const days = [];
-    for (let i = 0; i < 14; i++) {
-      days.push({
-        day: i + 1,
-        slots: {
-          breakfast: { mealId: BREAKFAST_CYCLE[i % BREAKFAST_CYCLE.length] },
-          lunch: { mealId: LUNCH_CYCLE[i % LUNCH_CYCLE.length] },
-          dinner: { mealId: DINNER_CYCLE[i] },
-          snack: { mealId: SNACK_ID },
-        },
-      });
-    }
-    return { days };
+    return MP.Generator.generatePlan(library, tagsData.tags, tagsData.targets, shelfData);
   }
 
   function loadPlan() {
@@ -113,8 +89,11 @@
           ${weekShort.length ? "Short across the week: " + weekShort.map(labelize).join(", ") : "All tracked nutrients covered this week"}
         </div>`;
       for (const d of weekDays) {
+        const heading = plan.startDate
+          ? `Day ${d.day} · ${WEEKDAY[MP.Generator.weekdayOf(plan.startDate, d.day)]}`
+          : `Day ${d.day}`;
         html += `<div class="day-row" data-day="${d.day}">
-          <h3>Day ${d.day}</h3>
+          <h3>${heading}</h3>
           <div class="slot-grid">
             ${SLOT_TYPES.map((slotType) => {
               const meal = mealAt(d.day, slotType);

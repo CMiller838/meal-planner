@@ -49,7 +49,13 @@
 
   function renderLibrary() {
     const grid = document.getElementById("library-grid");
-    grid.innerHTML = library
+    const query = document.getElementById("library-search").value;
+    const filtered = MP.filterMeals(library, query);
+    if (!filtered.length && query.trim()) {
+      grid.innerHTML = `<p class="empty">No meals match "${esc(query.trim())}".</p>`;
+      return;
+    }
+    grid.innerHTML = filtered
       .map(
         (meal) => `
       <div class="card" data-id="${esc(meal.id)}">
@@ -147,6 +153,8 @@
     document.getElementById("modal-overlay").addEventListener("click", (e) => {
       if (e.target.id === "modal-overlay") closeDetail();
     });
+
+    document.getElementById("library-search").addEventListener("input", renderLibrary);
 
     [tagsData, library] = await Promise.all([MP.Nutrition.load(), MP.getLibrary()]);
     renderLibrary();

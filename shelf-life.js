@@ -104,6 +104,17 @@ window.MP = window.MP || {};
     return buildWarning(dayNum, shopDayFor(dayNum), rawCat, shelfData);
   }
 
+  /**
+   * True if the meal's most perishable raw ingredient is still within its
+   * fridge window on dayNum, counting from that week's shop day. True when
+   * the meal has no tracked perishable (pantry/tinned/spices).
+   */
+  function rawSafeOn(meal, dayNum, shelfData) {
+    const cat = worstRawCategory(meal, shelfData);
+    if (!cat) return true;
+    return buildWarning(dayNum, shopDayFor(dayNum), cat, shelfData) === null;
+  }
+
   /** Returns { "day-slotType": {message, moveToDay, category} } for the whole plan. */
   function checkPlanWarnings(plan, mealsById, shelfData) {
     const occ = buildOccurrences(plan);
@@ -120,5 +131,5 @@ window.MP = window.MP || {};
     return warnings;
   }
 
-  MP.ShelfLife = { load, checkPlanWarnings, shopDayFor };
+  MP.ShelfLife = { load, checkPlanWarnings, shopDayFor, rawSafeOn };
 })();

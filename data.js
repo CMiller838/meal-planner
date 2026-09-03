@@ -41,9 +41,26 @@ window.MP = window.MP || {};
   function addToLibrary(meal) {
     const stored = JSON.parse(localStorage.getItem(LS_LIBRARY) || "[]");
     if (stored.some((m) => m.id === meal.id)) return stored;
-    stored.push(meal);
+    stored.push({ prepEffort: "quick", ...meal });
     saveLibrary(stored);
     return stored;
+  }
+
+  /**
+   * Case-insensitive substring match over name, mealTypes, and ingredient
+   * keys/labels. Blank/whitespace query returns the array unfiltered.
+   */
+  function filterMeals(meals, query) {
+    const q = (query || "").trim().toLowerCase();
+    if (!q) return meals;
+    return meals.filter((meal) => {
+      const parts = [meal.name, ...(meal.mealTypes || [])];
+      for (const ing of meal.ingredients || []) {
+        parts.push(ing.key.replace(/_/g, " "));
+        if (ing.label) parts.push(ing.label);
+      }
+      return parts.join(" ").toLowerCase().includes(q);
+    });
   }
 
   function getDismissed() {
@@ -84,6 +101,7 @@ window.MP = window.MP || {};
   MP.getLibrary = getLibrary;
   MP.saveLibrary = saveLibrary;
   MP.addToLibrary = addToLibrary;
+  MP.filterMeals = filterMeals;
   MP.getDismissed = getDismissed;
   MP.dismiss = dismiss;
   MP.initTheme = initTheme;

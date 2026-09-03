@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Meal Planner — self-check</title>
+</head>
+<body>
+<pre id="out">Running...</pre>
+
+<script src="data.js"></script>
+<script src="nutrition.js"></script>
+<script src="shelf-life.js"></script>
+<script src="generator.js"></script>
+<script>
+(async function () {
+  "use strict";
+  const lines = [];
+  let pass = 0, fail = 0;
+
+  function check(name, condition) {
+    if (condition) { pass++; lines.push(`PASS ${name}`); }
+    else { fail++; lines.push(`FAIL ${name}`); }
+  }
+  function deepEqual(a, b) { return JSON.stringify(a) === JSON.stringify(b); }
+
+  const tags = await fetch("ingredient-nutrient-tags.json").then((r) => r.json());
+  const targets = await fetch("nutrition-targets.json").then((r) => r.json());
+  const shelfData = await fetch("shelf-life.json").then((r) => r.json());
+  const library = await fetch("meals.json").then((r) => r.json());
+
+  // 1. weekendRuns from a known Monday
+  check(
+    "weekendRuns(Monday) === [[5,6,7],[12,13,14]]",
+    deepEqual(MP.Generator.weekendRuns("2026-09-07"), [[5, 6, 7], [12, 13, 14]])
+  );
+
+  // 2. weekendRuns from a known Saturday
+  check(
+    "weekendRuns(Saturday) === [[1,2],[7,8,9],[14]]",
+    deepEqual(MP.Generator.weekendRuns("2026-09-05"), [[1, 2], [7, 8, 9], [14]])
+  );
+
+  // 3. weekdayOf UTC-parse trap guard
+  {
+    const iso = "2026-09-07";
+    const [y, m, d] = iso.split("-").map(Number);
+    const expected = new Date(y, m - 1, d).getDay();
+    check("weekdayOf(startDate, 1) matches a locally-constructed Date", MP.Generator.weekdayOf(iso, 1) === expected);
+  }
+
+  // 4/5/6 need a generated plan
+  const plan = MP.Generator.generatePlan(library, tags, targets, shelfData, "2026-09-07");
+  const mealsById = Object.fromEntries(library.map((m) => [m.id, m]));
+  const runs = MP.Generator.weekendRuns("2026-09-07");
+
+  // 4. every run's first day holds a batchCook meal; leftover days hold same id or a leadsTo child
+  {
+    let ok = true;
+    for (const run of runs) {
+      if (run.length < 2) continue;
+      const first = mealsById[plan.days[run[0] - 1].slots.dinner.mealId];
+      if (!first || !first.batchCook) { ok = false; break; }
+      for (let i = 1; i < run.length; i++) {
+        const id = plan.days[run[i] - 1].slots.dinner.mealId;
+        if (id !== first.id && !(first.leadsTo || []).includes(id)) { ok = false; break; }
+      }
+    }
+    check("run-day-1 is batchCook; leftover days are same id or leadsTo child", ok);
+  }
+
+  // 5. no dinner id appears on consecutive days outside a run
+  {
+    const runDays = new Set(runs.flatMap((r) => (r.length >= 2 ? r.slice(1) : [])));
+    let ok = true;
+    for (let day = 2; day <= 14; day++) {
+      if (runDays.has(day)) continue;
+      const prev = plan.days[day - 2].slots.dinner.mealId;
+      const cur = plan.days[day - 1].slots.dinner.mealId;
+      if (prev && cur && prev === cur) { ok = false; break; }
+    }
+    check("no dinner repeats on consecutive days outside a run", ok);
+  }
+
+  // 6. tiny library still fills all 14 days and alternates dinners
+  {
+    const tiny = [
+      { id: "d1", mealTypes: ["dinner"], batchCook: false, prepEffort: "quick", ingredients: [] },
+      { id: "d2", mealTypes: ["dinner"], batchCook: false, prepEffort: "quick", ingredients: [] },
+      { id: "b1", mealTypes: ["breakfast"], batchCook: false, prepEffort: "quick", ingredients: [] },
+      { id: "l1", mealTypes: ["lunch"], batchCook: false, prepEffort: "quick", ingredients: [] },
+      { id: "s1", mealTypes: ["snack"], batchCook: false, prepEffort: "quick", ingredients: [] },
+    ];
+    let ok = true;
+    let threw = false;
+    let tinyPlan;
+    try {
+      tinyPlan = MP.Generator.generatePlan(tiny, tags, targets, shelfData, "2026-09-07");
+    } catch (e) {
+      threw = true;
+    }
+    if (!threw) {
+      for (const d of tinyPlan.days) {
+        if (!d.slots.breakfast.mealId || !d.slots.lunch.mealId || !d.slots.dinner.mealId || !d.slots.snack.mealId) ok = false;
+      }
+      for (let day = 2; day <= 14; day++) {
+        if (tinyPlan.days[day - 2].slots.dinner.mealId === tinyPlan.days[day - 1].slots.dinner.mealId) ok = false;
+      }
+    }
+    check("tiny library fills all 14 days without throwing, dinners alternate", !threw && ok);
+  }
+
+  // 7. rawSafeOn on real shelf-life.json values
+  {
+    const chorizo = mealsById["chorizo-pasta"];
+    const roast = mealsById["roast-chicken"];
+    const pantryOnly = { ingredients: [{ key: "pasta" }, { key: "gravy" }] };
+    check("rawSafeOn(chorizo-pasta, day 5) === true", MP.ShelfLife.rawSafeOn(chorizo, 5, shelfData) === true);
+    check("rawSafeOn(roast-chicken, day 5) === false", MP.ShelfLife.rawSafeOn(roast, 5, shelfData) === false);
+    check("rawSafeOn(pantry-only meal, day 5) === true", MP.ShelfLife.rawSafeOn(pantryOnly, 5, shelfData) === true);
+  }
+
+  // 8. MP.filterMeals
+  {
+    check("filterMeals matches by name fragment", MP.filterMeals(library, "chicken fajitas").some((m) => m.id === "chicken-fajitas"));
+    check("filterMeals matches by meal type", MP.filterMeals(library, "dinner").every((m) => m.mealTypes.includes("dinner")));
+    check("filterMeals matches by ingredient", MP.filterMeals(library, "yogurt").some((m) => m.id === "oats-yogurt-banana"));
+    check("filterMeals blank query returns full array", MP.filterMeals(library, "  ").length === library.length);
+  }
+
+  lines.push("", `${pass} passed, ${fail} failed`);
+  document.getElementById("out").textContent = lines.join("\n");
+})();
+</script>
+</body>
+</html>

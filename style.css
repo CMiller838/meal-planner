@@ -75,6 +75,21 @@ main { max-width: 900px; margin: 0 auto; padding: 1rem; }
 
 h1, h2, h3 { line-height: 1.2; }
 
+.search-input {
+  display: block;
+  width: 100%;
+  margin: .75rem 0 1rem;
+  padding: .6rem .8rem;
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: .6rem;
+  font-size: 1rem;
+}
+.search-input::placeholder { color: var(--text-dim); }
+
+.empty { color: var(--text-dim); font-style: italic; }
+
 /* ---- Cards ---- */
 .card-grid {
   display: grid;
