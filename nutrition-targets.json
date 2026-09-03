@@ -1,0 +1,20 @@
+{
+  "_note": "Baseline: NHS/SACN dietary reference values for an adult male, raised ~15-20% for an active 20-year-old student. Approximate targets used for coverage scoring, not a precise calorie counter.",
+  "energy_kcal": 2900,
+  "protein_g": 160,
+  "carbohydrate_g": 350,
+  "fat_g": 95,
+  "saturates_g_cap": 30,
+  "fibre_g": 35,
+  "vitA_mcg": 900,
+  "vitC_mg": 90,
+  "vitD_mcg": 15,
+  "vitB12_mcg": 3,
+  "folate_mcg": 300,
+  "calcium_mg": 1000,
+  "iron_mg": 12,
+  "zinc_mg": 11,
+  "magnesium_mg": 350,
+  "potassium_mg": 3800,
+  "sodium_mg_cap": 2300
+}

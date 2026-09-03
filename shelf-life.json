@@ -1,0 +1,14 @@
+{
+  "_note": "Generic Asda/FSA-based shelf-life estimates keyed by ingredient category, not exact SKUs (no purchase-date tracking). fridgeDays is the conservative cutoff used for warnings.",
+  "raw_chicken": { "label": "Raw chicken", "fridgeDays": 2, "frozenMonths": 9 },
+  "raw_beef_mince": { "label": "Raw beef mince", "fridgeDays": 2, "frozenMonths": 3 },
+  "raw_fish": { "label": "Raw fish (salmon/tuna steaks, fresh)", "fridgeDays": 2, "frozenMonths": 3 },
+  "tinned": { "label": "Tinned (ambient, use-by on tin)", "ambient": true },
+  "cooked_leftovers": { "label": "Cooked leftovers", "fridgeDays": 3, "frozenMonths": 3 },
+  "chorizo_opened": { "label": "Chorizo (cured, opened pack)", "fridgeDays": 14 },
+  "fresh_vegetables": { "label": "Fresh vegetables", "fridgeDays": 7 },
+  "frozen_vegetables": { "label": "Frozen vegetables", "ambient": false, "frozenMonths": 6, "useWithinDaysOfOpening": 4 },
+  "dairy": { "label": "Dairy (use-by on pack)", "fridgeDays": 7 },
+  "bread": { "label": "Bread", "fridgeDays": 5 },
+  "eggs": { "label": "Eggs", "fridgeDays": 21 }
+}
