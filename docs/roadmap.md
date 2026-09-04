@@ -57,3 +57,17 @@ mushroom-substituted version instead of a blanket reject, and the "generate a
 new plan" trigger phrase.
 
 *Entirely dependent on Phase 4's endpoints and shared exclusion-rule module.*
+
+## Phase 6 — Library CRUD & Browse cleanup (Status: Complete)
+
+**Goal:** Strip the leftover duplicate Discover section out of `index.html`,
+add a manual "Add a meal" form (name, description, recipe, meal type, with a
+soft duplicate-name warning), give the library detail modal Edit and Delete
+actions (delete backed by a confirm + undo toast) — description, recipe, and
+meal type become editable and a meal can be removed, with the removal
+propagating to Hermes via the existing whole-library sync — and add
+meal-type filter chips to the Library grid alongside the existing search.
+
+*Pure app-side UI/data work on top of the settled Phase 1 library schema and
+Phase 4 sync mechanism — no new backend surface, independent of Phases 2-5's
+generator/shopping-list work.*

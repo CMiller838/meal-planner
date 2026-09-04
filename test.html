@@ -395,6 +395,88 @@
     );
   }
 
+  // 23. MP.parseIngredients / MP.ingredientsToText
+  {
+    const keys = ["chicken_breast", "white_bread", "tortillas"];
+    check(
+      '"500g chicken breast" -> chicken_breast, 500g',
+      deepEqual(MP.parseIngredients("500g chicken breast", keys)[0], { key: "chicken_breast", qty: "500g", label: "chicken breast" })
+    );
+    check(
+      '"2 slices white bread" -> white_bread, 2 slices',
+      MP.parseIngredients("2 slices white bread", keys)[0].qty === "2 slices" &&
+      MP.parseIngredients("2 slices white bread", keys)[0].key === "white_bread"
+    );
+    check(
+      '"2 chicken breasts" -> qty "2" (unit allowlist guard)',
+      MP.parseIngredients("2 chicken breasts", keys)[0].qty === "2"
+    );
+    check(
+      '"1-2 tortillas" -> {qty:"1-2", key:"tortillas"}',
+      MP.parseIngredients("1-2 tortillas", keys)[0].qty === "1-2" && MP.parseIngredients("1-2 tortillas", keys)[0].key === "tortillas"
+    );
+    check(
+      '"Chicken Breast — leftover, sliced" -> chicken_breast, "leftover, sliced"',
+      MP.parseIngredients("Chicken Breast — leftover, sliced", keys)[0].key === "chicken_breast" &&
+      MP.parseIngredients("Chicken Breast — leftover, sliced", keys)[0].qty === "leftover, sliced"
+    );
+    check('"" -> []', deepEqual(MP.parseIngredients("", keys), []));
+    check("blank lines dropped", MP.parseIngredients("\n  \n500g chicken breast\n", keys).length === 1);
+    check(
+      'unknown ingredient never gets an empty key',
+      MP.parseIngredients("zzz unknown thing", [])[0].key === "zzz_unknown_thing"
+    );
+
+    let roundTripOk = true;
+    const allKeys = [...new Set(library.flatMap((m) => (m.ingredients || []).map((i) => i.key)))];
+    for (const meal of library) {
+      for (const ing of meal.ingredients || []) {
+        const line = MP.ingredientsToText([ing]);
+        const back = MP.parseIngredients(line, allKeys)[0];
+        if (!back || back.key !== ing.key || back.qty !== (ing.qty || "")) { roundTripOk = false; break; }
+      }
+      if (!roundTripOk) break;
+    }
+    check("every meals.json ingredient round-trips through parseIngredients(ingredientsToText())", roundTripOk);
+  }
+
+  // 24. MP.findSimilarName
+  {
+    const meals = [{ id: "a", name: "Chicken Fajitas" }, { id: "b", name: "Roast Chicken" }];
+    check("exact match found", MP.findSimilarName(meals, "Chicken Fajitas") !== null);
+    check('"chicken fajitas!" matches "Chicken Fajitas"', MP.findSimilarName(meals, "chicken fajitas!") !== null);
+    check('"Chilli" vs library === null', MP.findSimilarName(meals, "Chilli") === null);
+    check("ignoreId skips the only match", MP.findSimilarName(meals, "Chicken Fajitas", "a") === null);
+    check("3-char substring name === null (4-char floor)", MP.findSimilarName([{ id: "c", name: "Egg" }], "Eg") === null);
+  }
+
+  // 25. MP.upsertMeal / MP.removeFromLibrary
+  {
+    const key = "mp_library";
+    const stampKey = "mp_library_updated_at";
+    const original = localStorage.getItem(key);
+    try {
+      localStorage.setItem(key, JSON.stringify([{ id: "x1", name: "X1" }, { id: "x2", name: "X2" }]));
+      localStorage.removeItem(stampKey);
+
+      const upserted = MP.upsertMeal({ id: "x1", name: "X1 edited" });
+      check("upsertMeal replaces existing id in place, no growth", upserted.length === 2 && upserted.find((m) => m.id === "x1").name === "X1 edited");
+      check("upsertMeal stamps mp_library_updated_at", !!localStorage.getItem(stampKey));
+
+      const appended = MP.upsertMeal({ id: "x3", name: "X3" });
+      check("upsertMeal appends a new id", appended.length === 3);
+
+      const removed = MP.removeFromLibrary("x2");
+      check("removeFromLibrary removes by id", removed.length === 2 && !removed.some((m) => m.id === "x2"));
+
+      const noop = MP.removeFromLibrary("does-not-exist");
+      check("removeFromLibrary on absent id is a no-op", noop.length === 2);
+    } finally {
+      if (original === null) localStorage.removeItem(key);
+      else localStorage.setItem(key, original);
+    }
+  }
+
   lines.push("", `${pass} passed, ${fail} failed`);
   document.getElementById("out").textContent = lines.join("\n");
 })();

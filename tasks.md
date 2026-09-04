@@ -562,3 +562,227 @@ entries; `/discover` touches no storage and is deliberately not in it.
       the app, a third KV key, caching TheMealDB responses in the Worker, rate limiting
 - [ ] The n8n workflow itself lives outside this repo and is not version-controlled here —
       `docs/HERMES.md` is the only record of the contract it depends on
+
+## Phase 6 — Library CRUD & Browse cleanup
+
+Spec: `.claude/specs/phase6_spec.md`. Logic tasks are TDD — write the check in
+`test.html` first, watch it fail, then implement.
+
+Read spec §0 first. Pure app-side work: **no Worker change, no new KV key, no new
+dependency, no new JS file.** Delete/edit propagate to Hermes for free —
+`MP.saveLibrary()` already stamps and fires `mp:library-saved`, which
+`MP.Sync.start()` already listens for. Do not add a tombstone or any sync code.
+
+The two traps this checklist exists to prevent, both silent data loss:
+*an edit dropping the fields the form doesn't show* (§3d) and *a textarea
+round-trip folding a non-numeric `qty` into the label* (§2), which would make
+Phase 3's shopping list buy leftover chicken it already has.
+
+### 1. Strip the duplicate Discover deck (do this first — it's a deletion)
+
+- [x] `index.html` — delete lines 36–40, the `<section>` holding `#swipe-deck` and
+      `.swipe-hint`. `discover.html` is the real Discover page (fan deck, `#fan-deck`,
+      `discover.js`) and **nothing about it changes**
+- [x] `app.js` — delete `discoverPool` (line 8), `excludeIds()` (104–108), `renderDeck()`
+      (110–149), and the `MP.MealDB.getDiscoverPool` try/catch + `renderDeck()` call in
+      `init()` (193–198). Keep `cardImageHtml`/`tagRowHtml`/`collectMealTags` —
+      `renderLibrary` uses them
+- [x] `index.html` — remove `<script src="swipe.js">` and `<script src="mealdb.js">`.
+      **Do not delete either file**: `plan.js:198` uses `MP.makeSwipeable` and
+      `discover.js` needs `mealdb.js`. Both stay in `sw.js`'s `SHELL`
+- [x] Leave a one-line comment in `index.html`'s script block saying why this page no
+      longer loads them, so it doesn't read as an oversight
+- [x] `index.html` — keep `<script src="exclusions.js">` (§3c uses `MP.Exclusions.check`)
+      and **add** `<script src="shopping-list.js">` (§2 needs `pack-sizes.json` keys;
+      already in the SW shell since Phase 3)
+
+### 2. Logic & Backend Tasks — the ingredient text format (TDD)
+
+- [x] `data.js` — `MP.parseIngredients(text, knownKeys)` ⇒ `[{key, qty, label}]`.
+      Two accepted line forms, tried in order: **`label — qty`** (em dash or spaced
+      hyphen, split on the first occurrence) then **`<qty> label`** (leading quantity)
+- [x] The leading-quantity tokeniser uses a `UNIT` regex allowlist
+      (`g|kg|ml|l|tbsp|tsp|slices?|cans?|tins?|packs?|cloves?|handfuls?|bunch(es)?|pinch(es)?|rashers?|fillets?`).
+      A bare `"500g"` with nothing after it is a **label**, not a qty
+- [x] Emitted `qty` strings must stay parseable by `MP.ShoppingList.parseQty` — match its
+      shapes (`"500g"`, `"2 slices"`, `"1-2"`), don't invent new ones
+- [x] Key snapping, first hit wins: exact slug → singular/plural (`s` on/off) → **longest**
+      known key that is a substring of the slug or vice versa → raw slug
+- [x] **Never emit an empty `key`** — `data.js:77` does `ing.key.replace(...)` and throws
+      on one. Empty slug ⇒ `"ingredient"`
+- [x] `label` is stored **exactly as typed** (trimmed), not title-cased
+- [x] `ponytail:` comment naming the ceiling: substring matching, not a synonym table —
+      `"mince"` won't find `beef_mince`. Upgrade path is an `aliases` list in
+      `pack-sizes.json`, not a fuzzier matcher
+- [x] `data.js` — `MP.ingredientsToText(ingredients)` ⇒ one line per ingredient,
+      `label — qty` when `qty` is non-empty else just the label, falling back to
+      `labelize(key)` when `label` is absent
+- [x] Check: `"500g chicken breast"` ⇒ `{key:"chicken_breast", qty:"500g"}`;
+      `"2 slices white bread"` ⇒ `qty:"2 slices"`, `key:"white_bread"`
+- [x] **Check: `"2 chicken breasts"` ⇒ `qty:"2"`** — *the unit-allowlist check; it fails
+      the moment the parser treats any second token as a unit*
+- [x] Check: `"1-2 tortillas"` ⇒ `{qty:"1-2", key:"tortillas"}`;
+      `"Chicken Breast — leftover, sliced"` ⇒ `{key:"chicken_breast", qty:"leftover, sliced"}`
+- [x] Check: `""` ⇒ `[]`; blank/whitespace-only lines dropped;
+      `parseIngredients("zzz unknown thing", [])` ⇒ key `"zzz_unknown_thing"`, non-empty
+- [x] **Check: every ingredient of every meal in `meals.json` round-trips —**
+      `parseIngredients(ingredientsToText([ing]), keys)[0]` has the same `key` **and** the
+      same `qty`. *The loudest check in this phase. `toastie-chicken-cheese`'s
+      `{key:"chicken_breast", qty:"leftover, sliced"}` breaks first, and when it does,
+      Phase 3's shopping list starts buying chicken it already has*
+
+### 3. Logic & Backend Tasks — library mutation helpers (TDD)
+
+- [x] `data.js` — `MP.upsertMeal(meal)` ⇒ new library array: replace by `id`, else append.
+      Persists via `saveLibrary()` (stamp + `mp:library-saved`) — that, and nothing else,
+      is the Hermes propagation
+- [x] `data.js` — `MP.removeFromLibrary(mealId)` ⇒ new library array; absent id is a
+      silent no-op. Also persists via `saveLibrary()`
+- [x] Both **re-read `mp_library` from `localStorage` themselves** rather than trusting a
+      caller-held array — same pattern as `addToLibrary` (`data.js:60`), and it is what
+      makes Undo safe across a concurrent Hermes pull
+- [x] `data.js` — `MP.findSimilarName(meals, name, ignoreId)` ⇒ first similar meal or
+      `null`. Normalise `toLowerCase().replace(/[^a-z0-9]/g, "")`; match on equality, or
+      containment where the shorter string is ≥ 4 chars; skip `ignoreId`
+- [x] `ponytail:` comment: containment, not edit distance — `"Chilli"`/`"Chili"` won't
+      match. Add a real distance function only if near-dupes actually pile up
+- [x] Check: exact match ⇒ found; `"Chicken Fajitas"` vs `"chicken fajitas!"` ⇒ found;
+      `"Chilli"` vs `"Roast Chicken"` ⇒ null; `ignoreId` on the only match ⇒ null;
+      a 3-char substring name ⇒ null (the ≥ 4 floor)
+- [x] Check `upsertMeal`/`removeFromLibrary` against a two-meal `mp_library` fixture,
+      restoring the original value in a `finally`: upsert of an existing id replaces in
+      place and does **not** grow the array; upsert of a new id appends; remove of an
+      absent id is a no-op; `mp_library_updated_at` moves on all three
+- [x] `test.html` — no new script tags needed (`data.js`, `exclusions.js`,
+      `shopping-list.js` already included, `meals.json` already fetched)
+
+### 4. UI & Layout Tasks — the shared Add/Edit form
+
+- [x] `app.js` — `openForm(meal)` renders the form into the **existing** `#modal-sheet` /
+      `#modal-overlay`; `meal === null` is Add mode, a library meal is Edit mode.
+      `openDetail` keeps its read-only render
+- [x] Fields: `#form-name` (text, required), `#form-description` (textarea rows=2),
+      `#form-instructions` (textarea rows=6, the roadmap's "recipe"), `#form-ingredients`
+      (textarea rows=6, placeholder showing both accepted line forms), four
+      `.form-type` checkboxes (`breakfast`/`lunch`/`dinner`/`snack`), `#form-msg`,
+      `#form-save` (`.btn`), `#form-cancel` (`.ghost`)
+- [x] **Every prefilled value is set with `.value`/`.checked` after insertion**, never
+      interpolated into the HTML string — library records hold untrusted TheMealDB text
+- [x] Reuse `.sync-field` for the label+input pairs (`index.html:46-52` is exactly this
+      shape); add `textarea` to the existing `.sync-field input` CSS rule rather than
+      writing a new class
+- [x] `app.js` — `readForm(original)` spreads `...(original || {})` **first**, then
+      overwrites only `name`, `description`, `instructions`, `mealTypes`, `ingredients`
+- [x] **`batchCook`, `leadsTo`, `leftoverOf`, `servings`, `prepEffort`, `image`, `source`
+      and `id` must survive an edit untouched.** *Editing `roast-chicken`'s description
+      must not break its batch-cook chain into `chicken-fajitas`*
+- [x] **`id` is never recomputed on edit, even when the name changes** — a saved `mp_plan`
+      references meals by `mealId`, and `leadsTo`/`leftoverOf` reference them by id
+- [x] Add mode sets the downstream defaults: `id: "user-" + slug(name) + "-" +
+      Date.now().toString(36)`, `source: "manual"`, `prepEffort: "quick"`,
+      `batchCook: false` (`shopping-list.js`'s dinner dedupe reads it), `servings: 1`,
+      `image: null`
+- [x] Save step 1 — blank name ⇒ `#form-msg` `"A meal needs a name."`, stop. *Not
+      cosmetic: the Worker's `libraryError()` 400s the whole library push if any meal has
+      an empty `name`/`id`, which silently breaks sync for every other meal too*
+- [x] Save step 2 — `MP.Exclusions.check(candidate)`; `!ok` ⇒ `#form-msg`
+      `` `Can't save — ${reasons.join(", ")}.` `` and **stop**. Blocking, and it runs on
+      **Edit as well as Add** — an edit can introduce a mushroom just as easily
+- [x] Save step 3 — `MP.upsertMeal(candidate)`, `closeDetail()`, `renderLibrary()`,
+      `toast('Saved "<name>"')`
+- [x] Soft duplicate-name warning wired to the name field's `input` event:
+      `MP.findSimilarName(library, name, original?.id)` ⇒ `#form-msg` via `textContent`,
+      `Similar to "<name>" — add anyway if it's different.` **Never blocks Save**
+- [x] `app.js` `init()` — add `MP.ShoppingList.load()` to the existing `Promise.all`;
+      build `knownKeys` from `Object.keys(tagsData.tags)` + `Object.keys(packData.items)`,
+      filtering out keys starting with `_` (drops `"_note"`). A failed fetch ⇒ `[]`,
+      never a broken page init
+
+### 5. UI & Layout Tasks — detail modal actions, delete + undo
+
+- [x] `openDetail` gains a `.modal-actions` row under the instructions: `#detail-edit`
+      (`.btn`, "Edit") and `#detail-delete` (`.ghost danger`, "Delete")
+- [x] `#detail-edit` ⇒ `openForm(meal)` — re-renders the same sheet, no close/reopen flicker
+- [x] `#detail-delete` ⇒ native `confirm(`Remove "<name>" from your library?`)`, then
+      `MP.removeFromLibrary(meal.id)`, `closeDetail()`, `renderLibrary()`. No custom
+      confirm dialog — that's a modal inside a modal for one yes/no
+- [x] Undo: `toast(`Removed "<name>"`, "Undo", () => { library = MP.addToLibrary(meal);
+      renderLibrary(); })`. `addToLibrary` is the right primitive — it re-reads storage,
+      refuses on id collision, and `{prepEffort:"quick", ...meal}` preserves the record's
+      own `prepEffort`
+- [x] `app.js` — extend its local `toast(msg, actionLabel, onAction)`: message via
+      `textContent`, button appended as a real element, timeout **1800ms** without an
+      action and **6000ms** with one (1.8s is not long enough to tap Undo on a phone)
+- [x] Extend **only** `app.js`'s copy — `toast` is triplicated (`discover.js:12`,
+      `plan.js:17`); extracting a shared module is a refactor this phase didn't ask for.
+      `ponytail:` comment saying so
+- [x] `ponytail:` comment on the undo path: undo lives exactly as long as the toast —
+      no trash, no history. Once it expires, the delete has already synced and is gone
+
+### 6. UI & Layout Tasks — filter chips
+
+- [x] `index.html` — `<button id="add-meal" class="btn">+ Add a meal</button>` beside the
+      "Your Library" `<h2>`; click ⇒ `openForm(null)`
+- [x] `index.html` — static `#library-filters .chip-row` between `#library-search` and
+      `#library-grid`: five `<button class="chip" data-type="...">` for
+      `""`/`breakfast`/`lunch`/`dinner`/`snack`, `All` carrying `.active`. Five static
+      buttons need no JS to build
+- [x] `app.js` — module-level `let activeType = ""`; one **delegated** `click` listener on
+      `#library-filters` using `e.target.closest(".chip")`; sets `activeType`, toggles
+      `.active` across the row, calls `renderLibrary()`
+- [x] `renderLibrary()` — keep `MP.filterMeals(library, query)` and add one line:
+      `.filter((m) => !activeType || (m.mealTypes || []).includes(activeType))`.
+      **Do not push the type filter into `MP.filterMeals`** — it's tested (Phase 2) and
+      does one job
+- [x] Empty state, all four combinations, both interpolated values through `esc()`:
+      blank+All ⇒ `Your library is empty.`; blank+type ⇒ `No <type> meals in your library
+      yet.`; query+All ⇒ `No meals match "<q>".` (unchanged); query+type ⇒
+      `No <type> meals match "<q>".`
+
+### 7. Styling
+
+- [x] `style.css` — `.chip-row` (flex, wrap, `gap: .4rem`), `.chip` (`.tag`'s metrics +
+      `button.ghost`'s colours, bigger tap target ~2rem min-height), `.chip.active`
+      (mirror `.nav a.active`: `--accent` background, white text)
+- [x] `.sync-field textarea` — add `textarea` to the existing `.sync-field input` selector
+      (style.css:356) rather than duplicating it; plus `resize: vertical` and
+      `font-family: inherit` (textareas default to monospace)
+- [x] `.modal-actions` (flex, `gap: .6rem`), `button.ghost.danger` (`--danger` colour and
+      border), `#form-msg` (`.muted` metrics) + `#form-msg.error` (`--danger`),
+      `.toast button` (transparent, `--accent`, bold, `margin-left: .75rem`)
+- [x] All new rules use existing custom properties, dark mode first. No new CSS file, no
+      framework, no icon font
+
+### 8. Wiring & verification
+
+- [x] `sw.js` — bump `CACHE` to `"meal-planner-v6"`. **No `SHELL` change** — no new file is
+      added and `shopping-list.js` has been in the shell since Phase 3
+- [x] Confirm no `manifest.json`, `worker/`, `docs/HERMES.md` or `docs/ARCHITECTURE.md`
+      change is needed. The KV surface and the Worker's `KEYS` allowlist stay untouched
+- [x] **Manual pass — the edit-preservation check: open `roast-chicken`, Edit, change only
+      the description, Save, then confirm the stored record still has `batchCook: true`
+      and its `leadsTo` array.** Do this before committing; it is the phase's one
+      silent-data-loss failure mode
+- [x] Manual pass: serve, open `index.html` — no Discover section; Add a meal with
+      ingredients typed both ways; the near-dupe warning appears but doesn't block; a
+      mushroom ingredient **is** blocked with a reason; chips + search narrow together;
+      Delete confirms, removes, and Undo restores within the toast window
+- [x] Manual pass: with Hermes sync configured, delete a meal and confirm the next
+      `GET /library` no longer contains it — no new sync code should have been needed
+- [x] Mark Phase 6 complete in `docs/roadmap.md` and commit docs + code together
+      (`.claude/rules/roadmap-gating.md`)
+
+### Deferred (do not build in this phase)
+
+- [ ] Not built deliberately: bulk edit or multi-select delete; an image field/upload;
+      editing `servings`/`batchCook`/`prepEffort`/`leadsTo` from the form (generator
+      primitives — a different phase's decision); trash/undo history beyond the toast;
+      per-field conflict resolution; plan cleanup when a referenced meal is deleted;
+      a shared toast module; a synonym/alias table for ingredient keys; a structured
+      ingredient-row editor; multi-select filter chips; any new endpoint, KV key or
+      dependency
+- [ ] Note only: `shelf-life.js` is loaded by `index.html` but unused by `app.js`. It
+      predates this phase — leave it alone rather than pulling an unrelated cleanup in
+- [ ] `docs/FUTURE.md` — an ingredient-key alias table (so `"mince"` finds `beef_mince`)
+      is the upgrade path for §2's substring matcher. Revisit trigger: if hand-added meals
+      keep landing in the shopping list's `unpriced` group

@@ -26,17 +26,21 @@
 
 <main>
   <section class="section">
-    <h2>Your Library</h2>
+    <div class="section-head">
+      <h2>Your Library</h2>
+      <button id="add-meal" class="btn">+ Add a meal</button>
+    </div>
     <input type="search" id="library-search" class="search-input"
            placeholder="Search your library — name, meal type or ingredient"
            aria-label="Search your library">
+    <div id="library-filters" class="chip-row">
+      <button class="chip active" data-type="">All</button>
+      <button class="chip" data-type="breakfast">Breakfast</button>
+      <button class="chip" data-type="lunch">Lunch</button>
+      <button class="chip" data-type="dinner">Dinner</button>
+      <button class="chip" data-type="snack">Snack</button>
+    </div>
     <div id="library-grid" class="card-grid"></div>
-  </section>
-
-  <section class="section">
-    <h2>Discover <span style="font-weight:400;color:var(--text-dim);font-size:.85rem;">swipe suggestions from TheMealDB</span></h2>
-    <div id="swipe-deck" class="swipe-deck"></div>
-    <p class="swipe-hint">Swipe right to like · swipe left to skip · tap to view</p>
   </section>
 
   <section class="section">
@@ -62,10 +66,10 @@
 <script src="data.js"></script>
 <script src="nutrition.js"></script>
 <script src="shelf-life.js"></script>
-<script src="swipe.js"></script>
-
+<!-- swipe.js and mealdb.js are not loaded here: this page's Discover deck moved
+     to discover.html, but both files stay in sw.js's shell for that page. -->
 <script src="exclusions.js"></script>
-<script src="mealdb.js"></script>
+<script src="shopping-list.js"></script>
 <script src="hermes-sync.js"></script>
 <script src="app.js"></script>
 <script>if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js");</script>
