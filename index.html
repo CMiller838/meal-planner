@@ -19,6 +19,7 @@
   <span class="brand">🍽 Meal Planner</span>
   <a href="index.html" class="active">Browse & Add</a>
   <a href="plan.html">2-Week Plan</a>
+  <a href="shopping.html">Shopping</a>
   <button id="theme-toggle" class="icon-btn" title="Toggle dark/light mode">🌓</button>
 </nav>
 
@@ -36,6 +37,20 @@
     <div id="swipe-deck" class="swipe-deck"></div>
     <p class="swipe-hint">Swipe right to like · swipe left to skip · tap to view</p>
   </section>
+
+  <section class="section">
+    <details id="sync-settings">
+      <summary>Hermes sync</summary>
+      <p id="sync-status" class="muted">Not set up</p>
+      <label class="sync-field">Worker URL
+        <input type="url" id="sync-url" placeholder="https://....workers.dev">
+      </label>
+      <label class="sync-field">Secret token
+        <input type="password" id="sync-token" autocomplete="off">
+      </label>
+      <button id="sync-save" class="btn">Save &amp; sync now</button>
+    </details>
+  </section>
 </main>
 
 <div id="modal-overlay" class="modal-overlay hidden">
@@ -47,7 +62,9 @@
 <script src="nutrition.js"></script>
 <script src="shelf-life.js"></script>
 <script src="swipe.js"></script>
+
 <script src="mealdb.js"></script>
+<script src="hermes-sync.js"></script>
 <script src="app.js"></script>
 <script>if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js");</script>
 </body>

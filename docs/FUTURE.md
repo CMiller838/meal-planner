@@ -8,7 +8,7 @@ is, why it was parked, and a concrete trigger for revisiting.
 Download the liked-meal library (`mp_library`) as a JSON file, and a paste
 box to restore it. Would double as a manual backup.
 
-- **Why parked**: Phase 2's Hermes bridge (Cloudflare Worker + KV) already
+- **Why parked**: Phase 4's Hermes bridge (Cloudflare Worker + KV) already
   gives the library an off-device copy, which covers the main backup need.
 - **Revisit trigger**: if the Worker+KV store is ever unreliable/lost, or
   before removing reliance on it, add a manual export/import as a fallback.
@@ -40,6 +40,20 @@ Monday-start plan.
   weekend run — the cheap mitigation today is adding more long-shelf-life
   batch dinners to `meals.json`, not code.
 
+## Fill in `meals.json` quantities for accurate shopping totals
+
+Phase 3's shopping list (`shopping-list.js`) sums parsed `qty` strings, but
+most `meals.json` ingredients have blank or unparseable `qty` (e.g. `""`,
+`"handful, grated"`, `"whole"`), so most lines resolve to "1 pack of the
+default size" rather than a precise amount.
+
+- **Why parked**: the spec (`.claude/specs/phase3_spec.md` §0) is explicit
+  that this is a data problem, not a code problem — a smarter parser can't
+  extract a quantity nobody wrote down.
+- **Revisit trigger**: none needed — this is an ongoing "fill in `qty` as
+  you go" task, not a one-time fix. Do it opportunistically when editing a
+  meal for another reason.
+
 ## "Eating out" placeholder slot
 
 A non-meal option for a plan slot (e.g. takeaway night) so it doesn't break
@@ -49,3 +63,24 @@ the plan grid or confuse shelf-life warnings.
   are happening often enough to need explicit modeling yet.
 - **Revisit trigger**: if eating-out nights become regular enough that
   working around them in the plan UI gets annoying.
+
+## Hermes sync: offline write queue / retry-backoff
+
+Phase 4's `hermes-sync.js` is last-write-wins with no retry: an edit made
+while offline (or during a failed request) is silently overwritten by any
+newer remote write once connectivity returns, and there's no queued retry.
+
+- **Why parked**: `decide()` is deliberately a plain timestamp comparison,
+  not a merge; a queued push with retry/backoff is a bigger feature than a
+  tweak to it.
+- **Revisit trigger**: if an offline edit is ever actually lost in practice.
+
+## Hermes sync: no conflict UI
+
+The app never tells you it discarded a local library version on pull — it
+just applies the remote silently.
+
+- **Why parked**: last-write-wins was the chosen model for this phase; a
+  conflict UI implies a merge model instead.
+- **Revisit trigger**: if a real overwrite is ever noticed and it matters
+  which version was lost.

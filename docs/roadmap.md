@@ -29,7 +29,7 @@ generator can favour on weeknights, and ingredient/meal-type search on Browse
 *Sequenced first because the prep-effort tag changes the meal record shape,
 which every later phase (shopping list, KV sync) reads.*
 
-## Phase 3 — Shopping list from the 2-week plan
+## Phase 3 — Shopping list from the 2-week plan (Status: Complete)
 
 **Goal:** Turn a generated plan into a per-shop-day (day 1 / day 8) shopping
 list: aggregate ingredient quantities, round to real Asda pack sizes from a new
@@ -38,7 +38,7 @@ hand-maintained data file, and show a rough total cost.
 *Follows Phase 2 because it aggregates generator output, which the variety
 guard and batch-cook chains change.*
 
-## Phase 4 — Hermes bridge (Cloudflare Worker + KV)
+## Phase 4 — Hermes bridge (Cloudflare Worker + KV) (Status: Complete)
 
 **Goal:** Stand up the secret-gated Worker + KV sync so the liked-meal library
 moves both ways between the app and Hermes (last-write-wins), and the app acts

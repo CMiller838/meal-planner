@@ -148,6 +148,35 @@
     });
   }
 
+  function initSyncSettings() {
+    const status = document.getElementById("sync-status");
+    const urlInput = document.getElementById("sync-url");
+    const tokenInput = document.getElementById("sync-token");
+    const cfg = MP.Sync.config();
+    urlInput.value = cfg.url;
+    tokenInput.value = cfg.token;
+
+    const STATUS_TEXT = {
+      pull: "Pulled library from Hermes",
+      push: "Pushed library to Hermes",
+      noop: "In sync",
+      error: "Sync failed — check the URL and token",
+      off: "Not set up",
+    };
+
+    document.getElementById("sync-save").addEventListener("click", async () => {
+      MP.Sync.saveConfig(urlInput.value, tokenInput.value);
+      status.textContent = "Syncing…";
+      const result = await MP.Sync.syncLibrary();
+      status.textContent = STATUS_TEXT[result] || "Not set up";
+    });
+
+    window.addEventListener("mp:library-pulled", async () => {
+      library = await MP.getLibrary();
+      renderLibrary();
+    });
+  }
+
   async function init() {
     MP.initTheme();
     document.getElementById("modal-overlay").addEventListener("click", (e) => {
@@ -158,6 +187,8 @@
 
     [tagsData, library] = await Promise.all([MP.Nutrition.load(), MP.getLibrary()]);
     renderLibrary();
+    initSyncSettings();
+    MP.Sync.start();
 
     try {
       discoverPool = await MP.MealDB.getDiscoverPool(excludeIds());

@@ -235,6 +235,48 @@ button.ghost {
   padding: .6rem 1rem;
   cursor: pointer;
 }
+.btn {
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: .6rem;
+  padding: .7rem 1.1rem;
+  font-size: 1rem;
+  cursor: pointer;
+}
+.hidden { display: none; }
+
+/* ---- Hermes sync ---- */
+#sync-settings summary { cursor: pointer; font-weight: 600; }
+.sync-field {
+  display: block;
+  margin: .75rem 0 .25rem;
+  font-size: .85rem;
+  color: var(--text-dim);
+}
+.sync-field input {
+  display: block;
+  width: 100%;
+  margin-top: .3rem;
+  padding: .6rem .8rem;
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: .6rem;
+  font-size: 1rem;
+}
+#sync-save { margin-top: 1rem; }
+.banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: .75rem;
+  background: var(--surface);
+  border: 1px solid var(--accent);
+  border-radius: .75rem;
+  padding: .75rem 1rem;
+  margin-bottom: 1rem;
+}
 .toast {
   position: fixed;
   bottom: 1.25rem;
@@ -302,3 +344,48 @@ button.ghost {
 .coverage-list { display: flex; flex-wrap: wrap; gap: .3rem; margin-top: .4rem; }
 
 .top-actions { display: flex; gap: .6rem; margin-bottom: 1rem; flex-wrap: wrap; }
+
+.muted { color: var(--text-dim); font-size: .9rem; }
+
+/* ---- Shopping list page ---- */
+.shop-block {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: .9rem;
+  padding: .75rem 1rem;
+  margin-bottom: 1rem;
+}
+.shop-block h3 {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin: 0 0 .5rem;
+  font-size: 1rem;
+}
+.shop-total { color: var(--accent); font-size: .95rem; }
+.shop-list { list-style: none; margin: 0; padding: 0; }
+.shop-line {
+  border-bottom: 1px solid var(--border);
+  padding: .5rem 0;
+}
+.shop-line:last-child { border-bottom: none; }
+.shop-line label {
+  display: grid;
+  grid-template-columns: auto 3.5rem 1fr auto;
+  align-items: center;
+  gap: .5rem;
+  cursor: pointer;
+}
+.shop-qty { color: var(--text-dim); font-size: .85rem; }
+.shop-price { color: var(--text-dim); font-size: .85rem; }
+.shop-why {
+  display: block;
+  margin: .2rem 0 0 1.6rem;
+  color: var(--text-dim);
+  font-size: .78rem;
+  font-style: italic;
+}
+.shop-line.ticked .shop-name { text-decoration: line-through; color: var(--text-dim); }
+.shop-extra { margin-top: .6rem; }
+.shop-extra summary { cursor: pointer; color: var(--text-dim); font-size: .88rem; }
+.shop-extra .shop-list { margin-top: .5rem; }

@@ -11,6 +11,8 @@
 <script src="nutrition.js"></script>
 <script src="shelf-life.js"></script>
 <script src="generator.js"></script>
+<script src="shopping-list.js"></script>
+<script src="hermes-sync.js"></script>
 <script>
 (async function () {
   "use strict";
@@ -125,6 +127,188 @@
     check("filterMeals matches by meal type", MP.filterMeals(library, "dinner").every((m) => m.mealTypes.includes("dinner")));
     check("filterMeals matches by ingredient", MP.filterMeals(library, "yogurt").some((m) => m.id === "oats-yogurt-banana"));
     check("filterMeals blank query returns full array", MP.filterMeals(library, "  ").length === library.length);
+  }
+
+  // 9. MP.ShoppingList.parseQty
+  {
+    check('parseQty("500g") == {500,"g"}', deepEqual(MP.ShoppingList.parseQty("500g"), { value: 500, unit: "g" }));
+    check('parseQty("2 slices") == {2,"slices"}', deepEqual(MP.ShoppingList.parseQty("2 slices"), { value: 2, unit: "slices" }));
+    check('parseQty("1.5kg") == {1500,"g"}', deepEqual(MP.ShoppingList.parseQty("1.5kg"), { value: 1500, unit: "g" }));
+    check('parseQty("1-2") == {1,"each"}', deepEqual(MP.ShoppingList.parseQty("1-2"), { value: 1, unit: "each" }));
+    check('parseQty("") == null', MP.ShoppingList.parseQty("") === null);
+    check('parseQty("handful, grated") == null', MP.ShoppingList.parseQty("handful, grated") === null);
+    check('parseQty("Bisto") == null', MP.ShoppingList.parseQty("Bisto") === null);
+    check('parseQty("whole") == null', MP.ShoppingList.parseQty("whole") === null);
+  }
+
+  // 10. MP.ShoppingList.packsFor
+  {
+    const gPack = { packSize: 500, unit: "g" };
+    check("packsFor(900g, 500g pack) == 2", MP.ShoppingList.packsFor({ value: 900, unit: "g" }, gPack) === 2);
+    check("packsFor(500g, 500g pack) == 1", MP.ShoppingList.packsFor({ value: 500, unit: "g" }, gPack) === 1);
+    check("packsFor(null, item) == 1", MP.ShoppingList.packsFor(null, gPack) === 1);
+    check("packsFor(unit mismatch) == 1", MP.ShoppingList.packsFor({ value: 2, unit: "tbsp" }, gPack) === 1);
+    check("packsFor(unknown item) == 1", MP.ShoppingList.packsFor({ value: 900, unit: "g" }, null) === 1);
+  }
+
+  const packData = {
+    pricesAsOf: "2026-09",
+    items: {
+      beef_mince: { label: "Beef mince", packSize: 500, unit: "g", price: 4 },
+      tortillas: { label: "Tortillas", packSize: 1, unit: "each", price: 1.3 },
+      cheese: { label: "Cheese", packSize: 400, unit: "g", price: 3 },
+      rice: { label: "Rice", packSize: 1000, unit: "g", price: 1.2 },
+      peppers: { label: "Peppers", packSize: 1, unit: "each", price: 1.1 },
+      onion: { label: "Onion", packSize: 1000, unit: "g", price: 0.85 },
+      cannellini_beans: { label: "Cannellini beans", packSize: 1, unit: "tins", price: 0.65 },
+      white_bread: { label: "White bread", packSize: 16, unit: "slices", price: 1.1 },
+      gravy: { label: "Gravy", packSize: 1, unit: "each", price: 1.6, staple: true },
+    },
+  };
+
+  function emptyPlanDays() {
+    return Array.from({ length: 14 }, (_, i) => ({
+      day: i + 1,
+      slots: { breakfast: null, lunch: null, dinner: null, snack: null },
+    }));
+  }
+
+  // 11. Batch dedupe: chilli-con-carne on days 5,6,7 -> beef_mince once
+  {
+    const days = emptyPlanDays();
+    [5, 6, 7].forEach((d) => (days[d - 1].slots.dinner = { mealId: "chilli-con-carne" }));
+    const plan = { startDate: "2026-09-07", days };
+    const lists = MP.ShoppingList.buildLists(plan, mealsById, packData);
+    const line = lists["1"].lines.find((l) => l.key === "beef_mince");
+    check(
+      "batch dedupe: chilli-con-carne days 5-7 yields beef_mince once at 1 pack",
+      !!line && line.packs === 1 && deepEqual(line.needed, { value: 500, unit: "g" })
+    );
+  }
+
+  // 12. Non-batch repeat is not deduped (both occurrences counted, not folded into one)
+  {
+    const days = emptyPlanDays();
+    [1, 2].forEach((d) => (days[d - 1].slots.snack = { mealId: "egg-pb-toast-snack" }));
+    const plan = { startDate: "2026-09-07", days };
+    const eggPack = { items: { egg: { label: "Egg", packSize: 6, unit: "each", price: 1.75 } } };
+    const lists = MP.ShoppingList.buildLists(plan, mealsById, eggPack);
+    const line = lists["1"].lines.find((l) => l.key === "egg");
+    check(
+      "non-batchCook meal repeated on days 1-2 sums both occurrences (2 eggs)",
+      !!line && deepEqual(line.needed, { value: 2, unit: "each" })
+    );
+  }
+
+  // 13/14. Leftover exclusion, both forms
+  {
+    const days = emptyPlanDays();
+    days[0].slots.dinner = { mealId: "roast-chicken" };
+    days[1].slots.dinner = { mealId: "chicken-fajitas" };
+    days[2].slots.lunch = { mealId: "toastie-chicken-cheese" };
+    const plan = { startDate: "2026-09-07", days };
+    const lists = MP.ShoppingList.buildLists(plan, mealsById, packData);
+    const week1keys = [...lists["1"].lines, ...lists["1"].staples, ...lists["1"].unpriced].map((l) => l.key);
+    check("chicken-fajitas contributes tortillas", week1keys.includes("tortillas"));
+    check("chicken-fajitas does not contribute leftover_chicken", !week1keys.includes("leftover_chicken"));
+    check("toastie-chicken-cheese contributes white_bread and cheese", week1keys.includes("white_bread") && week1keys.includes("cheese"));
+    check("toastie-chicken-cheese does not contribute chicken_breast (leftover, sliced)", !week1keys.includes("chicken_breast"));
+  }
+
+  // 15. Shop-day split
+  {
+    const days = emptyPlanDays();
+    days[6].slots.dinner = { mealId: "salmon-rice-broccoli" };
+    days[7].slots.dinner = { mealId: "salmon-rice-broccoli" };
+    const plan = { startDate: "2026-09-07", days };
+    const salmonPack = { items: { salmon: { label: "Salmon", packSize: 1, unit: "each", price: 4.5 } } };
+    const lists = MP.ShoppingList.buildLists(plan, mealsById, salmonPack);
+    check("day 7 dinner lands in shop list 1", lists["1"].lines.some((l) => l.key === "salmon"));
+    check("day 8 dinner lands in shop list 8", lists["8"].lines.some((l) => l.key === "salmon"));
+  }
+
+  // 16. Unknown key unpriced, staple excluded, total matches hand-computed sum
+  {
+    const days = emptyPlanDays();
+    days[0].slots.dinner = { mealId: "roast-chicken" }; // gravy (staple), carrots+potatoes (unpriced here), chicken_roast
+    const plan = { startDate: "2026-09-07", days };
+    const minimalPack = {
+      items: {
+        chicken_roast: { label: "Chicken", packSize: 1, unit: "each", price: 5.5 },
+        gravy: { label: "Gravy", packSize: 1, unit: "each", price: 1.6, staple: true },
+      },
+    };
+    const lists = MP.ShoppingList.buildLists(plan, mealsById, minimalPack);
+    const carrotsLine = lists["1"].unpriced.find((l) => l.key === "carrots");
+    const gravyLine = lists["1"].staples.find((l) => l.key === "gravy");
+    check("unknown key lands in unpriced and contributes 0", !!carrotsLine && carrotsLine.lineCost === 0);
+    check("staple:true lands in staples, excluded from total", !!gravyLine && lists["1"].total === 5.5);
+  }
+
+  // 17. Edge cases: null slots, missing mealId, empty ingredients
+  {
+    const days = emptyPlanDays();
+    days[0].slots.dinner = { mealId: "does-not-exist" };
+    days[1].slots.dinner = null;
+    const plan = { startDate: "2026-09-07", days };
+    let threw = false;
+    let lists;
+    try {
+      lists = MP.ShoppingList.buildLists(plan, mealsById, packData);
+    } catch (e) {
+      threw = true;
+    }
+    check("missing mealId and null slots are skipped without throwing", !threw && lists["1"].lines.length === 0);
+  }
+
+  // 18. MP.Sync.decide — last-write-wins
+  {
+    const { decide, needsPlan } = MP.Sync;
+    check(
+      'decide(null, remote) === "pull" (Trap 1: unstamped seed never beats a real library)',
+      decide(null, { updatedAt: "2026-09-01T00:00:00Z", meals: [] }) === "pull"
+    );
+    check('decide(null, null) === "push" (first-ever bootstrap)', decide(null, null) === "push");
+    check('decide(stamped, null) === "push"', decide("2026-09-02T00:00:00Z", null) === "push");
+    check(
+      'decide(newer local, older remote) === "push"',
+      decide("2026-09-02T00:00:00Z", { updatedAt: "2026-09-01T00:00:00Z", meals: [] }) === "push"
+    );
+    check(
+      'decide(older local, newer remote) === "pull"',
+      decide("2026-09-01T00:00:00Z", { updatedAt: "2026-09-02T00:00:00Z", meals: [] }) === "pull"
+    );
+    check(
+      "decide(identical timestamps) === \"noop\" (must not thrash KV on every poll)",
+      decide("2026-09-01T00:00:00Z", { updatedAt: "2026-09-01T00:00:00Z", meals: [] }) === "noop"
+    );
+    check(
+      'decide(local, garbage remote updatedAt) === "push"',
+      decide("2026-09-01T00:00:00Z", { updatedAt: "not a date", meals: [] }) === "push"
+    );
+  }
+
+  // 19. MP.Sync.needsPlan
+  {
+    const { needsPlan } = MP.Sync;
+    check("needsPlan(null, null) === false", needsPlan(null, null) === false);
+    check("needsPlan({}, null) === false", needsPlan({}, null) === false);
+    check(
+      "needsPlan(unacked flag, null) === true",
+      needsPlan({ requestedAt: "2026-09-03T10:00:00Z", ackedAt: null }, null) === true
+    );
+    check(
+      "needsPlan(ackedAt after requestedAt) === false",
+      needsPlan({ requestedAt: "2026-09-03T10:00:00Z", ackedAt: "2026-09-03T11:00:00Z" }, null) === false
+    );
+    check(
+      "needsPlan(unacked flag, localAckedAt after requestedAt) === false (KV propagation suppression)",
+      needsPlan({ requestedAt: "2026-09-03T10:00:00Z", ackedAt: null }, "2026-09-03T11:00:00Z") === false
+    );
+    check(
+      "needsPlan(new requestedAt after both acks) === true",
+      needsPlan({ requestedAt: "2026-09-03T12:00:00Z", ackedAt: "2026-09-03T11:00:00Z" }, "2026-09-03T11:00:00Z") === true
+    );
   }
 
   lines.push("", `${pass} passed, ${fail} failed`);

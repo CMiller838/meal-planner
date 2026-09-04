@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-<title>Meal Planner — 2-Week Plan</title>
+<title>Meal Planner — Shopping List</title>
 <meta name="theme-color" content="#121212" />
 <link rel="manifest" href="manifest.json" />
 <link rel="icon" href="icons/icon-192.png" />
@@ -18,38 +18,23 @@
 <nav class="nav">
   <span class="brand">🍽 Meal Planner</span>
   <a href="index.html">Browse & Add</a>
-  <a href="plan.html" class="active">2-Week Plan</a>
-  <a href="shopping.html">Shopping</a>
+  <a href="plan.html">2-Week Plan</a>
+  <a href="shopping.html" class="active">Shopping</a>
   <button id="theme-toggle" class="icon-btn" title="Toggle dark/light mode">🌓</button>
 </nav>
 
 <main>
-  <div id="hermes-banner" class="banner hidden">
-    <span>Hermes asked for a new plan</span>
-    <button id="hermes-generate" class="btn">Generate</button>
-  </div>
-  <div class="top-actions">
-    <button id="generate-btn" class="primary">Generate Plan</button>
-  </div>
-  <div id="plan-root"></div>
+  <section class="section">
+    <h2>Shopping list</h2>
+    <p id="shopping-meta" class="muted"></p>
+  </section>
+  <div id="shopping-root"></div>
 </main>
 
-<div id="swap-overlay" class="modal-overlay hidden">
-  <div id="swap-sheet" class="modal-sheet"></div>
-</div>
-<div id="detail-overlay" class="modal-overlay hidden" style="z-index:60;">
-  <div id="detail-sheet" class="modal-sheet"></div>
-</div>
-<div id="toast-root"></div>
-
 <script src="data.js"></script>
-<script src="nutrition.js"></script>
 <script src="shelf-life.js"></script>
-<script src="swipe.js"></script>
-<script src="mealdb.js"></script>
-<script src="generator.js"></script>
-<script src="hermes-sync.js"></script>
-<script src="plan.js"></script>
+<script src="shopping-list.js"></script>
+<script src="shopping.js"></script>
 <script>if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js");</script>
 </body>
 </html>
