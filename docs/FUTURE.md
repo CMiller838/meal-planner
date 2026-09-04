@@ -84,3 +84,16 @@ just applies the remote silently.
   conflict UI implies a merge model instead.
 - **Revisit trigger**: if a real overwrite is ever noticed and it matters
   which version was lost.
+
+## `/coverage` endpoint for Hermes
+
+Phase 5's Q&A capability answers nutrition questions by having Hermes fetch
+`ingredient-nutrient-tags.json` / `nutrition-targets.json` directly, rather
+than exposing `MP.Nutrition.dayCoverage()` over HTTP.
+
+- **Why parked**: chat Q&A is qualitative ("is this high in protein?"), and
+  the tag files answer that directly — an endpoint would exist only to
+  compute a score nobody asks for in a sentence.
+- **Revisit trigger**: if Hermes' coverage answers ever disagree with the
+  plan page's banner, expose `dayCoverage` as `GET /coverage` rather than
+  teaching n8n the scoring rules.

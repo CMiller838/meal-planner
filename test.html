@@ -13,6 +13,7 @@
 <script src="generator.js"></script>
 <script src="shopping-list.js"></script>
 <script src="hermes-sync.js"></script>
+<script src="exclusions.js"></script>
 <script>
 (async function () {
   "use strict";
@@ -308,6 +309,89 @@
     check(
       "needsPlan(new requestedAt after both acks) === true",
       needsPlan({ requestedAt: "2026-09-03T12:00:00Z", ackedAt: "2026-09-03T11:00:00Z" }, "2026-09-03T11:00:00Z") === true
+    );
+  }
+
+  // 20. MP.Exclusions.hasMushroom
+  {
+    const { hasMushroom } = MP.Exclusions;
+    check('hasMushroom([{key:"mushrooms"}]) === true', hasMushroom([{ key: "mushrooms" }]) === true);
+    check(
+      'hasMushroom([{key:"beef", label:"Mushroom Soup Mix"}]) === true (label checked too)',
+      hasMushroom([{ key: "beef", label: "Mushroom Soup Mix" }]) === true
+    );
+    check('hasMushroom([{key:"chicken_breast"}]) === false', hasMushroom([{ key: "chicken_breast" }]) === false);
+  }
+
+  // 21. MP.Exclusions.isStandaloneEgg
+  {
+    const { isStandaloneEgg } = MP.Exclusions;
+    check('isStandaloneEgg(bare egg) === true', isStandaloneEgg({ ingredients: [{ key: "eggs" }] }) === true);
+    check(
+      'isStandaloneEgg(egg + bread) === true',
+      isStandaloneEgg({ ingredients: [{ key: "egg" }, { key: "white_bread" }] }) === true
+    );
+    check("isStandaloneEgg(seed french-toast) === false", isStandaloneEgg(mealsById["french-toast"]) === false);
+    check(
+      "isStandaloneEgg(seed egg-pb-toast-snack) === false (the loud one)",
+      isStandaloneEgg(mealsById["egg-pb-toast-snack"]) === false
+    );
+  }
+
+  // 22. MP.Exclusions.hasVegInToastie
+  {
+    const { hasVegInToastie } = MP.Exclusions;
+    check(
+      'hasVegInToastie(toastie + onions) === true',
+      hasVegInToastie({ id: "toastie-x", ingredients: [{ key: "onions" }] }) === true
+    );
+    check("hasVegInToastie(seed toastie-ham-cheese) === false", hasVegInToastie(mealsById["toastie-ham-cheese"]) === false);
+    check(
+      "hasVegInToastie(non-toastie with onions) === false (rule is veg-in-toasties, not veg dislike)",
+      hasVegInToastie({ id: "beef-mince-baked-beans", ingredients: [{ key: "onions" }] }) === false
+    );
+  }
+
+  // 23. every meal in meals.json passes check().ok
+  {
+    const failing = library.filter((m) => !MP.Exclusions.check(m).ok);
+    check(
+      "every meal in meals.json passes check().ok (best single check in this phase)",
+      failing.length === 0
+    );
+  }
+
+  // 24. MP.Exclusions.sanitize
+  {
+    const { sanitize } = MP.Exclusions;
+    const mushroomMeal = {
+      id: "m1",
+      ingredients: [{ key: "mushrooms", label: "Mushrooms", qty: "200g" }, { key: "rice", qty: "" }],
+    };
+    const subs = { mushroom: { key: "courgette", label: "Courgette" } };
+    const result = sanitize(mushroomMeal, subs);
+    check("sanitize(mushroom meal) result has no mushroom", !!result && !MP.Exclusions.hasMushroom(result.meal.ingredients));
+    check("sanitize(mushroom meal) substituted.length === 1", !!result && result.substituted.length === 1);
+    check(
+      "sanitize does not mutate its input (original still has mushroom)",
+      MP.Exclusions.hasMushroom(mushroomMeal.ingredients)
+    );
+
+    check(
+      "sanitize(standalone-egg meal) === null",
+      sanitize({ ingredients: [{ key: "egg" }] }, subs) === null
+    );
+
+    const cleanMeal = { id: "c1", ingredients: [{ key: "rice" }] };
+    const cleanResult = sanitize(cleanMeal, subs);
+    check(
+      "sanitize(clean meal) returns same ingredients, substituted: []",
+      !!cleanResult && deepEqual(cleanResult.meal.ingredients, cleanMeal.ingredients) && cleanResult.substituted.length === 0
+    );
+
+    check(
+      "sanitize(mushroom meal, {}) === null (degrade to reject, not pass-through)",
+      sanitize(mushroomMeal, {}) === null
     );
   }
 

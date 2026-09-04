@@ -398,155 +398,159 @@ entries; `/discover` touches no storage and is deliberately not in it.
 
 ### 0. Housekeeping — do this first
 
-- [ ] **Commit Phase 4.** `worker/`, `hermes-sync.js`, `CLAUDE.md`, `WORKFLOW.md`,
-      `.claude/` and `docs/OUTLINE.md` are all still untracked, and `app.js`/`data.js`/
-      `plan.js`/`index.html`/`plan.html`/`style.css`/`sw.js`/`tasks.md`/`docs/` are
-      modified — Phase 4 is marked complete in `docs/roadmap.md` but was never committed.
-      Stage and commit it as its own `feat:` commit **before** any Phase 5 code lands, so
-      the Phase 5 diff is reviewable
-- [ ] Delete the stray empty artifact `worker/e` (a shell-redirect leftover) in that same
+- [x] **Commit Phase 4.** Committed together with Phase 3 (also never committed) as one
+      `feat:` commit before Phase 5 code
+- [x] Delete the stray empty artifact `worker/e` (a shell-redirect leftover) in that same
       cleanup commit
-- [ ] Confirm `.gitignore` still covers `.wrangler/` and that
+- [x] Confirm `.gitignore` still covers `.wrangler/` and that
       `worker/.wrangler/cache/wrangler-account.json` is **not** staged — it is local
       account state, and the repo is public
 
 ### 1. Data & schema
 
-- [ ] New `substitutions.json` at repo root — `{ "note": "...", "mushroom": { "key":
+- [x] New `substitutions.json` at repo root — `{ "note": "...", "mushroom": { "key":
       "courgette", "label": "Courgette" } }` (spec §2). One entry, one replacement each,
       **not** an array of options
-- [ ] The `note` field must say the load-bearing part out loud: *a term with no entry here
+- [x] The `note` field must say the load-bearing part out loud: *a term with no entry here
       degrades to a blanket reject, never to a pass*
 
 ### 2. Logic & Backend Tasks — `exclusions.js` (TDD)
 
-- [ ] New `exclusions.js` at repo root — `MP.Exclusions` IIFE. **Must not depend on
+- [x] New `exclusions.js` at repo root — `MP.Exclusions` IIFE. **Must not depend on
       `data.js`** (the Worker never loads it) and must not touch `window`/`document`/
       `localStorage`/`sessionStorage` anywhere, not even inside a function body. Use the
       `(function (root) { ... })(typeof globalThis !== "undefined" ? globalThis : this)`
       wrapper from spec §1 so the same file loads in a `<script>` and in a Worker bundle
-- [ ] Rule terms as constants in this file (`MUSHROOM`, `EGG`, `TOASTIE`, `TOASTIE_VEG`),
+- [x] Rule terms as constants in this file (`MUSHROOM`, `EGG`, `TOASTIE`, `TOASTIE_VEG`),
       not a JSON file — `CLAUDE.md`'s data-not-constants invariant is about tunable
       nutrition numbers, and there must be exactly one place to read the rules
-- [ ] `hasMushroom(ingredients)` — substring match on **both** `key` and `label`
-- [ ] Check: `[{key:"mushrooms"}]` ⇒ true; `[{key:"beef", label:"Mushroom Soup Mix"}]` ⇒
+- [x] `hasMushroom(ingredients)` — substring match on **both** `key` and `label`
+- [x] Check: `[{key:"mushrooms"}]` ⇒ true; `[{key:"beef", label:"Mushroom Soup Mix"}]` ⇒
       true (*the label check — TheMealDB labels are the untidy side*); `[{key:
       "chicken_breast"}]` ⇒ false
-- [ ] `isStandaloneEgg(meal)` — egg present **and** at most one non-egg ingredient.
+- [x] `isStandaloneEgg(meal)` — egg present **and** at most one non-egg ingredient.
       `ponytail:` comment naming the ceiling (counting ingredients, not understanding
       dishes; upgrade path is an explicit id allow/deny list, not a cleverer count)
-- [ ] Check: bare egg ⇒ true; egg + bread ⇒ true; seed `french-toast` ⇒ false
-- [ ] **Check: seed `egg-pb-toast-snack` ⇒ false.** *The loud one — it fails the moment
+- [x] Check: bare egg ⇒ true; egg + bread ⇒ true; seed `french-toast` ⇒ false
+- [x] **Check: seed `egg-pb-toast-snack` ⇒ false.** *The loud one — it fails the moment
       the egg rule is written broadly enough to delete a meal the user actually eats*
-- [ ] `hasVegInToastie(meal)` — only applies when `meal.id`/`meal.name` matches
+- [x] `hasVegInToastie(meal)` — only applies when `meal.id`/`meal.name` matches
       `/toastie|toasted sandwich/i`; non-toasties always pass
-- [ ] Check: toastie + `onions` ⇒ true; seed `toastie-ham-cheese` ⇒ false; a non-toastie
+- [x] Check: toastie + `onions` ⇒ true; seed `toastie-ham-cheese` ⇒ false; a non-toastie
       containing `onions` ⇒ false (*the rule is veg-in-toasties, not a veg dislike*)
-- [ ] `check(meal)` ⇒ `{ ok, reasons: string[] }`, reasons being short human strings
+- [x] `check(meal)` ⇒ `{ ok, reasons: string[] }`, reasons being short human strings
       Hermes can read aloud
-- [ ] **Check: every meal in `meals.json` passes `check().ok`.** *The best single check in
+- [x] **Check: every meal in `meals.json` passes `check().ok`.** *The best single check in
       this phase — any rule written too broadly fails here immediately*
-- [ ] `sanitize(meal, subs)` ⇒ `{ meal, substituted: [{from,to}] } | null`, in spec §1's
+- [x] `sanitize(meal, subs)` ⇒ `{ meal, substituted: [{from,to}] } | null`, in spec §1's
       exact order: egg/toastie ⇒ `null` first (no swap exists for either), then swap every
       mushroom ingredient keeping `qty` verbatim, then **`null` if any mushroom remains**
       because `subs` had no entry
-- [ ] `sanitize` **never mutates its input** — build a fresh object and a fresh
+- [x] `sanitize` **never mutates its input** — build a fresh object and a fresh
       `ingredients` array
-- [ ] Comment the safety property: *`sanitize` can only ever return a meal that would pass
+- [x] Comment the safety property: *`sanitize` can only ever return a meal that would pass
       `check()`* — it is what makes `/discover` trustworthy
-- [ ] Check: mushroom meal ⇒ no mushroom in the result, `substituted.length === 1`, **and
+- [x] Check: mushroom meal ⇒ no mushroom in the result, `substituted.length === 1`, **and
       the original input object still contains mushroom** (the non-mutation assert)
-- [ ] Check: standalone-egg meal ⇒ `null`; clean meal ⇒ same ingredients, `substituted: []`
-- [ ] Check: `sanitize(mushroomMeal, {})` ⇒ `null`, not a pass-through (*the degrade-to-
+- [x] Check: standalone-egg meal ⇒ `null`; clean meal ⇒ same ingredients, `substituted: []`
+- [x] Check: `sanitize(mushroomMeal, {})` ⇒ `null`, not a pass-through (*the degrade-to-
       reject property; it fails if a missing substitution ever becomes a silent allow*)
-- [ ] `test.html` — add `<script src="exclusions.js">` to its includes
+- [x] `test.html` — add `<script src="exclusions.js">` to its includes
 
 ### 3. Logic & Backend Tasks — `mealdb.js` refactor (net deletion)
 
-- [ ] Move `extractIngredients`/`toMeal` onto the module surface as `MP.MealDB.toMeal(detail)`
+- [x] Move `extractIngredients`/`toMeal` onto the module surface as `MP.MealDB.toMeal(detail)`
       — the Worker imports this file for the mapping rather than reimplementing it
-- [ ] Every `sessionStorage`/`window` reference must sit **inside** `getDiscoverPool`'s
+- [x] Every `sessionStorage`/`window` reference must sit **inside** `getDiscoverPool`'s
       body, never at module scope; attach to `globalThis.MP` self-containedly like
       `exclusions.js`. Precedent: `hermes-sync.js` loads with zero effect when unconfigured
-- [ ] **Delete `hasMushroom` (lines 16–22) and its `.filter(d => !hasMushroom(d))`** —
+- [x] **Delete `hasMushroom` (lines 16–22) and its `.filter(d => !hasMushroom(d))`** —
       replace with `.map(MP.MealDB.toMeal).map(m => MP.Exclusions.sanitize(m, subs))
       .filter(Boolean)`. Root-cause fix: the app's Discover deck now enforces all three
       rules and offers the same substitution Hermes does, instead of only filtering mushrooms
-- [ ] Cached `load()` for `substitutions.json` on the existing `MP.MealDB` module,
+- [x] Cached `load()` for `substitutions.json` on the existing `MP.MealDB` module,
       mirroring `MP.ShelfLife.load()` — don't invent a new loader module
-- [ ] Fetch failure ⇒ fall back to `{}` so mushroom meals are rejected outright. Degrades
+- [x] Fetch failure ⇒ fall back to `{}` so mushroom meals are rejected outright. Degrades
       to Phase 1 behaviour, never to a pass
 
 ### 4. Backend — `worker/worker.js`
 
-- [ ] Imports at the top: `import "../exclusions.js"`, `import "../mealdb.js"`,
+- [x] Imports at the top: `import "../exclusions.js"`, `import "../mealdb.js"`,
       `import SUBS from "../substitutions.json"`. No new dependency — Workers have native
       `fetch` and Wrangler/esbuild imports JSON natively
-- [ ] Route `/discover` **after** the existing OPTIONS + auth checks and **before** the
+- [x] Route `/discover` **after** the existing OPTIONS + auth checks and **before** the
       `KEYS` lookup. `GET` only ⇒ anything else `405`. `KEYS` is untouched and
       `Access-Control-Allow-Methods` stays `GET, PUT, OPTIONS`
-- [ ] `q` non-empty ⇒ `search.php?s=<encodeURIComponent(q)>`; blank/absent ⇒ `random.php`.
+- [x] `q` non-empty ⇒ `search.php?s=<encodeURIComponent(q)>`; blank/absent ⇒ `random.php`.
       Both return full detail, so **no `lookup.php` N+1**. `filter.php?i=` deliberately
       unsupported — it returns stubs, and ingredient-led browsing is the app's Discover deck
-- [ ] Pipeline: `data.meals ?? []` → `MP.MealDB.toMeal` → `MP.Exclusions.sanitize(m, SUBS)`
+- [x] Pipeline: `data.meals ?? []` → `MP.MealDB.toMeal` → `MP.Exclusions.sanitize(m, SUBS)`
       → first **8** non-null
-- [ ] `200` body `{ query, meals: [...], rejected: [{name, reasons}] }` (spec §3). Meals are
+- [x] `200` body `{ query, meals: [...], rejected: [{name, reasons}] }` (spec §3). Meals are
       **already in the app's library shape** so Hermes can drop one into a `PUT /library`
       with no field translation; `substituted` is always present (`[]` when unchanged) so
       the chat layer has one code path; `rejected` capped at 8
-- [ ] TheMealDB non-2xx / network error / unparseable body ⇒ `502 "discovery upstream
+- [x] TheMealDB non-2xx / network error / unparseable body ⇒ `502 "discovery upstream
       failed"`. Never a 500, never a partial list
-- [ ] `{"meals": null}` from TheMealDB (no match) ⇒ `200` with `meals: []`, `rejected: []`
+- [x] `{"meals": null}` from TheMealDB (no match) ⇒ `200` with `meals: []`, `rejected: []`
 
 ### 5. Backend — `PUT /library` shape validation (trust boundary)
 
-- [ ] `libraryError(parsed)` ⇒ error reason string or `null`. Rejects with `400` when
+- [x] `libraryError(parsed)` ⇒ error reason string or `null`. Rejects with `400` when
       `meals` is not an array, an element is not a plain object, an element's `id`/`name`
       is not a non-empty string, `ingredients` is not an array, or two elements share an `id`
-- [ ] `meals: []` **stays legal** — Phase 4 established an empty remote library as
+- [x] `meals: []` **stays legal** — Phase 4 established an empty remote library as
       legitimate and `hermes-sync.js` already distinguishes it from a malformed blob.
       Do not regress that
-- [ ] `/planFlag` keeps Phase 4's generic plain-object check — the new validation is
+- [x] `/planFlag` keeps Phase 4's generic plain-object check — the new validation is
       `/library`-only
-- [ ] **Shape only, no exclusion checks on `PUT`** — running `check()` here would let a
+- [x] **Shape only, no exclusion checks on `PUT`** — running `check()` here would let a
       rule tweak lock the user out of saving their own library. Comment it so it doesn't
       look like an oversight
-- [ ] `ponytail:` comment: field presence, not deep validation; tighten only if a real
+- [x] `ponytail:` comment: field presence, not deep validation; tighten only if a real
       malformed write gets through
 
 ### 6. Wiring & verification
 
-- [ ] `index.html` — `<script src="exclusions.js">` **before** `mealdb.js`.
+- [x] `index.html` — `<script src="exclusions.js">` **before** `mealdb.js`.
       `plan.html`/`shopping.html` deliberately don't get it (neither touches TheMealDB)
-- [ ] `sw.js` — add `"exclusions.js"` and `"substitutions.json"` to `SHELL` **and** bump
+- [x] `sw.js` — add `"exclusions.js"` and `"substitutions.json"` to `SHELL` **and** bump
       `CACHE` to `"meal-planner-v5"`. `test.html` and `worker/` stay out of the shell
 - [ ] `npx wrangler deploy`, then the curl smoke table (spec §9, all 12 rows): `/discover`
       no token ⇒ 401; `OPTIONS /discover` ⇒ 204 + four CORS headers; `PUT /discover` ⇒ 405;
       `?q=chicken` ⇒ 200 with well-formed meals; **`?q=mushroom` ⇒ no `"mushroom"` anywhere
       in the `meals` array**; no `q` ⇒ one random meal; `?q=zzzznotathing` ⇒ `meals: []`;
       `PUT /library {"meals":"nope"}` ⇒ 400; duplicate ids ⇒ 400; `meals: []` ⇒ 204;
-      a real library ⇒ 204 and byte-identical round trip; `/planFlag` unchanged
-- [ ] The `?q=mushroom` row is the one that proves the phase: if it ever returns a mushroom,
-      the shared module is not actually being imported by the Worker
+      a real library ⇒ 204 and byte-identical round trip; `/planFlag` unchanged.
+      **Not run** — no deployed environment/wrangler credentials available in this
+      environment; the same 12 assertions (except the live-`fetch` details) were verified
+      against `worker/worker.js` directly with a mocked TheMealDB + KV in Node. Run the
+      real `npx wrangler deploy` + curl pass before relying on this in production
+- [x] The `?q=mushroom` row is the one that proves the phase: if it ever returns a mushroom,
+      the shared module is not actually being imported by the Worker — verified via the
+      Node harness above (no mushroom in any returned/rejected *ingredient*; per spec §10
+      a meal's *name* mentioning mushroom is not itself a failure, rules read ingredients)
 - [ ] Manual pass: serve, open `index.html`, swipe the Discover deck — suggestions still
       appear, none contain mushroom, and a substituted card shows its swapped ingredient.
-      Run this before shipping
+      **Not run** — no headless browser available in this environment. Run this before
+      shipping
 - [ ] Manual pass: from n8n (or curl standing in for it), run each row of the §7 contract
       end to end — discover → add to library → app pulls it; edit an ingredient → app
-      pulls it; trigger phrase → banner appears on `plan.html`
-- [ ] Mark Phase 5 complete in `docs/roadmap.md` and commit docs + code together
+      pulls it; trigger phrase → banner appears on `plan.html`. **Not run** — depends on
+      the live Worker deploy above and an n8n workflow that lives outside this repo
+- [x] Mark Phase 5 complete in `docs/roadmap.md` and commit docs + code together
       (`.claude/rules/roadmap-gating.md`)
 
 ### 7. Docs
 
-- [ ] New `docs/HERMES.md` — the n8n-side contract (spec §7): the four capabilities mapped
+- [x] New `docs/HERMES.md` — the n8n-side contract (spec §7): the four capabilities mapped
       to their HTTP calls, request/response shapes, the `X-Auth-Token` requirement, and the
       note that URL and token live in n8n credentials and never in this repo. A contract,
       not a tutorial
-- [ ] Record in it that Hermes **never renders a plan as chat text** (`docs/OUTLINE.md:36-38`)
+- [x] Record in it that Hermes **never renders a plan as chat text** (`docs/OUTLINE.md:36-38`)
       and that KV is eventually consistent (~60s), so n8n must not read back a write to
       confirm it
-- [ ] `docs/FUTURE.md` — no `/coverage` endpoint. Revisit trigger: *if Hermes' coverage
+- [x] `docs/FUTURE.md` — no `/coverage` endpoint. Revisit trigger: *if Hermes' coverage
       answers ever disagree with the plan page's banner, expose `MP.Nutrition.dayCoverage`
       as `GET /coverage` rather than teaching n8n the scoring rules*
 

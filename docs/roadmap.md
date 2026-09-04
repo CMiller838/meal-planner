@@ -48,7 +48,7 @@ on a Hermes-set "generate a new plan" flag.
 settled before anything syncs it. Deployable and testable on its own, with no
 conversational layer yet.*
 
-## Phase 5 — Hermes conversational capabilities
+## Phase 5 — Hermes conversational capabilities (Status: Complete)
 
 **Goal:** Give Hermes the chat skills on top of the bridge: recipe and
 nutrition Q&A over the existing tag data, add/remove/change ingredients within

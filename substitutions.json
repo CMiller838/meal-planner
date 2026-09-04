@@ -1,0 +1,4 @@
+{
+  "note": "Swap-ins for hard-excluded ingredients. Keyed by the excluded substring; the value is a normal ingredient entry. A term with no entry here degrades to a blanket reject, never to a pass.",
+  "mushroom": { "key": "courgette", "label": "Courgette" }
+}

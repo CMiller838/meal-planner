@@ -1,9 +1,9 @@
-// TheMealDB integration (free tier, key="1"). Client-side fetch, CORS is
-// allowed by TheMealDB. Every string from here is untrusted third-party
-// content - callers MUST run it through MP.esc() before innerHTML use.
-window.MP = window.MP || {};
-
-(function () {
+// TheMealDB integration (free tier, key="1"). Every string from here is
+// untrusted third-party content - callers MUST run it through MP.esc()
+// before innerHTML use. toMeal/extractIngredients are pure (no window/
+// sessionStorage) so the Worker can import this file for the same mapping;
+// only getDiscoverPool touches the browser, and only inside its own body.
+(function (root) {
   "use strict";
 
   const BASE = "https://www.themealdb.com/api/json/v1/1/";
@@ -12,14 +12,6 @@ window.MP = window.MP || {};
   const SS_POOL = "mp_discover_pool";
   const PER_INGREDIENT_LIMIT = 3;
   const POOL_LIMIT = 10;
-
-  function hasMushroom(detail) {
-    for (let i = 1; i <= 20; i++) {
-      const ing = detail[`strIngredient${i}`];
-      if (ing && ing.toLowerCase().includes("mushroom")) return true;
-    }
-    return false;
-  }
 
   function extractIngredients(detail) {
     const out = [];
@@ -46,6 +38,17 @@ window.MP = window.MP || {};
       ingredients: extractIngredients(detail),
       image: detail.strMealThumb || null,
     };
+  }
+
+  let subsCache = null;
+  /** Cached substitutions.json, mirroring MP.ShelfLife.load(). A fetch
+   *  failure degrades to {} (mushroom meals rejected outright), never a pass. */
+  async function load() {
+    if (subsCache) return subsCache;
+    subsCache = await fetch("substitutions.json")
+      .then((r) => r.json())
+      .catch(() => ({}));
+    return subsCache;
   }
 
   async function fetchJson(url) {
@@ -78,11 +81,14 @@ window.MP = window.MP || {};
           .catch(() => null)
       )
     );
+    const subs = await load();
     return details
       .filter(Boolean)
-      .filter((d) => !hasMushroom(d))
+      .map(toMeal)
+      .map((m) => root.MP.Exclusions.sanitize(m, subs))
+      .filter(Boolean)
       .slice(0, POOL_LIMIT)
-      .map(toMeal);
+      .map((r) => r.meal);
   }
 
   /** Cached (sessionStorage) discover pool, filtered against already-liked/dismissed ids. */
@@ -99,5 +105,6 @@ window.MP = window.MP || {};
     return pool.filter((m) => !exclude.has(m.id));
   }
 
-  MP.MealDB = { getDiscoverPool };
-})();
+  root.MP = root.MP || {};
+  root.MP.MealDB = { toMeal, load, getDiscoverPool };
+})(typeof globalThis !== "undefined" ? globalThis : this);
