@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Field Ledger — UI Concept</title>
+<style>
+  :root{
+    --bg:#0d1210;
+    --panel:#131a17;
+    --panel-2:#161f1b;
+    --line:#26332d;
+    --ink:#d7e4dd;
+    --ink-dim:#8ea69a;
+    --amber:#e0a83c;
+    --green:#5fbf7e;
+    --red:#e0654a;
+    color-scheme: dark;
+  }
+  html.light{
+    --bg:#f2f1ea;
+    --panel:#fbfaf5;
+    --panel-2:#eeece2;
+    --line:#d4d0c2;
+    --ink:#1c211d;
+    --ink-dim:#5b6259;
+    color-scheme: light;
+  }
+  *{ box-sizing:border-box; }
+  body{
+    margin:0; background: var(--bg); color: var(--ink);
+    font-family: "IBM Plex Mono","SFMono-Regular","Consolas",monospace;
+    font-size: 13px;
+    transition: background .3s, color .3s;
+  }
+  header.top{
+    display:flex; align-items:center; justify-content:space-between;
+    padding: 10px 20px; border-bottom: 1px solid var(--line);
+    background: var(--panel);
+    position: sticky; top:0; z-index:10;
+  }
+  .brand{ font-weight:700; letter-spacing:1.5px; text-transform:uppercase; font-size:.85rem; }
+  .brand span{ color: var(--amber); }
+  nav.tabs{ display:flex; gap:0; border:1px solid var(--line); }
+  nav.tabs button{
+    background:none; border:none; color: var(--ink-dim); padding:7px 16px;
+    font-family:inherit; font-size:.72rem; letter-spacing:1px; text-transform:uppercase;
+    cursor:pointer; border-right:1px solid var(--line);
+    transition: background .12s ease, color .12s ease;
+  }
+  nav.tabs button:last-child{ border-right:none; }
+  nav.tabs button.active{ background: var(--amber); color:#1a1200; font-weight:700; }
+  nav.tabs button:hover:not(.active){ background: var(--panel-2); color: var(--ink); }
+  .icon-btn{
+    background:none; border:1px solid var(--line); color: var(--ink-dim);
+    width:28px;height:28px; cursor:pointer; font-size:.8rem;
+  }
+  .icon-btn:hover{ color: var(--ink); border-color: var(--ink-dim); }
+
+  main{ max-width: 1040px; margin: 0 auto; padding: 22px 20px 90px; }
+  .view{ display:none; }
+  .view.active{ display:block; animation: slideIn .22s ease; }
+  @keyframes slideIn{ from{ opacity:0; transform: translateX(-6px);} to{opacity:1; transform:none;} }
+
+  .path{ color: var(--ink-dim); font-size:.72rem; margin-bottom: 4px; text-transform:uppercase; letter-spacing:1px; }
+  h1{ font-size:1.15rem; margin: 0 0 14px; letter-spacing:.5px; }
+  h1::before{ content:'> '; color: var(--amber); }
+
+  .filter-bar{ display:flex; gap:0; margin-bottom:14px; border:1px solid var(--line); width:fit-content; }
+  .filter-bar button{
+    background:var(--panel); border:none; border-right:1px solid var(--line); color: var(--ink-dim);
+    padding:5px 12px; font-family:inherit; font-size:.7rem; letter-spacing:.5px; text-transform:uppercase; cursor:pointer;
+  }
+  .filter-bar button:last-child{ border-right:none; }
+  .filter-bar button.on{ background: var(--green); color:#08170c; font-weight:700; }
+
+  table.ledger{ width:100%; border-collapse:collapse; }
+  table.ledger th{
+    text-align:left; font-size:.68rem; text-transform:uppercase; letter-spacing:.8px; color: var(--ink-dim);
+    padding: 6px 10px; border-bottom:1px solid var(--line); font-weight:600;
+  }
+  table.ledger td{
+    padding: 8px 10px; border-bottom:1px solid var(--line); vertical-align:middle;
+  }
+  table.ledger tbody tr{ transition: background .12s ease; }
+  table.ledger tbody tr:hover{ background: var(--panel-2); }
+  .row-index{ color: var(--ink-dim); width:32px; }
+  .flag{
+    display:inline-block; font-size:.62rem; font-weight:700; padding:1px 6px; letter-spacing:.4px;
+    text-transform:uppercase; border:1px solid currentColor;
+  }
+  .flag.batch{ color: var(--green); }
+  .flag.new{ color: var(--amber); }
+  .like-cell button{
+    background:none; border:1px solid var(--line); color: var(--ink-dim); width:26px; height:22px; cursor:pointer; font-size:.7rem;
+    transition: all .12s ease;
+  }
+  .like-cell button.liked{ color:#0c1710; background: var(--red); border-color: var(--red); }
+  .add-cell button{
+    background: var(--panel-2); border:1px solid var(--line); color: var(--ink); padding:3px 10px;
+    font-family:inherit; font-size:.68rem; letter-spacing:.5px; text-transform:uppercase; cursor:pointer;
+  }
+  .add-cell button:hover{ border-color: var(--amber); color: var(--amber); }
+  .add-cell button.done{ color: var(--green); border-color: var(--green); }
+
+  /* plan */
+  .toolbar{ display:flex; align-items:center; gap:12px; margin-bottom:16px; }
+  .gen-btn{
+    background: var(--amber); color:#1a1200; border:none; padding:8px 16px; font-family:inherit;
+    font-weight:700; font-size:.75rem; text-transform:uppercase; letter-spacing:.6px; cursor:pointer;
+  }
+  .gen-btn:active{ transform: translateY(1px); }
+  .banner{
+    border:1px solid var(--amber); color: var(--amber); padding:8px 12px; font-size:.75rem; margin-bottom:16px;
+    background: color-mix(in srgb, var(--amber) 8%, transparent);
+  }
+  .plan-row{
+    display:grid; grid-template-columns: 60px 1fr 140px 110px; gap:0; align-items:center;
+    border-bottom:1px solid var(--line); padding: 9px 4px;
+    transition: background .5s ease, opacity .3s ease, transform .3s ease;
+  }
+  .plan-row.refreshing{ opacity:0; transform: translateX(-8px); }
+  .plan-row .day{ color: var(--ink-dim); font-size:.72rem; text-transform:uppercase; }
+  .plan-row .meal{ font-weight:600; }
+  .plan-row .note{ color: var(--ink-dim); font-size:.72rem; }
+  .plan-row .stat{ display:flex; justify-content:flex-end; }
+  .stat-pill{ font-size:.65rem; padding:2px 7px; border:1px solid currentColor; text-transform:uppercase; letter-spacing:.3px; }
+  .stat-pill.warn{ color: var(--red); }
+  .stat-pill.ok{ color: var(--green); }
+  .stat-pill.leftover{ color: var(--amber); }
+
+  /* shopping */
+  .shop-header{ display:grid; grid-template-columns:26px 1fr 90px; gap:0; padding: 5px 4px; color: var(--ink-dim); font-size:.68rem; text-transform:uppercase; letter-spacing:.6px; border-bottom:1px solid var(--line); }
+  .shop-row{ display:grid; grid-template-columns:26px 1fr 90px; gap:0; align-items:center; padding: 7px 4px; border-bottom:1px solid var(--line); transition: color .2s ease; }
+  .shop-row.done{ color: var(--ink-dim); }
+  .shop-row.done .name{ text-decoration: line-through; }
+  .chk{ width:16px;height:16px; border:1px solid var(--ink-dim); cursor:pointer; position:relative; }
+  .chk.checked{ background: var(--green); border-color: var(--green); }
+  .chk.checked::after{ content:'✓'; position:absolute; inset:0; display:flex; align-items:center; justify-content:center; font-size:.6rem; color:#08170c; }
+  .section-tag{ color: var(--amber); font-size:.72rem; text-transform:uppercase; letter-spacing:1px; margin: 20px 0 4px; }
+
+  footer.hint{ color: var(--ink-dim); font-size:.7rem; text-align:center; margin-top:60px; letter-spacing:.4px; }
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="brand"><span>#</span> FIELD_LEDGER</div>
+  <nav class="tabs">
+    <button class="active" data-view="browse">BROWSE</button>
+    <button data-view="plan">PLAN</button>
+    <button data-view="shop">SHOP</button>
+  </nav>
+  <button class="icon-btn" id="lightToggle" title="toggle theme">◐</button>
+</header>
+
+<main>
+  <section class="view active" id="view-browse">
+    <div class="path">meals / library</div>
+    <h1>meal_index.tsv</h1>
+    <div class="filter-bar">
+      <button class="on">ALL</button>
+      <button>LIKED</button>
+      <button>BATCH</button>
+      <button>DISCOVER</button>
+    </div>
+    <table class="ledger">
+      <thead><tr><th>#</th><th>Name</th><th>Flags</th><th>Notes</th><th>Like</th><th></th></tr></thead>
+      <tbody id="mealBody"></tbody>
+    </table>
+  </section>
+
+  <section class="view" id="view-plan">
+    <div class="path">plan / week-1</div>
+    <h1>2wk_rotation.log</h1>
+    <div class="toolbar">
+      <button class="gen-btn" id="genBtn">▶ regenerate</button>
+    </div>
+    <div class="banner">! coverage warning: vitamin C trending low this week — add citrus or peppers</div>
+    <div id="planRows"></div>
+  </section>
+
+  <section class="view" id="view-shop">
+    <div class="path">shopping / current-trip</div>
+    <h1>list.csv</h1>
+    <div class="section-tag">fresh</div>
+    <div class="shop-header"><div></div><div>item</div><div>pack</div></div>
+    <div id="shopFresh"></div>
+    <div class="section-tag">cupboard</div>
+    <div class="shop-header"><div></div><div>item</div><div>pack</div></div>
+    <div id="shopCupboard"></div>
+  </section>
+
+  <footer class="hint">CONCEPT: FIELD LEDGER — dense tabular UI, mechanical clicks, monospace utility type.</footer>
+</main>
+
+<script>
+/* sound: short mechanical ticks/clicks */
+let actx;
+function ctx(){ actx = actx || new (window.AudioContext||window.webkitAudioContext)(); return actx; }
+function click(freq=900, dur=.035, gain=.05){
+  const c = ctx();
+  const o = c.createOscillator(), g = c.createGain();
+  o.type='square'; o.frequency.value = freq;
+  g.gain.value = 0;
+  o.connect(g); g.connect(c.destination);
+  const t0 = c.currentTime;
+  g.gain.setValueAtTime(gain, t0);
+  g.gain.exponentialRampToValueAtTime(.0001, t0 + dur);
+  o.start(t0); o.stop(t0 + dur + .01);
+}
+function sfxTab(){ click(1200,.02,.04); }
+function sfxLike(on){ on ? click(1400,.03,.05) : click(500,.03,.04); }
+function sfxAdd(){ click(1000,.02,.04); setTimeout(()=>click(1500,.02,.04),40); }
+function sfxCheck(){ click(1600,.025,.045); }
+function sfxGenerate(){ [700,900,1100,1400].forEach((f,i)=>setTimeout(()=>click(f,.02,.04), i*40)); }
+
+document.querySelectorAll('nav.tabs button').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    sfxTab();
+    document.querySelectorAll('nav.tabs button').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
+    document.getElementById('view-'+btn.dataset.view).classList.add('active');
+  });
+});
+document.getElementById('lightToggle').addEventListener('click', ()=>{
+  sfxTab();
+  document.documentElement.classList.toggle('light');
+});
+
+const meals = [
+  {name:'Sunday Roast Chicken', flags:['batch'], note:'roast potatoes, carrots, gravy — feeds fajitas', liked:true},
+  {name:'Chicken Fajitas', flags:[], note:'uses leftover roast chicken', liked:true},
+  {name:'Chilli', flags:['batch'], note:'beef mince, 3 servings', liked:true},
+  {name:'Chorizo & Pasta', flags:['batch'], note:'white sauce preferred', liked:true},
+  {name:'Salmon Teriyaki', flags:[], note:'salmon, rice, broccoli', liked:true},
+  {name:'Ham & Cheese Toastie', flags:[], note:'no veg, ever', liked:true},
+  {name:'French Toast', flags:[], note:'egg-coated bread', liked:false},
+  {name:'Porridge', flags:[], note:'oats, milk, banana', liked:false},
+  {name:'Beef & Broccoli Stir-fry', flags:['new'], note:'discover: adapted from TheMealDB', liked:false},
+];
+const mealBody = document.getElementById('mealBody');
+meals.forEach((m,i)=>{
+  const tr = document.createElement('tr');
+  tr.innerHTML = `
+    <td class="row-index">${String(i+1).padStart(2,'0')}</td>
+    <td>${m.name}</td>
+    <td>${m.flags.map(f=>`<span class="flag ${f}">${f}</span>`).join(' ')}</td>
+    <td class="note">${m.note}</td>
+    <td class="like-cell"><button class="${m.liked?'liked':''}">${m.liked?'♥':'♡'}</button></td>
+    <td class="add-cell"><button>add</button></td>
+  `;
+  const likeBtn = tr.querySelector('.like-cell button');
+  likeBtn.addEventListener('click', ()=>{
+    const nowLiked = !likeBtn.classList.contains('liked');
+    likeBtn.classList.toggle('liked', nowLiked);
+    likeBtn.textContent = nowLiked ? '♥' : '♡';
+    sfxLike(nowLiked);
+  });
+  const addBtn = tr.querySelector('.add-cell button');
+  addBtn.addEventListener('click', ()=>{
+    sfxAdd();
+    addBtn.textContent = 'added';
+    addBtn.classList.add('done');
+    setTimeout(()=>{ addBtn.textContent='add'; addBtn.classList.remove('done'); }, 1000);
+  });
+  mealBody.appendChild(tr);
+});
+
+const days = [
+  {d:'mon', meal:'Sunday Roast Chicken', note:'cooked today · fridge 2d', stat:'warn', label:'use soon'},
+  {d:'tue', meal:'Chicken Fajitas', note:'leftover chicken, day 2', stat:'leftover', label:'leftover'},
+  {d:'wed', meal:'Chilli', note:'batch · 3 servings', stat:'ok', label:'fresh'},
+  {d:'thu', meal:'Chilli (leftover)', note:'serving 2 of 3', stat:'leftover', label:'leftover'},
+  {d:'fri', meal:'Chorizo & Pasta', note:'fresh cook', stat:'ok', label:'fresh'},
+  {d:'sat', meal:'Salmon Teriyaki', note:'fresh fish, 1-2d window', stat:'warn', label:'use soon'},
+  {d:'sun', meal:'Ham & Cheese Toastie', note:'quick, no batch', stat:'ok', label:'fresh'},
+];
+function renderPlan(){
+  const c = document.getElementById('planRows');
+  c.innerHTML = '';
+  days.forEach(day=>{
+    const row = document.createElement('div');
+    row.className = 'plan-row';
+    row.innerHTML = `
+      <div class="day">${day.d}</div>
+      <div class="meal">${day.meal}</div>
+      <div class="note">${day.note}</div>
+      <div class="stat"><span class="stat-pill ${day.stat}">${day.label}</span></div>
+    `;
+    c.appendChild(row);
+  });
+}
+renderPlan();
+document.getElementById('genBtn').addEventListener('click', ()=>{
+  sfxGenerate();
+  document.querySelectorAll('.plan-row').forEach(r=>r.classList.add('refreshing'));
+  setTimeout(()=>{
+    days.reverse();
+    renderPlan();
+  }, 260);
+});
+
+const fresh = [
+  {name:'Chicken thighs', pack:'1kg pack'},
+  {name:'Beef mince', pack:'500g'},
+  {name:'Salmon fillets', pack:'2-pack'},
+  {name:'Carrots', pack:'1kg bag'},
+  {name:'Peppers', pack:'x3'},
+  {name:'Onions', pack:'x2'},
+  {name:'Cheddar block', pack:'400g'},
+  {name:'Chorizo ring', pack:'225g'},
+];
+const cupboard = [
+  {name:'Rice', pack:'1kg'},
+  {name:'Tortillas', pack:'8-pack'},
+  {name:'Pasta', pack:'500g'},
+  {name:'Chilli beans (tin)', pack:'x2'},
+  {name:'Teriyaki sauce', pack:'bottle'},
+  {name:'Oats', pack:'1kg'},
+];
+function renderShop(id, items){
+  const c = document.getElementById(id);
+  items.forEach(it=>{
+    const row = document.createElement('div');
+    row.className = 'shop-row';
+    row.innerHTML = `<div class="chk"></div><div class="name">${it.name}</div><div class="pack">${it.pack}</div>`;
+    const chk = row.querySelector('.chk');
+    chk.addEventListener('click', ()=>{
+      const checked = !chk.classList.contains('checked');
+      chk.classList.toggle('checked', checked);
+      row.classList.toggle('done', checked);
+      sfxCheck();
+    });
+    c.appendChild(row);
+  });
+}
+renderShop('shopFresh', fresh);
+renderShop('shopCupboard', cupboard);
+</script>
+</body>
+</html>

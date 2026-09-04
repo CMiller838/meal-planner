@@ -96,4 +96,4 @@ than exposing `MP.Nutrition.dayCoverage()` over HTTP.
   compute a score nobody asks for in a sentence.
 - **Revisit trigger**: if Hermes' coverage answers ever disagree with the
   plan page's banner, expose `dayCoverage` as `GET /coverage` rather than
-  teaching n8n the scoring rules.
+  teaching Hermes the scoring rules.

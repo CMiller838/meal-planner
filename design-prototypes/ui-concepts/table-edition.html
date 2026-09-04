@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Table Edition — UI Concept</title>
+<style>
+  :root{
+    --bg:#161513;
+    --bg-2:#1d1c19;
+    --ink:#f2ede2;
+    --ink-dim:#a8a196;
+    --rule:#3a3733;
+    --plum:#b7627a;
+    --olive:#9caf6e;
+    --gold:#d1a24a;
+    color-scheme: dark;
+  }
+  html.light{
+    --bg:#faf7f0;
+    --bg-2:#f1ecdf;
+    --ink:#211f1b;
+    --ink-dim:#726b5e;
+    --rule:#ddd4c0;
+    color-scheme: light;
+  }
+  *{ box-sizing:border-box; }
+  body{
+    margin:0; background: var(--bg); color: var(--ink);
+    font-family: "Iowan Old Style","Georgia","Times New Roman",serif;
+    transition: background .4s ease, color .4s ease;
+  }
+  .masthead{
+    padding: 34px 6vw 18px; border-bottom: 3px double var(--rule);
+    display:flex; align-items:baseline; justify-content:space-between; flex-wrap:wrap; gap:10px;
+  }
+  .masthead h1{
+    margin:0; font-size: clamp(2rem, 5vw, 3.4rem); font-weight:400; letter-spacing:.5px;
+    font-variant: small-caps;
+  }
+  .masthead .dateline{
+    font-family: "Helvetica Neue",Arial,sans-serif; font-size:.7rem; letter-spacing:2px;
+    text-transform:uppercase; color: var(--ink-dim);
+  }
+  nav.tabs{
+    display:flex; gap: 28px; padding: 12px 6vw; border-bottom:1px solid var(--rule);
+    font-family: "Helvetica Neue",Arial,sans-serif; font-size:.78rem; letter-spacing:1.5px; text-transform:uppercase;
+    align-items:center; justify-content:space-between;
+  }
+  .tab-group{ display:flex; gap:28px; }
+  nav.tabs button{
+    background:none; border:none; color: var(--ink-dim); cursor:pointer; padding: 4px 0;
+    font: inherit; letter-spacing: inherit; text-transform:inherit;
+    border-bottom: 2px solid transparent;
+    transition: color .25s ease, border-color .25s ease;
+  }
+  nav.tabs button.active{ color: var(--ink); border-color: var(--plum); }
+  nav.tabs button:hover{ color: var(--ink); }
+  .icon-btn{ background:none; border:1px solid var(--rule); color: var(--ink-dim); width:30px; height:30px; border-radius:50%; cursor:pointer; font-family: "Helvetica Neue",Arial,sans-serif; }
+
+  main{ max-width: 1180px; margin:0 auto; padding: 40px 6vw 100px; }
+  .view{ display:none; }
+  .view.active{ display:block; animation: fadeUp .6s ease; }
+  @keyframes fadeUp{ from{opacity:0; transform: translateY(14px);} to{opacity:1; transform:none;} }
+
+  .kicker{ font-family:"Helvetica Neue",Arial,sans-serif; font-size:.72rem; letter-spacing:2.5px; text-transform:uppercase; color: var(--plum); margin-bottom:8px; }
+  .deck{ font-size:1.05rem; color: var(--ink-dim); max-width: 640px; margin: 0 0 34px; line-height:1.5; font-style:italic; }
+
+  /* browse: editorial rows, not cards */
+  .story{
+    display:grid; grid-template-columns: 90px 1fr auto; gap: 22px; align-items:start;
+    padding: 26px 0; border-bottom: 1px solid var(--rule);
+    transition: background .3s ease;
+  }
+  .story:hover{ background: var(--bg-2); }
+  .story .drop{
+    font-size: 2.6rem; line-height:1; text-align:center; color: var(--gold);
+  }
+  .story h2{ margin: 0 0 6px; font-size:1.5rem; font-weight:400; }
+  .story p{ margin:0; color: var(--ink-dim); font-size:.92rem; line-height:1.55; max-width: 52ch; }
+  .story .meta{
+    font-family:"Helvetica Neue",Arial,sans-serif; font-size:.68rem; letter-spacing:1.2px; text-transform:uppercase;
+    color: var(--olive); margin-top:8px;
+  }
+  .story .actions{ display:flex; flex-direction:column; align-items:flex-end; gap:10px; }
+  .like-btn{
+    background:none; border:none; cursor:pointer; font-size:1.3rem; color: var(--ink-dim);
+    transition: transform .3s cubic-bezier(.3,1.6,.4,1), color .3s ease;
+  }
+  .like-btn.liked{ color: var(--plum); transform: scale(1.25); }
+  .add-btn{
+    font-family:"Helvetica Neue",Arial,sans-serif; font-size:.7rem; letter-spacing:1px; text-transform:uppercase;
+    background:none; border:1px solid var(--ink-dim); color: var(--ink); padding:6px 14px; cursor:pointer;
+    transition: border-color .25s ease, background .25s ease;
+  }
+  .add-btn:hover{ border-color: var(--olive); }
+  .add-btn.done{ border-color: var(--olive); color: var(--olive); }
+
+  /* plan: timeline spread */
+  .gen-line{ display:flex; align-items:center; gap:16px; margin-bottom: 26px; }
+  .gen-btn{
+    font-family:"Helvetica Neue",Arial,sans-serif; font-size:.72rem; letter-spacing:1.5px; text-transform:uppercase;
+    background: var(--plum); color:#241017; border:none; padding: 10px 20px; cursor:pointer;
+    transition: transform .2s ease, opacity .2s ease;
+  }
+  .gen-btn:hover{ transform: translateY(-1px); }
+  .gen-btn.busy{ opacity:.5; }
+  .banner{
+    font-style: italic; color: var(--gold); border-left:3px solid var(--gold); padding: 6px 14px; font-size:.92rem;
+  }
+  .timeline{ position:relative; margin-top: 30px; padding-left: 26px; border-left: 1px solid var(--rule); }
+  .entry{
+    position:relative; padding: 0 0 30px 20px;
+    opacity:0; transform: translateX(-8px);
+    animation: entryIn .5s ease forwards;
+  }
+  .entry::before{
+    content:''; position:absolute; left:-31px; top:4px; width:9px;height:9px; border-radius:50%;
+    background: var(--bg); border:2px solid var(--olive);
+  }
+  .entry.leftover::before{ border-color: var(--gold); }
+  .entry.warn::before{ border-color: var(--plum); }
+  @keyframes entryIn{ to{ opacity:1; transform:none; } }
+  .entry .day{ font-family:"Helvetica Neue",Arial,sans-serif; font-size:.68rem; letter-spacing:2px; text-transform:uppercase; color: var(--ink-dim); }
+  .entry h3{ margin:4px 0 4px; font-size:1.3rem; font-weight:400; }
+  .entry .note{ color: var(--ink-dim); font-size:.88rem; margin:0 0 6px; }
+  .entry .flag{
+    font-family:"Helvetica Neue",Arial,sans-serif; font-size:.65rem; letter-spacing:1px; text-transform:uppercase;
+    color: var(--olive);
+  }
+  .entry.leftover .flag{ color: var(--gold); }
+  .entry.warn .flag{ color: var(--plum); }
+
+  /* shopping: two-column list, receipt feel */
+  .receipt{ max-width: 520px; }
+  .section-title{
+    font-family:"Helvetica Neue",Arial,sans-serif; font-size:.7rem; letter-spacing:2px; text-transform:uppercase;
+    color: var(--ink-dim); margin: 28px 0 6px;
+  }
+  .line-item{
+    display:flex; align-items:baseline; gap: 10px; padding: 9px 0; border-bottom: 1px dotted var(--rule);
+    cursor:pointer; transition: opacity .3s ease;
+  }
+  .line-item.done{ opacity:.4; }
+  .line-item.done .name{ text-decoration: line-through; }
+  .line-item .mark{ width:16px; font-family:"Helvetica Neue",Arial,sans-serif; color: var(--olive); }
+  .line-item .name{ flex:1; font-size:.98rem; }
+  .line-item .pack{ font-family:"Helvetica Neue",Arial,sans-serif; font-size:.72rem; color: var(--ink-dim); }
+
+  footer.hint{ color: var(--ink-dim); font-size:.75rem; text-align:center; margin-top: 70px; font-style:italic; }
+</style>
+</head>
+<body>
+
+<div class="masthead">
+  <h1>The Table Edition</h1>
+  <div class="dateline">Two-Week Kitchen Almanac · Vol. IV</div>
+</div>
+<nav class="tabs">
+  <div class="tab-group">
+    <button class="active" data-view="browse">Browse</button>
+    <button data-view="plan">The Plan</button>
+    <button data-view="shop">Shopping</button>
+  </div>
+  <button class="icon-btn" id="lightToggle" title="toggle edition">☾</button>
+</nav>
+
+<main>
+  <section class="view active" id="view-browse">
+    <div class="kicker">Meal Library</div>
+    <p class="deck">Everything you've liked, plus a few discoveries adapted to your macros — reviewed one at a time, like a proper menu.</p>
+    <div id="stories"></div>
+  </section>
+
+  <section class="view" id="view-plan">
+    <div class="kicker">Fortnight Forecast</div>
+    <p class="deck">A running account of the next fourteen days — leftovers followed through, nothing left to spoil quietly in the back of the fridge.</p>
+    <div class="gen-line">
+      <button class="gen-btn" id="genBtn">Draft a new fortnight</button>
+      <span class="banner">Editor's note: vitamin C is thin this week — work in citrus or peppers.</span>
+    </div>
+    <div class="timeline" id="timeline"></div>
+  </section>
+
+  <section class="view" id="view-shop">
+    <div class="kicker">The List</div>
+    <p class="deck">Pack sizes as sold, not as needed — so nothing gets bought twice.</p>
+    <div class="receipt">
+      <div class="section-title">Fresh</div>
+      <div id="shopFresh"></div>
+      <div class="section-title">Store cupboard</div>
+      <div id="shopCupboard"></div>
+    </div>
+  </section>
+
+  <footer class="hint">Concept: Table Edition — editorial serif layout, spacious timeline, soft chimes.</footer>
+</main>
+
+<script>
+/* sound: soft mellow tones */
+let actx;
+function ctx(){ actx = actx || new (window.AudioContext||window.webkitAudioContext)(); return actx; }
+function chime(freq=440, dur=.5, gain=.05, delay=0, type='sine'){
+  const c = ctx();
+  const o = c.createOscillator(), g = c.createGain();
+  o.type = type; o.frequency.value = freq;
+  g.gain.value = 0;
+  o.connect(g); g.connect(c.destination);
+  const t0 = c.currentTime + delay;
+  g.gain.setValueAtTime(0, t0);
+  g.gain.linearRampToValueAtTime(gain, t0 + .04);
+  g.gain.exponentialRampToValueAtTime(.0001, t0 + dur);
+  o.start(t0); o.stop(t0 + dur + .05);
+}
+function sfxTab(){ chime(520,.35,.04); }
+function sfxLike(on){ on ? (chime(660,.4,.05), chime(990,.5,.035,.05)) : chime(330,.3,.03); }
+function sfxAdd(){ chime(440,.3,.04); chime(660,.4,.03,.08); }
+function sfxCheck(){ chime(700,.35,.04); chime(1050,.4,.03,.06); }
+function sfxGenerate(){ [392,494,587,740].forEach((f,i)=>chime(f,.55,.04,i*.09)); }
+
+document.querySelectorAll('nav.tabs button[data-view]').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    sfxTab();
+    document.querySelectorAll('nav.tabs button[data-view]').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
+    document.getElementById('view-'+btn.dataset.view).classList.add('active');
+  });
+});
+document.getElementById('lightToggle').addEventListener('click', ()=>{
+  sfxTab();
+  document.documentElement.classList.toggle('light');
+});
+
+const meals = [
+  {drop:'I', name:'Sunday Roast Chicken', desc:'Roast potatoes, carrots, Bisto gravy — a proper Sunday, with enough chicken left over to carry Monday.', meta:'Batch-cook · feeds fajitas', liked:true},
+  {drop:'II', name:'Chicken Fajitas', desc:'Tortillas, peppers, onion, cannellini beans, and the last of the roast chicken.', meta:'Uses leftovers', liked:true},
+  {drop:'III', name:'Chilli', desc:'Beef mince, carrots, peppers, chilli beans — a pot that lasts three dinners, not one.', meta:'Batch-cook · 3 servings', liked:true},
+  {drop:'IV', name:'Chorizo & Pasta', desc:'Any shape you like, chorizo, a white sauce if the mood strikes.', meta:'Batch-cook', liked:true},
+  {drop:'V', name:'Salmon Teriyaki', desc:'Salmon, rice, broccoli, a glaze that does most of the work.', meta:'Fresh cook', liked:true},
+  {drop:'VI', name:'Ham & Cheese Toastie', desc:'White bread, ham, cheese — and no vegetables, on principle.', meta:'Quick', liked:true},
+  {drop:'VII', name:'French Toast', desc:'Egg-coated bread, the one egg dish that earns its place solo.', meta:'Breakfast', liked:false},
+  {drop:'VIII', name:'Porridge', desc:'Oats, milk, banana — unglamorous, dependable.', meta:'Breakfast', liked:false},
+  {drop:'IX', name:'Beef & Broccoli Stir-fry', desc:'A discovery, adapted from TheMealDB to fit your usual macros.', meta:'Discover', liked:false},
+];
+const stories = document.getElementById('stories');
+meals.forEach(m=>{
+  const s = document.createElement('div');
+  s.className = 'story';
+  s.innerHTML = `
+    <div class="drop">${m.drop}</div>
+    <div>
+      <h2>${m.name}</h2>
+      <p>${m.desc}</p>
+      <div class="meta">${m.meta}</div>
+    </div>
+    <div class="actions">
+      <button class="like-btn ${m.liked?'liked':''}">${m.liked?'♥':'♡'}</button>
+      <button class="add-btn">Add to plan</button>
+    </div>
+  `;
+  const likeBtn = s.querySelector('.like-btn');
+  likeBtn.addEventListener('click', ()=>{
+    const nowLiked = !likeBtn.classList.contains('liked');
+    likeBtn.classList.toggle('liked', nowLiked);
+    likeBtn.textContent = nowLiked ? '♥' : '♡';
+    sfxLike(nowLiked);
+  });
+  const addBtn = s.querySelector('.add-btn');
+  addBtn.addEventListener('click', ()=>{
+    sfxAdd();
+    addBtn.textContent = 'Added';
+    addBtn.classList.add('done');
+    setTimeout(()=>{ addBtn.textContent='Add to plan'; addBtn.classList.remove('done'); }, 1300);
+  });
+  stories.appendChild(s);
+});
+
+const days = [
+  {d:'Monday', meal:'Sunday Roast Chicken', note:'Cooked today. Fridge life: 2 days.', cls:'warn', flag:'Use soon'},
+  {d:'Tuesday', meal:'Chicken Fajitas', note:'Built from yesterday\'s leftover chicken.', cls:'leftover', flag:'Leftover'},
+  {d:'Wednesday', meal:'Chilli', note:'Batch of three — tonight is serving one.', cls:'', flag:'Fresh'},
+  {d:'Thursday', meal:'Chilli, again', note:'Serving two of three, no extra effort.', cls:'leftover', flag:'Leftover'},
+  {d:'Friday', meal:'Chorizo & Pasta', note:'A fresh cook to close the week.', cls:'', flag:'Fresh'},
+  {d:'Saturday', meal:'Salmon Teriyaki', note:'Fresh fish — best within a day or two.', cls:'warn', flag:'Use soon'},
+  {d:'Sunday', meal:'Ham & Cheese Toastie', note:'Quick, no batch, no fuss.', cls:'', flag:'Fresh'},
+];
+function renderTimeline(){
+  const t = document.getElementById('timeline');
+  t.innerHTML = '';
+  days.forEach((day,i)=>{
+    const e = document.createElement('div');
+    e.className = 'entry ' + day.cls;
+    e.style.animationDelay = (i*.06)+'s';
+    e.innerHTML = `
+      <div class="day">${day.d}</div>
+      <h3>${day.meal}</h3>
+      <p class="note">${day.note}</p>
+      <div class="flag">${day.flag}</div>
+    `;
+    t.appendChild(e);
+  });
+}
+renderTimeline();
+document.getElementById('genBtn').addEventListener('click', (e)=>{
+  sfxGenerate();
+  const btn = e.currentTarget;
+  btn.classList.add('busy');
+  setTimeout(()=>{
+    days.reverse();
+    renderTimeline();
+    btn.classList.remove('busy');
+  }, 420);
+});
+
+const fresh = [
+  {name:'Chicken thighs', pack:'1kg pack'},
+  {name:'Beef mince', pack:'500g'},
+  {name:'Salmon fillets', pack:'2-pack'},
+  {name:'Carrots', pack:'1kg bag'},
+  {name:'Peppers', pack:'x3'},
+  {name:'Onions', pack:'x2'},
+  {name:'Cheddar block', pack:'400g'},
+  {name:'Chorizo ring', pack:'225g'},
+];
+const cupboard = [
+  {name:'Rice', pack:'1kg'},
+  {name:'Tortillas', pack:'8-pack'},
+  {name:'Pasta', pack:'500g'},
+  {name:'Chilli beans (tin)', pack:'x2'},
+  {name:'Teriyaki sauce', pack:'bottle'},
+  {name:'Oats', pack:'1kg'},
+];
+function renderShop(id, items){
+  const c = document.getElementById(id);
+  items.forEach(it=>{
+    const row = document.createElement('div');
+    row.className = 'line-item';
+    row.innerHTML = `<div class="mark"></div><div class="name">${it.name}</div><div class="pack">${it.pack}</div>`;
+    row.addEventListener('click', ()=>{
+      const done = !row.classList.contains('done');
+      row.classList.toggle('done', done);
+      row.querySelector('.mark').textContent = done ? '✓' : '';
+      sfxCheck();
+    });
+    c.appendChild(row);
+  });
+}
+renderShop('shopFresh', fresh);
+renderShop('shopCupboard', cupboard);
+</script>
+</body>
+</html>

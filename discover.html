@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Meal Planner — Discover</title>
+<meta name="theme-color" content="#1c1410" />
+<link rel="manifest" href="manifest.json" />
+<link rel="icon" href="icons/icon-192.png" />
+<link rel="apple-touch-icon" href="icons/icon-192.png" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="Meals" />
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+<nav class="nav">
+  <span class="brand">🍽 Meal Planner</span>
+  <a href="index.html">Browse & Add</a>
+  <a href="discover.html" class="active">Discover</a>
+  <a href="plan.html">2-Week Plan</a>
+  <a href="shopping.html">Shopping</a>
+  <button id="theme-toggle" class="icon-btn" title="Toggle dark/light mode">🌓</button>
+</nav>
+
+<main>
+  <section class="section" style="margin-top:1rem;">
+    <h1 style="color:#fff6ea;font-size:1.6rem;margin:0 0 4px;text-align:center;">Pin up something good</h1>
+    <p class="muted" style="text-align:center;">Swipe right to like, left to pass, up to save for later.</p>
+    <div class="fan-wrap">
+      <div class="fan-progress" id="fan-progress"></div>
+      <div class="fan-deck" id="fan-deck"></div>
+      <div class="fan-controls">
+        <button class="fan-btn skip" id="fan-skip" title="Pass">✕</button>
+        <button class="fan-btn super" id="fan-super" title="Save for later">★</button>
+        <button class="fan-btn like" id="fan-like" title="Like">♥</button>
+      </div>
+      <p class="swipe-hint">Drag the card — or use the buttons</p>
+      <div class="fan-filmstrip-title">Up next</div>
+      <div class="fan-filmstrip" id="fan-filmstrip"></div>
+    </div>
+  </section>
+
+  <section class="section">
+    <h2>Saved for later</h2>
+    <div id="saved-grid" class="card-grid"></div>
+  </section>
+</main>
+
+<div id="toast-root"></div>
+
+<script src="data.js"></script>
+<script src="exclusions.js"></script>
+<script src="mealdb.js"></script>
+<script src="discover.js"></script>
+<script>if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js");</script>
+</body>
+</html>

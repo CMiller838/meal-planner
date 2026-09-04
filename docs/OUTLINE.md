@@ -5,7 +5,8 @@
 Phase 1 shipped a static, browser-only meal planner (library + 2-week plan,
 nutrition/shelf-life logic, TheMealDB discovery). It only works when Cody is
 sitting at the app on his phone. He also runs a separate personal AI
-assistant, Hermes (phone-based, conversational, backed by n8n), and wants to
+assistant, Hermes (phone-based, conversational, backed by the hosted
+hermes-agent.nousresearch.com agent), and wants to
 discover, like/dislike, and tweak meals through that conversation instead of
 only through the swipe UI — then have a plan generated from whatever he's
 told Hermes he likes. The planner itself also has some rough edges from

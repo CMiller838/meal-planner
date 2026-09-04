@@ -1,11 +1,12 @@
 # Hermes contract
 
-Hermes is an n8n workflow that lives outside this repo. This is the contract
-it builds against — a reference, not a tutorial. The Worker URL and the
-`X-Auth-Token` value live in n8n credentials and must never be committed here.
+Hermes is a hosted agent (hermes-agent.nousresearch.com) that lives outside
+this repo. This is the contract it builds against — a reference, not a
+tutorial. The Worker URL and the `X-Auth-Token` value live in Hermes's own
+credential store and must never be committed here.
 
 Every request carries `X-Auth-Token: <token>`. KV is eventually consistent
-(~60s) — n8n must not read back a write to confirm it landed.
+(~60s) — Hermes must not read back a write to confirm it landed.
 
 | Capability | HTTP call | Notes |
 |---|---|---|

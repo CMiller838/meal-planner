@@ -1,0 +1,504 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cork Kitchen — Swipe Fan</title>
+<style>
+  :root{
+    --cork:#3a2a1f;
+    --cork-light:#4d372a;
+    --paper:#fdf6ec;
+    --paper-2:#f7ecda;
+    --ink:#2b1d14;
+    --terracotta:#d4633b;
+    --sage:#7a9a6b;
+    --butter:#e8b74a;
+    --red:#c1421a;
+    --line:#e3d3ba;
+    --radius:18px;
+    --shadow: 0 6px 16px rgba(43,29,20,.18), 0 1px 0 rgba(255,255,255,.4) inset;
+    color-scheme: light;
+  }
+  html.dark{
+    --cork:#1c1410;
+    --cork-light:#26190f;
+    --paper:#241a13;
+    --paper-2:#2c2018;
+    --ink:#f3e6d4;
+    --line:#4a382b;
+    --shadow: 0 6px 18px rgba(0,0,0,.45), 0 1px 0 rgba(255,255,255,.03) inset;
+    color-scheme: dark;
+  }
+  *{ box-sizing:border-box; }
+  body{
+    margin:0;
+    font-family: "Segoe UI Rounded","Nunito","Trebuchet MS",system-ui,sans-serif;
+    background: radial-gradient(circle at 8% 12%, rgba(255,255,255,.05), transparent 40%), var(--cork);
+    background-image:
+      repeating-radial-gradient(circle at 20% 30%, rgba(0,0,0,.04) 0 2px, transparent 2px 40px),
+      linear-gradient(var(--cork), var(--cork-light));
+    color: var(--ink);
+    min-height:100vh;
+    transition: background-color .4s ease, color .4s ease;
+  }
+  header.top{
+    display:flex; align-items:center; justify-content:space-between;
+    padding: 18px 28px; position: sticky; top:0; z-index:20;
+    backdrop-filter: blur(6px); background: rgba(0,0,0,.12);
+    border-bottom: 1px solid rgba(255,255,255,.08);
+  }
+  .brand{ display:flex; align-items:center; gap:10px; color:#fff6ea; font-weight:800; font-size:1.25rem; letter-spacing:.3px; }
+  .brand .pin{ width:14px;height:14px;border-radius:50%; background: radial-gradient(circle at 30% 30%, #ff8a65, #c1421a); box-shadow: 0 2px 3px rgba(0,0,0,.5); }
+  nav.tabs{ display:flex; gap:8px; background: rgba(0,0,0,.2); padding:6px; border-radius:999px; }
+  nav.tabs button{
+    border:none; background:transparent; color:#f3e6d4cc; padding:9px 18px; border-radius:999px;
+    font-weight:700; cursor:pointer; font-size:.92rem; transition: background .25s ease, color .25s ease, transform .15s ease;
+  }
+  nav.tabs button.active{ background: var(--terracotta); color:#fff; box-shadow: 0 3px 10px rgba(212,99,59,.5); }
+  nav.tabs button:hover{ transform: translateY(-1px); }
+  .icon-btn{
+    border:none; background: rgba(255,255,255,.1); color:#f3e6d4; width:38px;height:38px;border-radius:50%;
+    cursor:pointer; font-size:1.05rem; display:flex; align-items:center; justify-content:center;
+    transition: transform .2s ease, background .2s ease;
+  }
+  .icon-btn:hover{ transform: rotate(-8deg) scale(1.08); background: rgba(255,255,255,.2); }
+
+  main{ max-width:1180px; margin:0 auto; padding: 28px 24px 80px; }
+  .view{ display:none; animation: riseIn .5s cubic-bezier(.2,.9,.25,1.3); }
+  .view.active{ display:block; }
+  @keyframes riseIn{ from{ opacity:0; transform: translateY(18px) scale(.98); } to{ opacity:1; transform:none; } }
+
+  h1.page-title{ color:#fff6ea; font-size:2rem; margin:0 0 4px; text-align:center; }
+  p.page-sub{ color:#f3e6d4a8; margin:0 0 22px; text-align:center; }
+
+  /* ---------- Fanned swipe deck ---------- */
+  .swipe-wrap{ max-width:460px; margin:0 auto; }
+  .swipe-progress{ text-align:center; color:#f3e6d4a8; font-size:.82rem; margin-bottom:10px; font-weight:700; letter-spacing:.3px; }
+  .deck{ position:relative; height:440px; margin-bottom:14px; touch-action:none; }
+  .swipe-card{
+    position:absolute; left:50%; top:0; width:100%; max-width:300px; height:410px; margin-left:-150px;
+    background: var(--paper); border-radius: 24px; box-shadow: var(--shadow);
+    display:flex; flex-direction:column; overflow:hidden; cursor:grab;
+    transition: transform .4s cubic-bezier(.2,.9,.22,1.4), opacity .35s ease;
+    user-select:none; -webkit-user-select:none;
+    transform-origin: 50% 120%;
+  }
+  .swipe-card.dragging{ transition:none; cursor:grabbing; }
+  .swipe-card .thumb{
+    flex:1; min-height:170px; display:flex; align-items:center; justify-content:center; font-size:4rem;
+    background: linear-gradient(135deg, var(--paper-2), var(--line)); color: var(--terracotta);
+  }
+  .swipe-card .body{ padding:14px 18px 18px; }
+  .swipe-card h3{ margin:0 0 4px; font-size:1.15rem; }
+  .swipe-card .desc{ font-size:.82rem; color: color-mix(in srgb, var(--ink) 70%, transparent); margin:0 0 8px; line-height:1.4; }
+  .swipe-card .tags{ display:flex; gap:6px; }
+  .tag{ font-size:.66rem; font-weight:800; text-transform:uppercase; letter-spacing:.4px; padding:3px 8px; border-radius:6px; color:#fff; }
+  .tag.batch{ background: var(--sage); }
+  .tag.new{ background: var(--butter); color:#3a2a10; }
+  .stamp{
+    position:absolute; top:18px; padding:6px 14px; border:4px solid; border-radius:12px;
+    font-weight:900; font-size:1.25rem; letter-spacing:1px; text-transform:uppercase; opacity:0; pointer-events:none;
+  }
+  .stamp.like{ left:16px; color: var(--sage); border-color: var(--sage); transform:rotate(-16deg); }
+  .stamp.skip{ right:16px; color: var(--red); border-color: var(--red); transform:rotate(16deg); }
+  .stamp.super{ left:50%; bottom:16px; top:auto; transform:translateX(-50%); color: var(--butter); border-color: var(--butter); }
+
+  .swipe-controls{ display:flex; justify-content:center; align-items:center; gap:18px; margin-bottom:6px; }
+  .swipe-btn{
+    width:52px; height:52px; border-radius:50%; border:none; font-size:1.35rem; cursor:pointer;
+    box-shadow: var(--shadow); background: var(--paper); transition: transform .15s ease;
+  }
+  .swipe-btn:hover{ transform: translateY(-3px) scale(1.06); }
+  .swipe-btn:active{ transform: scale(.88); }
+  .swipe-btn.skip{ color: var(--red); }
+  .swipe-btn.like{ color: var(--terracotta); width:62px; height:62px; font-size:1.65rem; }
+  .swipe-btn.super{ color: var(--butter); }
+  .swipe-hint{ text-align:center; color:#f3e6d477; font-size:.72rem; margin-bottom:20px; }
+  .swipe-empty{ text-align:center; color:#f3e6d4; padding: 80px 20px; }
+  .swipe-empty .big{ font-size:2.6rem; margin-bottom:10px; }
+
+  /* ---------- filmstrip queue ---------- */
+  .filmstrip-title{ color:#f3e6d488; font-size:.7rem; text-transform:uppercase; letter-spacing:1px; margin: 0 0 8px; font-weight:800; }
+  .filmstrip{ display:flex; gap:10px; overflow-x:auto; padding: 6px 2px 16px; }
+  .film-card{
+    flex: 0 0 auto; width:70px; height:88px; background: var(--paper); border-radius:10px; box-shadow: var(--shadow);
+    display:flex; flex-direction:column; align-items:center; justify-content:center; gap:4px;
+    transform: rotate(var(--r,0deg)); opacity:.85; transition: transform .25s ease, opacity .25s ease;
+  }
+  .film-card .e{ font-size:1.5rem; }
+  .film-card .n{ font-size:.55rem; font-weight:700; text-align:center; padding:0 4px; line-height:1.15; }
+
+  /* ---------- Plan (corkboard) ---------- */
+  .board{ display:grid; grid-template-columns: repeat(7,1fr); gap:14px; }
+  .week-label{ grid-column: 1/-1; color:#f3e6d4; font-weight:800; margin: 18px 0 6px; font-size:1rem; }
+  .day-pin{
+    background: var(--paper); border-radius: 14px; padding:12px; box-shadow: var(--shadow);
+    min-height:150px; position:relative; transform: rotate(var(--r,0deg)); transition: transform .3s ease;
+  }
+  .day-pin:hover{ transform: rotate(0) translateY(-3px); }
+  .day-pin::before{
+    content:''; position:absolute; top:-8px; left:50%; transform:translateX(-50%); width:14px;height:14px;border-radius:50%;
+    background: radial-gradient(circle at 30% 30%, #ff8a65, #c1421a); box-shadow: 0 3px 4px rgba(0,0,0,.5);
+  }
+  .day-name{ font-weight:800; font-size:.78rem; text-transform:uppercase; letter-spacing:.5px; color: var(--terracotta); }
+  .day-meal{ font-size:.88rem; font-weight:700; margin: 6px 0 4px; }
+  .day-note{ font-size:.7rem; color: color-mix(in srgb, var(--ink) 65%, transparent); line-height:1.35; }
+  .badge{ display:inline-block; font-size:.62rem; font-weight:800; padding:2px 6px; border-radius:5px; margin-top:6px; color:#fff; }
+  .badge.shelf{ background:#c1421a; }
+  .badge.shelf.ok{ background: var(--sage); color:#12200f; }
+  .badge.leftover{ background: var(--butter); color:#3a2a10; }
+  .coverage-banner{
+    margin: 24px 0; padding:14px 18px; border-radius: 14px; background: linear-gradient(135deg, #4a3a26, #3a2c1c);
+    color:#f3e6d4; display:flex; align-items:center; gap:12px; box-shadow: var(--shadow); font-size:.88rem;
+  }
+  .coverage-banner strong{ color: var(--butter); }
+  .generate-btn{
+    display:inline-flex; align-items:center; gap:8px; border:none; background: var(--sage); color:#12200f; font-weight:800;
+    padding:12px 22px; border-radius:12px; cursor:pointer; font-size:.95rem; box-shadow: 0 6px 14px rgba(122,154,107,.4);
+    transition: transform .15s ease; margin-bottom: 10px;
+  }
+  .generate-btn:hover{ transform: translateY(-2px); }
+  .generate-btn:active{ transform: scale(.95); }
+  .generate-btn.spin .dice{ animation: spin .6s ease; }
+  @keyframes spin{ from{transform:rotate(0);} to{transform:rotate(360deg);} }
+
+  /* ---------- Shopping ---------- */
+  .shop-list{ display:flex; flex-direction:column; gap:10px; max-width:640px; }
+  .shop-section-title{ color:#f3e6d4; font-weight:800; margin: 20px 0 8px; font-size:.85rem; text-transform:uppercase; letter-spacing:.6px; }
+  .shop-item{
+    display:flex; align-items:center; gap:12px; background: var(--paper); border-radius: 12px; padding: 12px 14px;
+    box-shadow: var(--shadow); transition: transform .25s ease, opacity .25s ease;
+  }
+  .shop-item.done{ opacity:.5; }
+  .shop-item.done .name{ text-decoration: line-through; }
+  .checkbox{
+    width:24px;height:24px;border-radius:8px; border:2px solid var(--terracotta); display:flex; align-items:center;
+    justify-content:center; cursor:pointer; flex-shrink:0; transition: background .2s ease, transform .15s ease;
+    background:transparent; font-size:.9rem; color:#fff;
+  }
+  .checkbox.checked{ background: var(--terracotta); animation: checkPop .35s ease; }
+  @keyframes checkPop{ 0%{transform:scale(1);} 50%{transform:scale(1.3);} 100%{transform:scale(1);} }
+  .shop-item .name{ flex:1; font-weight:700; font-size:.92rem; }
+  .shop-item .pack{ font-size:.75rem; color: color-mix(in srgb, var(--ink) 60%, transparent); }
+
+  footer.hint{ text-align:center; color:#f3e6d466; font-size:.75rem; margin-top:50px; }
+  ::selection{ background: var(--butter); color:#3a2a10; }
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="brand"><span class="pin"></span> Cork Kitchen</div>
+  <nav class="tabs">
+    <button class="active" data-view="browse">Browse</button>
+    <button data-view="plan">2-Week Plan</button>
+    <button data-view="shop">Shopping</button>
+  </nav>
+  <button class="icon-btn" id="darkToggle" title="Toggle dark mode">🌙</button>
+</header>
+
+<main>
+
+  <!-- BROWSE: fanned swipe deck -->
+  <section class="view active" id="view-browse">
+    <h1 class="page-title">Pin up something good</h1>
+    <p class="page-sub">Swipe right to like, left to pass, up to save for later.</p>
+    <div class="swipe-wrap">
+      <div class="swipe-progress" id="swipeProgress"></div>
+      <div class="deck" id="deck"></div>
+      <div class="swipe-controls">
+        <button class="swipe-btn skip" id="skipBtn" title="Pass">✕</button>
+        <button class="swipe-btn super" id="superBtn" title="Save for later">★</button>
+        <button class="swipe-btn like" id="likeBtn" title="Like">♥</button>
+      </div>
+      <div class="swipe-hint">Drag the card — or use the buttons</div>
+      <div class="filmstrip-title">Up next</div>
+      <div class="filmstrip" id="filmstrip"></div>
+    </div>
+  </section>
+
+  <!-- PLAN -->
+  <section class="view" id="view-plan">
+    <h1 class="page-title">The 2-Week Plan</h1>
+    <p class="page-sub">Pinned to the board, leftovers followed through, nothing wasted.</p>
+    <button class="generate-btn" id="genBtn"><span class="dice">🎲</span> Generate new plan</button>
+    <div class="coverage-banner">⚠️ <span><strong>Low on vitamin C</strong> this week — try adding citrus or peppers to a lunch.</span></div>
+    <div class="board" id="planBoard"></div>
+  </section>
+
+  <!-- SHOPPING -->
+  <section class="view" id="view-shop">
+    <h1 class="page-title">Shopping List</h1>
+    <p class="page-sub">Pack-size aware — tap to cross off as you shop.</p>
+    <div class="shop-section-title">Fresh</div>
+    <div class="shop-list" id="shopFresh"></div>
+    <div class="shop-section-title">Store cupboard</div>
+    <div class="shop-list" id="shopCupboard"></div>
+  </section>
+
+  <footer class="hint">Concept: Cork Kitchen — Swipe Fan. Fanned card hand, swipe-up "save for later" gesture, filmstrip queue preview.</footer>
+</main>
+
+<script>
+/* ---------------- sound ---------------- */
+let actx;
+function ctx(){ actx = actx || new (window.AudioContext||window.webkitAudioContext)(); return actx; }
+function beep(freq=440, dur=.09, type='sine', gain=.05, delay=0){
+  const c = ctx();
+  const o = c.createOscillator(), g = c.createGain();
+  o.type = type; o.frequency.value = freq;
+  g.gain.value = 0;
+  o.connect(g); g.connect(c.destination);
+  const t0 = c.currentTime + delay;
+  g.gain.setValueAtTime(0, t0);
+  g.gain.linearRampToValueAtTime(gain, t0 + .01);
+  g.gain.exponentialRampToValueAtTime(.0001, t0 + dur);
+  o.start(t0); o.stop(t0 + dur + .02);
+}
+function sfxLike(){ beep(660,.08,'triangle',.06); beep(880,.1,'triangle',.05,.06); }
+function sfxSuper(){ [660,880,1100].forEach((f,i)=>beep(f,.1,'triangle',.05,i*.06)); }
+function sfxSkip(){ beep(420,.07,'sine',.04); beep(280,.09,'sine',.035,.05); }
+function sfxTick(){ beep(700,.05,'square',.03); }
+function sfxCheck(){ beep(600,.06,'triangle',.05); beep(900,.08,'triangle',.04,.05); }
+function sfxGenerate(){ [440,554,659,880].forEach((f,i)=>beep(f,.09,'sine',.045,i*.07)); }
+
+/* ---------------- tabs ---------------- */
+document.querySelectorAll('nav.tabs button').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    sfxTick();
+    document.querySelectorAll('nav.tabs button').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
+    document.getElementById('view-'+btn.dataset.view).classList.add('active');
+  });
+});
+document.getElementById('darkToggle').addEventListener('click', ()=>{
+  sfxTick();
+  document.documentElement.classList.toggle('dark');
+});
+document.documentElement.classList.add('dark');
+
+/* ---------------- swipe deck ---------------- */
+const meals = [
+  {name:'Sunday Roast Chicken', emoji:'🍗', tags:['batch'], desc:'Roast potatoes, carrots, Bisto gravy. Feeds into fajitas.'},
+  {name:'Chicken Fajitas', emoji:'🌯', tags:[], desc:'Leftover roast chicken, peppers, onion, cannellini beans.'},
+  {name:'Chilli', emoji:'🌶️', tags:['batch'], desc:'Beef mince, carrots, peppers, chilli beans — makes 3 servings.'},
+  {name:'Chorizo & Pasta', emoji:'🍝', tags:['batch'], desc:'Any shape pasta, chorizo, white sauce.'},
+  {name:'Salmon Teriyaki', emoji:'🐟', tags:[], desc:'Salmon, rice, broccoli, teriyaki glaze.'},
+  {name:'Ham & Cheese Toastie', emoji:'🥪', tags:[], desc:'White bread, ham, cheese. No veg, ever.'},
+  {name:'French Toast', emoji:'🍞', tags:[], desc:'Egg-coated bread, classic weekend breakfast.'},
+  {name:'Porridge', emoji:'🥣', tags:[], desc:'Oats, milk, banana.'},
+  {name:'Beef & Broccoli Stir-fry', emoji:'🥢', tags:['new'], desc:'Discover: TheMealDB find, adapted to your macros.'},
+];
+
+let idx = 0;
+let likedCount = 0, skippedCount = 0, savedCount = 0;
+const deck = document.getElementById('deck');
+const progressEl = document.getElementById('swipeProgress');
+const filmstrip = document.getElementById('filmstrip');
+const FAN_ANGLES = [0, -7, 6];
+
+function cardInner(m){
+  return `
+    <div class="stamp like">Liked</div>
+    <div class="stamp skip">Pass</div>
+    <div class="stamp super">Saved</div>
+    <div class="thumb">${m.emoji}</div>
+    <div class="body">
+      <h3>${m.name}</h3>
+      <p class="desc">${m.desc}</p>
+      <div class="tags">
+        ${m.tags.includes('batch') ? '<span class="tag batch">Batch-cook</span>' : ''}
+        ${m.tags.includes('new') ? '<span class="tag new">Discover</span>' : ''}
+      </div>
+    </div>`;
+}
+
+function makeDraggable(el){
+  let startX=0, startY=0, dx=0, dy=0, dragging=false;
+  const likeStamp = el.querySelector('.stamp.like');
+  const skipStamp = el.querySelector('.stamp.skip');
+  const superStamp = el.querySelector('.stamp.super');
+  const baseTransform = el.dataset.base || '';
+  function down(e){
+    dragging = true;
+    el.classList.add('dragging');
+    el.setPointerCapture(e.pointerId);
+    startX = e.clientX; startY = e.clientY;
+  }
+  function move(e){
+    if(!dragging) return;
+    dx = e.clientX - startX; dy = e.clientY - startY;
+    const rot = dx / 14;
+    el.style.transform = `${baseTransform} translate(${dx}px, ${dy}px) rotate(${rot}deg)`;
+    likeStamp.style.opacity = Math.max(0, Math.min(1, dx/90));
+    skipStamp.style.opacity = Math.max(0, Math.min(1, -dx/90));
+    superStamp.style.opacity = Math.max(0, Math.min(1, -dy/80));
+  }
+  function up(){
+    if(!dragging) return;
+    dragging = false;
+    el.classList.remove('dragging');
+    const threshold = 100;
+    if(dy < -threshold && Math.abs(dy) > Math.abs(dx)){ decide(el, 'super'); }
+    else if(dx > threshold){ decide(el, 'like'); }
+    else if(dx < -threshold){ decide(el, 'skip'); }
+    else{
+      el.style.transform = baseTransform;
+      likeStamp.style.opacity = 0; skipStamp.style.opacity = 0; superStamp.style.opacity = 0;
+    }
+  }
+  el.addEventListener('pointerdown', down);
+  el.addEventListener('pointermove', move);
+  el.addEventListener('pointerup', up);
+  el.addEventListener('pointercancel', up);
+}
+
+function decide(el, dir){
+  if(dir === 'like'){ sfxLike(); likedCount++; el.style.transform = `translate(700px, -30px) rotate(24deg)`; }
+  else if(dir === 'super'){ sfxSuper(); savedCount++; el.style.transform = `translate(0, -650px) rotate(0deg) scale(.9)`; }
+  else { sfxSkip(); skippedCount++; el.style.transform = `translate(-700px, -30px) rotate(-24deg)`; }
+  el.style.opacity = '0';
+  idx++;
+  setTimeout(renderDeck, 260);
+}
+
+function renderDeck(){
+  deck.innerHTML = '';
+  const upcoming = meals.slice(idx, idx+3);
+  if(upcoming.length === 0){
+    deck.innerHTML = `<div class="swipe-empty"><div class="big">📌</div>All reviewed.<br>${likedCount} liked, ${savedCount} saved, ${skippedCount} passed.</div>`;
+    progressEl.textContent = '';
+    filmstrip.innerHTML = '';
+    return;
+  }
+  progressEl.textContent = `Reviewed ${idx} of ${meals.length}`;
+  upcoming.forEach((m,i)=>{
+    const el = document.createElement('div');
+    el.className = 'swipe-card';
+    el.innerHTML = cardInner(m);
+    const angle = FAN_ANGLES[i] || 0;
+    const finalT = `translateY(${i*6}px) scale(${1 - i*0.05}) rotate(${angle}deg)`;
+    el.dataset.base = finalT;
+    el.style.zIndex = 10 - i;
+    el.style.transform = `translateY(${i*6 + 60}px) scale(${1 - i*0.05}) rotate(${angle}deg)`;
+    el.style.opacity = '0';
+    deck.appendChild(el);
+    requestAnimationFrame(()=>{
+      el.style.transform = finalT;
+      el.style.opacity = i < 2 ? '1' : '0.55';
+    });
+    if(i === 0) makeDraggable(el);
+  });
+  renderFilmstrip();
+}
+
+function renderFilmstrip(){
+  filmstrip.innerHTML = '';
+  meals.slice(idx+1, idx+7).forEach((m,i)=>{
+    const c = document.createElement('div');
+    c.className = 'film-card';
+    c.style.setProperty('--r', (i%2? '3deg':'-3deg'));
+    c.innerHTML = `<div class="e">${m.emoji}</div><div class="n">${m.name}</div>`;
+    filmstrip.appendChild(c);
+  });
+}
+renderDeck();
+
+document.getElementById('likeBtn').addEventListener('click', ()=>{
+  const top = deck.querySelector('.swipe-card');
+  if(top) decide(top, 'like');
+});
+document.getElementById('skipBtn').addEventListener('click', ()=>{
+  const top = deck.querySelector('.swipe-card');
+  if(top) decide(top, 'skip');
+});
+document.getElementById('superBtn').addEventListener('click', ()=>{
+  const top = deck.querySelector('.swipe-card');
+  if(top) decide(top, 'super');
+});
+
+/* ---------------- plan board ---------------- */
+const days = [
+  {d:'Mon', meal:'Sunday Roast Chicken', note:'Cooked today · fridge 2 days', badge:'shelf', ok:false},
+  {d:'Tue', meal:'Chicken Fajitas', note:'Leftover chicken, day 2', badge:'leftover'},
+  {d:'Wed', meal:'Chilli', note:'Batch cooked · 3 servings', badge:'shelf', ok:true},
+  {d:'Thu', meal:'Chilli (leftover)', note:'Serving 2 of 3', badge:'leftover'},
+  {d:'Fri', meal:'Chorizo & Pasta', note:'Fresh cook', badge:'shelf', ok:true},
+  {d:'Sat', meal:'Salmon Teriyaki', note:'Fresh fish — use within 1-2 days', badge:'shelf', ok:false},
+  {d:'Sun', meal:'Ham & Cheese Toastie', note:'Quick, no batch', badge:'shelf', ok:true},
+];
+function renderBoard(){
+  const board = document.getElementById('planBoard');
+  board.innerHTML = '<div class="week-label">Week 1</div>';
+  days.forEach((day,i)=>{
+    const pin = document.createElement('div');
+    pin.className = 'day-pin';
+    pin.style.setProperty('--r', (i%2? '1deg':'-1deg'));
+    pin.innerHTML = `
+      <div class="day-name">${day.d}</div>
+      <div class="day-meal">${day.meal}</div>
+      <div class="day-note">${day.note}</div>
+      <span class="badge ${day.badge} ${day.ok?'ok':''}">${day.badge==='leftover' ? 'Leftover' : (day.ok?'Fresh · OK':'Use soon')}</span>
+    `;
+    board.appendChild(pin);
+  });
+}
+renderBoard();
+document.getElementById('genBtn').addEventListener('click', (e)=>{
+  sfxGenerate();
+  const btn = e.currentTarget;
+  btn.classList.add('spin');
+  document.getElementById('planBoard').style.opacity = '.3';
+  document.getElementById('planBoard').style.transform = 'scale(.98)';
+  document.getElementById('planBoard').style.transition = 'all .35s ease';
+  setTimeout(()=>{
+    days.reverse();
+    renderBoard();
+    document.getElementById('planBoard').style.opacity = '1';
+    document.getElementById('planBoard').style.transform = 'scale(1)';
+    btn.classList.remove('spin');
+  }, 380);
+});
+
+/* ---------------- shopping ---------------- */
+const fresh = [
+  {name:'Chicken thighs', pack:'1kg pack'},
+  {name:'Beef mince', pack:'500g'},
+  {name:'Salmon fillets', pack:'2-pack'},
+  {name:'Carrots', pack:'1kg bag'},
+  {name:'Peppers', pack:'x3'},
+  {name:'Onions', pack:'x2'},
+  {name:'Cheddar block', pack:'400g'},
+  {name:'Chorizo ring', pack:'225g'},
+];
+const cupboard = [
+  {name:'Rice', pack:'1kg'},
+  {name:'Tortillas', pack:'8-pack'},
+  {name:'Pasta', pack:'500g'},
+  {name:'Chilli beans (tin)', pack:'x2'},
+  {name:'Teriyaki sauce', pack:'bottle'},
+  {name:'Oats', pack:'1kg'},
+];
+function renderShop(containerId, items){
+  const c = document.getElementById(containerId);
+  items.forEach(it=>{
+    const row = document.createElement('div');
+    row.className = 'shop-item';
+    row.innerHTML = `<div class="checkbox">✓</div><div class="name">${it.name}</div><div class="pack">${it.pack}</div>`;
+    const box = row.querySelector('.checkbox');
+    box.addEventListener('click', ()=>{
+      const checked = !box.classList.contains('checked');
+      box.classList.toggle('checked', checked);
+      row.classList.toggle('done', checked);
+      sfxCheck();
+    });
+    c.appendChild(row);
+  });
+}
+renderShop('shopFresh', fresh);
+renderShop('shopCupboard', cupboard);
+</script>
+</body>
+</html>

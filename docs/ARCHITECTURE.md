@@ -9,7 +9,8 @@
   **Workers KV**, deployed with Wrangler from a `worker/` directory in this
   same repo. Secret-token-gated. This is the *only* backend in the project —
   it exists solely to sync the liked-meal library and a couple of small
-  flags between the app and Hermes (n8n), and is not a general API.
+  flags between the app and Hermes (the hosted agent at
+  hermes-agent.nousresearch.com), and is not a general API.
 
 ## Why Worker + KV (not a DB, not a PC-hosted service)
 
@@ -35,7 +36,7 @@ if the Gist itself were secret).
 ## Data flow
 
 ```
-Hermes (n8n, HTTP node)  <---->  Cloudflare Worker  <---->  Workers KV
+Hermes (hosted agent)   <---->  Cloudflare Worker  <---->  Workers KV
                                         ^
                                         |  (poll on load/focus + on local edit)
                                         v

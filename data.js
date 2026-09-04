@@ -8,6 +8,7 @@ window.MP = window.MP || {};
   const LS_LIBRARY_STAMP = "mp_library_updated_at";
   const LS_THEME = "mp_theme";
   const SS_DISMISSED = "mp_dismissed_discover";
+  const LS_SAVED_LATER = "mp_saved_later";
 
   /** Escape untrusted text before innerHTML interpolation (TheMealDB strings). */
   function esc(str) {
@@ -90,6 +91,26 @@ window.MP = window.MP || {};
     sessionStorage.setItem(SS_DISMISSED, JSON.stringify([...set]));
   }
 
+  /** "Save for later" pile from the Discover fan deck — persisted separately
+   *  from the liked library so a save isn't the same as adding to the plan. */
+  function getSavedLater() {
+    return JSON.parse(localStorage.getItem(LS_SAVED_LATER) || "[]");
+  }
+
+  function saveForLater(meal) {
+    const stored = getSavedLater();
+    if (stored.some((m) => m.id === meal.id)) return stored;
+    stored.push(meal);
+    localStorage.setItem(LS_SAVED_LATER, JSON.stringify(stored));
+    return stored;
+  }
+
+  function removeSavedLater(mealId) {
+    const stored = getSavedLater().filter((m) => m.id !== mealId);
+    localStorage.setItem(LS_SAVED_LATER, JSON.stringify(stored));
+    return stored;
+  }
+
   function getTheme() {
     return localStorage.getItem(LS_THEME) || "dark";
   }
@@ -123,5 +144,8 @@ window.MP = window.MP || {};
   MP.filterMeals = filterMeals;
   MP.getDismissed = getDismissed;
   MP.dismiss = dismiss;
+  MP.getSavedLater = getSavedLater;
+  MP.saveForLater = saveForLater;
+  MP.removeSavedLater = removeSavedLater;
   MP.initTheme = initTheme;
 })();
