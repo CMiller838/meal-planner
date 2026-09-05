@@ -1,3 +1,8 @@
+---
+name: planner-invocation
+description: Efficiency protocol for invoking the planner agent in phase mode (spec + tasks breakdown) — scan first with a scanner agent, name exact files, reference one prior phase as the format model, and bias toward zero-pause decision gates. Use whenever about to invoke @planner for a phase spec.
+---
+
 ## PLANNER INVOCATION EFFICIENCY PROTOCOL
 
 `@planner` (phase mode) calls burn tokens fast because a resumed agent replays
@@ -21,6 +26,15 @@ its whole prior transcript. Follow these four rules whenever invoking
    below — ask `planner` to state its own recommendation and default to
    proceeding on it (not pausing) for any fork that isn't genuinely high-stakes
    or irreversible for the project.
+5. **Tell `planner` to touch only its own phase's slice of `tasks.md`.**
+   `tasks.md` accumulates every prior phase's full checklist — instruct
+   `planner` explicitly to `Grep` for `^## Phase <N>` (its own heading) and
+   the next `^## Phase` heading to get its exact line range, read only that
+   slice, and never read or reason about any other phase's tasks (the one
+   phase named as the format model in rule 3 is the sole exception). This is
+   already in `planner.md`'s own instructions, but restate it in the prompt —
+   a resumed `planner` call replays its whole prior transcript, so a blind
+   full-file read early on is expensive to have happened at all.
 
 ### Decision gates
 

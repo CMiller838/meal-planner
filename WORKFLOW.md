@@ -104,6 +104,10 @@ Full 3-stage lifecycle:
 
 ### 4b. Build
 
+- **Scope your `tasks.md` read to the current phase.** `tasks.md` accumulates
+  every prior phase's full checklist. Grep for the current phase's `^## Phase
+  N` heading and the next `^## Phase` heading to find its line range, and
+  read only that slice — don't read the whole file or other phases' tasks.
 - **Logic**: TDD — failing test first — for anything matching this project's
   "core logic" file list (name it in `CLAUDE.md`'s Architecture invariants
   section). Keep it ponytail-lazy: smallest working diff, no speculative

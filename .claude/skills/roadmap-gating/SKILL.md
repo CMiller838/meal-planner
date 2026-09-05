@@ -1,6 +1,6 @@
 ---
-name: roadmap-gating 
-description: Instructions for dynamically discovering and updating any active roadmap (roadmap.md) and checklist (tasks.md, todo.md) files in the repository during commits.
+name: roadmap-gating
+description: Instructions for dynamically discovering and updating any active roadmap (roadmap.md) and checklist (tasks.md, todo.md) files in the repository during commits. Use before staging files, creating a commit, or ending a milestone/phase.
 ---
 
 ##  DYNAMIC ROADMAP & TASK GATING PROTOCOL
@@ -33,5 +33,3 @@ STEP 4: Atomic Progress Commits
 
     Ensure that the updated Checklist and Roadmap files are staged and committed in the exact same Git commit as the code changes that completed them.
     Write a highly professional, human-sounding commit message using conventional commit prefixes (e.g., feat:, fix:, refactor:) that explicitly reflects the checklist progress.
-
-
