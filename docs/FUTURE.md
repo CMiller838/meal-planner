@@ -85,6 +85,25 @@ just applies the remote silently.
 - **Revisit trigger**: if a real overwrite is ever noticed and it matters
   which version was lost.
 
+## Meal variants (multiple recipes/ingredient sets per meal)
+
+Let a single meal entry hold multiple variants (e.g. "Chorizo & Pasta" with
+a cream-sauce variant, a milk-and-butter-white-sauce variant, a
+canned-tomato variant), each with its own `ingredients`/`instructions`, so
+the planner/generator can pick whichever variant best fits what's in stock
+(`/pantry`) or other constraints, instead of a meal being locked to one
+fixed recipe.
+
+- **Why parked**: raised in a Hermes chat while manually reworking the
+  Chorizo & Pasta recipe/ingredients (cream vs. milk+butter vs. tomatoes vs.
+  spinach) — no variant data model or picker logic exists yet in
+  `meals.json`/`generator.js`.
+- **Revisit trigger**: next time a meal needs more than one plausible
+  ingredient substitution captured permanently (not just a one-off chat
+  swap), design the variant shape (schema in `meals.json`, matching logic
+  in `generator.js`/pantry cross-check) rather than continuing to hand-edit
+  a single fixed recipe per meal.
+
 ## `/coverage` endpoint for Hermes
 
 Phase 5's Q&A capability answers nutrition questions by having Hermes fetch
