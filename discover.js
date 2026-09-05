@@ -8,6 +8,8 @@
 
   let pool = [];
   let idx = 0;
+  let activeCat = "";
+  let loadFailed = false;
 
   function toast(msg) {
     const root = document.getElementById("toast-root");
@@ -105,7 +107,12 @@
     deck.innerHTML = "";
     const upcoming = pool.slice(idx, idx + 3);
     if (!upcoming.length) {
-      deck.innerHTML = `<div class="swipe-empty">📌 No more suggestions right now — check back later.</div>`;
+      const msg = loadFailed
+        ? "Couldn't reach TheMealDB — check your connection and tap the chip again."
+        : activeCat
+        ? `No more ${esc(activeCat)} suggestions — try another chip.`
+        : "📌 No more suggestions right now — check back later.";
+      deck.innerHTML = `<div class="swipe-empty">${msg}</div>`;
       progress.textContent = "";
       document.getElementById("fan-filmstrip").innerHTML = "";
       return;
@@ -196,21 +203,50 @@
     if (top) decide(top, "super");
   });
 
-  async function init() {
-    MP.initTheme();
-    renderSaved();
+  /** Ids the deck must never show: already in the library, dismissed, or saved for later.
+   *  Recomputed per load so a chip switch respects likes made since page load. */
+  async function excludeIds() {
     const library = await MP.getLibrary();
-    const excludeIds = [
+    return [
       ...library.map((m) => m.id),
       ...MP.getDismissed(),
       ...MP.getSavedLater().map((m) => m.id),
     ];
+  }
+
+  /** Fetch, install and render the deck for one chip. @param {string} cat  "" = All */
+  async function loadPool(cat) {
+    activeCat = cat;
+    loadFailed = false;
+    document.getElementById("fan-deck").innerHTML = `<div class="swipe-empty">Loading suggestions…</div>`;
+    document.getElementById("fan-progress").textContent = "";
+    document.getElementById("fan-filmstrip").innerHTML = "";
+    let next;
     try {
-      pool = await MP.MealDB.getDiscoverPool(excludeIds);
+      next = await MP.MealDB.getDiscoverPool(await excludeIds(), cat);
     } catch (e) {
-      pool = [];
+      loadFailed = true;
+      next = [];
     }
+    if (cat !== activeCat) return;
+    pool = next;
+    idx = 0;
     renderDeck();
+  }
+
+  document.getElementById("discover-filters").addEventListener("click", (e) => {
+    const chip = e.target.closest(".chip");
+    if (!chip) return;
+    if (chip.dataset.cat === activeCat && !loadFailed) return;
+    document.querySelectorAll("#discover-filters .chip").forEach((c) => c.classList.remove("active"));
+    chip.classList.add("active");
+    loadPool(chip.dataset.cat);
+  });
+
+  async function init() {
+    MP.initTheme();
+    renderSaved();
+    await loadPool("");
   }
 
   init();

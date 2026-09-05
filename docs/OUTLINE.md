@@ -158,3 +158,77 @@ None — see `docs/FUTURE.md` for ideas raised but parked instead.
 - No per-field conflict resolution — edits and deletes stay under the
   existing whole-library last-write-wins model (see `docs/FUTURE.md` for the
   already-parked "no conflict UI" item, which applies here too).
+
+---
+
+# Meal Planner — v2 Outline
+
+## Problem
+
+Real phone use after v1 surfaced everyday friction rather than a missing
+capability: the top nav doesn't fit small screens, some library meals have no
+image, Discover only offers free-text search, and tapping a plan day shows
+too little to be useful at a glance. v2 is a focused pass on that friction —
+not the bigger pantry/cost or Hermes-smarts ideas that also came out of the
+v1 retro (`docs/OUTLINE.md`'s retro record, dated 2026-09-05), which are real
+but explicitly not this version's core theme.
+
+## Users
+
+Solo tool, one user (Cody), no sign-up, no sharing — unchanged.
+
+## Must-haves
+
+- **Scrollable mobile tab bar** — the top nav overflows on phone widths;
+  make the tab strip horizontally scrollable instead of squeezing/wrapping.
+- **Backfill missing meal images** — for a library meal with no image, try a
+  TheMealDB lookup by name first; if that finds nothing, let the user attach
+  their own photo when adding/editing the meal (plain `<input type="file">`
+  + `FileReader`, stored like any other meal field — no new dependency).
+- **Discover category filters** — filter chips above Discover results (e.g.
+  All / using what's left / meat / pasta), alongside the existing free-text
+  search, not replacing it.
+- **Expanded day view on the 2-week plan** — clicking a day opens a full
+  expanded view of that day's meals/ingredients, replacing today's compact
+  view.
+
+## Nice-to-haves
+
+Real ideas, but not this version's core theme — sequenced after the
+must-haves above if time allows, not parked:
+
+- **Nutrient-gap-aware Discover** — favor suggestions that cover
+  vitamins/nutrients underrepresented across the current liked-meal library,
+  using the existing `ingredient-nutrient-tags.json` coverage data.
+- **Hermes can add meals to the plan directly** — beyond the existing
+  "generate a new plan" trigger, let Hermes place a specific meal into a
+  specific plan slot via conversation.
+- **Preference learning/adaptation** — app + Hermes adapt suggestions over
+  time based on actual behavior (likes/dislikes/eaten history), not only the
+  static tags/exclusion rules.
+- **Bulk-buy/reuse-aware shopping** — account for ingredients that outlast
+  one 2-week cycle (e.g. a block of cheese) instead of re-buying every plan,
+  building on the `/pantry` endpoint shipped post-Phase-6 (see
+  `docs/HERMES.md`).
+- **Pantry-driven cost reduction** — use Hermes' pantry data to cut
+  duplicate shopping/cost, prioritizing healthiness over cheapest-possible.
+- **"Eat" flow with pantry deduction** — mark a meal eaten from the plan or
+  library, see remaining ingredient quantities after consumption, confirm/
+  cancel, then update the pantry and auto-add any shortfall to a shopping
+  list.
+- **Two separate shopping lists** — split the existing 2-week planned list
+  from a separate ad-hoc "ran out of / want to buy this week" list.
+
+## Constraints
+
+Same as v1 (see Phase 2 outline above): static site, no build step, no new
+dependency without confirming first, no backend beyond the existing Hermes
+Worker+KV, all Phase 1 architecture invariants (no `innerHTML` with
+unescaped external content, data-driven nutrient tags, category-based
+shelf-life, hard content exclusions, dark-mode-default) unchanged.
+
+## Non-goals
+
+- Any must-have from the nice-to-have list above landing as a v2 must-have —
+  this version stays scoped to usability polish.
+- Anything not listed here or in `docs/FUTURE.md`.

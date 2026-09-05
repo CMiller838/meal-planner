@@ -10,8 +10,32 @@
   // Ingredients Cody already likes, used to source Discover suggestions.
   const LIKED_INGREDIENTS = ["chicken_breast", "minced_beef", "salmon", "tuna", "chorizo"];
   const SS_POOL = "mp_discover_pool";
-  const PER_INGREDIENT_LIMIT = 3;
   const POOL_LIMIT = 10;
+  const CANDIDATE_LIMIT = 12;
+  const CATEGORIES = ["Chicken", "Beef", "Seafood", "Pasta", "Pork", "Lamb", "Vegetarian", "Breakfast"];
+
+  /** Unique idMeal values from filter.php results, shuffled, capped at `limit`.
+   *  Fisher-Yates, descending loop, so rnd() === ~1 yields the identity permutation.
+   *  @param {Array<{idMeal: string}>} list
+   *  @param {number} limit
+   *  @param {Function} [rnd]  defaults to Math.random; injected only by test.html
+   *  @returns {string[]} */
+  function sampleIds(list, limit, rnd) {
+    const seen = new Set();
+    const ids = [];
+    for (const m of list) {
+      if (m.idMeal && !seen.has(m.idMeal)) {
+        seen.add(m.idMeal);
+        ids.push(m.idMeal);
+      }
+    }
+    const random = rnd || Math.random;
+    for (let i = ids.length - 1; i > 0; i--) {
+      const j = Math.floor(random() * (i + 1));
+      [ids[i], ids[j]] = [ids[j], ids[i]];
+    }
+    return ids.slice(0, limit);
+  }
 
   function extractIngredients(detail) {
     const out = [];
@@ -56,23 +80,22 @@
     return res.json();
   }
 
-  async function fetchPoolUncached() {
-    const perIngredient = await Promise.all(
-      LIKED_INGREDIENTS.map((ing) =>
-        fetchJson(`${BASE}filter.php?i=${encodeURIComponent(ing)}`)
-          .then((d) => (d.meals || []).slice(0, PER_INGREDIENT_LIMIT))
-          .catch(() => [])
-      )
-    );
-    const seen = new Set();
-    const candidateIds = [];
-    for (const list of perIngredient) {
-      for (const m of list) {
-        if (!seen.has(m.idMeal)) {
-          seen.add(m.idMeal);
-          candidateIds.push(m.idMeal);
-        }
-      }
+  async function fetchPoolUncached(category) {
+    let candidateIds;
+    if (category) {
+      // No .catch() here - a dead filter.php must reach discover.js's handler as a
+      // network error, not as an indistinguishable empty deck.
+      const d = await fetchJson(`${BASE}filter.php?c=${encodeURIComponent(category)}`);
+      candidateIds = sampleIds(d.meals || [], CANDIDATE_LIMIT);
+    } else {
+      const lists = await Promise.all(
+        LIKED_INGREDIENTS.map((ing) =>
+          fetchJson(`${BASE}filter.php?i=${encodeURIComponent(ing)}`)
+            .then((d) => d.meals || [])
+            .catch(() => [])
+        )
+      );
+      candidateIds = sampleIds([].concat(...lists), CANDIDATE_LIMIT);
     }
     const details = await Promise.all(
       candidateIds.map((id) =>
@@ -91,20 +114,27 @@
       .map((r) => r.meal);
   }
 
-  /** Cached (sessionStorage) discover pool, filtered against already-liked/dismissed ids. */
-  async function getDiscoverPool(excludeIds) {
+  /** Cached (sessionStorage) discover pool, filtered against already-liked/dismissed ids.
+   *  @param {string[]} excludeIds
+   *  @param {string} [category]  "" or omitted = the liked-ingredient pool */
+  async function getDiscoverPool(excludeIds, category) {
+    const key = `${SS_POOL}:${category || ""}`;
     let pool;
-    const cached = sessionStorage.getItem(SS_POOL);
+    const cached = sessionStorage.getItem(key);
     if (cached) {
       pool = JSON.parse(cached);
     } else {
-      pool = await fetchPoolUncached();
-      sessionStorage.setItem(SS_POOL, JSON.stringify(pool));
+      pool = await fetchPoolUncached(category);
+      try {
+        sessionStorage.setItem(key, JSON.stringify(pool));
+      } catch (e) {
+        // quota/private-mode - skip caching rather than take down page load
+      }
     }
     const exclude = new Set(excludeIds);
     return pool.filter((m) => !exclude.has(m.id));
   }
 
   root.MP = root.MP || {};
-  root.MP.MealDB = { toMeal, load, getDiscoverPool };
+  root.MP.MealDB = { toMeal, load, getDiscoverPool, sampleIds, CATEGORIES };
 })(typeof globalThis !== "undefined" ? globalThis : this);

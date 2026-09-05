@@ -234,6 +234,8 @@ window.MP = window.MP || {};
         setTheme(getTheme() === "dark" ? "light" : "dark");
       });
     }
+    const active = document.querySelector(".nav-links a.active");
+    if (active) active.scrollIntoView({ inline: "nearest", block: "nearest" });
   }
 
   MP.esc = esc;

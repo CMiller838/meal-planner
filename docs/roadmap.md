@@ -3,9 +3,10 @@
 Active roadmap. Superseded versions live in `.claude/archive/` — this file is
 updated in place, never forked into a versioned copy.
 
-Source of scope: `docs/OUTLINE.md` (Phase 2 must-haves) against the stack in
-`docs/ARCHITECTURE.md`. Parked ideas in `docs/FUTURE.md` are explicitly not
-sequenced here.
+Source of scope: `docs/OUTLINE.md` — the Phase 2 must-haves for Phases 1-6 (v1),
+the "Meal Planner — v2 Outline" must-haves and nice-to-haves for Phases 7-13 —
+against the stack in `docs/ARCHITECTURE.md`. Parked ideas in `docs/FUTURE.md`
+are explicitly not sequenced here.
 
 ---
 
@@ -48,6 +49,11 @@ on a Hermes-set "generate a new plan" flag.
 settled before anything syncs it. Deployable and testable on its own, with no
 conversational layer yet.*
 
+Extended post-Phase 6 with a `/pantry` endpoint (same relay pattern as
+`/library`) so Hermes can track what food is on hand — see `docs/HERMES.md`.
+Not app-consuming yet; the v1 retro (below) adopted pantry-driven shopping/
+eat-flow features for v2 to build on it.
+
 ## Phase 5 — Hermes conversational capabilities (Status: Complete)
 
 **Goal:** Give Hermes the chat skills on top of the bridge: recipe and
@@ -71,3 +77,110 @@ meal-type filter chips to the Library grid alongside the existing search.
 *Pure app-side UI/data work on top of the settled Phase 1 library schema and
 Phase 4 sync mechanism — no new backend surface, independent of Phases 2-5's
 generator/shopping-list work.*
+
+---
+
+# v2 — usability polish (Phases 7-13)
+
+Scope from `docs/OUTLINE.md`'s "Meal Planner — v2 Outline". Phases 7-9 are the
+v2 must-haves; Phases 10-13 are its nice-to-haves, sequenced after rather than
+parked. No stack change — the `@architect` step was skipped deliberately, since
+every phase below fits the existing static-site + Hermes Worker/KV shape and
+adds no dependency.
+
+## Phase 7 — Mobile chrome & Discover filters (Status: Complete)
+
+**Goal:** Make the top nav a horizontally scrollable strip at phone widths, and
+add category filter chips above the Discover results so the deck is no longer
+fixed to one hardcoded ingredient pool.
+
+*Grouped because they are the same piece of work twice — a horizontally
+scrollable strip of pills. Both reuse the `.chip-row`/`.chip` component and
+`.nav` layout already in `style.css`, so one styling pass covers both, and the
+chips rebuild the Discover pool through the `filter.php` → `lookup.php` two-step
+`mealdb.js` already uses. Sequenced first because neither touches the meal
+record, so it carries no risk into the data work that follows.*
+
+*Settled scope:* chips only — Discover has no free-text search today (the pool
+comes from five hardcoded ingredients in `mealdb.js`, and the search box the
+outline refers to is the Library's), and none is being added; the chips are how
+Discover is steered. The outline's "using what's left" chip needs pantry data
+and defers to Phase 11 rather than pulling a nice-to-have forward.
+
+## Phase 8 — Meal image backfill (Status: Not started)
+
+**Goal:** Fill in missing meal images — a TheMealDB lookup by name first, with a
+manual photo attach in the add/edit form as the fallback, downscaled to a small
+JPEG data-URL on the way in.
+
+*The only phase that writes to the meal record and the only one that changes
+what the Hermes sync payload carries, so it is isolated. Sequenced before the
+expanded day view purely so that view is built against a library that actually
+has images rather than eight placeholder tiles — 8 of the 14 seed meals still
+carry `image: null`.*
+
+*Settled scope:* an uploaded photo is downscaled via `<canvas>` to roughly 50KB
+and stored in the existing `image` field as a data-URL, so there is no schema
+change and no new dependency. It syncs to KV like any other field — the library
+blob is the off-device copy, and excluding photos from it would mean losing them
+with a browser-data clear.
+
+## Phase 9 — Expanded plan day view (Status: Not started)
+
+**Goal:** Replace the compact day interaction on the 2-week plan with a full
+expanded view of that day's meals, ingredients and warnings.
+
+*Last of the must-haves because it renders what the previous two fix — images
+from Phase 8 and the shared strip/modal styling from Phase 7. It also has the
+largest behavioural surface: a day tap currently goes straight to the swap
+picker, so this phase re-plumbs that entry point.*
+
+*Settled scope:* the expanded view becomes the day tap's destination and each
+meal inside it gets a Swap action opening the existing `openSwapPicker`
+unchanged — swapping moves one tap deeper rather than being rebuilt inline.
+
+## Phase 10 — Nutrient-gap-aware Discover (Status: Not started)
+
+**Goal:** Rank Discover suggestions by the nutrients the current liked-meal
+library under-covers.
+
+*First of the nice-to-haves because it is the cheapest: `MP.Nutrition`'s
+`dayCoverage().missing` and `rankByGap()` already exist and are already wired
+this exact way for the plan's swap suggestions, so this is a second caller, not
+new logic. Depends on Phase 7 having restructured how the Discover pool is
+built, which is what it ranks.*
+
+## Phase 11 — Pantry-aware shopping (Status: Not started)
+
+**Goal:** Consume the already-shipped `/pantry` endpoint so the shopping list
+subtracts what is already on hand — covering both bulk-buy/reuse of ingredients
+that outlast one 2-week cycle and pantry-driven cost reduction.
+
+*Those two outline items are one code path: `MP.ShoppingList.buildLists(plan,
+mealsById, packData)` gaining on-hand quantities. This is the first time the app
+reads pantry data at all — Phase 4's endpoint has never had an app-side consumer
+— so it has to precede anything that writes back to it. Also the natural home
+for Phase 7's deferred "using what's left" Discover chip.*
+
+## Phase 12 — Eat flow & split shopping lists (Status: Not started)
+
+**Goal:** Mark a meal eaten from the plan or library, review the remaining
+ingredient quantities, confirm, deduct from the pantry, and drop any shortfall
+onto a separate ad-hoc shopping list alongside the existing planned one.
+
+*The eat flow and the planned/ad-hoc list split are the same feature from
+opposite ends — the shortfall the eat flow produces needs a list to land in, and
+that list is the ad-hoc one. Depends on Phase 11 having established pantry
+read/write in the app.*
+
+## Phase 13 — Hermes plan placement & preference learning (Status: Not started)
+
+**Goal:** Let Hermes place a specific meal into a specific plan slot, and let
+the app and Hermes adapt suggestions from actual like/dismiss/eaten behaviour
+rather than the static tags and exclusion rules alone.
+
+*Last because both need something no earlier phase provides. Plan-slot placement
+requires a plan surface in KV, which `docs/ARCHITECTURE.md` currently rules out
+("the plan itself is never stored in KV") — a real architecture decision to take
+at this phase's planning step, not polish. Preference learning wants eaten
+history, which only exists once Phase 12 has shipped.*

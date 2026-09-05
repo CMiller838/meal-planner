@@ -786,3 +786,233 @@ Phase 3's shopping list buy leftover chicken it already has.
 - [ ] `docs/FUTURE.md` — an ingredient-key alias table (so `"mince"` finds `beef_mince`)
       is the upgrade path for §2's substring matcher. Revisit trigger: if hand-added meals
       keep landing in the shopping list's `unpriced` group
+
+## Phase 7 — Mobile chrome & Discover filters
+
+Spec: `.claude/specs/phase7_spec.md`. Logic tasks are TDD — write the check in
+`test.html` first, watch it fail, then implement.
+
+Read spec §0 first. Pure app-side work: **no Worker change, no new KV key, no new
+dependency, no new JS file, no new CSS file, no change to the meal record.** Two
+features that are the same piece of work twice — a horizontally scrollable strip
+of pills — sharing one `.hscroll` utility class.
+
+The two traps this checklist exists to prevent, both of which look fine in a
+desktop preview: *a flex child that can't shrink doesn't scroll, it overflows the
+page* (§4), and *two quick chip taps paint the slower response last* (§3).
+
+Gate answers baked in below: chips are **TheMealDB categories**, a category is a
+**random 12 of the whole list** (not the first 12), and the nav's **brand and
+theme toggle stay pinned** while only the links scroll.
+
+### 1. Logic & Backend Tasks — `mealdb.js` category pools (TDD)
+
+- [x] `mealdb.js` — `MP.MealDB.sampleIds(list, limit, rnd)` ⇒ up to `limit` unique
+      `idMeal` strings. Dedupe in input order, then **Fisher-Yates with a descending
+      loop** (`for (let i = ids.length - 1; i > 0; i--)`), then `slice(0, limit)`
+- [x] `rnd` defaults to `Math.random` and is injected **only** by `test.html` — it exists
+      to make the shuffle checkable, not to be configured by callers
+- [x] Not `sort(() => Math.random() - .5)` — that shuffle is biased and
+      implementation-dependent, and Fisher-Yates is four lines either way
+- [x] `mealdb.js` — `const CATEGORIES = ["Chicken","Beef","Seafood","Pasta","Pork","Lamb",
+      "Vegetarian","Breakfast"]`, exported on `MP.MealDB`. Strings must match TheMealDB's
+      category names **exactly, including capitalisation** — a typo silently returns an
+      empty deck
+- [x] Hardcoded, **not** fetched from `list.php?c=list`: that's a request on every cold
+      load for a list that hasn't changed in years, and we want 8 of its 14 entries
+- [x] **Delete `PER_INGREDIENT_LIMIT`** (`mealdb.js:13`). `POOL_LIMIT = 10` stays; add
+      `CANDIDATE_LIMIT = 12` (the number of `lookup.php` calls per pool build)
+- [x] `fetchPoolUncached(category)` — category branch: one
+      `filter.php?c=<encodeURIComponent(category)>` ⇒ `sampleIds(d.meals || [],
+      CANDIDATE_LIMIT)`. **No `.catch()` on this call** — a dead `filter.php` must reach
+      `discover.js` as a network error, not as an indistinguishable empty deck
+- [x] `fetchPoolUncached("")` — All branch: keep the five-ingredient `Promise.all` fan-out
+      with its per-ingredient `.catch(() => [])`, but **stop slicing each result to 3**;
+      concat all five lists and pass the lot through the same `sampleIds(..., 12)`
+- [x] Everything after candidate selection is **unchanged**: the `lookup.php` fan-out,
+      `toMeal`, `MP.Exclusions.sanitize`, `.slice(POOL_LIMIT)`, `.map(r => r.meal)`
+- [x] `getDiscoverPool(excludeIds, category)` — new optional second argument, `""` or
+      omitted = the liked-ingredient pool. Cache key becomes
+      `` `${SS_POOL}:${category || ""}` `` — one cached pool per chip
+- [x] Wrap the `sessionStorage.setItem` in a `try/catch` that swallows the error. Nine
+      cached pools is ~300KB, but a quota/private-mode throw here currently takes down
+      page load for a cache write we can simply skip
+- [x] The `excludeIds` filter still runs **after** the cache read, unchanged — a cached
+      pool must still hide meals liked or dismissed since it was fetched
+- [x] **`toMeal`'s `mealTypes` mapping is unchanged** (`strCategory === "Breakfast"` ⇒
+      `["breakfast"]`, else `["dinner"]`). Do not build a category→mealType table now that
+      seven more categories can reach it
+- [x] `test.html` — add `<script src="mealdb.js"></script>` **after** `exclusions.js`.
+      `mealdb.js` only defines and exports at load (no fetch, no `sessionStorage` at module
+      scope), so including it is inert
+- [x] **Check: `sampleIds([{idMeal:"1"},{idMeal:"2"},{idMeal:"3"}], 2, () => 0.999999)` ⇒
+      `["1","2"]`** — *the exact-permutation check. `rnd()` near 1 makes `j === i` at every
+      step, so a correct descending Fisher-Yates returns input order. It fails if the loop
+      is ascending, if `rnd` is ignored, or if `Math.random` was hardcoded*
+- [x] Check: `sampleIds([{idMeal:"1"},{idMeal:"1"},{idMeal:"2"}], 5, () => 0.999999)` ⇒
+      `["1","2"]` — dedupe by `idMeal`, first occurrence wins
+- [x] **Check: set preservation** — for a 20-element list,
+      `sampleIds(list, 20).slice().sort()` `deepEqual` the input ids sorted. *The shuffle
+      must not drop, duplicate or invent an id; this is what catches a wrong swap*
+- [x] Check: `sampleIds([], 5)` ⇒ `[]`; `sampleIds(list, 0)` ⇒ `[]`;
+      `sampleIds(list3, 99)` ⇒ all 3 (a limit above the unique count is not an error)
+- [x] Check: `toMeal({strCategory:"Pasta", …}).mealTypes` ⇒ `["dinner"]` and
+      `strCategory: "Breakfast"` ⇒ `["breakfast"]` — guards the mapping above
+- [x] Check: `deepEqual(MP.MealDB.CATEGORIES, ["Chicken","Beef","Seafood","Pasta","Pork",
+      "Lamb","Vegetarian","Breakfast"])` — `test.html` can't reach `discover.html`'s DOM,
+      so the chip/category parity is asserted from this side and eyeballed in §5
+
+### 2. UI & Layout Tasks — the mobile nav strip
+
+- [x] `index.html`, `discover.html`, `plan.html`, `shopping.html` — wrap **only** the four
+      `<a>` elements in `<div class="nav-links hscroll">`. `<span class="brand">` and
+      `<button id="theme-toggle">` stay **outside** the wrapper — that is what pins them
+- [x] The `.active` class stays exactly where it is on each page; the four navs remain
+      byte-identical to each other apart from it
+- [x] `data.js` — two lines at the end of `initTheme()` (line 229-237, already called by
+      all four page controllers):
+      `const active = document.querySelector(".nav-links a.active");`
+      `if (active) active.scrollIntoView({ inline: "nearest", block: "nearest" });`
+- [x] **`block: "nearest"` is not optional** — without it `scrollIntoView` scrolls the
+      document vertically too, and because `.nav` is `position: sticky` every phone page
+      load jumps down past the header. `inline: "nearest"` is a no-op when the link
+      already fits, so `index.html` and desktop are unaffected and no overflow check is needed
+- [x] No `tabindex`, no `role="tablist"`, no arrow-key handling. The links stay real `<a>`
+      elements in DOM order and browsers scroll a focused element into view natively
+
+### 3. UI & Layout Tasks — Discover chips
+
+- [x] `discover.html` — static `#discover-filters` with `class="chip-row hscroll"`, placed
+      between the `<p class="muted">` hint and `<div class="fan-wrap">` (currently line 32):
+      nine `<button class="chip" data-cat="...">` for `""` (All) plus the eight
+      `CATEGORIES`, `All` carrying `.active`. Nine static buttons need no JS to build
+- [x] `data-cat` values go straight into the `filter.php?c=` query, so they must match
+      §1's `CATEGORIES` exactly. No script-tag change — `discover.html` already loads
+      `data.js`, `exclusions.js`, `mealdb.js`, `discover.js`
+- [x] `discover.js` — module-level `let activeCat = ""` and `let loadFailed = false`
+- [x] `discover.js` — extract `async function excludeIds()` from `init()` (lines 202-207,
+      moved verbatim) so a chip switch respects likes made since page load, rather than
+      reusing a list captured at init
+- [x] `discover.js` — `async function loadPool(cat)`: set `activeCat`/`loadFailed`, paint
+      a static `<div class="swipe-empty">Loading suggestions…</div>` into `#fan-deck` and
+      clear `#fan-progress`/`#fan-filmstrip`, then
+      `await MP.MealDB.getDiscoverPool(await excludeIds(), cat)` in a `try/catch`
+      (`catch` ⇒ `loadFailed = true`, `next = []`)
+- [x] **`if (cat !== activeCat) return;` immediately after the await** — a slower earlier
+      request must not paint over a newer chip's deck. Then `pool = next; idx = 0;
+      renderDeck();`
+- [x] `discover.js` — one **delegated** `click` listener on `#discover-filters` using
+      `e.target.closest(".chip")`, mirroring `app.js:290`: toggle `.active` across the row,
+      then `loadPool(chip.dataset.cat)`
+- [x] Re-tapping the already-active chip is a **no-op** so swipe position is preserved —
+      **except** when `loadFailed`, where a re-tap is the retry the error message asks for
+- [x] `renderDeck()` empty state becomes three branches: `loadFailed` ⇒ `Couldn't reach
+      TheMealDB — check your connection and tap the chip again.`; `activeCat` set ⇒
+      `No more ${esc(activeCat)} suggestions — try another chip.`; otherwise the existing
+      `📌 No more suggestions right now — check back later.` unchanged
+- [x] `activeCat` goes through `esc()` even though it is our own static string — it is
+      interpolated into `innerHTML`, and the house rule is about the sink, not the source
+- [x] `discover.js` `init()` — replace the inline library/exclude/pool block (lines
+      202-213) with `await loadPool("")`. `MP.initTheme()` and `renderSaved()` stay first
+      and unchanged. The chip resets to `All` on every load; the per-chip session cache is
+      what makes that cheap
+
+### 4. Styling
+
+- [x] `style.css` — the shared strip utility, **placed immediately after the `.chip` block
+      (line 418)**: `.hscroll { flex-wrap: nowrap; overflow-x: auto; min-width: 0;
+      scrollbar-width: none; -ms-overflow-style: none; }`,
+      `.hscroll::-webkit-scrollbar { display: none; }`, `.hscroll > * { flex: 0 0 auto; }`
+- [x] **Placement is load-bearing**: `.chip-row` sets `flex-wrap: wrap` at line 406 and
+      `.hscroll` has identical specificity, so it only wins by coming later in the file
+- [x] **`min-width: 0` is the declaration the mobile half lives or dies on** — without it
+      the nav row grows past the viewport and the *page* scrolls sideways instead of the
+      strip. It looks almost right in a desktop devtools preview
+- [x] `style.css` base (mobile-first, matching the file's existing convention):
+      `.nav .brand { display: none; }` (modify the rule at line 68),
+      `.nav-links { display: flex; gap: .5rem; flex: 1 1 auto; }`,
+      `.nav .icon-btn { flex: 0 0 auto; }`, and `white-space: nowrap` on `.nav a` (line 85)
+- [x] Inside the **existing** `@media (min-width: 640px)` block at line 134:
+      `.nav .brand { display: flex; }` and `.nav-links { flex: 0 1 auto; }`. These two
+      lines exist to make the ≥640px nav **pixel-identical to today**
+- [x] **Keep `margin-right: auto` on `.brand`** (line 70) — moving it to `.nav-links`
+      changes the desktop layout for no reason
+- [x] No `.chip` change — Phase 6 built it (`style.css:407-418`) and it is reused verbatim.
+      No `#library-filters` change — five chips fit at phone widths; leave it wrapping
+- [x] All new rules use existing custom properties, dark mode first. No new CSS file, no
+      framework, no icon font, no scroll-snap or edge-fade affordances
+
+### 5. Wiring & verification
+
+- [x] `sw.js` — bump `CACHE` to `"meal-planner-v7"`. **No `SHELL` change** — no new file is
+      added and all four pages plus `mealdb.js` are already cached
+- [x] Confirm no `manifest.json`, `worker/`, `docs/HERMES.md`, `docs/ARCHITECTURE.md` or
+      `meals.json` change is needed. This phase does not write to the meal record, which
+      is why it sequences before Phase 8
+- [ ] **Manual pass — the mobile nav, at 360px in devtools *and* on a real phone: the
+      links scroll horizontally, the page itself does not scroll sideways, the theme
+      toggle stays reachable, and opening `shopping.html` shows the Shopping tab already
+      scrolled into view without the page jumping down.** The page-scrolls-sideways failure
+      is the one a desktop preview hides. **Not run** — no headless browser available in
+      this environment; the CSS/JS were verified by reading (`.hscroll`'s `min-width: 0`
+      placement after `.chip-row`, `block: "nearest"` on `scrollIntoView`). Run before shipping
+- [ ] Manual pass: `discover.html` — every chip loads a deck; the chip row scrolls rather
+      than wrapping; swiping still likes/passes/saves; tapping two chips quickly leaves the
+      **second** chip's deck on screen; re-tapping the active chip does not reset progress.
+      **Not run** — same limitation; the stale-response guard and no-op logic were verified
+      by code reading. Run before shipping
+- [ ] Manual pass: a Vegetarian or Pasta deck shows meals that could not have come from the
+      five hardcoded ingredients — that is the whole phase in one observation. **Not run**
+- [x] Eyeballed every `data-cat` in `discover.html` against `MP.MealDB.CATEGORIES` — matches
+      exactly (both lists: Chicken, Beef, Seafood, Pasta, Pork, Lamb, Vegetarian, Breakfast)
+- [ ] Manual pass: airplane-mode a category chip ⇒ the connection message appears and
+      re-tapping the chip retries; all four pages still render offline after one visit.
+      **Not run**
+- [ ] Manual pass: verify desktop (≥640px) nav is unchanged against a before screenshot —
+      brand visible, links and toggle right-aligned. **Not run**
+- [x] Mark Phase 7 complete in `docs/roadmap.md` and commit docs + code together
+      (`.claude/rules/roadmap-gating.md`)
+
+### Deferred (do not build in this phase)
+
+- [ ] **Free-text search on Discover** — settled in the roadmap: the search box the outline
+      mentions is the Library's, and none is being added here. The chips are how Discover
+      is steered
+- [ ] **The outline's "using what's left" chip** — needs pantry data; it belongs to
+      Phase 11 and must not be pulled forward
+- [ ] Nutrient-gap ranking of the pool is **Phase 10**, which depends on this phase having
+      restructured how the pool is built. Do not rank here
+- [ ] Not built deliberately: multi-select chips; persisting the last-used chip across
+      visits; area/cuisine chips; fetching the category list from `list.php?c=list`;
+      Dessert/Side/Starter/Goat/Vegan/Miscellaneous chips; a bottom tab bar or hamburger
+      menu; scroll-snap or edge-fade affordances on either strip; making `#library-filters`
+      scroll; infinite scroll or a "load more" button on the deck; any change to `.chip`
+      styling, the meal record, `meals.json`, the Worker, or the dependency set
+- [ ] Known asymmetry, accepted: an offline **All** chip shows the generic empty message
+      rather than the connection one, because the five-ingredient fan-out catches its own
+      per-ingredient failures by design. Reworking it into an all-or-nothing error path is
+      not this phase's job
+
+## Phase 8 — Meal image backfill
+
+- [ ] Not yet planned — run `@planner Phase 8` for the spec and task breakdown
+
+## Phase 9 — Expanded plan day view
+
+- [ ] Not yet planned — run `@planner Phase 9` for the spec and task breakdown
+
+## Phase 10 — Nutrient-gap-aware Discover
+
+- [ ] Not yet planned — run `@planner Phase 10` for the spec and task breakdown
+
+## Phase 11 — Pantry-aware shopping
+
+- [ ] Not yet planned — run `@planner Phase 11` for the spec and task breakdown
+
+## Phase 12 — Eat flow & split shopping lists
+
+- [ ] Not yet planned — run `@planner Phase 12` for the spec and task breakdown
+
+## Phase 13 — Hermes plan placement & preference learning
+
+- [ ] Not yet planned — run `@planner Phase 13` for the spec and task breakdown

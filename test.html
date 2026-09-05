@@ -14,6 +14,7 @@
 <script src="shopping-list.js"></script>
 <script src="hermes-sync.js"></script>
 <script src="exclusions.js"></script>
+<script src="mealdb.js"></script>
 <script>
 (async function () {
   "use strict";
@@ -475,6 +476,40 @@
       if (original === null) localStorage.removeItem(key);
       else localStorage.setItem(key, original);
     }
+  }
+
+  // 26. MP.MealDB.sampleIds / CATEGORIES / toMeal mealTypes
+  {
+    const { sampleIds, toMeal, CATEGORIES } = MP.MealDB;
+    check(
+      "sampleIds exact-permutation (rnd near 1 -> identity order)",
+      deepEqual(sampleIds([{ idMeal: "1" }, { idMeal: "2" }, { idMeal: "3" }], 2, () => 0.999999), ["1", "2"])
+    );
+    check(
+      "sampleIds dedupes by idMeal, first occurrence wins",
+      deepEqual(sampleIds([{ idMeal: "1" }, { idMeal: "1" }, { idMeal: "2" }], 5, () => 0.999999), ["1", "2"])
+    );
+    const list20 = Array.from({ length: 20 }, (_, i) => ({ idMeal: String(i) }));
+    check(
+      "sampleIds set preservation over 20 elements",
+      deepEqual(sampleIds(list20, 20).slice().sort(), list20.map((m) => m.idMeal).sort())
+    );
+    check("sampleIds([], 5) === []", deepEqual(sampleIds([], 5), []));
+    const list3 = [{ idMeal: "1" }, { idMeal: "2" }, { idMeal: "3" }];
+    check("sampleIds(list, 0) === []", deepEqual(sampleIds(list3, 0), []));
+    check("sampleIds(list3, 99) === all 3", sampleIds(list3, 99).length === 3);
+    check(
+      'toMeal(strCategory: "Pasta").mealTypes === ["dinner"]',
+      deepEqual(toMeal({ idMeal: "1", strCategory: "Pasta", strMeal: "x", strInstructions: "y" }).mealTypes, ["dinner"])
+    );
+    check(
+      'toMeal(strCategory: "Breakfast").mealTypes === ["breakfast"]',
+      deepEqual(toMeal({ idMeal: "1", strCategory: "Breakfast", strMeal: "x", strInstructions: "y" }).mealTypes, ["breakfast"])
+    );
+    check(
+      "CATEGORIES matches the 8 chip categories exactly",
+      deepEqual(CATEGORIES, ["Chicken", "Beef", "Seafood", "Pasta", "Pork", "Lamb", "Vegetarian", "Breakfast"])
+    );
   }
 
   lines.push("", `${pass} passed, ${fail} failed`);
