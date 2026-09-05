@@ -995,7 +995,270 @@ theme toggle stay pinned** while only the links scroll.
 
 ## Phase 8 — Meal image backfill
 
-- [ ] Not yet planned — run `@planner Phase 8` for the spec and task breakdown
+Spec: `.claude/specs/phase8_spec.md`. Logic tasks are TDD — write the check in
+`test.html` first, watch it fail, then implement.
+
+Read spec §0 first. Pure app-side work: **no schema change, no Worker change, no
+new KV key, no new dependency, no new JS file, no new CSS file, no `meals.json`
+edit.** Photos sync to Hermes for free — `hermes-sync.js:81` serialises the whole
+meals array with no field allow-list, and `worker.js`'s `libraryError()` never
+looks at `image`. Do not add sync or Worker code.
+
+The three things this checklist exists to prevent: *Phase 6 deleted
+`<script src="mealdb.js">` from `index.html`, so the whole feature is a silent
+`TypeError` until it goes back* (§5); *an un-budgeted photo throws inside
+`MP.saveLibrary`'s `setItem`, the modal closes, and the edit is gone* (§2, §3);
+and *`readForm` is being changed, which is the function Phase 6 guarded against
+dropping `batchCook`/`leadsTo` on an edit* (§3).
+
+No Decision Gate was raised — the roadmap settled the architecture and the rest
+are implementation defaults, listed in the spec's decisions table. The two most
+overridable: the seed backfill is a **runtime button over the live library, not
+a `meals.json` edit**, and the name lookup fires on the name field's **`change`
+event, not on save**.
+
+### 1. Logic & Backend Tasks — `mealdb.js` lookup by name (TDD)
+
+- [x] `mealdb.js` — `MP.MealDB.thumbFromSearch(data, name)` ⇒ thumbnail URL or `null`.
+      `(data && data.meals) || []`, then: the first result whose normalised `strMeal`
+      equals the normalised `name` **and** has a `strMealThumb`, else the first result
+      with any `strMealThumb`, else `null`
+- [x] Normalise with `String(s).toLowerCase().replace(/[^a-z0-9]/g, "")` — the same rule
+      as `MP.findSimilarName`, **deliberately duplicated rather than imported**:
+      `mealdb.js` is imported by `worker/worker.js`, which never loads `data.js`
+- [x] `mealdb.js` — `async function imageByName(name)` ⇒ `Promise<string|null>`.
+      Blank/whitespace name ⇒ `null` **with no fetch**; otherwise
+      `search.php?s=${encodeURIComponent(name.trim())}` ⇒ `thumbFromSearch(data, name)`
+- [x] **`.catch(() => null)` on the fetch** — every caller is a UI event handler, so this
+      must never throw. A dead network and no match are the same outcome here, and that
+      is correct: the manual attach is the fallback either way
+- [x] One request, **no `lookup.php` N+1** — `search.php?s=` returns full detail objects,
+      the same shape `lookup.php?i=` returns, so `strMealThumb` is already in the body
+      (same reason Phase 5's `/discover` route uses it)
+- [x] No caching layer. These are one-shot user-initiated calls; a `sessionStorage` cache
+      would be state to invalidate for no measured gain
+- [x] **No `MP.Exclusions` call and no fallback searches.** Nothing from TheMealDB enters
+      the library — only a URL string lands on a meal the user already owns. Comment both
+      so neither reads as an oversight against the Phase 5 invariant
+- [x] `ponytail:` comment naming the ceiling: exact-then-first, no fuzzy matching. Upgrade
+      path is a similarity floor on `strMeal`, not a cleverer query
+- [x] Export both on the module surface:
+      `{ toMeal, load, getDiscoverPool, sampleIds, CATEGORIES, imageByName, thumbFromSearch }`
+- [x] `test.html` — no new script tags needed (`data.js` and `mealdb.js` are both already
+      included). New check group 27
+- [x] Check: `thumbFromSearch({meals: null}, "x")` ⇒ `null` — *the no-match shape.
+      `search.php` returns `meals: null`, not `[]`, and getting it wrong throws on `.find`*
+- [x] Check: `thumbFromSearch(null, "x")` ⇒ `null`; `thumbFromSearch({}, "x")` ⇒ `null`
+- [x] Check: `{meals:[{strMeal:"A",strMealThumb:""},{strMeal:"B",strMealThumb:"b.jpg"}]}`
+      with name `"z"` ⇒ `"b.jpg"` — first result **with a thumb**, not first result
+- [x] **Check: `{meals:[{strMeal:"Chilli prawn linguine",strMealThumb:"wrong.jpg"},
+      {strMeal:"chilli!",strMealThumb:"right.jpg"}]}` with name `"Chilli"` ⇒
+      `"right.jpg"`** — *the exact-match preference plus its case/punctuation
+      normalisation. It fails the moment someone simplifies this to "take the first"*
+- [x] Check: `{meals:[{strMeal:"Chilli"}]}` with name `"Chilli"` ⇒ `null` — an exact name
+      match with no thumbnail is still no thumbnail
+- [x] **Check: `esc("data:image/jpeg;base64,/9j/4AAQSkZJRg+ab/cd=")` comes back
+      unchanged** — *the data-URL survival check. `esc` is provably a no-op on base64
+      today; this fails if it is ever "improved" into something URL-encoding, which would
+      break every stored photo at once and only on screen*
+- [x] Check: `esc('data:image/jpeg;base64,AAA" onerror="x')` contains `&quot;` and no raw
+      `"` — the escaping still does its real job on a data-URL-shaped string
+- [x] Check: every meal in `meals.json` has `image === null` or a non-empty string
+
+### 2. Logic & Backend Tasks — the downscale pipeline (`app.js`)
+
+- [x] `app.js` — `async function shrinkImage(file)` ⇒ `Promise<string>` (a JPEG data-URL),
+      rejecting with `Error("not-an-image" | "too-big" | "decode-failed")`. Short
+      machine-readable messages, mapped to user copy in one `IMAGE_ERRORS` object
+- [x] Lives in `app.js`, **not** `mealdb.js` or `data.js` — only the form uses it and it
+      needs `document`; `mealdb.js` must stay Worker-importable
+- [x] Constants: `MAX_DIM = 640`, `QUALITIES = [0.72, 0.6, 0.5, 0.4]`, `MAX_CHARS = 70000`,
+      `MAX_FILE_BYTES = 20 * 1024 * 1024`
+- [x] Guards first, before any decode: `!file.type.startsWith("image/")` ⇒ `"not-an-image"`;
+      `file.size > MAX_FILE_BYTES` ⇒ `"too-big"`. **`accept="image/*"` is a picker hint,
+      not validation** — Android hands back whatever it likes
+- [x] `URL.createObjectURL(file)` + `new Image()`, **not `FileReader`** — one fewer async
+      hop and it never materialises the full-size original as base64 in memory.
+      `URL.revokeObjectURL` in a `finally`
+- [x] `img.onerror` ⇒ `"decode-failed"`. *This is the likely real failure: an iPhone
+      `.heic` does not decode in Chrome*
+- [x] `scale = Math.min(1, MAX_DIM / Math.max(img.naturalWidth, img.naturalHeight))`, draw
+      to a canvas at the rounded scaled dimensions. Never upscale
+- [x] **Quality ladder, not a fixed quality**: return the first
+      `canvas.toDataURL("image/jpeg", q)` whose `.length <= MAX_CHARS`. JPEG size depends
+      on image content, not dimensions — a flat plate at 640/0.72 is ~25KB and a busy
+      photo is ~200KB, so any single fixed quality either looks bad or overruns the quota
+- [x] If none fits: redraw at half those dimensions and return
+      `toDataURL("image/jpeg", 0.5)` **unconditionally**. `ponytail:` comment naming the
+      two-pass ceiling — upgrade path is a binary search on quality, not a third pass
+- [x] Comment why `MAX_CHARS = 70000`: base64 is 4/3 of the bytes, so ≈51KB of JPEG (the
+      roadmap's "roughly 50KB"); `localStorage` is UTF-16, so ~137KB of quota per photo and
+      ~2MB for all 14 seed meals against a ~5MB origin quota
+- [x] Comment that **no EXIF handling is needed** — current browsers default `<img>` to
+      `image-orientation: from-image` and `drawImage` honours it, so a portrait phone photo
+      lands upright. Say it out loud so nobody adds an EXIF parser (a dependency)
+- [x] **No `catch {}` anywhere in this pipeline.** Every throw path is surfaced in
+      `#form-msg` — the point of the phase is that the user knows whether their photo took
+- [x] Not checkable in `test.html` (needs a real decoded image and a canvas) — its budget
+      is verified in §5's manual pass instead
+
+### 3. UI & Layout Tasks — the photo field on the add/edit form
+
+- [x] `app.js` `openForm` — new block in the template string between the Ingredients
+      `<label>` (lines 167-169) and the Meal types `<div>` (line 170):
+      `<div class="sync-field">Photo`, an `<img id="form-image-preview" class="form-photo
+      hidden" alt="">`, and a `<div class="form-photo-row">` holding
+      `<input type="file" id="form-image" accept="image/*">` and
+      `<button id="form-image-clear" class="ghost hidden">Remove photo</button>`
+- [x] A `<div class="sync-field">`, not a `<label>` — same reason the meal-types block
+      above it is a `<div>` (a `<label>` wrapping two controls is ambiguous)
+- [x] **No `capture` attribute** — it forces the camera and removes "choose from gallery",
+      which is the more common path for a meal photo
+- [x] `app.js` — module-level `let formImage = null;` beside `activeType`. The file input
+      cannot be prefilled and the preview's `src` is not a reliable store, so the pending
+      value lives in a variable
+- [x] `openForm` sets `formImage = meal ? meal.image || null : null;` first thing, and
+      calls a local `showImage()` once at the end
+- [x] `showImage()` — the single place that renders `formImage`: `preview.src = formImage`
+      **as a property, never interpolated into `innerHTML`**, and `.hidden` toggled on both
+      the preview and the clear button by `!!formImage`
+- [x] `readForm` — **one** new line in the overwrite block, after `ingredients`:
+      `image: formImage,`. It goes in the overwrite block, not the `original ||` defaults
+      block (whose existing `image: null` stays for Add mode's shape)
+- [x] **This is the one field Phase 6 froze that is now deliberately writable.**
+      `batchCook`, `leadsTo`, `leftoverOf`, `servings`, `prepEffort`, `source` and `id` are
+      still preserved by the spread and must stay that way
+- [x] `#form-image` `change` listener: bail on no file; `#form-msg` ⇒ `"Shrinking photo…"`;
+      `await shrinkImage(file)` in a `try/catch` setting `formImage` or the mapped error;
+      then **`fileIn.value = ""`** (so re-picking the same file fires `change` again) and
+      `showImage()`
+- [x] `IMAGE_ERRORS` copy: `not-an-image` ⇒ `"That file isn't an image."`; `too-big` ⇒
+      `"That photo is too large — try one under 20MB."`; `decode-failed` ⇒ `"Couldn't read
+      that image. iPhone HEIC photos often need converting to JPEG first."`; `default` ⇒
+      `"Couldn't use that image."`. **The HEIC hint is not padding** — it is the most
+      likely real failure and without it the message is unactionable
+- [x] `#form-image-clear` click ⇒ `formImage = null; fileIn.value = ""; showImage();`
+      Nothing is persisted until Save, so this is not a delete
+- [x] `nameInput` **`change`** listener (a *second* listener — the existing `input` listener
+      at line 194 keeps doing the near-dupe check and is not touched): return early if
+      `formImage` is already set, else `await MP.MealDB.imageByName(nameInput.value)` and
+      set + `showImage()` on a hit
+- [x] **`input` would fire a TheMealDB request per keystroke.** `change` fires on
+      blur/commit, so the platform does the debouncing
+- [x] **Re-check `!formImage` after the `await`** before assigning — the user can pick a
+      photo while the lookup is in flight, and their choice must win
+- [x] Never re-look-up when an image already exists: a name edit must not clobber a photo.
+      The escape hatch is Remove photo, then re-commit the name
+- [x] **`saveForm` — wrap `library = MP.upsertMeal(candidate)` in a `try/catch`**; on throw,
+      `#form-msg.error` ⇒ `"Couldn't save — browser storage is full. Remove a photo from
+      another meal and try again."` and **`return` with the modal still open**
+- [x] *Why it is not optional:* `MP.saveLibrary` (`data.js:41-45`) calls `setItem`
+      unguarded, and photos are the first thing in this app big enough to hit the quota.
+      Without the guard the modal closes, the toast says `Saved "X"`, and nothing was saved
+- [x] **Do not "fix" this in `data.js`** by swallowing the error there — a silent
+      `saveLibrary` would break Hermes sync everywhere else too. The guard belongs where a
+      human can act on it
+- [x] Nothing else in `saveForm` changes: the blank-name check and `MP.Exclusions.check`
+      still run first, and **no lookup runs on save** — an offline save must never hang
+
+### 4. UI & Layout Tasks — the backfill button
+
+- [x] `index.html` `.section-head` (lines 31-34) — `<button id="backfill-images"
+      class="ghost">Find images</button>` before `#add-meal`. Ghost, not `.btn`: it is the
+      secondary action next to Add
+- [x] `app.js` — `async function backfillImages(btn)`, wired in `init()` beside the other
+      listeners (line 288). Only ever writes into an empty field; it cannot overwrite a photo
+- [x] `const missing = library.filter((m) => !m.image)` — `!m.image` catches `null` **and**
+      `""`. Empty ⇒ `toast("Every meal already has an image.")` and no requests
+- [x] `btn.disabled = true` and a `btn.textContent` counter (`Looking up 3/9…`) as it goes —
+      `textContent`, never `innerHTML`. Restore both in a `finally`
+- [x] **Sequential `for...of`, not `Promise.all`** — nine parallel requests at a free public
+      API for a once-pressed button is rude for no benefit; the user watches a counter
+      either way. `imageByName` returns `null` on failure, so no `try/catch` in the loop
+- [x] Collect hits in a `Map` keyed by meal id, then **one write, not N**: re-read the
+      library from storage, `.map` the matched ids to `{ ...m, image: found.get(m.id) }`,
+      and call `MP.saveLibrary(library)` **once**, inside a `try/catch` that toasts the
+      quota message
+- [x] **Re-read rather than trusting the module-level `library` array** — a Hermes pull can
+      land during a nine-request loop. Same reasoning that made Phase 6's `upsertMeal`
+      re-read storage
+- [x] Calling `MP.upsertMeal` per hit would fire `mp:library-saved` nine times and push
+      nine times to KV. Don't
+- [x] Finish with `renderLibrary()` and `toast(`Found ${found.size} of ${missing.length}
+      images.`)` — **including when `found.size === 0`**, which is a real and expected
+      outcome for names like *Chorizo & Pasta*
+- [x] **No automatic version of this.** The lookup never runs on page load: nine outbound
+      requests every visit, to fill a field that is allowed to be empty, is the kind of
+      background work that becomes a mystery when TheMealDB is slow
+
+### 5. Styling, wiring & verification
+
+- [x] `style.css` — append after the `.sync-field` block (lines 355-374):
+      `.form-photo { display: block; width: 100%; max-height: 10rem; object-fit: cover;
+      border-radius: .6rem; margin-top: .4rem; }`,
+      `.form-photo-row { display: flex; align-items: center; gap: .6rem; margin-top: .4rem; }`,
+      `.form-photo-row input[type="file"] { font-size: .85rem; color: var(--text-dim); }`
+- [x] **The file-input override is why the row exists:** the existing
+      `.sync-field input, .sync-field textarea` rule (line 360) sets `width: 100%` and a
+      padded box, which makes a file input look like a broken text field
+- [x] **No `.card-img` change** — it already sets `aspect-ratio: 16/9; object-fit: cover`
+      (lines 159-164), so a 640px data-URL renders exactly like a TheMealDB thumbnail.
+      All new rules use existing custom properties, dark mode first. No new CSS file
+- [x] **`index.html` — put `<script src="mealdb.js"></script>` back**, after `exclusions.js`
+      and before `app.js`. *Phase 6 deleted it; without it the whole feature is a silent
+      `TypeError` inside a `change` handler that nobody ever sees*
+- [x] **Rewrite the Phase 6 comment at lines 72-73** — `swipe.js` is still deliberately not
+      loaded here, `mealdb.js` now is, and the comment must say why so the next cleanup
+      doesn't delete it again
+- [x] `sw.js` — bump `CACHE` to `"meal-planner-v8"`. **No `SHELL` change** — no new file is
+      added and `mealdb.js` has been in the shell since Phase 1
+- [x] Confirm no `manifest.json`, `worker/`, `docs/HERMES.md`, `docs/ARCHITECTURE.md` or
+      `meals.json` change is needed. The KV surface, the Worker's `KEYS` allowlist and
+      `libraryError()` stay untouched — photos sync as a side effect of the existing
+      whole-array serialisation
+- [ ] **Manual pass — the budget: attach a real phone photo, then check the stored `image`
+      string length in devtools is ≤ 70 000, the preview is upright (not rotated 90°), and
+      the card thumbnail is not visibly worse than a TheMealDB one.** `test.html` cannot
+      cover this; it is the phase's core claim **Not run** — no headless browser available in this environment; the logic was verified by reading and by the pure-function checks in test.html. Run before shipping.
+- [ ] **Manual pass — the edit-preservation check, re-run because `readForm` changed: open
+      `roast-chicken`, attach a photo, Save, confirm the stored record still has
+      `batchCook: true` and its `leadsTo` array.** Phase 6's silent-data-loss failure mode **Not run** — no headless browser available in this environment; the logic was verified by reading and by the pure-function checks in test.html. Run before shipping.
+- [ ] Manual pass: press "Find images" with the 9 null-image meals present — the counter
+      advances, the toast reports honestly, no existing image is overwritten **Not run** — no headless browser available in this environment; the logic was verified by reading and by the pure-function checks in test.html. Run before shipping.
+- [ ] Manual pass: type a name TheMealDB definitely has (e.g. *Beef Wellington*) into a new
+      meal and tab out — the preview appears without touching the file picker **Not run** — no headless browser available in this environment; the logic was verified by reading and by the pure-function checks in test.html. Run before shipping.
+- [ ] Manual pass: airplane mode — committing a name is a silent no-op with no hang, and
+      saving a meal still works normally **Not run** — no headless browser available in this environment; the logic was verified by reading and by the pure-function checks in test.html. Run before shipping.
+- [ ] Manual pass: pick a non-image file and a >20MB file — both are refused with their own
+      message and nothing is set **Not run** — no headless browser available in this environment; the logic was verified by reading and by the pure-function checks in test.html. Run before shipping.
+- [ ] Manual pass: with Hermes sync configured, attach a photo and confirm the next
+      `GET /library` carries the data-URL — no sync code should have been needed **Not run** — no headless browser available in this environment; the logic was verified by reading and by the pure-function checks in test.html. Run before shipping.
+- [x] Mark Phase 8 complete in `docs/roadmap.md` and commit docs + code together
+      (`.claude/skills/roadmap-gating/`)
+
+### Deferred (do not build in this phase)
+
+- [x] **No `meals.json` edit.** `meals.json` is only the first-run seed; the real library
+      lives in `localStorage`/KV, so committing thumbnail URLs would fix a library nobody
+      is using. The §4 button fixes both, and a fresh seed identically
+- [x] **Images on the plan page belong to Phase 9**, which is sequenced after this one
+      precisely so it can assume the library has images. Do not pull it forward
+- [x] Accepted, with a `ponytail:` ceiling comment: the name search is a substring match, so
+      *Chilli* can return *Chilli prawn linguine*'s photo. The image is visible in the form
+      before saving and in the grid after, and Edit → Remove photo is one tap. Add a
+      similarity floor only if wrong photos actually turn up
+- [x] Accepted, with a `ponytail:` ceiling comment: `renderLibrary` interpolates data-URLs
+      into one injected HTML string (~630KB for 9 photos, re-escaped on every search
+      keystroke). Upgrade path is assigning `.src` after insertion — not this phase's job
+- [x] Not built deliberately: an automatic lookup on page load or on save; progressive/fuzzy
+      name search or a second query with fewer words; caching `search.php` responses;
+      running `MP.Exclusions` over a name-lookup result; cropping, rotation, filters or any
+      image-editing UI; a `capture` attribute; multiple photos per meal; a separate
+      thumbnail/full-size pair; an EXIF parser; WebP/AVIF output; IndexedDB or the Cache API
+      for images; uploading to R2 or a CDN; image validation or a field allow-list in the
+      Worker; excluding photos from the Hermes payload; a placeholder-image generator; any
+      change to `.card-img`, `discover.js`, `generator.js`, the meal schema, the Worker, or
+      the dependency set
 
 ## Phase 9 — Expanded plan day view
 

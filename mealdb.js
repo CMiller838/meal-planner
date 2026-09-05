@@ -64,6 +64,40 @@
     };
   }
 
+  /** Pick a thumbnail URL out of a search.php?s= response.
+   *  Prefers a result whose name matches `name` exactly (case/punctuation-insensitive),
+   *  otherwise the first result that actually carries a thumbnail.
+   *  ponytail: exact-then-first, no fuzzy matching — upgrade path is a similarity
+   *  floor on strMeal, not a cleverer query.
+   *  @param {{meals: Array|null}|null} data  raw search.php body
+   *  @param {string} name                    the name that was searched for
+   *  @returns {string|null} */
+  function thumbFromSearch(data, name) {
+    // search.php returns meals: null (not []) on no match.
+    const list = (data && data.meals) || [];
+    // Same normalisation as MP.findSimilarName (data.js), deliberately duplicated:
+    // this file is imported by worker/worker.js, which never loads data.js.
+    const norm = (s) => String(s).toLowerCase().replace(/[^a-z0-9]/g, "");
+    const target = norm(name);
+    const exact = list.find((m) => m.strMealThumb && norm(m.strMeal) === target);
+    return (exact || list.find((m) => m.strMealThumb) || {}).strMealThumb || null;
+  }
+
+  /** First plausible TheMealDB thumbnail for a meal name, or null.
+   *  Network failure, no match and a blank name are all "no image" — this never
+   *  throws, because every caller is a UI event handler.
+   *  No MP.Exclusions call here: nothing from TheMealDB enters the library, only a
+   *  URL string is copied onto a meal the user already owns.
+   *  @param {string} name
+   *  @returns {Promise<string|null>} */
+  async function imageByName(name) {
+    const trimmed = (name || "").trim();
+    if (!trimmed) return null;
+    return fetchJson(`${BASE}search.php?s=${encodeURIComponent(trimmed)}`)
+      .then((data) => thumbFromSearch(data, name))
+      .catch(() => null);
+  }
+
   let subsCache = null;
   /** Cached substitutions.json, mirroring MP.ShelfLife.load(). A fetch
    *  failure degrades to {} (mushroom meals rejected outright), never a pass. */
@@ -136,5 +170,5 @@
   }
 
   root.MP = root.MP || {};
-  root.MP.MealDB = { toMeal, load, getDiscoverPool, sampleIds, CATEGORIES };
+  root.MP.MealDB = { toMeal, load, getDiscoverPool, sampleIds, CATEGORIES, imageByName, thumbFromSearch };
 })(typeof globalThis !== "undefined" ? globalThis : this);

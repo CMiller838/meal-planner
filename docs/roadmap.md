@@ -107,7 +107,7 @@ outline refers to is the Library's), and none is being added; the chips are how
 Discover is steered. The outline's "using what's left" chip needs pantry data
 and defers to Phase 11 rather than pulling a nice-to-have forward.
 
-## Phase 8 — Meal image backfill (Status: Not started)
+## Phase 8 — Meal image backfill (Status: Complete)
 
 **Goal:** Fill in missing meal images — a TheMealDB lookup by name first, with a
 manual photo attach in the add/edit form as the fallback, downscaled to a small

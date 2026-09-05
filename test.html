@@ -512,6 +512,41 @@
     );
   }
 
+  // 27. MP.MealDB.thumbFromSearch / imageByName / esc on data-URLs
+  {
+    const { thumbFromSearch } = MP.MealDB;
+    check("thumbFromSearch({meals: null}) === null", thumbFromSearch({ meals: null }, "x") === null);
+    check("thumbFromSearch(null) === null", thumbFromSearch(null, "x") === null);
+    check("thumbFromSearch({}) === null", thumbFromSearch({}, "x") === null);
+    check(
+      "first result with a thumb, not first result",
+      thumbFromSearch({ meals: [{ strMeal: "A", strMealThumb: "" }, { strMeal: "B", strMealThumb: "b.jpg" }] }, "z") === "b.jpg"
+    );
+    check(
+      "exact-match preference with normalisation",
+      thumbFromSearch(
+        { meals: [{ strMeal: "Chilli prawn linguine", strMealThumb: "wrong.jpg" }, { strMeal: "chilli!", strMealThumb: "right.jpg" }] },
+        "Chilli"
+      ) === "right.jpg"
+    );
+    check(
+      "exact name match with no thumbnail is still no thumbnail",
+      thumbFromSearch({ meals: [{ strMeal: "Chilli" }] }, "Chilli") === null
+    );
+    check(
+      "esc() is a no-op on a data-URL",
+      MP.esc("data:image/jpeg;base64,/9j/4AAQSkZJRg+ab/cd=") === "data:image/jpeg;base64,/9j/4AAQSkZJRg+ab/cd="
+    );
+    {
+      const escaped = MP.esc('data:image/jpeg;base64,AAA" onerror="x');
+      check("esc() still escapes a data-URL-shaped attack string", escaped.includes("&quot;") && !escaped.includes('"'));
+    }
+    check(
+      "every meal in meals.json has image === null or a non-empty string",
+      library.every((m) => m.image === null || (typeof m.image === "string" && m.image.length > 0))
+    );
+  }
+
   lines.push("", `${pass} passed, ${fail} failed`);
   document.getElementById("out").textContent = lines.join("\n");
 })();
