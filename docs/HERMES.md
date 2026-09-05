@@ -14,6 +14,7 @@ Every request carries `X-Auth-Token: <token>`. KV is eventually consistent
 | Answer nutrition/recipe Q&A | `GET /library` + the public `ingredient-nutrient-tags.json` / `nutrition-targets.json` | Approximate-coverage framing only ("this looks light on protein"), never precise calorie math. |
 | Edit ingredients in a meal | `GET /library` → modify → `PUT /library` | Always send the full `meals` array back, and set `updatedAt` to now. A `400` means the edit was malformed — re-read and retry with a corrected body, never resend the same one. |
 | "Generate a new plan" | `PUT /planFlag {"requestedAt": "<now ISO>", "ackedAt": null}` | The app shows a banner and generates on tap. Hermes replies "ready in the app" — it never renders a plan as chat text. |
+| Track what food is on hand | `GET /pantry` / `PUT /pantry` | Same relay pattern as `/library`. Body: `{ updatedAt, items: [{ name, qty? }] }`. `items` must be an array, each item needs a non-empty `name`, no duplicate names (case-insensitive). Always fetch-then-write the full array back. |
 
 ## `GET /discover`
 
@@ -32,3 +33,12 @@ Shape-validated only: `meals` must be an array, each meal needs a non-empty
 legal. No dietary rules are enforced on the way in — those apply only at
 `/discover`, since a rule tweak here would risk locking the user out of
 saving their own existing library.
+
+## `GET /pantry` / `PUT /pantry`
+
+Generic two-key relay, same as `/library`. Body shape: `{ updatedAt, items:
+[{ name, qty? }] }`. `items` must be an array; each item needs a non-empty
+`name` string; no duplicate names (case-insensitive, trimmed). `qty` is a
+free-text string (e.g. `"2"`, `"half a bag"`) and unvalidated. `items: []`
+is legal (empty pantry). Hermes should fetch-then-write — never PUT from
+stale/cached data, since this clobbers the whole array.

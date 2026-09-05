@@ -7,7 +7,7 @@ import SUBS from "../substitutions.json";
 const Exclusions = globalThis.MP.Exclusions;
 const MealDB = globalThis.MP.MealDB;
 
-const KEYS = { "/library": "library", "/planFlag": "planFlag" };
+const KEYS = { "/library": "library", "/planFlag": "planFlag", "/pantry": "pantry" };
 const MEALDB_BASE = "https://www.themealdb.com/api/json/v1/1/";
 const DISCOVER_LIMIT = 8;
 
@@ -71,6 +71,21 @@ function libraryError(parsed) {
   return null;
 }
 
+/** @param {any} parsed  the already-JSON.parsed PUT body
+ *  @returns {string|null}  an error reason, or null if the body is acceptable */
+function pantryError(parsed) {
+  if (!Array.isArray(parsed.items)) return "items must be an array";
+  const seenNames = new Set();
+  for (const item of parsed.items) {
+    if (typeof item !== "object" || item === null || Array.isArray(item)) return "each item must be an object";
+    if (typeof item.name !== "string" || !item.name.trim()) return "each item needs a non-empty name";
+    const key = item.name.trim().toLowerCase();
+    if (seenNames.has(key)) return "duplicate pantry item: " + item.name;
+    seenNames.add(key);
+  }
+  return null;
+}
+
 export default {
   async fetch(request, env) {
     if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: CORS });
@@ -110,6 +125,10 @@ export default {
       // out of saving their own existing library.
       if (kvKey === "library") {
         const reason = libraryError(parsed);
+        if (reason) return json(400, reason);
+      }
+      if (kvKey === "pantry") {
+        const reason = pantryError(parsed);
         if (reason) return json(400, reason);
       }
       await env.MP_KV.put(kvKey, body);
