@@ -42,6 +42,15 @@
             "command": "bash ${CLAUDE_PROJECT_DIR}/.claude/hooks/block-dangerous.sh"
           }
         ]
+      },
+      {
+        "matcher": "Agent",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo 'Before spawning: is an agent already running/completed on this task? Check ListAgents / conversation for an agentId, and use SendMessage to resume it instead of a fresh Agent call — see .claude/rules/agent-resume.md.' >&2; exit 0"
+          }
+        ]
       }
     ],
     "PostToolUse": [

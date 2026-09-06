@@ -32,6 +32,7 @@
     <button id="hermes-generate" class="btn">Generate</button>
     <button id="hermes-dismiss" class="btn">Dismiss</button>
   </div>
+  <div id="hermes-placements-banner" class="hermes-banner" hidden></div>
   <div class="top-actions">
     <button id="generate-btn" class="primary">Generate Plan</button>
   </div>
@@ -47,15 +48,20 @@
 <div id="detail-overlay" class="modal-overlay hidden" style="z-index:60;">
   <div id="detail-sheet" class="modal-sheet"></div>
 </div>
+<div id="eat-overlay" class="modal-overlay hidden" style="z-index:70;">
+  <div id="eat-sheet" class="modal-sheet"></div>
+</div>
 <div id="toast-root"></div>
 
 <script src="data.js"></script>
+<script src="prefs.js"></script>
 <script src="nutrition.js"></script>
 <script src="shelf-life.js"></script>
 <script src="swipe.js"></script>
 <script src="mealdb.js"></script>
 <script src="generator.js"></script>
 <script src="hermes-sync.js"></script>
+<script src="shopping-list.js"></script>
 <script src="plan.js"></script>
 <script>if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js");</script>
 </body>

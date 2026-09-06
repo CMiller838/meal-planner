@@ -82,7 +82,7 @@ window.MP = window.MP || {};
           const prevSlot = plan.days[idx - 1].slots.dinner;
           if (prevSlot && prevSlot.mealId === slot.mealId && meal.batchCook) return;
         }
-        occ.push({ day: day.day, meal });
+        occ.push({ day: day.day, meal: MP.effectiveMeal(meal, slot.variantId) });
       });
     });
     return occ;
@@ -166,5 +166,63 @@ window.MP = window.MP || {};
   // ponytail: both shop days subtract the same pantry amount — the pantry
   // is not a running balance in this phase. A balance belongs in Phase 12's
   // deduction flow.
-  MP.ShoppingList = { load, buildLists, parseQty, packsFor, normalizeKey, pantryIndex };
+
+  /** have/used are {value,unit} from parseQty, already unit-matched by the
+   * caller. Returns the display/storage string for have - used, clamped at 0. */
+  function fmtRemaining(have, used) {
+    const remaining = Math.max(0, have.value - used.value);
+    if (remaining === 0) return "0";
+    return `${remaining % 1 === 0 ? remaining : remaining.toFixed(1).replace(/\.0$/, "")}${have.unit}`;
+  }
+
+  /**
+   * The eat-flow decision table for one meal, pure and DOM/I-O free.
+   * used: {[ingredientKey]: qtyString} — absent/empty means not consumed.
+   * pantry: the {updatedAt, items} object from fetchItems("pantry"), or null.
+   * Returns { rows, ops } — the caller applies ops and renders rows.
+   */
+  function eatPlan(meal, used, pantry) {
+    const have = pantryIndex(pantry);
+    const rows = [];
+    const ops = [];
+    (meal.ingredients || []).forEach((ing) => {
+      const usedText = used[ing.key];
+      if (!usedText) return; // not consumed — skip entirely
+
+      const label = ing.label || MP.labelize(ing.key);
+      const key = normalizeKey(ing.key);
+      const haveText = have[key];
+
+      if (haveText === undefined) {
+        rows.push({ key: ing.key, label, used: usedText, have: null, after: null, shortfall: false, note: "not tracked" });
+        return;
+      }
+      const usedQty = parseQty(usedText);
+      const haveQty = parseQty(haveText);
+      if (!usedQty) {
+        rows.push({ key: ing.key, label, used: usedText, have: haveText, after: null, shortfall: false, note: `can't subtract from "${usedText}"` });
+        return;
+      }
+      if (!haveQty) {
+        rows.push({ key: ing.key, label, used: usedText, have: haveText, after: null, shortfall: false, note: `can't subtract from "${haveText}"` });
+        return;
+      }
+      if (haveQty.unit !== usedQty.unit) {
+        rows.push({ key: ing.key, label, used: usedText, have: haveText, after: null, shortfall: false, note: `units differ ("${haveText}" vs "${usedText}")` });
+        return;
+      }
+
+      const after = fmtRemaining(haveQty, usedQty);
+      ops.push({ list: "pantry", type: "sub", name: ing.key, qty: usedText });
+      const shortfall = haveQty.value < usedQty.value;
+      if (shortfall) {
+        const remainder = fmtRemaining(usedQty, haveQty); // used - have
+        ops.push({ list: "adhoc", type: "add", name: ing.key, qty: remainder });
+      }
+      rows.push({ key: ing.key, label, used: usedText, have: haveText, after, shortfall, note: null });
+    });
+    return { rows, ops };
+  }
+
+  MP.ShoppingList = { load, buildLists, parseQty, packsFor, normalizeKey, pantryIndex, fmtRemaining, eatPlan };
 })();

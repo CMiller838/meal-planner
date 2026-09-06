@@ -61,6 +61,7 @@ window.MP = window.MP || {};
     if (stored.some((m) => m.id === meal.id)) return stored;
     stored.push({ prepEffort: "quick", ...meal });
     saveLibrary(stored);
+    if (MP.Prefs) MP.Prefs.bump(meal, "liked");
     return stored;
   }
 
@@ -149,6 +150,30 @@ window.MP = window.MP || {};
       .join("\n");
   }
 
+  /** variant|null within meal.variants, by id. Never throws on a meal with no `variants`. */
+  function findVariant(meal, variantId) {
+    if (!meal || !variantId || !Array.isArray(meal.variants)) return null;
+    return meal.variants.find((v) => v.id === variantId) || null;
+  }
+
+  /** "" for the base variant (null/undefined/unknown id), else the variant's name. */
+  function variantLabel(meal, variantId) {
+    const v = findVariant(meal, variantId);
+    return v ? v.name : "";
+  }
+
+  /** Merge a variant over its base meal. Same object back (no allocation) for
+   *  a null/undefined/unknown variantId, or one missing `ingredients` — a
+   *  stale/bad variantId degrades silently to the base rather than throwing.
+   *  Never mutates `meal`; always keeps `meal.id`. */
+  function effectiveMeal(meal, variantId) {
+    if (!meal || variantId === null || variantId === undefined) return meal;
+    const variant = findVariant(meal, variantId);
+    if (!variant || !Array.isArray(variant.ingredients)) return meal;
+    const { id, ...fields } = variant;
+    return { ...meal, ...fields };
+  }
+
   /** First library meal with a confusably similar name, or null. */
   function findSimilarName(meals, name, ignoreId) {
     const norm = (s) => (s || "").toLowerCase().replace(/[^a-z0-9]/g, "");
@@ -187,10 +212,11 @@ window.MP = window.MP || {};
     return new Set(JSON.parse(sessionStorage.getItem(SS_DISMISSED) || "[]"));
   }
 
-  function dismiss(mealId) {
+  function dismiss(mealId, name) {
     const set = getDismissed();
     set.add(mealId);
     sessionStorage.setItem(SS_DISMISSED, JSON.stringify([...set]));
+    if (MP.Prefs) MP.Prefs.bump({ id: mealId, name }, "dismissed");
   }
 
   /** "Save for later" pile from the Discover fan deck — persisted separately
@@ -204,6 +230,7 @@ window.MP = window.MP || {};
     if (stored.some((m) => m.id === meal.id)) return stored;
     stored.push(meal);
     localStorage.setItem(LS_SAVED_LATER, JSON.stringify(stored));
+    if (MP.Prefs) MP.Prefs.bump(meal, "liked");
     return stored;
   }
 
@@ -240,6 +267,7 @@ window.MP = window.MP || {};
 
   MP.esc = esc;
   MP.labelize = labelize;
+  MP.slugify = slugify;
   MP.getLibrary = getLibrary;
   MP.saveLibrary = saveLibrary;
   MP.applyRemoteLibrary = applyRemoteLibrary;
@@ -247,6 +275,9 @@ window.MP = window.MP || {};
   MP.addToLibrary = addToLibrary;
   MP.upsertMeal = upsertMeal;
   MP.removeFromLibrary = removeFromLibrary;
+  MP.findVariant = findVariant;
+  MP.variantLabel = variantLabel;
+  MP.effectiveMeal = effectiveMeal;
   MP.parseIngredients = parseIngredients;
   MP.ingredientsToText = ingredientsToText;
   MP.findSimilarName = findSimilarName;

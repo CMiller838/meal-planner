@@ -83,8 +83,64 @@
     });
   }
 
+  // ---- Ad-hoc list ----
+  function adhocLineHtml(item) {
+    return `<li class="shop-line">
+      <label>
+        <input type="checkbox" data-name="${esc(item.name)}">
+        <span class="shop-qty">${esc(item.qty || "")}</span>
+        <span class="shop-name">${esc(item.name)}</span>
+      </label>
+    </li>`;
+  }
+
+  function adhocHtml(items) {
+    return `<section class="shop-block adhoc">
+      ${items.length
+        ? `<ul class="shop-list">${items.map(adhocLineHtml).join("")}</ul>`
+        : `<p class="muted">Nothing on your ad-hoc list.</p>`}
+      <div class="adhoc-add">
+        <input type="text" id="adhoc-name" placeholder="Add an item">
+        <input type="text" id="adhoc-qty" placeholder="qty (optional)">
+        <button id="adhoc-add-btn" class="ghost">Add</button>
+      </div>
+    </section>`;
+  }
+
+  function renderAdhoc() {
+    const root = document.getElementById("adhoc-root");
+    if (!root) return;
+    const items = MP.Sync.localItems("adhoc");
+    root.innerHTML = adhocHtml(items);
+
+    root.querySelectorAll('input[type="checkbox"]').forEach((cb) => {
+      cb.addEventListener("change", () => {
+        MP.Sync.queueOp({ list: "adhoc", type: "remove", name: cb.dataset.name });
+        MP.Sync.writeLocalItems("adhoc", MP.Sync.applyOps(MP.Sync.localItems("adhoc"), [{ type: "remove", name: cb.dataset.name }]));
+        renderAdhoc();
+        MP.Sync.flushOps();
+      });
+    });
+
+    root.querySelector("#adhoc-add-btn").addEventListener("click", () => {
+      const nameInput = root.querySelector("#adhoc-name");
+      const qtyInput = root.querySelector("#adhoc-qty");
+      const name = nameInput.value.trim();
+      if (!name) return;
+      const qty = qtyInput.value.trim();
+      const op = { list: "adhoc", type: "add", name, ...(qty ? { qty } : {}) };
+      MP.Sync.queueOp(op);
+      MP.Sync.writeLocalItems("adhoc", MP.Sync.applyOps(MP.Sync.localItems("adhoc"), [op]));
+      renderAdhoc();
+      MP.Sync.flushOps();
+    });
+  }
+
   async function init() {
     MP.initTheme();
+    renderAdhoc();
+    MP.Sync.fetchItems("adhoc").then(() => renderAdhoc());
+
     const plan = loadPlan();
     const root = document.getElementById("shopping-root");
     if (!plan || !plan.days.some((d) => Object.values(d.slots).some((s) => s && s.mealId))) {

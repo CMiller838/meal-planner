@@ -385,6 +385,19 @@ button.ghost {
 }
 #sync-save { margin-top: 1rem; }
 
+/* ---- Meal variants (Phase 14) ---- */
+.variant-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: .5rem;
+  padding: .5rem 0;
+  border-bottom: 1px solid var(--border);
+}
+.variant-row-actions { display: flex; gap: .4rem; flex-shrink: 0; }
+.variant-options { display: flex; flex-direction: column; gap: .5rem; margin-top: .75rem; }
+.variant-option.active { border-color: var(--accent, var(--text)); font-weight: 700; }
+
 .form-photo { display: block; width: 100%; max-height: 10rem; object-fit: cover; border-radius: .6rem; margin-top: .4rem; }
 .form-photo-row { display: flex; align-items: center; gap: .6rem; margin-top: .4rem; }
 .form-photo-row input[type="file"] { font-size: .85rem; color: var(--text-dim); }
@@ -399,6 +412,28 @@ button.ghost {
   padding: .75rem 1rem;
   margin-bottom: 1rem;
   box-shadow: 0 6px 16px var(--shadow);
+}
+.hermes-banner {
+  position: relative;
+  background: var(--surface);
+  border: 1px solid var(--accent);
+  border-radius: .9rem;
+  padding: .75rem 2.25rem .75rem 1rem;
+  margin-bottom: 1rem;
+  box-shadow: 0 6px 16px var(--shadow);
+}
+.hermes-banner p { margin: 0 0 .25rem; }
+.hermes-banner ul { margin: 0 0 .5rem; padding-left: 1.1rem; }
+.hermes-banner .rejected { color: var(--text-dim); }
+.hermes-banner button.dismiss {
+  position: absolute;
+  top: .5rem;
+  right: .5rem;
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  cursor: pointer;
+  font-size: 1rem;
 }
 .toast {
   position: fixed;
@@ -564,5 +599,23 @@ button.ghost.danger { color: var(--danger); border-color: var(--danger); }
 .shop-extra { margin-top: .6rem; }
 .shop-extra summary { cursor: pointer; color: var(--text-dim); font-size: .88rem; }
 .shop-extra .shop-list { margin-top: .5rem; }
+.shop-block.adhoc { margin-top: 1rem; }
+.adhoc-add { display: flex; gap: .5rem; margin-top: .75rem; flex-wrap: wrap; }
+.adhoc-add input { flex: 1 1 auto; min-width: 8rem; }
+.adhoc-add #adhoc-qty { flex: 0 1 6rem; }
+
+/* ---- Eat sheet ---- */
+.eat-row {
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+  flex-wrap: wrap;
+  padding: .4rem 0;
+  border-bottom: 1px solid var(--border);
+}
+.eat-row .eat-label { flex: 1 1 8rem; }
+.eat-row .eat-qty { flex: 0 1 6rem; }
+.eat-row .eat-after { color: var(--text-dim); font-size: .8rem; }
+.eat-row.shortfall .eat-after { color: var(--danger); }
 
 ::selection { background: var(--butter); color: #3a2a10; }

@@ -8,6 +8,7 @@
 <pre id="out">Running...</pre>
 
 <script src="data.js"></script>
+<script src="prefs.js"></script>
 <script src="nutrition.js"></script>
 <script src="shelf-life.js"></script>
 <script src="generator.js"></script>
@@ -15,6 +16,7 @@
 <script src="hermes-sync.js"></script>
 <script src="exclusions.js"></script>
 <script src="mealdb.js"></script>
+<script src="plan.js"></script>
 <script>
 (async function () {
   "use strict";
@@ -738,6 +740,497 @@
           }
         })()
       );
+    }
+  }
+
+  // 31. Phase 12 — eat flow deduction/shortfall maths + op-log sync
+  {
+    const { fmtRemaining, eatPlan, buildLists } = MP.ShoppingList;
+    const { applyOps } = MP.Sync;
+
+    check(
+      "fmtRemaining: 800g - 300g = 500g",
+      fmtRemaining({ value: 800, unit: "g" }, { value: 300, unit: "g" }) === "500g"
+    );
+    check(
+      "fmtRemaining clamps at 0, never negative",
+      fmtRemaining({ value: 300, unit: "g" }, { value: 500, unit: "g" }) === "0"
+    );
+    check(
+      "fmtRemaining trims trailing .0",
+      fmtRemaining({ value: 1500, unit: "g" }, { value: 500, unit: "g" }) === "1000g"
+    );
+
+    const meal = {
+      id: "eat1", name: "Eat test", batchCook: false,
+      ingredients: [{ key: "beef_mince", qty: "500g" }],
+    };
+
+    {
+      const { rows, ops } = eatPlan(meal, { beef_mince: "300g" }, null);
+      check("eatPlan: no pantry at all -> not tracked, zero ops, no throw (Hermes-off guarantee)",
+        rows[0].after === null && rows[0].note === "not tracked" && ops.length === 0);
+    }
+    {
+      const pantry = { updatedAt: "x", items: [{ name: "Beef Mince", qty: "800g" }] };
+      const { rows, ops } = eatPlan(meal, { beef_mince: "300g" }, pantry);
+      check("eatPlan: clean deduction -> one sub op, after 500g, no shortfall",
+        ops.length === 1 && ops[0].type === "sub" && ops[0].list === "pantry" &&
+        rows[0].after === "500g" && rows[0].shortfall === false);
+    }
+    {
+      const pantry = { updatedAt: "x", items: [{ name: "Beef Mince", qty: "200g" }] };
+      const bigMeal = { ...meal, ingredients: [{ key: "beef_mince", qty: "500g" }] };
+      const { rows, ops } = eatPlan(bigMeal, { beef_mince: "500g" }, pantry);
+      check("eatPlan: shortfall -> after 0, shortfall true, sub + adhoc/add for 300g remainder",
+        rows[0].after === "0" && rows[0].shortfall === true && ops.length === 2 &&
+        ops.some((o) => o.type === "sub" && o.list === "pantry") &&
+        ops.some((o) => o.type === "add" && o.list === "adhoc" && o.qty === "300g"));
+    }
+    {
+      const pantry = { updatedAt: "x", items: [{ name: "Beef Mince", qty: "half a bag" }] };
+      const { rows, ops } = eatPlan(meal, { beef_mince: "300g" }, pantry);
+      check("eatPlan: unparseable pantry qty -> zero ops, after null, note names the text",
+        ops.length === 0 && rows[0].after === null && rows[0].note.includes("half a bag"));
+    }
+    {
+      const pantry = { updatedAt: "x", items: [{ name: "Beef Mince", qty: "2 tins" }] };
+      const { rows, ops } = eatPlan(meal, { beef_mince: "300g" }, pantry);
+      check("eatPlan: unit mismatch -> zero ops, after null",
+        ops.length === 0 && rows[0].after === null);
+    }
+    {
+      const unmeasured = { ...meal, ingredients: [{ key: "beef_mince", qty: "" }] };
+      const pantry = { updatedAt: "x", items: [{ name: "Beef Mince", qty: "300g" }] };
+      check("eatPlan: unmeasured ingredient (empty used) -> skipped, zero ops, no throw", (() => {
+        try {
+          const { rows, ops } = eatPlan(unmeasured, {}, pantry);
+          return rows.length === 0 && ops.length === 0;
+        } catch (e) {
+          return false;
+        }
+      })());
+    }
+    {
+      const pantry = { updatedAt: "x", items: [{ name: "Beef Mince", qty: "800g" }] };
+      const { rows, ops } = eatPlan(meal, {}, pantry);
+      check("eatPlan: empty/omitted used entry -> ingredient skipped entirely",
+        rows.length === 0 && ops.length === 0);
+    }
+
+    {
+      const remote = [{ name: "Beef Mince", qty: "800g" }, { name: "Milk", qty: "1l" }];
+      const result = applyOps(remote, [{ list: "pantry", type: "sub", name: "beef_mince", qty: "300g" }]);
+      check("applyOps: sub reduces only the matched item, sibling untouched",
+        result.find((i) => i.name === "Beef Mince").qty === "500g" &&
+        result.find((i) => i.name === "Milk").qty === "1l");
+    }
+    {
+      const remote = [{ name: "Milk", qty: "1l" }];
+      const result = applyOps(remote, [{ list: "pantry", type: "sub", name: "beef_mince", qty: "300g" }]);
+      check("applyOps: sub for a name not present remotely -> unchanged, no phantom item",
+        deepEqual(result, remote));
+    }
+    {
+      const remote = [{ name: "Milk", qty: "1l" }];
+      const appended = applyOps(remote, [{ list: "adhoc", type: "add", name: "Eggs", qty: "6" }]);
+      check("applyOps: add appends a new name",
+        appended.some((i) => i.name === "Eggs" && i.qty === "6"));
+      const replaced = applyOps(remote, [{ list: "adhoc", type: "add", name: "milk", qty: "2l" }]);
+      check("applyOps: add replaces qty of an existing normalized name rather than duplicating",
+        replaced.length === 1 && replaced[0].qty === "2l");
+    }
+    {
+      const remote = [{ name: "Milk", qty: "1l" }, { name: "Eggs", qty: "6" }];
+      const result = applyOps(remote, [{ list: "adhoc", type: "remove", name: "milk" }]);
+      check("applyOps: remove drops the match", !result.some((i) => i.name === "Milk"));
+      check("applyOps: remove for a missing name is a no-op",
+        deepEqual(applyOps(remote, [{ list: "adhoc", type: "remove", name: "nonexistent" }]), remote));
+    }
+    check("applyOps: empty op list is deep-equal to input", deepEqual(applyOps([{ name: "Milk", qty: "1l" }], []), [{ name: "Milk", qty: "1l" }]));
+    check("applyOps: empty items array with ops does not throw", (() => {
+      try { applyOps([], [{ type: "add", name: "Eggs", qty: "6" }]); return true; } catch (e) { return false; }
+    })());
+    check("applyOps: malformed op is skipped, not thrown on", (() => {
+      try {
+        applyOps([{ name: "Milk", qty: "1l" }], [{}, { type: "nonsense" }]);
+        return true;
+      } catch (e) {
+        return false;
+      }
+    })());
+    {
+      const input = [{ name: "Milk", qty: "1l" }];
+      const clone = JSON.parse(JSON.stringify(input));
+      applyOps(input, [{ list: "pantry", type: "sub", name: "milk", qty: "500ml" }]);
+      check("applyOps: purity — input array/items not mutated", deepEqual(input, clone));
+    }
+
+    {
+      const packData = { items: {} };
+      const plan30 = { days: [{ day: 1, slots: { breakfast: null, lunch: null, dinner: { mealId: "m1" }, snack: null } }] };
+      const meals30 = { m1: { id: "m1", name: "M", batchCook: false, ingredients: [{ key: "milk", qty: "1l" }] } };
+      const before = buildLists(plan30, meals30, packData);
+      const after = buildLists(plan30, meals30, packData, undefined);
+      check("back-compat: buildLists(plan, mealsById, packData) unaffected by Phase 12 additions",
+        deepEqual(before, after));
+    }
+  }
+
+  // ---- Group 32: Phase 13 (Hermes plan placement & preference learning) ----
+  {
+    const applyPlacements = MP.Plan.applyPlacements;
+
+    // newPlacements
+    check("newPlacements: [] for null remote", deepEqual(MP.Sync.newPlacements(null, null), []));
+    check("newPlacements: [] for malformed remote", deepEqual(MP.Sync.newPlacements({}, null), []));
+    {
+      const remote = { placements: [
+        { id: "a", requestedAt: "2026-09-01T00:00:00Z" },
+        { id: "b", requestedAt: "2026-09-03T00:00:00Z" },
+        { id: "c", requestedAt: "2026-09-02T00:00:00Z" },
+      ] };
+      const result = MP.Sync.newPlacements(remote, "2026-09-01T12:00:00Z");
+      check("newPlacements: filters by watermark and sorts ascending",
+        deepEqual(result.map((p) => p.id), ["c", "b"]));
+      check("newPlacements: [] once everything is acked",
+        deepEqual(MP.Sync.newPlacements(remote, "2026-09-04T00:00:00Z"), []));
+    }
+
+    // planMirror
+    {
+      const p = { startDate: "2026-09-07", days: [
+        { day: 1, slots: { dinner: { mealId: "m1", eatenAt: "2026-09-08T00:00:00Z" }, breakfast: null } },
+        { day: 2, slots: {} },
+      ] };
+      const mirror = MP.Sync.planMirror(p);
+      check("planMirror: omits empty slots", Object.keys(mirror.days[1].slots).length === 0);
+      check("planMirror: carries eatenAt through", mirror.days[0].slots.dinner.eatenAt === "2026-09-08T00:00:00Z");
+      // Phase 14 (D8): variantId widens the mirror, so "exactly mealId+eatenAt"
+      // is replaced by "a subset of {mealId, eatenAt, variantId}".
+      check("planMirror: slot keys are a subset of mealId/eatenAt/variantId",
+        Object.keys(mirror.days[0].slots.dinner).every((k) => ["mealId", "eatenAt", "variantId"].includes(k)));
+      {
+        const withVariant = { days: [{ day: 1, slots: { dinner: { mealId: "m1", variantId: "v1" } } }] };
+        const m2 = MP.Sync.planMirror(withVariant);
+        check("planMirror: carries variantId through when set", m2.days[0].slots.dinner.variantId === "v1");
+        check("planMirror: omits variantId (not null) when unset", !("variantId" in mirror.days[0].slots.dinner));
+      }
+      check("planMirror: handles a plan with no days", deepEqual(MP.Sync.planMirror({ days: [] }).days, []));
+      check("planMirror: a slot missing mealId doesn't throw or appear", (() => {
+        try {
+          return Object.keys(MP.Sync.planMirror({ days: [{ day: 1, slots: { dinner: {} } }] }).days[0].slots).length === 0;
+        } catch (e) { return false; }
+      })());
+    }
+
+    // applyPlacements
+    {
+      const lib = [{ id: "m1", name: "Meal One" }, { id: "m2", name: "Meal Two" }];
+      const p = { startDate: "2026-09-07", days: Array.from({ length: 2 }, (_, i) => ({
+        day: i + 1, slots: { dinner: i === 0 ? { mealId: "m1", eatenAt: "2026-09-08T00:00:00Z" } : null },
+      })) };
+      const clone = JSON.parse(JSON.stringify(p));
+
+      const valid = applyPlacements(p, [{ day: 2, slot: "dinner", mealId: "m2", mealName: "Meal Two" }], lib);
+      check("applyPlacements: applies a valid placement", valid.plan.days[1].slots.dinner.mealId === "m2");
+      check("applyPlacements: input plan is not mutated", deepEqual(p, clone));
+
+      const eaten = applyPlacements(p, [{ day: 1, slot: "dinner", mealId: "m2" }], lib);
+      check("applyPlacements: rejects onto an eaten slot", eaten.rejected[0].reason === "eaten");
+
+      const unknown = applyPlacements(p, [{ day: 2, slot: "dinner", mealId: "zzz" }], lib);
+      check("applyPlacements: rejects an unknown meal", unknown.rejected[0].reason === "unknown-meal");
+
+      const badDay = applyPlacements(p, [{ day: 0, slot: "dinner", mealId: "m2" }], lib);
+      check("applyPlacements: rejects day 0", badDay.rejected[0].reason === "bad-slot");
+      const badDay2 = applyPlacements(p, [{ day: 15, slot: "dinner", mealId: "m2" }], lib);
+      check("applyPlacements: rejects day 15", badDay2.rejected[0].reason === "bad-slot");
+      const badSlot = applyPlacements(p, [{ day: 2, slot: "brunch", mealId: "m2" }], lib);
+      check("applyPlacements: rejects a bogus slot name", badSlot.rejected[0].reason === "bad-slot");
+
+      const mixed = applyPlacements(p, [
+        { day: 2, slot: "dinner", mealId: "m2" },
+        { day: 1, slot: "dinner", mealId: "m2" },
+      ], lib);
+      check("applyPlacements: a mixed queue yields both applied and rejected", mixed.applied.length === 1 && mixed.rejected.length === 1);
+    }
+
+    // MP.Prefs.bump / score
+    {
+      const backup = localStorage.getItem("mp_prefs");
+      const dirtyBackup = localStorage.getItem("mp_prefs_dirty");
+      try {
+        localStorage.removeItem("mp_prefs");
+        MP.Prefs.bump({ id: "m1", name: "Meal One" }, "liked");
+        check("MP.Prefs.bump: creates a record", MP.Prefs.get().m1.liked === 1);
+        MP.Prefs.bump({ id: "m1" }, "liked");
+        check("MP.Prefs.bump: increments", MP.Prefs.get().m1.liked === 2);
+        check("MP.Prefs.bump: sets lastAt", typeof MP.Prefs.get().m1.lastAt === "string");
+        MP.Prefs.bump({ id: "m1" }, "nonsense");
+        check("MP.Prefs.bump: no-ops on an unknown field", MP.Prefs.get().m1.liked === 2 && MP.Prefs.get().m1.nonsense === undefined);
+        localStorage.setItem("mp_prefs", "not json{{{");
+        check("MP.Prefs.get: survives corrupt mp_prefs", deepEqual(MP.Prefs.get(), {}));
+        MP.Prefs.bump({ id: "m2", name: "M2" }, "eaten");
+        check("MP.Prefs.bump: survives corrupt mp_prefs and still writes", MP.Prefs.get().m2.eaten === 1);
+      } finally {
+        if (backup === null) localStorage.removeItem("mp_prefs"); else localStorage.setItem("mp_prefs", backup);
+        if (dirtyBackup === null) localStorage.removeItem("mp_prefs_dirty"); else localStorage.setItem("mp_prefs_dirty", dirtyBackup);
+      }
+    }
+
+    // orderByTaste
+    {
+      const meals = [
+        { id: "a", ingredients: [{ key: "chicken_breast" }, { key: "rice" }] },
+        { id: "b", ingredients: [{ key: "beef_mince" }] },
+        { id: "c", ingredients: [{ key: "rice" }] },
+      ];
+      const emptyPrefs = {};
+      const identity = MP.Prefs.orderByTaste(meals, emptyPrefs, meals);
+      check("orderByTaste: identity permutation when prefs is empty", deepEqual(identity.map((m) => m.id), ["a", "b", "c"]));
+
+      const prefs = { a: { liked: 5, dismissed: 0, eaten: 0 } };
+      const ordered = MP.Prefs.orderByTaste(meals, prefs, meals);
+      check("orderByTaste: output is a permutation of the input", deepEqual([...ordered.map((m) => m.id)].sort(), ["a", "b", "c"]));
+      check("orderByTaste: a meal sharing tokens with a well-liked meal outranks one that doesn't",
+        ordered.findIndex((m) => m.id === "c") < ordered.findIndex((m) => m.id === "b"));
+    }
+
+    // Worker validators (re-declared here since worker/worker.js is an ES module, not a <script>)
+    {
+      function planError(parsed) {
+        if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) return "expected an object";
+        if (!Array.isArray(parsed.days)) return "days must be an array";
+        return null;
+      }
+      function placementsError(parsed) {
+        if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) return "expected an object";
+        if (!Array.isArray(parsed.placements)) return "placements must be an array";
+        return null;
+      }
+      function prefsError(parsed) {
+        if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) return "expected an object";
+        if (typeof parsed.prefs !== "object" || parsed.prefs === null || Array.isArray(parsed.prefs)) return "prefs must be a plain object";
+        return null;
+      }
+      check("planError: rejects a bare string", typeof planError("nope") === "string");
+      check("planError: rejects null", typeof planError(null) === "string");
+      check("planError: accepts a minimal valid body", planError({ days: [] }) === null);
+      check("placementsError: rejects a bare string", typeof placementsError("nope") === "string");
+      check("placementsError: rejects null", typeof placementsError(null) === "string");
+      check("placementsError: accepts a minimal valid body", placementsError({ placements: [] }) === null);
+      check("prefsError: rejects a bare string", typeof prefsError("nope") === "string");
+      check("prefsError: rejects null", typeof prefsError(null) === "string");
+      check("prefsError: rejects array-shaped prefs", typeof prefsError({ prefs: [] }) === "string");
+      check("prefsError: accepts a minimal valid body", prefsError({ prefs: {} }) === null);
+    }
+  }
+
+  // ---- Group 33: Phase 14 (meal variants) ----
+  {
+    // effectiveMeal / findVariant / variantLabel
+    const base = {
+      id: "m1", name: "Base Meal", instructions: "base instructions",
+      ingredients: [{ key: "pasta", qty: "200g" }],
+      variants: [
+        { id: "v1", name: "cream sauce", ingredients: [{ key: "cream", qty: "100ml" }], instructions: "cream instructions" },
+        { id: "v2", name: "no ingredients variant" }, // missing `ingredients` on purpose
+      ],
+    };
+    const baseNoVariants = { id: "m2", name: "Plain Meal", ingredients: [{ key: "rice", qty: "100g" }] };
+    const baseEmptyVariants = { id: "m3", name: "Empty Variants Meal", ingredients: [{ key: "rice", qty: "100g" }], variants: [] };
+
+    check("effectiveMeal: same object for null variantId", MP.effectiveMeal(base, null) === base);
+    check("effectiveMeal: same object for undefined variantId", MP.effectiveMeal(base, undefined) === base);
+    check("effectiveMeal: same object for an unknown variantId", MP.effectiveMeal(base, "nope") === base);
+    check("effectiveMeal: survives a meal with variants: []", MP.effectiveMeal(baseEmptyVariants, "v1") === baseEmptyVariants);
+    check("effectiveMeal: no throw for a meal with no variants key", MP.effectiveMeal(baseNoVariants, "v1") === baseNoVariants);
+    {
+      const merged = MP.effectiveMeal(base, "v1");
+      check("effectiveMeal: merges ingredients for a known variant", deepEqual(merged.ingredients, base.variants[0].ingredients));
+      check("effectiveMeal: merges instructions for a known variant", merged.instructions === "cream instructions");
+      check("effectiveMeal: keeps meal.id", merged.id === "m1");
+      check("effectiveMeal: never mutates the base meal", deepEqual(base.ingredients, [{ key: "pasta", qty: "200g" }]));
+    }
+    check("effectiveMeal: falls back to base for a variant missing ingredients", MP.effectiveMeal(base, "v2") === base);
+
+    check("findVariant: null for the base (no variantId)", MP.findVariant(base, null) === null);
+    check("findVariant: null for an unknown variantId", MP.findVariant(base, "nope") === null);
+    check("findVariant: no throw for a meal with no variants key", MP.findVariant(baseNoVariants, "v1") === null);
+    check("findVariant: finds a known variant", MP.findVariant(base, "v1") === base.variants[0]);
+    check("variantLabel: \"\" for the base", MP.variantLabel(base, null) === "");
+    check("variantLabel: correct label for a known variant", MP.variantLabel(base, "v1") === "cream sauce");
+
+    // Variety-guard / filterMeals regressions: exercised against the real seed
+    // library + generated plan from the top of this file, which now carries
+    // a chorizo-pasta variant (D3: variants must not affect either path).
+    {
+      const chorizo = library.find((m) => m.id === "chorizo-pasta");
+      check("seed fixture: chorizo-pasta carries a variant to regress against", !!(chorizo && chorizo.variants && chorizo.variants.length));
+      // Same shape as check #5 above (no dinner repeats outside a run), scoped
+      // to the one meal in the seed library that now carries a variant.
+      const runDays = new Set(runs.flatMap((r) => (r.length >= 2 ? r.slice(1) : [])));
+      let ok = true;
+      for (let day = 2; day <= 14; day++) {
+        if (runDays.has(day)) continue;
+        const prev = plan.days[day - 2].slots.dinner.mealId;
+        const cur = plan.days[day - 1].slots.dinner.mealId;
+        if (prev === "chorizo-pasta" && cur === "chorizo-pasta") { ok = false; break; }
+      }
+      check("variety guard: a meal with variants still can't repeat on consecutive non-batch days", ok);
+      check("filterMeals: a family with variants returns exactly one row", MP.filterMeals(library, "chorizo").length === 1);
+    }
+
+    // Slot handling: changing a slot's meal clears variantId; applyPlacements
+    // with an unknown variantId applies against the base rather than rejecting.
+    {
+      const lib = [
+        { id: "m1", name: "Meal One" },
+        { id: "m2", name: "Meal Two", variants: [{ id: "v1", name: "V1", ingredients: [] }] },
+      ];
+      const p = { days: [{ day: 1, slots: { dinner: { mealId: "m1", variantId: "stale" } } }] };
+      const swapped = MP.Plan.applyPlacements(p, [{ day: 1, slot: "dinner", mealId: "m2" }], lib);
+      check("applyPlacements: changing a slot's meal clears variantId",
+        !("variantId" in swapped.plan.days[0].slots.dinner));
+
+      const unknownVariant = MP.Plan.applyPlacements(p, [{ day: 1, slot: "dinner", mealId: "m2", variantId: "nope" }], lib);
+      check("applyPlacements: an unknown variantId applies against the base, doesn't reject",
+        unknownVariant.applied.length === 1 && !("variantId" in unknownVariant.plan.days[0].slots.dinner));
+
+      const knownVariant = MP.Plan.applyPlacements(p, [{ day: 1, slot: "dinner", mealId: "m2", variantId: "v1" }], lib);
+      check("applyPlacements: a known variantId is applied",
+        knownVariant.plan.days[0].slots.dinner.variantId === "v1");
+    }
+
+    // mealsError (re-declared here since worker/worker.js is an ES module, not a <script>)
+    {
+      function mealsError(parsed) {
+        if (!Array.isArray(parsed.meals)) return "meals must be an array";
+        const seenIds = new Set();
+        for (const meal of parsed.meals) {
+          if (typeof meal !== "object" || meal === null || Array.isArray(meal)) return "each meal must be an object";
+          if (typeof meal.id !== "string" || !meal.id) return "each meal needs a non-empty id";
+          if (typeof meal.name !== "string" || !meal.name) return "each meal needs a non-empty name";
+          if (!Array.isArray(meal.ingredients)) return "each meal needs an ingredients array";
+          if (meal.variants !== undefined) {
+            if (!Array.isArray(meal.variants)) return "meal variants must be an array";
+            const seenVariantIds = new Set();
+            for (const v of meal.variants) {
+              if (typeof v !== "object" || v === null || Array.isArray(v)) return "each variant must be an object";
+              if (typeof v.id !== "string" || !v.id) return "each variant needs a non-empty id";
+              if (typeof v.name !== "string" || !v.name) return "each variant needs a non-empty name";
+              if (!Array.isArray(v.ingredients)) return "each variant needs an ingredients array";
+              if (seenVariantIds.has(v.id)) return "duplicate variant id: " + v.id;
+              seenVariantIds.add(v.id);
+            }
+          }
+          if (seenIds.has(meal.id)) return "duplicate meal id: " + meal.id;
+          seenIds.add(meal.id);
+        }
+        return null;
+      }
+      const okMeal = { id: "a", name: "A", ingredients: [] };
+      check("mealsError: accepts a meal with no variants", mealsError({ meals: [okMeal] }) === null);
+      check("mealsError: accepts a valid variants array",
+        mealsError({ meals: [{ ...okMeal, variants: [{ id: "v1", name: "V1", ingredients: [] }] }] }) === null);
+      check("mealsError: rejects a non-array variants",
+        typeof mealsError({ meals: [{ ...okMeal, variants: {} }] }) === "string");
+      check("mealsError: rejects a variant with no id",
+        typeof mealsError({ meals: [{ ...okMeal, variants: [{ name: "V1", ingredients: [] }] }] }) === "string");
+      check("mealsError: rejects a variant with no ingredients array",
+        typeof mealsError({ meals: [{ ...okMeal, variants: [{ id: "v1", name: "V1" }] }] }) === "string");
+      check("mealsError: rejects duplicate variant ids",
+        typeof mealsError({ meals: [{ ...okMeal, variants: [
+          { id: "v1", name: "V1", ingredients: [] }, { id: "v1", name: "V2", ingredients: [] },
+        ] }] }) === "string");
+    }
+  }
+
+  // ---- Group 34: Phase 15 (eaten log) ----
+  {
+    const tags = { pasta: { fibre: "med" }, cream: { calcium: "high" }, milk: { calcium: "low", vitD: "low" } };
+    check("tagsForMeal: dedupes + sorts across ingredients",
+      deepEqual(MP.Nutrition.tagsForMeal({ ingredients: [{ key: "cream" }, { key: "milk" }] }, tags), ["calcium", "vitD"]));
+    check("tagsForMeal: unknown key contributes nothing",
+      deepEqual(MP.Nutrition.tagsForMeal({ ingredients: [{ key: "nope" }] }, tags), []));
+    check("tagsForMeal: no ingredients => []", deepEqual(MP.Nutrition.tagsForMeal({ ingredients: [] }, tags), []));
+    check("tagsForMeal: null meal doesn't throw", deepEqual(MP.Nutrition.tagsForMeal(null, tags), []));
+    check("tagsForMeal: a low-level tag still appears",
+      deepEqual(MP.Nutrition.tagsForMeal({ ingredients: [{ key: "milk" }] }, tags), ["calcium", "vitD"]));
+
+    // localEatenLog / logEaten (against a stubbed localStorage-backed MP.Sync)
+    {
+      const store = {};
+      const realGetItem = localStorage.getItem.bind(localStorage);
+      const realSetItem = localStorage.setItem.bind(localStorage);
+      localStorage.getItem = (k) => (k === "mp_eatenLog" ? (store.log ?? null) : realGetItem(k));
+      localStorage.setItem = (k, v) => { if (k === "mp_eatenLog") store.log = v; else realSetItem(k, v); };
+
+      check("localEatenLog: [] for a missing key", deepEqual(MP.Sync.localEatenLog(), []));
+      store.log = "{not json";
+      check("localEatenLog: [] for a corrupt value", deepEqual(MP.Sync.localEatenLog(), []));
+
+      store.log = "[]";
+      MP.Sync.logEaten({ id: "a:1", mealId: "a", name: "A", eatenAt: "1", tags: [] });
+      check("logEaten: appends to an empty log", MP.Sync.localEatenLog().length === 1);
+      MP.Sync.logEaten({ id: "a:1", mealId: "a", name: "A", eatenAt: "1", tags: [] });
+      check("logEaten: same id twice is a no-op", MP.Sync.localEatenLog().length === 1);
+      MP.Sync.logEaten({ id: "a:2", mealId: "a", name: "A", eatenAt: "2", tags: [] });
+      check("logEaten: same meal, different eatenAt, does append", MP.Sync.localEatenLog().length === 2);
+
+      store.log = JSON.stringify(Array.from({ length: 200 }, (_, i) => ({ id: `x:${i}`, mealId: "x", name: "X", eatenAt: `${i}`, tags: [] })));
+      MP.Sync.logEaten({ id: "x:200", mealId: "x", name: "X", eatenAt: "200", tags: [] });
+      const log = MP.Sync.localEatenLog();
+      check("logEaten: past 200 drops the oldest and keeps length 200", log.length === 200);
+      check("logEaten: newest entry is last", log[log.length - 1].id === "x:200");
+      check("logEaten: oldest entry was dropped", !log.some((e) => e.id === "x:0"));
+
+      localStorage.getItem = realGetItem;
+      localStorage.setItem = realSetItem;
+      localStorage.removeItem("mp_eatenLog");
+    }
+
+    // eatenLogError (re-declared here since worker/worker.js is an ES module, not a <script>)
+    {
+      function eatenLogError(parsed) {
+        if (!Array.isArray(parsed)) return "expected an array";
+        if (parsed.length > 200) return "at most 200 entries";
+        const seenIds = new Set();
+        const ALLOWED_KEYS = new Set(["id", "mealId", "name", "eatenAt", "tags"]);
+        for (const entry of parsed) {
+          if (typeof entry !== "object" || entry === null || Array.isArray(entry)) return "each entry must be an object";
+          for (const key of Object.keys(entry)) {
+            if (!ALLOWED_KEYS.has(key)) return "unknown entry key: " + key;
+          }
+          for (const field of ["id", "mealId", "name", "eatenAt"]) {
+            if (typeof entry[field] !== "string" || !entry[field]) return "each entry needs a non-empty " + field;
+          }
+          if (!Array.isArray(entry.tags) || entry.tags.some((t) => typeof t !== "string")) {
+            return "each entry needs a tags array of strings";
+          }
+          if (seenIds.has(entry.id)) return "duplicate entry id: " + entry.id;
+          seenIds.add(entry.id);
+        }
+        return null;
+      }
+      const okEntry = { id: "a:1", mealId: "a", name: "A", eatenAt: "1", tags: ["fibre"] };
+      check("eatenLogError: accepts an empty array", eatenLogError([]) === null);
+      check("eatenLogError: accepts a valid array", eatenLogError([okEntry]) === null);
+      check("eatenLogError: accepts tags: []", eatenLogError([{ ...okEntry, tags: [] }]) === null);
+      check("eatenLogError: rejects a non-array", typeof eatenLogError({}) === "string");
+      check("eatenLogError: rejects 201 entries",
+        typeof eatenLogError(Array.from({ length: 201 }, (_, i) => ({ ...okEntry, id: `a:${i}` }))) === "string");
+      check("eatenLogError: rejects an entry missing mealId",
+        typeof eatenLogError([{ ...okEntry, mealId: undefined }]) === "string");
+      check("eatenLogError: rejects an entry missing name",
+        typeof eatenLogError([{ ...okEntry, name: undefined }]) === "string");
+      check("eatenLogError: rejects an entry missing eatenAt",
+        typeof eatenLogError([{ ...okEntry, eatenAt: undefined }]) === "string");
+      check("eatenLogError: rejects tags as a string", typeof eatenLogError([{ ...okEntry, tags: "fibre" }]) === "string");
+      check("eatenLogError: rejects a non-string inside tags", typeof eatenLogError([{ ...okEntry, tags: [1] }]) === "string");
+      check("eatenLogError: rejects duplicate ids", typeof eatenLogError([okEntry, okEntry]) === "string");
+      check("eatenLogError: rejects an unknown extra key", typeof eatenLogError([{ ...okEntry, extra: 1 }]) === "string");
     }
   }
 

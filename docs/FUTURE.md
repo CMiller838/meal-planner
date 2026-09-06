@@ -85,24 +85,23 @@ just applies the remote silently.
 - **Revisit trigger**: if a real overwrite is ever noticed and it matters
   which version was lost.
 
-## Meal variants (multiple recipes/ingredient sets per meal)
+## Pantry-driven automatic variant selection
 
-Let a single meal entry hold multiple variants (e.g. "Chorizo & Pasta" with
-a cream-sauce variant, a milk-and-butter-white-sauce variant, a
-canned-tomato variant), each with its own `ingredients`/`instructions`, so
-the planner/generator can pick whichever variant best fits what's in stock
-(`/pantry`) or other constraints, instead of a meal being locked to one
-fixed recipe.
+Phase 14 shipped the manual half of this idea: a meal entry can hold
+`variants` (e.g. "Chorizo & Pasta" with a cream-sauce variant), each with its
+own `ingredients`/`instructions`, and the user picks one from the plan day
+view. Still parked: having the **generator** pick a variant automatically
+based on what's in stock (`/pantry`) or other constraints, instead of always
+leaving `variantId` unset (the base recipe).
 
-- **Why parked**: raised in a Hermes chat while manually reworking the
-  Chorizo & Pasta recipe/ingredients (cream vs. milk+butter vs. tomatoes vs.
-  spinach) — no variant data model or picker logic exists yet in
-  `meals.json`/`generator.js`.
-- **Revisit trigger**: next time a meal needs more than one plausible
-  ingredient substitution captured permanently (not just a one-off chat
-  swap), design the variant shape (schema in `meals.json`, matching logic
-  in `generator.js`/pantry cross-check) rather than continuing to hand-edit
-  a single fixed recipe per meal.
+- **Why parked**: the generator plans by `mealId` only (Phase 14, D6) —
+  teaching it to weigh pantry stock per-variant is a meaningfully bigger
+  piece of logic than the manual picker, and nothing yet demands it.
+- **Revisit trigger**: manually picking a variant after every generate/swap
+  proves annoying enough to want it automated. The Phase 14 resolver
+  (`MP.effectiveMeal`) and schema (`meal.variants`) are exactly what this
+  would build on — no new data model needed, just generator logic plus a
+  pantry cross-check.
 
 ## `/coverage` endpoint for Hermes
 

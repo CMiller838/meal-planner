@@ -35,6 +35,7 @@
 
   function savePlan() {
     localStorage.setItem(LS_PLAN, JSON.stringify(plan));
+    window.dispatchEvent(new CustomEvent("mp:plan-saved", { detail: plan }));
   }
 
   function mealAt(day, slotType) {
@@ -42,8 +43,32 @@
     return slot && slot.mealId ? mealsById[slot.mealId] : null;
   }
 
+  /** The planned meal with its slot's variant (if any) resolved. */
+  function effectiveMealAt(day, slotType) {
+    const meal = mealAt(day, slotType);
+    if (!meal) return null;
+    const slot = plan.days[day - 1].slots[slotType];
+    return MP.effectiveMeal(meal, slot.variantId);
+  }
+
   function dayMeals(day) {
-    return SLOT_TYPES.map((s) => mealAt(day, s)).filter(Boolean);
+    return SLOT_TYPES.map((s) => effectiveMealAt(day, s)).filter(Boolean);
+  }
+
+  /** Shared slot-write paths: a meal change always starts a fresh slot object
+   *  (no stale variantId from the meal it replaced); a variant change never
+   *  touches the meal. */
+  function setSlotMeal(day, slotType, mealId) {
+    plan.days[day - 1].slots[slotType] = { mealId };
+    savePlan();
+  }
+
+  function setSlotVariant(day, slotType, variantId) {
+    const slot = { ...plan.days[day - 1].slots[slotType] };
+    if (variantId) slot.variantId = variantId;
+    else delete slot.variantId;
+    plan.days[day - 1].slots[slotType] = slot;
+    savePlan();
   }
 
   function tagRowHtml(meal) {
@@ -164,7 +189,7 @@
     const slot = plan.days[day - 1].slots[slotType];
     const currentId = slot ? slot.mealId : null;
     const others = SLOT_TYPES.filter((s) => s !== slotType).flatMap((s) => {
-      const m = mealAt(day, s);
+      const m = effectiveMealAt(day, s);
       return m ? [m] : [];
     });
     const gapCov = MP.Nutrition.dayCoverage(others, tagsData.tags, tagsData.targets);
@@ -182,6 +207,41 @@
   function closeSwapPicker() {
     document.getElementById("swap-overlay").classList.add("hidden");
     swapCtx = null;
+    variantCtx = null;
+  }
+
+  // ---- Variant picker (reuses the swap overlay/sheet) ----
+  let variantCtx = null; // { day, slotType, meal }
+
+  function openVariantPicker(day, slotType) {
+    const meal = mealAt(day, slotType);
+    if (!meal || !meal.variants || !meal.variants.length) return;
+    variantCtx = { day, slotType, meal };
+    renderVariantPicker();
+    document.getElementById("swap-overlay").classList.remove("hidden");
+  }
+
+  function renderVariantPicker() {
+    const sheet = document.getElementById("swap-sheet");
+    const { day, slotType, meal } = variantCtx;
+    const slot = plan.days[day - 1].slots[slotType];
+    const current = slot.variantId || null;
+    const options = [{ id: null, name: "Original" }, ...meal.variants];
+    sheet.innerHTML = `<button class="close-btn" aria-label="Close">✕</button>
+      <h2>Choose a variant — ${esc(meal.name)}</h2>
+      <div class="variant-options">${options
+        .map((o) => `<button class="ghost variant-option${o.id === current ? " active" : ""}" data-id="${o.id ? esc(o.id) : ""}">${esc(o.name)}</button>`)
+        .join("")}</div>`;
+    sheet.querySelector(".close-btn").addEventListener("click", closeSwapPicker);
+    sheet.querySelectorAll(".variant-option").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const label = btn.textContent;
+        setSlotVariant(day, slotType, btn.dataset.id || null);
+        closeSwapPicker();
+        renderPlan();
+        toast(`Using ${label}`);
+      });
+    });
   }
 
   function renderSwapDeck() {
@@ -219,8 +279,7 @@
       if (idx === 0) {
         MP.makeSwipeable(card, {
           onSwipeRight: () => {
-            plan.days[swapCtx.day - 1].slots[swapCtx.slotType] = { mealId: meal.id };
-            savePlan();
+            setSlotMeal(swapCtx.day, swapCtx.slotType, meal.id);
             toast(`Swapped in "${meal.name}"`);
             closeSwapPicker();
             renderPlan();
@@ -236,23 +295,29 @@
     });
   }
 
-  function openDetail(meal) {
+  function openDetail(meal, variantId) {
     const overlay = document.getElementById("detail-overlay");
     const sheet = document.getElementById("detail-sheet");
+    const effMeal = MP.effectiveMeal(meal, variantId);
+    const label = MP.variantLabel(meal, variantId);
     sheet.innerHTML = `
       <button class="close-btn" aria-label="Close">✕</button>
       ${meal.image ? `<img src="${esc(meal.image)}" alt="${esc(meal.name)}">` : ""}
-      <h2>${esc(meal.name)}</h2>
-      ${tagRowHtml(meal)}
+      <h2>${esc(meal.name)}${label ? ` — ${esc(label)}` : ""}</h2>
+      ${tagRowHtml(effMeal)}
       <p>${esc(meal.description || "")}</p>
       <h3>Ingredients</h3>
-      <ul class="ingredient-list">${ingredientListHtml(meal)}</ul>
+      <ul class="ingredient-list">${ingredientListHtml(effMeal)}</ul>
       <h3>Instructions</h3>
-      <p>${esc(meal.instructions || "")}</p>
+      <p>${esc(effMeal.instructions || "")}</p>
+      <div class="day-slot-actions">
+        <button class="ghost detail-eat-btn">Eat this</button>
+      </div>
     `;
     sheet.querySelector(".close-btn").addEventListener("click", () => {
       overlay.classList.add("hidden");
     });
+    sheet.querySelector(".detail-eat-btn").addEventListener("click", () => openEatSheet(effMeal, null, null));
     overlay.classList.remove("hidden");
   }
 
@@ -270,6 +335,17 @@
     dayCtx = null;
   }
 
+  function slotEaten(day, slotType) {
+    const slot = plan.days[day - 1].slots[slotType];
+    return slot && slot.eatenAt ? slot.eatenAt : null;
+  }
+
+  function eatBtnHtml(day, slotType) {
+    return slotEaten(day, slotType)
+      ? `<button class="ghost day-eat-btn" disabled>Eaten ✓</button>`
+      : `<button class="ghost day-eat-btn" data-slot="${slotType}">Eat</button>`;
+  }
+
   function daySlotHtml(day, slotType) {
     const meal = mealAt(day, slotType);
     if (!meal) {
@@ -281,6 +357,9 @@
         </div>
       </section>`;
     }
+    const slot = plan.days[day - 1].slots[slotType];
+    const effMeal = MP.effectiveMeal(meal, slot.variantId);
+    const label = MP.variantLabel(meal, slot.variantId);
     return `<section class="day-slot">
       <div class="slot-type">${slotType}</div>
       <div class="day-slot-head">
@@ -288,18 +367,21 @@
           ? `<img class="day-thumb" src="${esc(meal.image)}" alt="" loading="lazy">`
           : `<div class="day-thumb placeholder">🍽</div>`}
         <div>
-          <h3>${esc(meal.name)}</h3>
+          <h3>${esc(meal.name)}${label ? ` — ${esc(label)}` : ""}</h3>
           <p>${esc(meal.description || "")}</p>
         </div>
       </div>
-      ${tagRowHtml(meal)}
+      ${tagRowHtml(effMeal)}
       ${meal.leftoverOf ? `<p class="day-slot-note">Leftovers — already shopped for.</p>` : ""}
-      <ul class="ingredient-list">${ingredientListHtml(meal)}</ul>
+      <ul class="ingredient-list">${ingredientListHtml(effMeal)}</ul>
       ${warningHtml(day, slotType, warnings[`${day}-${slotType}`])}
       <div class="day-slot-actions">
         <button class="ghost day-swap-btn" data-slot="${slotType}">Swap</button>
+        ${meal.variants && meal.variants.length ? `<button class="ghost day-variant-btn" data-slot="${slotType}">Variant</button>` : ""}
         <button class="ghost day-recipe-btn" data-slot="${slotType}">Recipe</button>
+        ${eatBtnHtml(day, slotType)}
       </div>
+      ${slotEaten(day, slotType) ? `<p class="day-slot-note">Eaten ${esc(new Date(slotEaten(day, slotType)).toLocaleDateString())}</p>` : ""}
     </section>`;
   }
 
@@ -316,10 +398,112 @@
     wireMoveBtns(sheet);
     sheet.querySelectorAll(".day-swap-btn").forEach((b) =>
       b.addEventListener("click", () => openSwapPicker(day, b.dataset.slot)));
+    sheet.querySelectorAll(".day-variant-btn").forEach((b) =>
+      b.addEventListener("click", () => openVariantPicker(day, b.dataset.slot)));
     sheet.querySelectorAll(".day-recipe-btn").forEach((b) => {
       const meal = mealAt(day, b.dataset.slot);
-      if (meal) b.addEventListener("click", () => openDetail(meal));
+      const slot = plan.days[day - 1].slots[b.dataset.slot];
+      if (meal) b.addEventListener("click", () => openDetail(meal, slot.variantId));
     });
+    sheet.querySelectorAll(".day-eat-btn:not([disabled])").forEach((b) => {
+      const meal = mealAt(day, b.dataset.slot);
+      const slot = plan.days[day - 1].slots[b.dataset.slot];
+      if (meal) b.addEventListener("click", () => openEatSheet(MP.effectiveMeal(meal, slot.variantId), day, b.dataset.slot));
+    });
+  }
+
+  // ---- Eat flow ----
+  let eatCtx = null; // { meal, day, slotType } — day/slotType null for a library eat
+
+  function readEatInputs() {
+    const used = {};
+    document.querySelectorAll("#eat-sheet .eat-qty").forEach((input) => {
+      used[input.dataset.key] = input.value.trim();
+    });
+    return used;
+  }
+
+  function eatRowHtml(row) {
+    const summary = row.note
+      ? `<span class="eat-after">${esc(row.note)}</span>`
+      : `<span class="eat-after">${esc(row.have)} → ${esc(row.after)}</span>`;
+    return `<div class="eat-row${row.shortfall ? " shortfall" : ""}">
+      <span class="eat-label">${esc(row.label)}</span>
+      <input type="text" class="eat-qty" data-key="${esc(row.key)}" value="${esc(row.used)}">
+      ${summary}
+    </div>`;
+  }
+
+  function renderEatSheet(pantry) {
+    if (!eatCtx) return;
+    const used = readEatInputs();
+    const { meal } = eatCtx;
+    const hasInputs = Object.keys(used).length > 0;
+    const currentUsed = hasInputs ? used : Object.fromEntries((meal.ingredients || []).map((i) => [i.key, i.qty || ""]));
+    const { rows, ops } = MP.ShoppingList.eatPlan(meal, currentUsed, pantry);
+    const shortfallCount = ops.filter((op) => op.list === "adhoc").length;
+    const sheet = document.getElementById("eat-sheet");
+    sheet.innerHTML = `
+      <button class="close-btn" aria-label="Close">✕</button>
+      <h2>Eat ${esc(meal.name)}</h2>
+      ${pantry === undefined ? `<p class="muted">Checking pantry…</p>` : ""}
+      ${rows.map(eatRowHtml).join("")}
+      ${shortfallCount ? `<p class="muted">${shortfallCount} item${shortfallCount === 1 ? "" : "s"} will be added to your ad-hoc list</p>` : ""}
+      <div class="day-slot-actions">
+        <button class="primary eat-confirm-btn">Confirm</button>
+        <button class="ghost eat-cancel-btn">Cancel</button>
+      </div>`;
+    sheet.querySelector(".close-btn").addEventListener("click", closeEatSheet);
+    sheet.querySelector(".eat-cancel-btn").addEventListener("click", closeEatSheet);
+    sheet.querySelector(".eat-confirm-btn").addEventListener("click", () => commitEat(pantry));
+    sheet.querySelectorAll(".eat-qty").forEach((input) => {
+      input.addEventListener("input", () => renderEatSheet(pantry));
+    });
+  }
+
+  async function openEatSheet(meal, day, slotType) {
+    eatCtx = { meal, day, slotType };
+    renderEatSheet(undefined);
+    document.getElementById("eat-overlay").classList.remove("hidden");
+    const pantry = await MP.Sync.fetchItems("pantry");
+    if (eatCtx && eatCtx.meal === meal) renderEatSheet(pantry);
+  }
+
+  function closeEatSheet() {
+    document.getElementById("eat-overlay").classList.add("hidden");
+    eatCtx = null;
+  }
+
+  function commitEat(pantry) {
+    if (!eatCtx) return;
+    const { meal, day, slotType } = eatCtx;
+    const used = readEatInputs();
+    const { ops, rows } = MP.ShoppingList.eatPlan(meal, used, pantry);
+    const eatenAt = new Date().toISOString();
+
+    ["pantry", "adhoc"].forEach((list) => {
+      const listOps = ops.filter((op) => op.list === list);
+      if (!listOps.length) return;
+      MP.Sync.writeLocalItems(list, MP.Sync.applyOps(MP.Sync.localItems(list), listOps));
+    });
+    ops.forEach(MP.Sync.queueOp);
+
+    if (day) {
+      plan.days[day - 1].slots[slotType].eatenAt = eatenAt;
+      savePlan();
+      renderPlan();
+    }
+    if (MP.Prefs) MP.Prefs.bump(meal, "eaten");
+
+    const shortfallCount = ops.filter((op) => op.list === "adhoc").length;
+    closeEatSheet();
+    toast(`Eaten — pantry updated${shortfallCount ? ` · ${shortfallCount} added to ad-hoc list` : ""}`);
+
+    MP.Sync.flushOps();
+    MP.Nutrition.load().then(
+      ({ tags }) => MP.Nutrition.tagsForMeal(meal, tags),
+      () => []
+    ).then((tags) => MP.Sync.logEaten({ id: `${meal.id}:${eatenAt}`, mealId: meal.id, name: meal.name, eatenAt, tags }));
   }
 
   let pendingRequestedAt = null;
@@ -333,6 +517,80 @@
     }
   }
 
+  // ---- Hermes placements ----
+
+  /** Pure: applies a queue of Hermes-proposed placements onto `plan`, never
+   *  mutating the input. Rejects rather than overwriting eaten history or an
+   *  unknown meal — the KV mirror is stale-by-construction (§1 of the spec),
+   *  so this local plan is the only authority for what's safe to apply. */
+  function applyPlacements(planIn, placements, library) {
+    const days = planIn.days.map((d) => ({ day: d.day, slots: { ...d.slots } }));
+    const byId = new Set((library || []).map((m) => m.id));
+    const applied = [];
+    const rejected = [];
+    for (const p of placements) {
+      const name = (byId.has(p.mealId) && library.find((m) => m.id === p.mealId).name) || p.mealName;
+      const dayRec = days[p.day - 1];
+      if (!dayRec || !SLOT_TYPES.includes(p.slot)) {
+        rejected.push({ day: p.day, slot: p.slot, mealId: p.mealId, name, reason: "bad-slot" });
+        continue;
+      }
+      const existing = dayRec.slots[p.slot];
+      if (existing && existing.eatenAt) {
+        rejected.push({ day: p.day, slot: p.slot, mealId: p.mealId, name, reason: "eaten" });
+        continue;
+      }
+      if (!byId.has(p.mealId)) {
+        rejected.push({ day: p.day, slot: p.slot, mealId: p.mealId, name, reason: "unknown-meal" });
+        continue;
+      }
+      const meal = library.find((m) => m.id === p.mealId);
+      const slotValue = { mealId: p.mealId };
+      if (p.variantId && MP.findVariant(meal, p.variantId)) slotValue.variantId = p.variantId;
+      dayRec.slots = { ...dayRec.slots, [p.slot]: slotValue };
+      applied.push({ day: p.day, slot: p.slot, mealId: p.mealId, name });
+    }
+    return { plan: { ...planIn, days }, applied, rejected };
+  }
+
+  function placementBannerHtml(applied, rejected) {
+    const reasonText = { eaten: "already eaten", "unknown-meal": "not in your library", "bad-slot": "invalid slot" };
+    let html = `<button class="ghost dismiss" aria-label="Dismiss">✕</button>`;
+    if (applied.length) {
+      html += `<p>Hermes placed ${applied.length} meal${applied.length === 1 ? "" : "s"}:</p><ul>`;
+      html += applied.map((a) => `<li>Day ${a.day} ${esc(a.slot)} — ${esc(a.name || "")}</li>`).join("");
+      html += `</ul>`;
+    }
+    if (rejected.length) {
+      html += `<p class="rejected">Couldn't place:</p><ul class="rejected">`;
+      html += rejected.map((r) => `<li>Day ${r.day} ${esc(r.slot)} — ${esc(r.name || "")} (${reasonText[r.reason] || r.reason})</li>`).join("");
+      html += `</ul>`;
+    }
+    return html;
+  }
+
+  function renderPlacementBanner(detail) {
+    const el = document.getElementById("hermes-placements-banner");
+    if (!el) return;
+    if (!detail.applied.length && !detail.rejected.length) {
+      el.hidden = true;
+      return;
+    }
+    el.innerHTML = placementBannerHtml(detail.applied, detail.rejected);
+    el.hidden = false;
+    el.querySelector(".dismiss").addEventListener("click", () => {
+      el.hidden = true;
+    });
+  }
+
+  window.addEventListener("mp:placements-applied", (e) => {
+    plan = JSON.parse(localStorage.getItem(LS_PLAN) || "null") || plan;
+    renderPlan();
+    renderPlacementBanner(e.detail);
+  });
+
+  MP.Plan = { applyPlacements };
+
   async function init() {
     MP.initTheme();
     document.getElementById("day-overlay").addEventListener("click", (e) => {
@@ -343,6 +601,9 @@
     });
     document.getElementById("detail-overlay").addEventListener("click", (e) => {
       if (e.target.id === "detail-overlay") e.currentTarget.classList.add("hidden");
+    });
+    document.getElementById("eat-overlay").addEventListener("click", (e) => {
+      if (e.target.id === "eat-overlay") closeEatSheet();
     });
     document.getElementById("generate-btn").addEventListener("click", () => {
       if (confirm("Regenerate the 2-week plan? This replaces your current edits.")) {
@@ -376,5 +637,7 @@
     initHermesBanner();
   }
 
-  init();
+  // Guarded so this file can be included in test.html for pure-function
+  // testing (MP.Plan.applyPlacements) without a plan.html DOM to init against.
+  if (document.getElementById("plan-root")) init();
 })();

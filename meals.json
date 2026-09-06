@@ -108,7 +108,19 @@
       { "key": "chorizo", "qty": "" },
       { "key": "white_sauce", "qty": "" }
     ],
-    "image": null
+    "image": null,
+    "variants": [
+      {
+        "id": "cream-sauce",
+        "name": "cream sauce",
+        "ingredients": [
+          { "key": "pasta", "qty": "any shape" },
+          { "key": "chorizo", "qty": "" },
+          { "key": "cream", "qty": "" }
+        ],
+        "instructions": "Cook pasta. Fry sliced chorizo until the oil renders out. Stir through cream and the cooked pasta."
+      }
+    ]
   },
   {
     "id": "salmon-rice-broccoli",

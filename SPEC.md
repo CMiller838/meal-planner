@@ -145,7 +145,10 @@ first scheduled.
 2. **Browse & Add page**: shows your current liked-meal library as cards
    (image, name, short description, protein/nutrient tags) PLUS a
    "Discover" section of new TheMealDB-sourced suggestion cards filtered
-   to your liked ingredients and excluding dislikes/mushrooms.
+   to your liked ingredients and excluding dislikes/mushrooms. A meal may
+   hold linked **variants** (e.g. a different sauce), authored in the same
+   edit modal — a family of variants is still one library card, with the
+   specific variant picked from the 2-week plan day view.
    - **Tap a card** → opens a detail modal/sheet: full picture, recipe/
      instructions, ingredient list, nutrient tags.
    - **Swipe right** on a Discover card → adds it to your liked library
@@ -171,6 +174,9 @@ first scheduled.
      the swap into that slot. **Swipe left** → skip to the next candidate.
      Tap (not swipe) → view that candidate's full recipe without swapping.
    - Inline shelf-life/freeze/move warnings per slot, per the logic above.
+   - Marking a meal eaten (from the plan or the library) appends an entry to
+     a capped, write-only `/eaten-log` Hermes mirror, so Hermes can answer
+     variety-over-time questions — nothing in the app reads this log back.
    - A small nutrient-coverage summary per day (protein total vs 160g
      target, plus which of the tracked nutrients are covered/short) and
      for the week.

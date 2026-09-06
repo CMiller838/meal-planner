@@ -39,6 +39,19 @@ window.MP = window.MP || {};
     return { scores, proteinGrams };
   }
 
+  /** Nutrient names (not levels) present in one meal, deduped and sorted.
+   *  Unknown ingredient keys contribute nothing; a null/ingredient-less meal
+   *  gives []. Used to freeze a snapshot into the eaten log (Phase 15). */
+  function tagsForMeal(meal, tags) {
+    const names = new Set();
+    for (const ing of (meal && meal.ingredients) || []) {
+      const tag = tags[ing.key];
+      if (!tag) continue;
+      for (const nutrient of Object.keys(tag)) names.add(nutrient);
+    }
+    return [...names].sort();
+  }
+
   /** Coverage checklist for one day's meals (array of meal objects). */
   function dayCoverage(meals, tags, targets) {
     const { scores, proteinGrams } = scoresForMeals(meals, tags);
@@ -81,5 +94,5 @@ window.MP = window.MP || {};
       .map((x) => x.meal);
   }
 
-  MP.Nutrition = { load, dayCoverage, weekCoverage, rankByGap, TRACKED_NUTRIENTS };
+  MP.Nutrition = { load, tagsForMeal, dayCoverage, weekCoverage, rankByGap, TRACKED_NUTRIENTS };
 })();

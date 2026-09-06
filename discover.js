@@ -95,7 +95,7 @@
       el.style.transform = "translate(0, -650px) rotate(0deg) scale(.9)";
       renderSaved();
     } else {
-      MP.dismiss(meal.id);
+      MP.dismiss(meal.id, meal.name);
       el.style.transform = "translate(-700px, -30px) rotate(-24deg)";
     }
     el.style.opacity = "0";
@@ -287,6 +287,10 @@
       if (gaps.length) {
         const { tags } = await MP.Nutrition.load();
         next = MP.Nutrition.rankByGap(next, gaps, tags);
+      }
+      if (MP.Prefs) {
+        const library = await MP.getLibrary();
+        next = MP.Prefs.orderByTaste(next, MP.Prefs.get(), [...library, ...MP.getSavedLater()]);
       }
       if (pantryFirst) next = orderPool(next, await pantryIndexCached());
     } catch (e) {

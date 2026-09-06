@@ -162,7 +162,7 @@ reads pantry data at all — Phase 4's endpoint has never had an app-side consum
 — so it has to precede anything that writes back to it. Also the natural home
 for Phase 7's deferred "using what's left" Discover chip.*
 
-## Phase 12 — Eat flow & split shopping lists (Status: Not started)
+## Phase 12 — Eat flow & split shopping lists (Status: Complete)
 
 **Goal:** Mark a meal eaten from the plan or library, review the remaining
 ingredient quantities, confirm, deduct from the pantry, and drop any shortfall
@@ -173,7 +173,7 @@ opposite ends — the shortfall the eat flow produces needs a list to land in, a
 that list is the ad-hoc one. Depends on Phase 11 having established pantry
 read/write in the app.*
 
-## Phase 13 — Hermes plan placement & preference learning (Status: Not started)
+## Phase 13 — Hermes plan placement & preference learning (Status: Complete)
 
 **Goal:** Let Hermes place a specific meal into a specific plan slot, and let
 the app and Hermes adapt suggestions from actual like/dismiss/eaten behaviour
@@ -185,7 +185,7 @@ requires a plan surface in KV, which `docs/ARCHITECTURE.md` currently rules out
 at this phase's planning step, not polish. Preference learning wants eaten
 history, which only exists once Phase 12 has shipped.*
 
-## Phase 14 — Meal variants (Status: Not started)
+## Phase 14 — Meal variants (Status: Complete)
 
 **Goal:** Support variations of the same base meal (e.g. a different sauce or
 side for one recipe) as linked variants rather than duplicate library entries,
@@ -200,7 +200,7 @@ edit/delete CRUD for the variant-management UI. Sequenced after the v2
 must-haves/nice-to-haves since it's a new data-model shape, not polish on the
 existing one.*
 
-## Phase 15 — Eaten-meal nutrient logging for Hermes (Status: Not started)
+## Phase 15 — Eaten-meal nutrient logging for Hermes (Status: Complete)
 
 **Goal:** When a meal is marked eaten (Phase 12's eat flow), append an entry
 — meal name, date, nutrient tags from `ingredient-nutrient-tags.json` — to a

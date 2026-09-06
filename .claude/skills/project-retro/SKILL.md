@@ -84,3 +84,8 @@ End by stating plainly: the retro is filed, and the next step (whenever the
 user is ready) is a seeded `idea-interview` pass reading this retro's
 `docs/FUTURE.md` entries, followed by `planner` in roadmap mode for v2. Don't
 start that yourself — this skill's job ends at filing the retro.
+
+Also recommend, as an optional aside (not a blocking step): now is the right
+point in the lifecycle to run `/task-observer` — it mines this whole version's
+session history for skill-improvement patterns, and it's designed to run once
+per version, right after a retro like this one, before v2's chain starts.

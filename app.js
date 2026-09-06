@@ -8,6 +8,8 @@
   let library = [];
   let activeType = "";
   let formImage = null;
+  let formVariants = [];
+  let editingVariantId = null; // id of the variant being edited, null = new variant
 
   const MAX_DIM = 640; // longest side, CSS px
   const QUALITIES = [0.72, 0.6, 0.5, 0.4];
@@ -207,6 +209,89 @@
     return [...tagKeys, ...packKeys].filter((k) => !k.startsWith("_"));
   }
 
+  function variantIdFor(name, keepId) {
+    const base = MP.slugify(name);
+    let id = base;
+    let n = 2;
+    while (formVariants.some((v) => v.id === id && v.id !== keepId)) {
+      id = `${base}-${n++}`;
+    }
+    return id;
+  }
+
+  function variantRowHtml(v) {
+    const count = (v.ingredients || []).length;
+    return `<div class="variant-row" data-id="${esc(v.id)}">
+      <span>${esc(v.name)} <span class="muted">(${count} ingredient${count === 1 ? "" : "s"})</span></span>
+      <span class="variant-row-actions">
+        <button type="button" class="ghost variant-edit-btn" data-id="${esc(v.id)}">Edit</button>
+        <button type="button" class="ghost variant-delete-btn" data-id="${esc(v.id)}">Delete</button>
+      </span>
+    </div>`;
+  }
+
+  function renderVariantList() {
+    const container = document.getElementById("form-variants");
+    if (!container) return;
+    container.innerHTML = formVariants.length
+      ? formVariants.map(variantRowHtml).join("")
+      : `<p class="muted">No variants yet.</p>`;
+    container.querySelectorAll(".variant-edit-btn").forEach((b) =>
+      b.addEventListener("click", () => openVariantEditor(b.dataset.id)));
+    container.querySelectorAll(".variant-delete-btn").forEach((b) =>
+      b.addEventListener("click", () => {
+        formVariants = formVariants.filter((v) => v.id !== b.dataset.id);
+        renderVariantList();
+      }));
+  }
+
+  function openVariantEditor(variantId) {
+    const sheet = document.getElementById("modal-sheet");
+    const v = variantId ? formVariants.find((x) => x.id === variantId) : null;
+    editingVariantId = variantId || null;
+    sheet.querySelector("#form-variant-name").value = v ? v.name : "";
+    sheet.querySelector("#form-variant-ingredients").value = v ? MP.ingredientsToText(v.ingredients) : "";
+    sheet.querySelector("#form-variant-instructions").value = v ? v.instructions || "" : "";
+    sheet.querySelector("#form-variants-section").classList.add("hidden");
+    sheet.querySelector("#form-variant-editor").classList.remove("hidden");
+  }
+
+  function closeVariantEditor() {
+    const sheet = document.getElementById("modal-sheet");
+    sheet.querySelector("#form-variant-editor").classList.add("hidden");
+    sheet.querySelector("#form-variants-section").classList.remove("hidden");
+    editingVariantId = null;
+  }
+
+  function collectVariant() {
+    const sheet = document.getElementById("modal-sheet");
+    return {
+      name: sheet.querySelector("#form-variant-name").value.trim(),
+      ingredients: MP.parseIngredients(sheet.querySelector("#form-variant-ingredients").value, knownKeys()),
+      instructions: sheet.querySelector("#form-variant-instructions").value.trim(),
+    };
+  }
+
+  function saveVariant() {
+    const { name, ingredients, instructions } = collectVariant();
+    const msg = document.getElementById("form-msg");
+    if (!name || !ingredients.length) {
+      msg.classList.add("error");
+      msg.textContent = "A variant needs a name and at least one ingredient.";
+      return;
+    }
+    msg.classList.remove("error");
+    msg.textContent = "";
+    const id = editingVariantId || variantIdFor(name, null);
+    const variant = { id, name, ingredients };
+    if (instructions) variant.instructions = instructions;
+    const idx = formVariants.findIndex((v) => v.id === editingVariantId);
+    if (idx === -1) formVariants.push(variant);
+    else formVariants[idx] = variant;
+    closeVariantEditor();
+    renderVariantList();
+  }
+
   /** @param {object|null} meal  null = Add mode, a library meal = Edit mode */
   function openForm(meal) {
     const overlay = document.getElementById("modal-overlay");
@@ -227,6 +312,25 @@
       <label class="sync-field">Ingredients
         <textarea id="form-ingredients" rows="6" placeholder="500g chicken breast&#10;or: chicken breast — 500g"></textarea>
       </label>
+      <div id="form-variants-section" class="sync-field">Variants
+        <div id="form-variants"></div>
+        <button type="button" id="form-variant-add" class="ghost">Add variant</button>
+      </div>
+      <div id="form-variant-editor" class="sync-field hidden">
+        <label class="sync-field">Variant name
+          <input type="text" id="form-variant-name">
+        </label>
+        <label class="sync-field">Ingredients
+          <textarea id="form-variant-ingredients" rows="6" placeholder="500g chicken breast&#10;or: chicken breast — 500g"></textarea>
+        </label>
+        <label class="sync-field">Recipe
+          <textarea id="form-variant-instructions" rows="4"></textarea>
+        </label>
+        <div class="modal-actions">
+          <button type="button" id="form-variant-save" class="btn">Save variant</button>
+          <button type="button" id="form-variant-cancel" class="ghost">Cancel</button>
+        </div>
+      </div>
       <div class="sync-field">Photo
         <img id="form-image-preview" class="form-photo hidden" alt="">
         <div class="form-photo-row">
@@ -252,6 +356,11 @@
     sheet.querySelector("#form-description").value = meal ? meal.description || "" : "";
     sheet.querySelector("#form-instructions").value = meal ? meal.instructions || "" : "";
     sheet.querySelector("#form-ingredients").value = meal ? MP.ingredientsToText(meal.ingredients) : "";
+    formVariants = meal && Array.isArray(meal.variants) ? meal.variants.map((v) => ({ ...v })) : [];
+    renderVariantList();
+    sheet.querySelector("#form-variant-add").addEventListener("click", () => openVariantEditor(null));
+    sheet.querySelector("#form-variant-save").addEventListener("click", saveVariant);
+    sheet.querySelector("#form-variant-cancel").addEventListener("click", closeVariantEditor);
     const mealTypes = meal ? meal.mealTypes || [] : [];
     sheet.querySelectorAll(".form-type").forEach((cb) => {
       cb.checked = mealTypes.includes(cb.value);
@@ -339,6 +448,8 @@
       ingredients,
       image: formImage,
     };
+    if (formVariants.length) record.variants = formVariants.slice();
+    else delete record.variants;
     return record;
   }
 
