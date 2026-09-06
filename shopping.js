@@ -32,13 +32,16 @@
   function lineHtml(shopDay, line, ticked, showPrice) {
     const key = `${shopDay}:${line.key}`;
     const checked = ticked.keys.includes(key) ? "checked" : "";
-    const tickedClass = ticked.keys.includes(key) ? "ticked" : "";
+    const classes = ["shop-line"];
+    if (ticked.keys.includes(key)) classes.push("ticked");
+    if (line.packs === 0) classes.push("covered");
     const meals = line.meals.map(esc).join(", ");
-    return `<li class="shop-line ${tickedClass}">
+    return `<li class="${classes.join(" ")}">
       <label>
         <input type="checkbox" data-shop="${shopDay}" data-key="${esc(line.key)}" ${checked}>
         <span class="shop-qty">${esc(fmtQty(line))}</span>
         <span class="shop-name">${esc(line.label)}</span>
+        ${line.pantryQty ? `<span class="have">have ${esc(line.pantryQty)}</span>` : ""}
         ${showPrice ? `<span class="shop-price">${line.price != null ? "£" + line.lineCost.toFixed(2) : ""}</span>` : ""}
       </label>
       ${meals ? `<span class="shop-why">${meals}</span>` : ""}
@@ -88,9 +91,9 @@
       root.innerHTML = `<p class="empty">No plan yet — <a href="plan.html">generate a 2-week plan</a> first.</p>`;
       return;
     }
-    const [library, packData] = await Promise.all([MP.getLibrary(), MP.ShoppingList.load()]);
+    const [library, packData, pantry] = await Promise.all([MP.getLibrary(), MP.ShoppingList.load(), MP.Sync.fetchPantry()]);
     const mealsById = Object.fromEntries(library.map((m) => [m.id, m]));
-    const lists = MP.ShoppingList.buildLists(plan, mealsById, packData);
+    const lists = MP.ShoppingList.buildLists(plan, mealsById, packData, pantry);
     const ticked = loadTicked(plan);
     render(plan, lists, ticked);
   }

@@ -313,6 +313,17 @@ section.section h2 { display: flex; align-items: center; gap: .5rem; color: #fff
   margin-bottom: 1rem;
 }
 .ingredient-list { padding-left: 1.2rem; }
+.day-slot { border-top: 1px solid var(--border); margin-top: .9rem; padding-top: .9rem; }
+.day-slot:first-of-type { border-top: 0; margin-top: 0; }
+.day-slot h3 { margin: 0 0 .15rem; font-size: 1rem; }
+.day-slot p { margin: 0; color: var(--text-dim); font-size: .9rem; }
+.day-slot .day-slot-note { margin-top: .4rem; }
+.day-slot-head { display: flex; gap: .75rem; align-items: flex-start; margin: .3rem 0 .5rem; }
+.modal-sheet .day-thumb { width: 4rem; height: 4rem; flex: 0 0 4rem; aspect-ratio: 1;
+                          object-fit: cover; border-radius: .6rem; margin: 0; }
+.day-thumb.placeholder { display: flex; align-items: center; justify-content: center;
+                         background: var(--surface-alt); font-size: 1.5rem; }
+.day-slot-actions { display: flex; gap: .5rem; margin-top: .6rem; }
 
 /* ---- Buttons ---- */
 button.primary {
@@ -483,14 +494,14 @@ button.ghost.danger { color: var(--danger); border-color: var(--danger); }
   cursor: pointer;
   min-height: 4.5rem;
 }
-.slot-card .slot-type {
+.slot-card .slot-type, .day-slot .slot-type {
   font-size: .68rem;
   text-transform: uppercase;
   color: var(--text-dim);
   letter-spacing: .04em;
 }
 .slot-card .slot-meal { font-size: .85rem; margin-top: .15rem; font-weight: 700; }
-.slot-card .slot-warning {
+.slot-card .slot-warning, .day-slot .slot-warning {
   color: var(--danger);
   font-size: .72rem;
   margin-top: .3rem;
@@ -548,6 +559,8 @@ button.ghost.danger { color: var(--danger); border-color: var(--danger); }
   font-style: italic;
 }
 .shop-line.ticked .shop-name { text-decoration: line-through; color: var(--text-dim); }
+.shop-line .have { color: var(--text-dim); font-size: .78rem; font-style: italic; }
+.shop-line.covered label { opacity: .55; }
 .shop-extra { margin-top: .6rem; }
 .shop-extra summary { cursor: pointer; color: var(--text-dim); font-size: .88rem; }
 .shop-extra .shop-list { margin-top: .5rem; }

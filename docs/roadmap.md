@@ -125,7 +125,7 @@ change and no new dependency. It syncs to KV like any other field — the librar
 blob is the off-device copy, and excluding photos from it would mean losing them
 with a browser-data clear.
 
-## Phase 9 — Expanded plan day view (Status: Not started)
+## Phase 9 — Expanded plan day view (Status: Complete)
 
 **Goal:** Replace the compact day interaction on the 2-week plan with a full
 expanded view of that day's meals, ingredients and warnings.
@@ -139,7 +139,7 @@ picker, so this phase re-plumbs that entry point.*
 meal inside it gets a Swap action opening the existing `openSwapPicker`
 unchanged — swapping moves one tap deeper rather than being rebuilt inline.
 
-## Phase 10 — Nutrient-gap-aware Discover (Status: Not started)
+## Phase 10 — Nutrient-gap-aware Discover (Status: Complete)
 
 **Goal:** Rank Discover suggestions by the nutrients the current liked-meal
 library under-covers.
@@ -150,7 +150,7 @@ this exact way for the plan's swap suggestions, so this is a second caller, not
 new logic. Depends on Phase 7 having restructured how the Discover pool is
 built, which is what it ranks.*
 
-## Phase 11 — Pantry-aware shopping (Status: Not started)
+## Phase 11 — Pantry-aware shopping (Status: Complete)
 
 **Goal:** Consume the already-shipped `/pantry` endpoint so the shopping list
 subtracts what is already on hand — covering both bulk-buy/reuse of ingredients
@@ -184,3 +184,31 @@ requires a plan surface in KV, which `docs/ARCHITECTURE.md` currently rules out
 ("the plan itself is never stored in KV") — a real architecture decision to take
 at this phase's planning step, not polish. Preference learning wants eaten
 history, which only exists once Phase 12 has shipped.*
+
+## Phase 14 — Meal variants (Status: Not started)
+
+**Goal:** Support variations of the same base meal (e.g. a different sauce or
+side for one recipe) as linked variants rather than duplicate library entries,
+so the generator's variety guard, Browse search, and Discover treat a family
+of variants as one meal while the user can still pick a specific variant when
+planning.
+
+*Not in the original `docs/OUTLINE.md` — added directly to the roadmap. A
+`meals.json` schema change (a variant needs to reference its base meal), so
+it depends on Phase 2's variety-guard field shape and reuses Phase 6's
+edit/delete CRUD for the variant-management UI. Sequenced after the v2
+must-haves/nice-to-haves since it's a new data-model shape, not polish on the
+existing one.*
+
+## Phase 15 — Eaten-meal nutrient logging for Hermes (Status: Not started)
+
+**Goal:** When a meal is marked eaten (Phase 12's eat flow), append an entry
+— meal name, date, nutrient tags from `ingredient-nutrient-tags.json` — to a
+new `/eaten-log` Hermes-bridge endpoint (same relay pattern as `/pantry`), so
+Hermes can answer questions about whether nutrient/vitamin/vegetable variety
+is being maintained over time rather than only what's in the current plan.
+
+*Not in the original `docs/OUTLINE.md` — added directly to the roadmap.
+Depends on Phase 12 for the mark-eaten trigger point; reuses Phase 4's
+Worker+KV relay pattern and existing nutrient-tag data, so it's a new log
+endpoint and a write-on-eat call, not new scoring logic.*

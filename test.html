@@ -547,6 +547,200 @@
     );
   }
 
+  // 28. checkPlanWarnings key/value contract shared by renderPlan and the day view
+  {
+    const planWarnings = MP.ShelfLife.checkPlanWarnings(plan, mealsById, shelfData);
+    const entries = Object.entries(planWarnings);
+    const SLOT_TYPES = ["breakfast", "lunch", "dinner", "snack"];
+    check("checkPlanWarnings returns at least one warning for this fixture plan", entries.length > 0);
+    check(
+      "every warning key is exactly `${day}-${slotType}` for a day in 1..14 and a real slot type",
+      entries.every(([key]) => {
+        const m = /^(\d+)-(.+)$/.exec(key);
+        return m && Number(m[1]) >= 1 && Number(m[1]) <= 14 && SLOT_TYPES.includes(m[2]) &&
+          key === `${m[1]}-${m[2]}`;
+      })
+    );
+    check(
+      "every warning value has a string message and a numeric moveToDay in 1..14, != day",
+      entries.every(([key, val]) => {
+        const day = Number(key.split("-")[0]);
+        return typeof val.message === "string" && val.message.length > 0 &&
+          typeof val.moveToDay === "number" && val.moveToDay >= 1 && val.moveToDay <= 14 &&
+          val.moveToDay !== day;
+      })
+    );
+    check(
+      "a safe slot's key is undefined, not null/{}",
+      planWarnings["999-nonexistent"] === undefined
+    );
+    check(
+      "every meal in meals.json has an ingredients array",
+      library.every((m) => Array.isArray(m.ingredients))
+    );
+  }
+
+  // 29. Phase 10 — Nutrient-gap-aware Discover ranking contract
+  {
+    const { rankByGap, dayCoverage, TRACKED_NUTRIENTS } = MP.Nutrition;
+    const candidates = [
+      { id: "a", ingredients: [{ key: "white_bread" }] },
+      { id: "b", ingredients: [{ key: "beef_mince" }] },
+      { id: "c", ingredients: [] },
+    ];
+
+    const sameIdSet = (arr, ids) => arr.length === ids.length && deepEqual(arr.map((m) => m.id).slice().sort(), ids.slice().sort());
+
+    check(
+      "rankByGap returns a permutation (non-empty gaps): same length and id set",
+      sameIdSet(rankByGap(candidates, ["iron"], tags), ["a", "b", "c"])
+    );
+    check(
+      "rankByGap returns a permutation (empty gaps): same length and id set",
+      sameIdSet(rankByGap(candidates, [], tags), ["a", "b", "c"])
+    );
+    check(
+      "rankByGap returns a permutation (no candidate matches any gap nutrient)",
+      sameIdSet(rankByGap(candidates, ["vitB12"], tags), ["a", "b", "c"])
+    );
+
+    {
+      const ironCandidates = [
+        { id: "low", ingredients: [{ key: "white_bread" }] },
+        { id: "high", ingredients: [{ key: "beef_mince" }] },
+      ];
+      const ranked = rankByGap(ironCandidates, ["iron"], tags);
+      check("rankByGap actually orders: higher-iron candidate comes first", ranked[0].id === "high");
+    }
+
+    check(
+      "rankByGap with ingredients: [] does not throw and scores 0 (sorts, never crashes)",
+      (() => {
+        try {
+          const r = rankByGap(candidates, ["iron"], tags);
+          return sameIdSet(r, ["a", "b", "c"]);
+        } catch (e) {
+          return false;
+        }
+      })()
+    );
+
+    {
+      const cov = dayCoverage(library, tags, targets);
+      const missingSet = new Set(cov.missing);
+      const overlap = cov.partial.filter((n) => missingSet.has(n));
+      check(
+        "dayCoverage(whole library) missing/partial are subsets of TRACKED_NUTRIENTS and disjoint",
+        [...cov.missing, ...cov.partial].every((n) => TRACKED_NUTRIENTS.includes(n)) && overlap.length === 0
+      );
+    }
+
+    check(
+      "MP.labelize returns a non-empty string for every TRACKED_NUTRIENTS entry",
+      TRACKED_NUTRIENTS.every((n) => typeof MP.labelize(n) === "string" && MP.labelize(n).length > 0)
+    );
+  }
+
+  // 30. Phase 11 — pantry-aware shopping (shopping-list.js half; orderPool
+  // covered by hand in the manual pass — discover.js is a page controller
+  // with no DOM-free test hook)
+  {
+    const { normalizeKey, pantryIndex, buildLists } = MP.ShoppingList;
+
+    check(
+      "normalizeKey collapses casing/punctuation/plurals to one key",
+      [normalizeKey("Chicken Breasts"), normalizeKey("chicken-breast"), normalizeKey(" Chicken_Breast "), normalizeKey("chicken breast")]
+        .every((k) => k === "chicken_breast")
+    );
+    check("normalizeKey(null) === ''", normalizeKey(null) === "");
+
+    check("pantryIndex(null) === {}", deepEqual(pantryIndex(null), {}));
+    check("pantryIndex({}) === {}", deepEqual(pantryIndex({}), {}));
+    check("pantryIndex({items:'nope'}) === {}", deepEqual(pantryIndex({ items: "nope" }), {}));
+
+    const plan = {
+      startDate: null,
+      days: [{ day: 1, slots: { breakfast: null, lunch: null, dinner: { mealId: "m" }, snack: null } }],
+    };
+    const meals = {
+      m: { id: "m", name: "Test meal", batchCook: false, ingredients: [{ key: "beef_mince", qty: "800g" }] },
+    };
+    const packData = { items: { beef_mince: { label: "Beef mince", packSize: 500, unit: "g", price: 3 } } };
+
+    check(
+      "buildLists with no 4th arg is deep-equal to buildLists(..., null)",
+      deepEqual(buildLists(plan, meals, packData), buildLists(plan, meals, packData, null))
+    );
+
+    {
+      const pantry = { updatedAt: "2026-09-01T00:00:00Z", items: [{ name: "Beef Mince", qty: "300g" }] };
+      const line = buildLists(plan, meals, packData, pantry)[1].lines[0];
+      check("partial pantry match subtracts: needed.value === 500", line.needed.value === 500);
+      check("packs recomputed from remainder (500/500 = 1, not 800/500 = 2)", line.packs === 1);
+    }
+
+    {
+      const pantry = { updatedAt: "2026-09-01T00:00:00Z", items: [{ name: "Beef Mince", qty: "1kg" }] };
+      const noPantry = buildLists(plan, meals, packData);
+      const withPantry = buildLists(plan, meals, packData, pantry);
+      const line = withPantry[1].lines[0];
+      check("full coverage: packs === 0", line.packs === 0);
+      check("full coverage: lineCost === 0", line.lineCost === 0);
+      check("full coverage: line stays present in lines", withPantry[1].lines.length === noPantry[1].lines.length);
+      check(
+        "full coverage: total equals no-pantry total minus that line's cost",
+        withPantry[1].total === Math.round((noPantry[1].total - noPantry[1].lines[0].lineCost) * 100) / 100
+      );
+    }
+
+    {
+      const planKg = { ...plan, days: [{ day: 1, slots: { breakfast: null, lunch: null, dinner: { mealId: "m2" }, snack: null } }] };
+      const mealsKg = { m2: { id: "m2", name: "Kg meal", batchCook: false, ingredients: [{ key: "beef_mince", qty: "1kg" }] } };
+      const pantry = { updatedAt: "x", items: [{ name: "Beef Mince", qty: "300g" }] };
+      const line = buildLists(planKg, mealsKg, packData, pantry)[1].lines[0];
+      check("unit normalization crosses the parser: 1kg + 300g subtracts to 700g", line.needed.value === 700 && line.needed.unit === "g");
+    }
+
+    {
+      const planTins = { ...plan, days: [{ day: 1, slots: { breakfast: null, lunch: null, dinner: { mealId: "m3" }, snack: null } }] };
+      const mealsTins = { m3: { id: "m3", name: "Tins meal", batchCook: false, ingredients: [{ key: "beef_mince", qty: "2 tins" }] } };
+      const pantry = { updatedAt: "x", items: [{ name: "Beef Mince", qty: "300g" }] };
+      const noPantry = buildLists(planTins, mealsTins, packData);
+      const line = buildLists(planTins, mealsTins, packData, pantry)[1].lines[0];
+      check("unit mismatch: onHand === null", line.onHand === null);
+      check("unit mismatch: pantryQty is set", line.pantryQty === "300g");
+      check("unit mismatch: packs unchanged from no-pantry build", line.packs === noPantry[1].lines[0].packs);
+    }
+
+    ["a bit", ""].forEach((qtyText) => {
+      const pantry = { updatedAt: "x", items: [{ name: "Beef Mince", qty: qtyText }] };
+      const noPantry = buildLists(plan, meals, packData);
+      const line = buildLists(plan, meals, packData, pantry)[1].lines[0];
+      check(
+        `unparseable/empty pantry qty (${JSON.stringify(qtyText)}) leaves packs unchanged, pantryQty set`,
+        line.packs === noPantry[1].lines[0].packs && line.pantryQty === (qtyText || "(some)")
+      );
+    });
+
+    {
+      const planUn = { ...plan, days: [{ day: 1, slots: { breakfast: null, lunch: null, dinner: { mealId: "m4" }, snack: null } }] };
+      const mealsUn = { m4: { id: "m4", name: "Unmeasured", batchCook: false, ingredients: [{ key: "beef_mince", qty: "" }] } };
+      const pantry = { updatedAt: "x", items: [{ name: "Beef Mince", qty: "300g" }] };
+      check(
+        "unmeasured ingredient (needed === null) with a pantry match does not throw, packs unchanged",
+        (() => {
+          try {
+            const noPantry = buildLists(planUn, mealsUn, packData);
+            const line = buildLists(planUn, mealsUn, packData, pantry)[1].lines[0];
+            return line.packs === noPantry[1].lines[0].packs;
+          } catch (e) {
+            return false;
+          }
+        })()
+      );
+    }
+  }
+
   lines.push("", `${pass} passed, ${fail} failed`);
   document.getElementById("out").textContent = lines.join("\n");
 })();

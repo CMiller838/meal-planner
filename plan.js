@@ -13,6 +13,7 @@
   let tagsData = null;
   let shelfData = null;
   let plan = null;
+  let warnings = {}; // "day-slotType" -> { message, moveToDay, category }; owned by renderPlan
 
   function toast(msg) {
     const root = document.getElementById("toast-root");
@@ -73,9 +74,35 @@
     return `<div class="coverage-list"><span class="tag">${bits.join(" · ")}</span></div>`;
   }
 
+  function warningHtml(day, slotType, warn) {
+    if (!warn) return "";
+    return `<span class="slot-warning">${esc(warn.message)} <button class="ghost move-btn" data-day="${day}" data-slot="${slotType}" data-moveto="${warn.moveToDay}">Move to day ${warn.moveToDay}</button></span>`;
+  }
+
+  function ingredientListHtml(meal) {
+    return (meal.ingredients || [])
+      .map((i) => `<li>${esc(i.label || labelize(i.key))}${i.qty ? " — " + esc(i.qty) : ""}</li>`)
+      .join("");
+  }
+
+  function wireMoveBtns(scope) {
+    scope.querySelectorAll(".move-btn").forEach((btn) => {
+      btn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        moveSlot(Number(btn.dataset.day), btn.dataset.slot, Number(btn.dataset.moveto));
+      });
+    });
+  }
+
+  function dayHeading(day) {
+    return plan.startDate
+      ? `Day ${day} · ${WEEKDAY[MP.Generator.weekdayOf(plan.startDate, day)]}`
+      : `Day ${day}`;
+  }
+
   function renderPlan() {
     mealsById = Object.fromEntries(library.map((m) => [m.id, m]));
-    const warnings = MP.ShelfLife.checkPlanWarnings(plan, mealsById, shelfData);
+    warnings = MP.ShelfLife.checkPlanWarnings(plan, mealsById, shelfData);
     const root = document.getElementById("plan-root");
     let html = "";
     for (const weekStart of [1, 8]) {
@@ -89,9 +116,7 @@
           ${weekShort.length ? "Short across the week: " + weekShort.map(labelize).join(", ") : "All tracked nutrients covered this week"}
         </div>`;
       for (const d of weekDays) {
-        const heading = plan.startDate
-          ? `Day ${d.day} · ${WEEKDAY[MP.Generator.weekdayOf(plan.startDate, d.day)]}`
-          : `Day ${d.day}`;
+        const heading = dayHeading(d.day);
         html += `<div class="day-row" data-day="${d.day}">
           <h3>${heading}</h3>
           <div class="slot-grid">
@@ -101,7 +126,7 @@
               return `<div class="slot-card ${meal ? "" : "empty"}" data-day="${d.day}" data-slot="${slotType}">
                 <div class="slot-type">${slotType}</div>
                 <div class="slot-meal">${meal ? esc(meal.name) : "tap to add"}</div>
-                ${warn ? `<span class="slot-warning">${esc(warn.message)} <button class="ghost move-btn" data-day="${d.day}" data-slot="${slotType}" data-moveto="${warn.moveToDay}">Move to day ${warn.moveToDay}</button></span>` : ""}
+                ${warningHtml(d.day, slotType, warn)}
               </div>`;
             }).join("")}
           </div>
@@ -115,15 +140,11 @@
     root.querySelectorAll(".slot-card").forEach((el) => {
       el.addEventListener("click", (e) => {
         if (e.target.closest(".move-btn")) return;
-        openSwapPicker(Number(el.dataset.day), el.dataset.slot);
+        openDayView(Number(el.dataset.day));
       });
     });
-    root.querySelectorAll(".move-btn").forEach((btn) => {
-      btn.addEventListener("click", (e) => {
-        e.stopPropagation();
-        moveSlot(Number(btn.dataset.day), btn.dataset.slot, Number(btn.dataset.moveto));
-      });
-    });
+    wireMoveBtns(root);
+    if (dayCtx) renderDayView();
   }
 
   function moveSlot(day, slotType, moveToDay) {
@@ -140,7 +161,8 @@
   let swapCtx = null; // { day, slotType, candidates }
 
   function candidatesFor(day, slotType) {
-    const currentId = plan.days[day - 1].slots[slotType].mealId;
+    const slot = plan.days[day - 1].slots[slotType];
+    const currentId = slot ? slot.mealId : null;
     const others = SLOT_TYPES.filter((s) => s !== slotType).flatMap((s) => {
       const m = mealAt(day, s);
       return m ? [m] : [];
@@ -217,9 +239,6 @@
   function openDetail(meal) {
     const overlay = document.getElementById("detail-overlay");
     const sheet = document.getElementById("detail-sheet");
-    const ingredientsHtml = (meal.ingredients || [])
-      .map((i) => `<li>${esc(i.label || labelize(i.key))}${i.qty ? " — " + esc(i.qty) : ""}</li>`)
-      .join("");
     sheet.innerHTML = `
       <button class="close-btn" aria-label="Close">✕</button>
       ${meal.image ? `<img src="${esc(meal.image)}" alt="${esc(meal.name)}">` : ""}
@@ -227,7 +246,7 @@
       ${tagRowHtml(meal)}
       <p>${esc(meal.description || "")}</p>
       <h3>Ingredients</h3>
-      <ul class="ingredient-list">${ingredientsHtml}</ul>
+      <ul class="ingredient-list">${ingredientListHtml(meal)}</ul>
       <h3>Instructions</h3>
       <p>${esc(meal.instructions || "")}</p>
     `;
@@ -235,6 +254,72 @@
       overlay.classList.add("hidden");
     });
     overlay.classList.remove("hidden");
+  }
+
+  // ---- Expanded day view ----
+  let dayCtx = null; // { day } while the expanded day view is open
+
+  function openDayView(day) {
+    dayCtx = { day };
+    renderDayView();
+    document.getElementById("day-overlay").classList.remove("hidden");
+  }
+
+  function closeDayView() {
+    document.getElementById("day-overlay").classList.add("hidden");
+    dayCtx = null;
+  }
+
+  function daySlotHtml(day, slotType) {
+    const meal = mealAt(day, slotType);
+    if (!meal) {
+      return `<section class="day-slot">
+        <div class="slot-type">${slotType}</div>
+        <p class="muted">Nothing planned.</p>
+        <div class="day-slot-actions">
+          <button class="ghost day-swap-btn" data-slot="${slotType}">Add a meal</button>
+        </div>
+      </section>`;
+    }
+    return `<section class="day-slot">
+      <div class="slot-type">${slotType}</div>
+      <div class="day-slot-head">
+        ${meal.image
+          ? `<img class="day-thumb" src="${esc(meal.image)}" alt="" loading="lazy">`
+          : `<div class="day-thumb placeholder">🍽</div>`}
+        <div>
+          <h3>${esc(meal.name)}</h3>
+          <p>${esc(meal.description || "")}</p>
+        </div>
+      </div>
+      ${tagRowHtml(meal)}
+      ${meal.leftoverOf ? `<p class="day-slot-note">Leftovers — already shopped for.</p>` : ""}
+      <ul class="ingredient-list">${ingredientListHtml(meal)}</ul>
+      ${warningHtml(day, slotType, warnings[`${day}-${slotType}`])}
+      <div class="day-slot-actions">
+        <button class="ghost day-swap-btn" data-slot="${slotType}">Swap</button>
+        <button class="ghost day-recipe-btn" data-slot="${slotType}">Recipe</button>
+      </div>
+    </section>`;
+  }
+
+  function renderDayView() {
+    if (!dayCtx) return;
+    const sheet = document.getElementById("day-sheet");
+    const day = dayCtx.day;
+    sheet.innerHTML = `
+      <button class="close-btn" aria-label="Close">✕</button>
+      <h2>${esc(dayHeading(day))}</h2>
+      ${SLOT_TYPES.map((slotType) => daySlotHtml(day, slotType)).join("")}
+      ${coverageHtml(dayMeals(day))}`;
+    sheet.querySelector(".close-btn").addEventListener("click", closeDayView);
+    wireMoveBtns(sheet);
+    sheet.querySelectorAll(".day-swap-btn").forEach((b) =>
+      b.addEventListener("click", () => openSwapPicker(day, b.dataset.slot)));
+    sheet.querySelectorAll(".day-recipe-btn").forEach((b) => {
+      const meal = mealAt(day, b.dataset.slot);
+      if (meal) b.addEventListener("click", () => openDetail(meal));
+    });
   }
 
   let pendingRequestedAt = null;
@@ -250,6 +335,9 @@
 
   async function init() {
     MP.initTheme();
+    document.getElementById("day-overlay").addEventListener("click", (e) => {
+      if (e.target.id === "day-overlay") closeDayView();
+    });
     document.getElementById("swap-overlay").addEventListener("click", (e) => {
       if (e.target.id === "swap-overlay") closeSwapPicker();
     });

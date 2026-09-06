@@ -37,7 +37,32 @@ window.MP = window.MP || {};
   function packsFor(needed, item) {
     if (!item || !needed) return 1;
     if (needed.unit !== item.unit) return 1;
+    if (needed.value <= 0) return 0;
     return Math.max(1, Math.ceil(needed.value / item.packSize));
+  }
+
+  /** ponytail: exact match after normalization only — no synonyms, no plural
+   * irregulars, no unit words ("tin of chopped tomatoes" won't match
+   * chopped_tomatoes). Upgrade path is a small alias map in pack-sizes.json,
+   * not a fuzzy-match dependency. */
+  function normalizeKey(text) {
+    return String(text || "")
+      .toLowerCase()
+      .trim()
+      .replace(/[^a-z0-9]+/g, "_")
+      .replace(/^_+|_+$/g, "")
+      .split("_")
+      .map((w) => w.replace(/s$/, ""))
+      .join("_");
+  }
+
+  function pantryIndex(pantry) {
+    const items = pantry && Array.isArray(pantry.items) ? pantry.items : [];
+    const idx = {};
+    items.forEach((item) => {
+      idx[normalizeKey(item.name)] = item.qty || "";
+    });
+    return idx;
   }
 
   function isSkippedIngredient(ing) {
@@ -63,7 +88,8 @@ window.MP = window.MP || {};
     return occ;
   }
 
-  function buildLists(plan, mealsById, packData) {
+  function buildLists(plan, mealsById, packData, pantry) {
+    const have = pantryIndex(pantry);
     const lists = {
       1: { shopDay: 1, lines: [], staples: [], unpriced: [], total: 0 },
       8: { shopDay: 8, lines: [], staples: [], unpriced: [], total: 0 },
@@ -88,9 +114,22 @@ window.MP = window.MP || {};
       Object.entries(groups[shopDay]).forEach(([key, g]) => {
         const item = packData.items[key] || null;
         const sameUnit = g.parses.every((p) => p && p.unit === g.parses[0].unit);
-        const needed = sameUnit && g.parses[0]
+        let needed = sameUnit && g.parses[0]
           ? { value: g.parses.reduce((s, p) => s + p.value, 0), unit: g.parses[0].unit }
           : null;
+
+        const raw = have[normalizeKey(key)];
+        let pantryQty, onHand;
+        if (raw !== undefined) {
+          pantryQty = raw || "(some)";
+          onHand = parseQty(raw);
+          if (needed && onHand && onHand.unit === needed.unit) {
+            needed = { value: Math.max(0, needed.value - onHand.value), unit: needed.unit };
+          } else {
+            onHand = null;
+          }
+        }
+
         const packs = packsFor(needed, item);
         const price = item ? item.price : null;
         const lineCost = price != null ? packs * price : 0;
@@ -105,6 +144,8 @@ window.MP = window.MP || {};
           lineCost,
           meals: g.meals,
         };
+        if (pantryQty !== undefined) line.pantryQty = pantryQty;
+        if (raw !== undefined) line.onHand = onHand;
         if (!item) list.unpriced.push(line);
         else if (item.staple) list.staples.push(line);
         else {
@@ -122,5 +163,8 @@ window.MP = window.MP || {};
     return lists;
   }
 
-  MP.ShoppingList = { load, buildLists, parseQty, packsFor };
+  // ponytail: both shop days subtract the same pantry amount — the pantry
+  // is not a running balance in this phase. A balance belongs in Phase 12's
+  // deduction flow.
+  MP.ShoppingList = { load, buildLists, parseQty, packsFor, normalizeKey, pantryIndex };
 })();

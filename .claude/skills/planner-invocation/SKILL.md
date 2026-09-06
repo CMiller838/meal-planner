@@ -1,23 +1,29 @@
 ---
 name: planner-invocation
-description: Efficiency protocol for invoking the planner agent in phase mode (spec + tasks breakdown) — scan first with a scanner agent, name exact files, reference one prior phase as the format model, and bias toward zero-pause decision gates. Use whenever about to invoke @planner for a phase spec.
+description: Efficiency protocol for invoking the planner agent in phase mode (spec + tasks breakdown) — name exact files, reference one prior phase as the format model, bias toward zero-pause decision gates, and leave discovery/scanning to planner itself rather than pre-scanning in the coordinator session. Use whenever about to invoke @planner for a phase spec.
 ---
 
 ## PLANNER INVOCATION EFFICIENCY PROTOCOL
 
 `@planner` (phase mode) calls burn tokens fast because a resumed agent replays
-its whole prior transcript. Follow these four rules whenever invoking
-`planner` for a phase spec + tasks breakdown:
+its whole prior transcript. Follow these rules whenever invoking `planner`
+for a phase spec + tasks breakdown:
 
-1. **Scan first, plan second.** Before invoking `planner`, spawn a `scanner`
-   agent to read the exact files the phase touches and return a compact
-   digest (relevant excerpts, existing component/constant names, function
-   signatures). Hand that digest to `planner` in its prompt instead of telling
-   `planner` to read the files itself. `planner` should reason over the
-   digest, not re-derive it.
+1. **Do not pre-scan the codebase yourself.** `planner.md`'s own Stage 1
+   already spawns a `scanner` subagent (Haiku, read-only) whenever a phase
+   needs bulk file reading, and reports back only function signatures/
+   existing helpers/behavior — not raw dumps. Spawning a scanner in the
+   *coordinator* session first duplicates that cost: the digest lands in the
+   coordinator's context via the tool result, then gets pasted again into the
+   planner prompt, and planner may still re-verify parts of it anyway. Let
+   planner decide for itself whether the phase warrants a scan and do that
+   research on its own turn, where the digest never has to cross back through
+   the coordinator's context at all.
 2. **Name exact files and locations, never "read the relevant code."** Point
-   at specific files, and where possible specific functions/line ranges/CSS
-   selectors, in the prompt (either directly, or via the scan digest above).
+   at specific files, and where possible specific functions/line
+   ranges/CSS selectors, directly in the `planner` prompt — this is what lets
+   planner's own Stage 1 skip straight to targeted Glob/Grep or a scanner
+   call instead of an open-ended sweep.
 3. **Reference exactly one prior phase as the format model.** Tell `planner`
    which single phase's `.claude/specs/phaseN_spec.md` + its `tasks.md`
    section to match for depth/structure — never "look at prior phases" or

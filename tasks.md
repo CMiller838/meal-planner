@@ -1262,20 +1262,543 @@ event, not on save**.
 
 ## Phase 9 — Expanded plan day view
 
-- [ ] Not yet planned — run `@planner Phase 9` for the spec and task breakdown
+Spec: `.claude/specs/phase9_spec.md`. A day tap opens a new bottom sheet showing all four
+slots for that day — thumb, name, description, tags, ingredients, shelf-life warning — and
+each slot gets a Swap button into the **unchanged** `openSwapPicker`. No schema change, no
+new dependency, no new file, no change to the swipe deck.
+
+### Logic & Backend Tasks (TDD — write the check first)
+
+- [x] `test.html` check group **28** (next free number after 27; the file reuses 23/24
+      mid-file — do not renumber): `MP.ShelfLife.checkPlanWarnings` over a hand-built plan
+      returns a key that is exactly `` `${day}-${slotType}` ``, its value has a string
+      `message` and a number `moveToDay`, `moveToDay` is in `1..14` and `!== day`, and a safe
+      slot's key is `undefined` (not `null`/`{}`). This is the one contract two independent
+      render paths now share, and a mismatch fails silently
+- [x] `test.html` group 28: every meal in `meals.json` has an `ingredients` array — the day
+      view calls `ingredientListHtml` for all four slots, not just the tapped meal
+- [x] `plan.js` — promote `warnings` to module scope (`let warnings = {};` beside `plan`,
+      line 15) and change `renderPlan`'s `const warnings = ...` (line 78) to a plain
+      assignment. Do **not** recompute `checkPlanWarnings` in the day view
+- [x] `plan.js` — extract `warningHtml(day, slotType, warn)` from the inline string at line
+      104 (returns `""` when `!warn`); route line 104 through it. Output must be byte-identical
+- [x] `plan.js` — extract `ingredientListHtml(meal)` from `openDetail` lines 220-222; call it
+      from `openDetail`'s `<ul>` and delete the local `ingredientsHtml` const
+- [x] `plan.js` — extract `wireMoveBtns(scope)` from lines 121-126 (`root` → `scope`, keep
+      `e.stopPropagation()`); `renderPlan` calls `wireMoveBtns(root)`
+- [x] `plan.js` — extract `dayHeading(day)` from lines 92-94; `renderPlan` calls it
+- [x] `plan.js` — `candidatesFor` (line 143) null-slot guard: `const slot = plan.days[day-1]
+      .slots[slotType]; const currentId = slot ? slot.mealId : null;` — `mealAt` already
+      guards this exact access, `candidatesFor` does not, and this phase puts an "Add a meal"
+      button directly on that path
+- [x] `plan.js` — `let dayCtx = null;` plus `openDayView(day)` / `closeDayView()` /
+      `renderDayView()` in a new `// ---- Expanded day view ----` section (spec §2c). No
+      `sheet.scrollTop` reset on repaint
+- [x] `plan.js` — **the entry point**: `.slot-card` click handler (lines 115-120) calls
+      `openDayView(Number(el.dataset.day))` instead of `openSwapPicker`. Keep the
+      `e.target.closest(".move-btn")` guard; leave the now-unread `data-slot` attribute alone
+- [x] `plan.js` — one line at the end of `renderPlan()`: `if (dayCtx) renderDayView();`
+      This is the **only** refresh mechanism — do not add refresh calls to `moveSlot` or to
+      `renderSwapCards`'s `onSwipeRight`; both already call `renderPlan`
+- [x] `plan.js` — `init()`: backdrop listener on `#day-overlay` → `closeDayView()`, matching
+      the two existing overlay listeners (lines 253-257)
+- [x] Confirm untouched: `openSwapPicker` internals (154-158), `closeSwapPicker`,
+      `renderSwapDeck`, `renderSwapCards` (including the `plan.js:210` `openDetail` call from
+      the swipe deck), `moveSlot`, and `renderPlan`'s day-cell HTML apart from the helper
+      call-throughs
+
+### UI & Layout Tasks (visual, no TDD)
+
+- [x] `plan.html` — add `<div id="day-overlay" class="modal-overlay hidden"
+      style="z-index:40;"><div id="day-sheet" class="modal-sheet"></div></div>` immediately
+      before `#swap-overlay` (line 41). **z-index 40 is load-bearing**: base overlay is 50 and
+      detail is 60, so the day sheet must sit beneath both. No script tag changes
+- [x] `plan.js` — `daySlotHtml(day, slotType)` (spec §2d): `.slot-type` label, then either the
+      filled block (4rem thumb or 🍽 placeholder + name + description, `tagRowHtml(meal)`,
+      `leftoverOf` note, ingredient list, `warningHtml`, **Swap** + **Recipe** buttons) or the
+      empty block (`.muted` "Nothing planned." + **Add a meal**). `alt=""` on the thumb — the
+      name is right beside it
+- [x] `plan.js` — `renderDayView` wires `.day-swap-btn` → `openSwapPicker(day, b.dataset.slot)`
+      and `.day-recipe-btn` → `openDetail(meal)`, plus `wireMoveBtns(sheet)` and the `.close-btn`
+- [x] `esc()` every `meal.name`, `meal.description`, `meal.image`, ingredient label and
+      `warn.message`. `slotType` is interpolated raw (module constant, as at line 102)
+- [x] `style.css` — widen two existing selectors rather than copying their bodies:
+      `.slot-card .slot-type, .day-slot .slot-type` (line 486) and
+      `.slot-card .slot-warning, .day-slot .slot-warning` (line 493)
+- [x] `style.css` — append the 9 new rules after `.ingredient-list` (line 315). **Specificity
+      traps**: `.modal-sheet .day-thumb` (not `.day-thumb`) or `.modal-sheet img`'s
+      `width:100%; aspect-ratio:16/9; margin-bottom:1rem` wins and the thumb renders as a
+      full-width hero; `.day-slot .day-slot-note` (not `.day-slot-note`) or `.day-slot p` wins.
+      Existing custom properties only, no new CSS file, no media query
+- [x] No new scroll container — `.modal-sheet` is already `max-height:88vh; overflow-y:auto`
+      with a sticky close button
+
+### Wiring & verification
+
+- [x] `sw.js` — bump `CACHE` to `"meal-planner-v9"`. No `SHELL` change (no new file)
+- [x] Confirm no change to `index.html`, `discover.html`, `shopping.html`, `app.js`,
+      `discover.js`, `generator.js`, `shelf-life.js`, `data.js`, `worker/`, `meals.json`,
+      `manifest.json`, `docs/HERMES.md`, `docs/ARCHITECTURE.md`
+- [ ] Manual: tap a slot → all four slots shown + the day coverage line; sheet scrolls with a
+      pinned ✕
+- [ ] Manual: **Swap** opens the picker *over* the day sheet (day sheet still visible behind);
+      confirming a swap closes only the picker and the day sheet repaints with the new meal,
+      its ingredients and an updated coverage line
+- [ ] Manual: **Recipe** opens the detail sheet above both; closing it returns to the day view
+- [ ] Manual: **Move to day** inside the day sheet toasts, updates the grid behind, and leaves
+      the sheet open; the grid's own Move buttons still work and do **not** open the day view
+- [ ] Manual: an empty slot shows "Nothing planned." + **Add a meal** and opens the picker with
+      no console error (the §2f guard)
+- [ ] Manual on phone width: thumbs are 4rem squares (not heroes), placeholder tiles align with
+      real photos, backdrop tap and ✕ both close
+- [x] `docs/roadmap.md` Phase 9 ⇒ `(Status: Complete)` in the same commit as the code
+- [x] Not built: editing/deleting a meal from the day view, drag-and-drop, cook/ate actions
+      (Phase 12), day-to-day swipe inside the sheet, a `?day=N` route or history state,
+      accordions, inline instructions, per-day shopping list, serving maths, per-slot nutrition
+      beyond the existing coverage line, a shared `MP.cardImageHtml` + the `app.js`/`discover.js`
+      dedupe (a `/simplify` candidate), Escape-key handling or focus traps, making `.slot-card`
+      a real `<button>`, or any change to `openSwapPicker`'s internals, the swipe deck,
+      `generator.js`, the meal schema, the Worker, or the dependency set
 
 ## Phase 10 — Nutrient-gap-aware Discover
 
-- [ ] Not yet planned — run `@planner Phase 10` for the spec and task breakdown
+Spec: `.claude/specs/phase10_spec.md`. Discover's pool is reordered by the nutrients the
+liked-meal library under-covers — a **second caller** of `MP.Nutrition.dayCoverage` +
+`rankByGap`, wired exactly as `plan.js`'s swap suggestions already wire them. No schema
+change, no new dependency, no new file, no `nutrition.js`/`mealdb.js`/`exclusions.js` edit,
+no `style.css` change, no change to the swipe deck.
+
+### Logic & Backend Tasks (TDD — write the check first)
+
+- [x] `test.html` check group **29** (next free number after 28; the file reuses 23/24
+      mid-file — do not renumber): `MP.Nutrition.rankByGap` returns a **permutation, never a
+      filter** — same length and same set of `id`s as the input, for a non-empty gap list, an
+      empty gap list, and candidates matching no gap. A dropped candidate shows up only as a
+      deck that runs out early
+- [x] `test.html` group 29: `rankByGap` actually orders — with `gaps: ["iron"]` and two
+      candidates where only the second has a `high`-iron ingredient, the second comes back first
+- [x] `test.html` group 29: a candidate with `ingredients: []` scores 0 and does **not** throw
+      (a TheMealDB record whose measures all parse away yields an empty list)
+- [x] `test.html` group 29: `dayCoverage` over the **entire** seed library as one meal set
+      returns `missing` and `partial` arrays that are subsets of `TRACKED_NUTRIENTS` and are
+      **disjoint** — the deck concatenates them, so an overlap double-weights a nutrient
+- [x] `test.html` group 29: `MP.labelize` returns a non-empty string for every entry of
+      `MP.Nutrition.TRACKED_NUTRIENTS` — otherwise the note line renders raw `vitB12`
+- [x] `discover.js` — add `libraryGaps()` beside `excludeIds()` (line 206): `Promise.all`
+      of `MP.getLibrary()` + `MP.Nutrition.load()`, then
+      `dayCoverage(library, nut.tags, nut.targets)` → `[...missing, ...partial]`. Wrap the
+      whole body in `try`/`catch` returning `[]` — **a nutrition failure must degrade to
+      today's unordered deck, never to an empty deck or a thrown init**
+- [x] `discover.js` — `loadPool` (218-235): `const [ids, g] = await Promise.all([excludeIds(),
+      libraryGaps()])` (one cached `getLibrary` fetch, two awaits), then
+      `getDiscoverPool(ids, cat)`, then `if (gaps.length) next = MP.Nutrition.rankByGap(next,
+      gaps, (await MP.Nutrition.load()).tags)` — the second `load()` hits `nutrition.js`'s
+      cache, no second fetch
+- [x] `discover.js` — **the trap**: rank the local `next`, **before** the
+      `if (cat !== activeCat) return;` stale-response guard (line 231), and never assign to the
+      module-level `pool` from inside the ranking step — that reinstates the race the guard exists
+      to kill
+- [x] `discover.js` — `ponytail:` comment on the rank call naming the ceiling: this reorders
+      the 10 `POOL_LIMIT` already picked, it does not widen the pick; raise `POOL_LIMIT` if the
+      top card stops feeling gap-relevant
+- [x] Confirm untouched: `nutrition.js` (all four exports byte-identical), `mealdb.js`
+      (`getDiscoverPool`, `toMeal`, `POOL_LIMIT`, the exclusion chain 142-148), `exclusions.js`,
+      and `discover.js`'s `decide`, `renderDeck`, `cardInner`, `cardImageHtml`, `makeDraggable`,
+      filmstrip, saved pile and chip handler (237-244)
+
+### UI & Layout Tasks (visual, no TDD)
+
+- [x] `discover.html` — **the load-bearing line**: `<script src="nutrition.js"></script>`
+      between `data.js` (line 66) and `exclusions.js` (line 67). Without it `MP.Nutrition` is
+      undefined, `libraryGaps`'s `catch` swallows it, and the phase silently never happens
+- [x] `discover.html` — `<p class="muted" id="gap-note" style="text-align:center;"></p>` after
+      the `#discover-filters` row (line 43), before `.fan-wrap` (line 44). Reuses `.muted` and
+      the sibling paragraph's inline centring — **no new CSS rule, no `style.css` change**
+- [x] `discover.js` — `renderGapNote(gaps)`: `el.textContent = top ? \`Ranked to fill: ${top}\`
+      : ""` where `top` is `gaps.slice(0, 3).map(MP.labelize).join(", ")`, plus
+      `el.hidden = !top`. `textContent`, not `innerHTML`. Top 3 only — a day-one library can be
+      missing 8 of 11 nutrients and an eight-item list above the deck is noise
+- [x] `discover.js` — call `renderGapNote(gaps)` **after** the stale-response guard, beside
+      `renderDeck()`, so an abandoned chip's load never paints the note
+- [x] `discover.js` — `MP.labelize` is not in line 6's destructure (`esc` only); either add it
+      there or call it qualified
+
+### Wiring & verification
+
+- [x] `sw.js` — bump `CACHE` to `"meal-planner-v10"`. **No `SHELL` change**: `nutrition.js`
+      (13), `ingredient-nutrient-tags.json` (26) and `nutrition-targets.json` (28) are already
+      listed
+- [x] Confirm no change to `style.css`, `index.html`, `plan.html`, `shopping.html`, `app.js`,
+      `plan.js`, `generator.js`, `shelf-life.js`, `shopping-list.js`, `swipe.js`, `data.js`,
+      `meals.json`, `nutrition-targets.json`, `ingredient-nutrient-tags.json`, `manifest.json`,
+      `worker/`, `docs/HERMES.md`, `docs/ARCHITECTURE.md`
+- [ ] Manual: open Discover → "Ranked to fill: …" names up to 3 nutrients and the top card's
+      ingredients plausibly hit at least one of them. **Not run** — no headless browser
+      available in this environment; ranking/permutation/degradation logic verified instead
+      via `test.html` group 29 run under Node against the real data files. Run this manual
+      pass before shipping
+- [ ] Manual: tap through several chips → deck reloads, note stays consistent, no console error
+      and no delay beyond the existing fetch. **Not run**, same reason
+- [ ] Manual: like a meal then tap a chip → still loads; the note may not change (one meal
+      rarely closes a library-wide gap) — the point is it does not error or blank the deck.
+      **Not run**, same reason
+- [ ] Manual: block `nutrition-targets.json` in devtools → deck still loads **unranked** with
+      the note hidden. This is the isolation check for `libraryGaps`'s `catch`. **Not run**,
+      same reason
+- [ ] Manual: comment out the `nutrition.js` tag → same graceful (silent) degradation; confirm,
+      then put it back. **Not run**, same reason
+- [ ] Manual on phone width: the note is one centred line and does not push the deck below the
+      fold; an empty note collapses (it is `hidden`). **Not run**, same reason
+- [x] `docs/roadmap.md` Phase 10 ⇒ `(Status: Complete)` in the same commit as the code
+- [x] Not built: a per-card "covers: iron" badge, exposing per-candidate scores from
+      `rankByGap`, widening `POOL_LIMIT` so ranking picks from a larger set (the named
+      `ponytail:` ceiling), re-ranking the live deck after each like, per-category or
+      per-slot-type gap lists, weighting `missing` above `partial`, gap-aware ranking of the
+      saved pile / browse page / plan generator, a "why this meal" explainer, caching gaps in
+      `localStorage`, or any change to the high/med/low tag weights (it is a coverage checklist,
+      not a calculator)
 
 ## Phase 11 — Pantry-aware shopping
 
-- [ ] Not yet planned — run `@planner Phase 11` for the spec and task breakdown
+Spec: `.claude/specs/phase11_spec.md`. First app-side consumer of the `/pantry` endpoint
+Phase 4 shipped: `buildLists` gains an optional 4th `pantry` argument and subtracts on-hand
+quantities, and Discover gets Phase 7's deferred "using what's left" chip as a **ranking**
+toggle. Read-only — no PUT, no pantry editing UI, no eat-flow deduction (all Phase 12). No
+new file, no new dependency, no `worker/` edit, no `meals.json`/`pack-sizes.json` schema
+change, no change to the staples/unpriced split or the tick-state keys.
+
+### Logic & Backend Tasks (TDD — write the check first)
+
+- [x] `test.html` check group **30** (next free number after 29; the file reuses 23/24
+      mid-file — do not renumber): `MP.ShoppingList.normalizeKey` maps `"Chicken Breasts"`,
+      `"chicken-breast"`, `" Chicken_Breast "` and `"chicken breast"` all to
+      `chicken_breast`, and `normalizeKey(null)` is `""` without throwing
+- [x] `test.html` group 30: `pantryIndex(null)`, `pantryIndex({})` and
+      `pantryIndex({items: "nope"})` all return `{}`
+- [x] `test.html` group 30: **back-compat guard** — `buildLists(plan, mealsById, packData)`
+      with no 4th argument is deep-equal to `buildLists(plan, mealsById, packData, null)`.
+      This is what keeps groups 11-17 meaningful
+- [x] `test.html` group 30: needing 800g with pantry `"300g"` ⇒ `needed.value === 500` and
+      `packs` recomputed from 500, not 800
+- [x] `test.html` group 30: pantry qty ≥ needed ⇒ `packs === 0`, `lineCost === 0`, the line
+      is **still present in `lines`**, and `total` equals the no-pantry total minus that
+      line's original `lineCost`
+- [x] `test.html` group 30: needed `"1kg"` + pantry `"300g"` subtracts (both normalize to
+      `g`); needed `"2 tins"` + pantry `"300g"` does **not** — `onHand === null`,
+      `pantryQty` set, `packs` unchanged
+- [x] `test.html` group 30: unparseable (`"a bit"`) and empty (`""`) pantry qty leave
+      `packs` unchanged with `pantryQty` set — the "never silently drop a grocery" check
+- [x] `test.html` group 30: unmeasured ingredient (`qty: ""` ⇒ `needed === null`) with a
+      pantry match does not throw and leaves `packs` unchanged
+- [x] `test.html` group 30: `orderPool` is a **permutation, never a filter** — same length
+      and same set of ids for a non-empty pantry, an empty pantry `{}`, and a meal with
+      `ingredients: []` (scores 0, does not throw)
+- [x] `hermes-sync.js` — add `fetchPantry()` beside `syncPlanFlag()` (line 92) and to the
+      `MP.Sync` export (line 116): `GET /pantry` via `req()`, returns
+      `{updatedAt, items}` or `null`. Modelled on `syncPlanFlag`, **not** `syncLibrary` —
+      no `decide()`, no `inflight` guard, no PUT
+- [x] `hermes-sync.js` — `if (!config().enabled)` returns the localStorage mirror (never
+      fetches a relative URL); on success mirror `body` to `mp_pantry` **only if**
+      `Array.isArray(body.items)` (same defensive rule as `syncLibrary`'s
+      `Array.isArray(remote.meals)` guard); on throw or bad shape return the parsed mirror
+      or `null`. **Never throws to the caller**
+- [x] `hermes-sync.js` — `ponytail:` comment: read-only mirror, Phase 12 adds the write
+      path and whatever conflict rule it needs. `start()` stays unchanged (pantry is
+      fetched on demand by the two pages that use it, not on every page load)
+- [x] `shopping-list.js` — `normalizeKey(text)`: lowercase → trim → non-alphanumeric runs
+      to `_` → strip leading/trailing `_` → strip one trailing `s` per `_`-separated word.
+      Nullish ⇒ `""`. Applied to **both** sides so neither needs a special case
+- [x] `shopping-list.js` — `ponytail:` comment on `normalizeKey` naming the ceiling: exact
+      match after normalization only, no synonyms/irregular plurals/unit words
+      (`"tin of chopped tomatoes"` will not match `chopped_tomatoes`); upgrade path is a
+      small alias map in `pack-sizes.json`, not a fuzzy-match dependency
+- [x] `shopping-list.js` — `pantryIndex(pantry)` → `{ [normalizeKey(item.name)]: item.qty || "" }`;
+      `null`/malformed ⇒ `{}`; later duplicates win
+- [x] `shopping-list.js` — `packsFor` (line 37): add `if (needed.value <= 0) return 0;`
+      rather than relying on `Math.ceil(0 / packSize)` staying 0 through future edits
+- [x] `shopping-list.js` — `buildLists(plan, mealsById, packData, pantry?)`: build
+      `const have = pantryIndex(pantry)` once at the top. Omitted pantry ⇒ `{}` ⇒ every
+      branch below no-ops and output is **byte-identical to today**
+- [x] `shopping-list.js` — subtraction sits **after `needed` is computed and before
+      `packsFor(needed, item)`**: `have[normalizeKey(key)]` miss ⇒ skip entirely; hit ⇒ set
+      `line.pantryQty = raw || "(some)"` **always**, then subtract only when
+      `needed && onHand && onHand.unit === needed.unit` (reusing `parseQty` on the pantry
+      text, so kg→g / l→ml already match), clamped with `Math.max(0, …)`
+- [x] `shopping-list.js` — unit mismatch, unparseable qty, empty qty or `needed === null`
+      ⇒ **no subtraction**, `line.onHand = null`, note still shown. Never silently drop a
+      grocery from the list
+- [x] `shopping-list.js` — a fully-covered line **stays in `lines`** with `packs: 0` and
+      `lineCost: 0`; `total` falls out of the existing sum with **no special case** and no
+      fourth category. Staples/unpriced go through the same path; sorting (lines 115-118)
+      untouched so the list does not reshuffle between shops
+- [x] `shopping-list.js` — `ponytail:` comment: both shop days subtract the same pantry
+      amount, the pantry is not a running balance in this phase — a balance belongs in
+      Phase 12's deduction flow
+- [x] `shopping-list.js` — export `normalizeKey` and `pantryIndex` on `MP.ShoppingList`
+      (line 125)
+- [x] `shopping.js` — `init()` (line 83): add `MP.Sync.fetchPantry()` to the existing
+      `Promise.all` and pass it as `buildLists`' 4th argument. `fetchPantry` never rejects,
+      so the `Promise.all` cannot be poisoned by it
+- [x] `discover.js` — module state beside `pool`/`idx`/`activeCat`/`loadFailed` (lines
+      9-12): `pantryFirst = false`, `pantryKeys = null`
+- [x] `discover.js` — `pantryIndexCached()` beside `libraryGaps()`: cached
+      `MP.Sync.fetchPantry()` → `MP.ShoppingList.pantryIndex(...)`. Whole body in
+      `try`/`catch` returning `{}` — **a pantry failure must degrade to today's deck order,
+      never to an empty deck or a thrown init**
+- [x] `discover.js` — `pantryOverlap(meal, have)` (count of ingredients whose
+      `normalizeKey` is in `have`) and `orderPool(list, have)` (index-decorated stable sort,
+      descending overlap — `map` to `{m, i, s}`, sort by `s` desc then `i` asc, `map` back;
+      do not trust engine sort stability). Zero-overlap meals come **last, not out**
+- [x] `discover.js` — `loadPool` (line 241): apply
+      `if (pantryFirst) next = orderPool(next, await pantryIndexCached())` after Phase 10's
+      gap ranking and **before** the `if (cat !== activeCat) return;` stale guard — the
+      identical trap Phase 10 documented. Rank the local `next`; never assign to the
+      module-level `pool` from inside the ranking step
+- [x] `discover.js` — `ponytail:` comment on `pantryOverlap`: raw unweighted count, one
+      pantry staple ranks like one pantry protein; weight by pack price only if the
+      ordering proves useless in real use
+
+### UI & Layout Tasks (rapid visual prototyping)
+
+- [x] `shopping.js` — `lineHtml` (line 32): when `line.pantryQty` is set, append
+      `<span class="have">have ${esc(line.pantryQty)}</span>` after the label. **`esc()` is
+      mandatory** — pantry text is user/Hermes-entered free text arriving over the network,
+      same trust boundary as TheMealDB
+- [x] `shopping.js` — `lineHtml`: add `covered` to the `<li class="shop-line">` class list
+      when `line.packs === 0`. `blockHtml` (line 48), the `details` blocks, tick state and
+      `mp_shopping_ticked` keys all stay unchanged
+- [x] `style.css` — two rules only: `.shop-line .have` (small, muted, inline after the
+      label) and `.shop-line.covered` (reduced opacity). **Do not `display: none` a covered
+      line** — "I thought I had that" is exactly when the user needs to see it
+- [x] `discover.html` — add `<button class="chip" data-filter="pantry" aria-pressed="false">Using
+      what's left</button>` last inside `#discover-filters` (lines 33-43). A distinct
+      attribute, **not** a synthetic `data-cat` value, so a category stays selectable while
+      the toggle is on
+- [x] `discover.js` — chip handler (line 270) currently delegates on `.chip[data-cat]` and
+      will not fire for the new chip: add a sibling branch for `.chip[data-filter="pantry"]`
+      that flips `pantryFirst`, sets `aria-pressed`, toggles the same `active` class the
+      category chips use, then re-orders **in place without refetching**
+      (`pool = orderPool(pool, await pantryIndexCached())`, `idx = 0`, re-render). Toggling
+      off re-runs `loadPool(activeCat)` to restore gap order
+- [x] `discover.html` — add `<script src="shopping-list.js">` and
+      `<script src="hermes-sync.js">` before `discover.js` (line 71)
+- [x] `shopping.html` — add `<script src="hermes-sync.js">` before `shopping.js` (line 40);
+      `shopping-list.js` is already there (line 39)
+- [x] `sw.js` — bump `CACHE` to `"meal-planner-v11"`. **No `SHELL` additions** — no new
+      file, and every newly referenced script is already listed
+- [ ] Manual pass (`python3 -m http.server 8000`): sync **unconfigured** ⇒ shopping list and
+      Discover behave exactly as before, no console error, chip toggles and changes nothing.
+      **Not run** — no headless browser available in this environment; the equivalent logic
+      (pantry omitted ⇒ byte-identical `buildLists` output) is verified in `test.html` group
+      30 instead. Run this manual pass before shipping
+- [ ] Manual pass: sync configured with a partial and a full pantry match ⇒ partial line
+      shows a reduced quantity plus "have …", full line greys out at £0, total drops by
+      exactly that line. **Not run** — same limitation; the subtraction/coverage math is
+      covered by `test.html` group 30, but the actual rendered `.have`/`.covered` styling has
+      not been eyeballed
+- [ ] Manual pass: airplane mode after one successful load ⇒ the `mp_pantry` mirror still
+      subtracts. **Not run** — requires a real browser + Hermes deployment to exercise the
+      localStorage mirror path end to end
+- [ ] Manual pass: toggle the Discover chip on/off across two categories ⇒ the deck never
+      empties and the card count is identical either way. **Not run** — `orderPool`'s
+      permutation property is exercised by hand-reasoning only per the spec's fallback (no
+      DOM-free test hook for `discover.js`); this manual pass is the real check for it
+- [x] Flip `docs/roadmap.md` Phase 11 to **Status: Complete** in the *same commit* as the
+      code — not before
 
 ## Phase 12 — Eat flow & split shopping lists
 
-- [ ] Not yet planned — run `@planner Phase 12` for the spec and task breakdown
+Spec: `.claude/specs/phase12_spec.md`. Phase 11 made the app a pantry *reader*; this makes it a
+*writer* and adds the second list the shortfall lands in. The user explicitly answered both
+Decision Gates **1B, 2A**: the ad-hoc list is a **synced KV key** (`/adhoc`, Gate 1 Path B —
+chosen over the planner's localStorage-only recommendation, for maximum Hermes read/write
+connectivity) and every write is **local-first with a replayed pending-op log** (Gate 2 Path A —
+the app must stay fully usable with sync off). No new dependency,
+no new JS file, no change to `buildLists` or the planned list.
+
+### Logic & Backend Tasks (TDD — write the check first)
+
+- [ ] `test.html` check group **31** (next free after 30): `fmtRemaining({value:800,unit:"g"},
+      {value:300,unit:"g"}) === "500g"`; over-consumption clamps to `"0"` and is **never
+      negative**; no trailing `.0` (`1.5kg` − `500g` ⇒ `"1000g"`)
+- [ ] `test.html` group 31: `eatPlan` **not-tracked** case — an ingredient absent from the pantry
+      gives `after === null`, `note === "not tracked"`, `shortfall === false` and **zero ops**.
+      This is the check that stops the ad-hoc list filling with everything you cook
+- [ ] `test.html` group 31: `eatPlan` clean deduction — pantry `"800g"`, used `"300g"` ⇒ one
+      `sub` op, `after === "500g"`, `shortfall === false`, **no** `add` op
+- [ ] `test.html` group 31: `eatPlan` shortfall — pantry `"200g"`, used `"500g"` ⇒ `after === "0"`,
+      `shortfall === true`, exactly **two** ops (a `pantry`/`sub` and an `adhoc`/`add` whose `qty`
+      is the `300g` remainder)
+- [ ] `test.html` group 31: `eatPlan` unparseable pantry qty (`"half a bag"`) ⇒ **zero ops**,
+      `after === null`, `note` names the text — the "never silently destroy pantry data" check
+- [ ] `test.html` group 31: `eatPlan` unit mismatch (pantry `"2 tins"`, used `"300g"`) ⇒ zero ops,
+      `after === null`; unmeasured ingredient (`qty: ""`) ⇒ zero ops, no throw
+- [ ] `test.html` group 31: `eatPlan` empty/omitted `used` entry ⇒ ingredient skipped entirely, no
+      ops; and `eatPlan(meal, used, null)` (no pantry at all) ⇒ zero ops, every row
+      `"not tracked"`, no throw — **the Hermes-is-off guarantee in assertion form**
+- [ ] `test.html` group 31: `applyOps` **anti-clobber** — a `sub` against a freshly fetched remote
+      array reduces only the matched item and returns a remotely-edited sibling **untouched**.
+      This is what justifies putting the ad-hoc list in KV at all
+- [ ] `test.html` group 31: `applyOps` `sub` for a name not present remotely (Hermes deleted it) ⇒
+      array unchanged, no throw, **no phantom item created**
+- [ ] `test.html` group 31: `applyOps` `add` appends a new name but **replaces the `qty` of an
+      existing normalized name** rather than duplicating — it must not be able to produce a body
+      the Worker's duplicate-name validator would 400 on
+- [ ] `test.html` group 31: `applyOps` `remove` drops the match and no-ops a miss;
+      `applyOps(items, [])` is deep-equal to `items`; `applyOps([], ops)` does not throw; a
+      malformed op (`{}`, `{type:"nonsense"}`) is **skipped, not thrown on**
+- [ ] `test.html` group 31: `applyOps` **purity** — the input array and its item objects are not
+      mutated (deep-equal a pre-call clone afterwards)
+- [ ] `test.html` group 31: back-compat — `buildLists(plan, mealsById, packData, pantry)` still
+      produces the group-30 result. Phase 12 must not move the planned list at all
+- [ ] `worker/worker.js` — rename `pantryError` (lines 76-87) to **`itemsError`**, body unchanged:
+      it already validates exactly the shape `adhoc` needs (array `items`, non-empty string `name`,
+      no case-insensitive duplicates)
+- [ ] `worker/worker.js` — `GET /adhoc` + `PUT /adhoc` beside the `/pantry` handlers (lines
+      107-136), same 204/400/401 behaviour, KV key `"adhoc"`. Collapse `/pantry` and `/adhoc` into
+      one branch over `["pantry", "adhoc"]` rather than copy-pasting — but **do not** generalise to
+      "any key" (`ARCHITECTURE.md:86-89`, don't grow it into a general API)
+- [ ] `worker/worker.js` — deploy and confirm `GET /adhoc` returns `null` and a `PUT` round-trips
+      **before** any app code depends on it. No new secret, no `wrangler.toml` change
+- [ ] `shopping-list.js` — `fmtRemaining(have, used)`: `have - used` clamped at 0, formatted
+      (`"500g"`), trailing `.0` trimmed. Units assumed already matched by the caller
+- [ ] `shopping-list.js` — `eatPlan(meal, used, pantry)` → `{ops, rows}`. **Pure: no I/O, no
+      storage writes** — the caller does both. `used` is `{[key]: qtyString}`; an absent or empty
+      entry means that ingredient was **not consumed** and is skipped
+- [ ] `shopping-list.js` — `eatPlan` decision table: no pantry match ⇒ no ops, no shortfall,
+      `note: "not tracked"` (**absence means untracked, not "I have none"**); parseable + same unit
+      + `have >= used` ⇒ one `sub`; `have < used` ⇒ `sub` clamping to `"0"` **plus** an `adhoc`
+      `add` for the remainder, `shortfall: true`; unparseable/unit-mismatch/no-qty ⇒ no ops,
+      `after: null`, `note` naming the reason
+- [ ] `shopping-list.js` — an item driven to exactly 0 **keeps its pantry entry** with `qty: "0"`,
+      it is not removed. Deleting it loses the fact that it's a thing you buy, and Hermes is the
+      pantry's other editor
+- [ ] `shopping-list.js` — `ponytail:` comment: matching inherits Phase 11's `normalizeKey` exact
+      match wholesale, no synonyms and no unit conversion beyond `parseQty`'s kg→g / l→ml. Same
+      ceiling, same upgrade path (alias map) — **do not add a second matching strategy here**
+- [ ] `shopping-list.js` — export `fmtRemaining` and `eatPlan`. `buildLists`, `packsFor`,
+      `parseQty`, `normalizeKey`, `pantryIndex` and the line shape are **unchanged**
+- [ ] `hermes-sync.js` — generalise Phase 11's `fetchPantry` into `fetchItems(list)` (`"pantry"` |
+      `"adhoc"`): same body with `"/pantry"` → `` `/${list}` `` and `"mp_pantry"` → `` `mp_${list}` ``.
+      Every Phase 11 rule preserved: disabled config returns the mirror without touching the
+      network, a non-array `items` is a failure so a malformed blob never wipes the mirror,
+      **never throws to the caller**
+- [ ] `hermes-sync.js` — keep `fetchPantry()` as a one-line alias for `fetchItems("pantry")` so
+      Phase 11's callers (`shopping.js:95`, `discover.js`'s `pantryIndexCached`) need **no edit**
+- [ ] `hermes-sync.js` — `localItems(list)` (mirror's items, `[]` on missing/malformed) and
+      `writeLocalItems(list, items)` (mirror = `{updatedAt: now, items}`). Synchronous — the ad-hoc
+      list must paint with **no network in the critical path**
+- [ ] `hermes-sync.js` — new localStorage keys `mp_adhoc` (same shape as `mp_pantry`) and
+      `mp_sync_ops` (`[{list, type, name, qty?}]`, oldest first) beside the existing keys (lines 9-12)
+- [ ] `hermes-sync.js` — `queueOp(op)` appends to `mp_sync_ops`
+- [ ] `hermes-sync.js` — `applyOps(items, ops)`: **PURE** (new array, mutates nothing, never throws
+      on a malformed op — skip it), matched by `MP.ShoppingList.normalizeKey` on both sides. `sub`
+      ⇒ recompute qty via `fmtRemaining`, but leave the item **exactly as-is** on a miss / either
+      side unparseable / differing units. `add` ⇒ replace qty by normalized name else append
+      (drop `qty` when empty). `remove` ⇒ drop the match, miss is a no-op. Exported for `test.html`
+- [ ] `hermes-sync.js` — `flushOps()`: `!config().enabled` ⇒ `"off"` with ops **left queued**; no
+      ops ⇒ `"noop"`; else per list **GET fresh from the network (never the mirror — this is the
+      whole point)** → `applyOps` → PUT → drop that list's ops → `writeLocalItems` so the mirror
+      converges. Any throw ⇒ **ops stay queued**, return `"error"`, never throw to the caller
+- [ ] `hermes-sync.js` — `ponytail:` comment on `flushOps`: at-least-once, not exactly-once — a PUT
+      that succeeds with a lost response replays its `sub` and double-deducts. Single user, low
+      frequency, cost is retyping one qty; add op ids + server-side dedupe only if it actually bites
+- [ ] `hermes-sync.js` — `start()` (lines 134-140) gains **one line**: call `flushOps()` alongside
+      the existing sync work, so a queue built up offline drains on the next connected load
+- [ ] `plan.js` — `mp_plan` slot gains an optional `eatenAt: "<ISO8601>"`, written only by this
+      flow. Local-only: `ARCHITECTURE.md:74` says the plan is never stored in KV and **Phase 13
+      owns that question**. `MP.Generator` is **not touched** — a regenerated plan simply has no
+      `eatenAt`, which is correct
+- [ ] `plan.js` — `commitEat()` is the **only writer**, in this exact order: `eatPlan` → apply ops
+      to **both mirrors immediately** (`applyOps` + `writeLocalItems`) → `queueOp` each → write
+      `eatenAt` + `renderPlan()` when `eatCtx.day` is set → `closeEatSheet()` + toast → **then**
+      `flushOps()` fire-and-forget, **unawaited, after the UI has already updated**
+- [ ] `plan.js` — steps 2-5 above are synchronous and must complete **before** `flushOps()` is even
+      called. That ordering *is* the local-first decision — if it inverts, the flow breaks the
+      moment Hermes is off
+
+### UI & Layout Tasks (rapid visual prototyping)
+
+- [ ] `plan.html` — one overlay pair before `#swap-overlay` (line 41), matching Phase 9's
+      convention exactly: `<div id="eat-overlay" class="modal-overlay hidden" style="z-index:70;">`
+      wrapping `<div id="eat-sheet" class="modal-sheet"></div>`. Above `#day-overlay` so the day
+      sheet stays visible behind it
+- [ ] `plan.html` — add `<script src="shopping-list.js">` before `plan.js` (line 59); `hermes-sync.js`
+      is already loaded (line 58) and both are already in `sw.js`'s `SHELL`
+- [ ] `plan.js` — module state `let eatCtx = null;` (`{meal, day, slotType}`; `day`/`slotType`
+      `null` for a library eat) beside `dayCtx` (line 260), plus `openEatSheet(meal, day, slotType)`,
+      `closeEatSheet()`, `renderEatSheet(pantry)`, `commitEat()`
+- [ ] `plan.js` — `openEatSheet` awaits `fetchItems("pantry")`, but renders **immediately** with a
+      "checking pantry…" line rather than holding the sheet closed on the network. Unconfigured or
+      offline ⇒ mirror or `null` ⇒ sheet still opens with every row "not tracked". **The flow is
+      never blocked by the bridge**
+- [ ] `plan.js` — sheet body: `esc()`d meal name; one `.eat-row` per ingredient with a
+      `<input type="text" class="eat-qty" data-key="…">` pre-filled with the recipe qty and the
+      `have → after` summary or `note`; **clearing the input excludes that ingredient**
+- [ ] `plan.js` — re-run `eatPlan` on every `input` event and repaint only the summary spans. This
+      is the roadmap's "review the remaining ingredient quantities" — it has to update live or
+      editing a quantity is guesswork
+- [ ] `plan.js` — a shortfall count line ("2 items will be added to your ad-hoc list", nothing when
+      zero), plus `Confirm` and `Cancel`. **`Cancel` writes nothing at all**
+- [ ] `plan.js` — **every pantry string and ingredient label goes through `esc()`** before reaching
+      `innerHTML`. Pantry text is Hermes/user free text over the network — same trust boundary as
+      TheMealDB (`CLAUDE.md` invariant)
+- [ ] `plan.js` — plan entry point: `<button class="ghost day-eat-btn" data-slot="${slotType}">Eat</button>`
+      in `daySlotHtml`'s filled-slot `.day-slot-actions` row (line 273) beside Swap and Recipe,
+      wired in `renderDayView` beside the existing `.day-swap-btn`/`.day-recipe-btn` loops
+      (lines 317-322) → `openEatSheet(mealAt(day, slot), day, slot)`
+- [ ] `plan.js` — an already-eaten slot renders the button as `Eaten ✓`, **`disabled`**, with a
+      `<p class="day-slot-note">` giving the date. Re-tapping is a mis-tap, not a feature
+- [ ] `plan.js` — library entry point: `<button class="ghost detail-eat-btn">Eat this</button>` in
+      `openDetail(meal)`'s sheet (line 239) → `openEatSheet(meal, null, null)`. **Same sheet, same
+      commit**, no `eatenAt` written. `closeEatSheet` returns you to the day view you came from
+- [ ] `shopping.js` — `adhocHtml(items)` and `renderAdhoc()` painting `#adhoc-root` from
+      `MP.Sync.localItems("adhoc")` **synchronously** (instant, no network), then
+      `fetchItems("adhoc")` in the background and re-render if it returns something
+- [ ] `shopping.js` — each ad-hoc line is a checkbox + `esc(item.name)` + `esc(item.qty || "")` and
+      **nothing else** — no packs, no price, no shop-day. Ticking queues a `remove` op, writes the
+      mirror, re-renders, then calls `flushOps()` unawaited (same ordering rule as `commitEat`)
+- [ ] `shopping.js` — an "Add an item" row (name input, optional qty input, button) ⇒ an `add` op
+      through the identical path. This is the "want to buy this week" half of the outline item and
+      the only way to use the list without eating something
+- [ ] `shopping.js` — empty list renders the section with a one-line `.muted` placeholder, **not
+      hidden** (a missing section reads as a bug); and `renderAdhoc()` goes **outside** the "no plan
+      yet" early return (lines 88-93) so the ad-hoc list works before a plan has ever been generated
+- [ ] `shopping.js` — the planned-list rendering (`lineHtml`, `blockHtml`, `fmtQty`,
+      `mp_shopping_ticked` and its key scheme) is **untouched**
+- [ ] `shopping.html` — `<div id="adhoc-root">` in its own `<section class="section">` with
+      `<h2>Ad-hoc list</h2>`, **after** the planned-list section (lines 30-34): the two-week shop is
+      why the page exists. No script tag changes — both scripts already load (lines 39-40)
+- [ ] `style.css` — `.eat-row` (label / qty input / summary on one line, wrapping on narrow
+      phones), `.eat-row .eat-after` (muted), `.eat-row.shortfall .eat-after` (**reuse the existing
+      shelf-life warning colour variable — do not introduce a colour**), `.shop-block.adhoc` (same
+      block styling as the planned blocks), `.adhoc-add`. No change to `.shop-line`, `.shop-block`,
+      `.have`/`.covered` or any modal rule
+- [ ] `sw.js` — bump `CACHE` to `"meal-planner-v12"`. **No `SHELL` additions** — no new file
+- [ ] `docs/ARCHITECTURE.md` — the KV schema (lines 64-74) lists two keys and is **already stale**
+      (Phase 4 shipped `pantry`): add both `pantry` and `adhoc`, and fix the line-90 invariant
+      ("never stores anything beyond `library` and `planFlag`") to name all four keys. Add one line
+      that the two item lists are local-first with a replayed op log, so the app is fully usable
+      with the bridge unreachable
+- [ ] `docs/HERMES.md` — `GET /adhoc` / `PUT /adhoc` capability row + a section mirroring
+      `/pantry`'s (same body shape, same fetch-then-write rule), described as the "ran out of / want
+      to buy this week" list so Hermes uses it for "add X to my shopping list" instead of writing to
+      `/pantry`. State explicitly that the **planned** two-week list is not on the bridge (it is
+      derived from the local plan) so Hermes cannot be asked to edit it
+- [ ] Manual pass (`python3 -m http.server 8000`): **sync switched off entirely** ⇒ open a day, Eat
+      a meal, confirm: every row "not tracked", slot flips to `Eaten ✓`, nothing throws, **no
+      network request attempted**. Add an ad-hoc item by hand ⇒ persists across a reload
+- [ ] Manual pass: sync configured, pantry with a partial and a full match ⇒ quantities drop by the
+      right amounts in Hermes, the over-consumed item lands on the ad-hoc list with the correct
+      remainder, and the planned list reflects the reduced pantry on next load
+- [ ] Manual pass: **offline then online** ⇒ airplane mode, eat two meals and tick an ad-hoc line,
+      reconnect, reload: `flushOps` drains and the server matches local state
+- [ ] Manual pass: **concurrent edit** ⇒ with an op queued offline, change a *different* pantry item
+      via Hermes, then reconnect: both changes survive. This is the check that putting the ad-hoc
+      list in KV was worth it
+- [ ] Manual pass: re-tap Eat on an already-eaten slot ⇒ disabled, no second deduction
+- [ ] Flip `docs/roadmap.md` Phase 12 to **Status: Complete** in the *same commit* as the code
 
 ## Phase 13 — Hermes plan placement & preference learning
 
-- [ ] Not yet planned — run `@planner Phase 13` for the spec and task breakdown
+- [x] Not yet planned — run `@planner Phase 13` for the spec and task breakdown

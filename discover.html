@@ -40,7 +40,9 @@
       <button class="chip" data-cat="Lamb">Lamb</button>
       <button class="chip" data-cat="Vegetarian">Vegetarian</button>
       <button class="chip" data-cat="Breakfast">Breakfast</button>
+      <button class="chip" data-filter="pantry" aria-pressed="false">Using what's left</button>
     </div>
+    <p class="muted" id="gap-note" style="text-align:center;"></p>
     <div class="fan-wrap">
       <div class="fan-progress" id="fan-progress"></div>
       <div class="fan-deck" id="fan-deck"></div>
@@ -64,8 +66,11 @@
 <div id="toast-root"></div>
 
 <script src="data.js"></script>
+<script src="nutrition.js"></script>
 <script src="exclusions.js"></script>
 <script src="mealdb.js"></script>
+<script src="shopping-list.js"></script>
+<script src="hermes-sync.js"></script>
 <script src="discover.js"></script>
 <script>if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js");</script>
 </body>

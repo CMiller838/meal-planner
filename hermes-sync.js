@@ -9,6 +9,7 @@ window.MP = window.MP || {};
   const LS_URL = "mp_hermes_url";
   const LS_TOKEN = "mp_hermes_token";
   const LS_PLAN_ACKED = "mp_hermes_plan_acked";
+  const LS_PANTRY = "mp_pantry";
 
   function finite(n) {
     return Number.isFinite(n) ? n : null;
@@ -103,6 +104,31 @@ window.MP = window.MP || {};
     localStorage.setItem(LS_PLAN_ACKED, ackedAt);
   }
 
+  function pantryMirror() {
+    try {
+      return JSON.parse(localStorage.getItem(LS_PANTRY) || "null");
+    } catch (e) {
+      return null;
+    }
+  }
+
+  // ponytail: read-only mirror — Phase 12 adds the write path and whatever
+  // conflict rule it needs. Modelled on syncPlanFlag (plain GET), not
+  // syncLibrary — there is no local writer yet, so no decide()/inflight/PUT.
+  async function fetchPantry() {
+    if (!config().enabled) return pantryMirror();
+    try {
+      const body = await req("GET", "/pantry");
+      if (body && Array.isArray(body.items)) {
+        localStorage.setItem(LS_PANTRY, JSON.stringify(body));
+        return body;
+      }
+      return pantryMirror();
+    } catch (e) {
+      return pantryMirror();
+    }
+  }
+
   // ponytail: no debounce/retry — the inflight guard plus human-paced
   // triggers (save, resume) are enough. Queue/backoff is a FUTURE.md item.
   function start() {
@@ -113,5 +139,5 @@ window.MP = window.MP || {};
     syncLibrary();
   }
 
-  MP.Sync = { decide, needsPlan, config, saveConfig, syncLibrary, syncPlanFlag, ackPlanFlag, start };
+  MP.Sync = { decide, needsPlan, config, saveConfig, syncLibrary, syncPlanFlag, ackPlanFlag, fetchPantry, start };
 })();

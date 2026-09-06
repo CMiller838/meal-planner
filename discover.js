@@ -3,13 +3,15 @@
 (function () {
   "use strict";
 
-  const { esc } = MP;
+  const { esc, labelize } = MP;
   const FAN_ANGLES = [0, -6, 5];
 
   let pool = [];
   let idx = 0;
   let activeCat = "";
   let loadFailed = false;
+  let pantryFirst = false;
+  let pantryKeys = null;
 
   function toast(msg) {
     const root = document.getElementById("toast-root");
@@ -214,6 +216,59 @@
     ];
   }
 
+  /** Nutrients the whole liked-meal library under-covers, worst-first-ish, for ranking the deck.
+   *  Same call pair as plan.js's swap suggestions, with the library as the meal set instead of
+   *  one day's other slots. Returns [] if nutrition data can't load — Discover must still work.
+   *  @returns {Promise<string[]>} subset of MP.Nutrition.TRACKED_NUTRIENTS */
+  async function libraryGaps() {
+    try {
+      const [library, nut] = await Promise.all([MP.getLibrary(), MP.Nutrition.load()]);
+      const cov = MP.Nutrition.dayCoverage(library, nut.tags, nut.targets);
+      return [...cov.missing, ...cov.partial];
+    } catch (e) {
+      return [];
+    }
+  }
+
+  /** Cached pantry index, fetched once per page load. Degrades to {} on any
+   *  failure — Discover must still work when Hermes is unreachable/unset up. */
+  async function pantryIndexCached() {
+    if (pantryKeys) return pantryKeys;
+    try {
+      pantryKeys = MP.ShoppingList.pantryIndex(await MP.Sync.fetchPantry());
+    } catch (e) {
+      pantryKeys = {};
+    }
+    return pantryKeys;
+  }
+
+  /** Count of a meal's ingredients already on hand, by normalized key. */
+  function pantryOverlap(meal, have) {
+    return (meal.ingredients || []).filter((ing) => have[MP.ShoppingList.normalizeKey(ing.key)]).length;
+  }
+
+  // ponytail: raw unweighted count — one pantry staple ranks like one pantry
+  // protein. Weight by pack price only if the ordering proves useless in
+  // real use.
+  /** Stable-sort permutation of list, descending pantryOverlap. Never a filter —
+   *  zero-overlap meals come last, not out. Index-decorated so it doesn't rely
+   *  on engine sort stability. */
+  function orderPool(list, have) {
+    return list
+      .map((m, i) => ({ m, i, s: pantryOverlap(m, have) }))
+      .sort((a, b) => b.s - a.s || a.i - b.i)
+      .map((x) => x.m);
+  }
+
+  /** One line above the deck explaining the ordering. Hidden when there is nothing to fill.
+   *  @param {string[]} gaps */
+  function renderGapNote(gaps) {
+    const el = document.getElementById("gap-note");
+    const top = gaps.slice(0, 3).map(labelize).join(", ");
+    el.textContent = top ? `Ranked to fill: ${top}` : "";
+    el.hidden = !top;
+  }
+
   /** Fetch, install and render the deck for one chip. @param {string} cat  "" = All */
   async function loadPool(cat) {
     activeCat = cat;
@@ -222,8 +277,18 @@
     document.getElementById("fan-progress").textContent = "";
     document.getElementById("fan-filmstrip").innerHTML = "";
     let next;
+    let gaps = [];
     try {
-      next = await MP.MealDB.getDiscoverPool(await excludeIds(), cat);
+      const [ids, g] = await Promise.all([excludeIds(), libraryGaps()]);
+      gaps = g;
+      next = await MP.MealDB.getDiscoverPool(ids, cat);
+      // ponytail: reorders the 10 the pool already picked, doesn't widen the pick.
+      // Raise mealdb POOL_LIMIT if the top card stops feeling gap-relevant.
+      if (gaps.length) {
+        const { tags } = await MP.Nutrition.load();
+        next = MP.Nutrition.rankByGap(next, gaps, tags);
+      }
+      if (pantryFirst) next = orderPool(next, await pantryIndexCached());
     } catch (e) {
       loadFailed = true;
       next = [];
@@ -231,14 +296,28 @@
     if (cat !== activeCat) return;
     pool = next;
     idx = 0;
+    renderGapNote(gaps);
     renderDeck();
   }
 
-  document.getElementById("discover-filters").addEventListener("click", (e) => {
+  document.getElementById("discover-filters").addEventListener("click", async (e) => {
     const chip = e.target.closest(".chip");
     if (!chip) return;
+    if (chip.dataset.filter === "pantry") {
+      pantryFirst = !pantryFirst;
+      chip.setAttribute("aria-pressed", String(pantryFirst));
+      chip.classList.toggle("active", pantryFirst);
+      if (pantryFirst) {
+        pool = orderPool(pool, await pantryIndexCached());
+        idx = 0;
+        renderDeck();
+      } else {
+        loadPool(activeCat);
+      }
+      return;
+    }
     if (chip.dataset.cat === activeCat && !loadFailed) return;
-    document.querySelectorAll("#discover-filters .chip").forEach((c) => c.classList.remove("active"));
+    document.querySelectorAll("#discover-filters .chip[data-cat]").forEach((c) => c.classList.remove("active"));
     chip.classList.add("active");
     loadPool(chip.dataset.cat);
   });
