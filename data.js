@@ -174,6 +174,12 @@ window.MP = window.MP || {};
     return { ...meal, ...fields };
   }
 
+  /** True if this meal yields leftovers worth chaining: multi-serving and not
+   *  itself a leftover child. Replaces the removed `batchCook` field. */
+  function isBatch(meal) {
+    return (meal.servings || 1) >= 2 && !meal.leftoverOf;
+  }
+
   /** First library meal with a confusably similar name, or null. */
   function findSimilarName(meals, name, ignoreId) {
     const norm = (s) => (s || "").toLowerCase().replace(/[^a-z0-9]/g, "");
@@ -278,6 +284,7 @@ window.MP = window.MP || {};
   MP.findVariant = findVariant;
   MP.variantLabel = variantLabel;
   MP.effectiveMeal = effectiveMeal;
+  MP.isBatch = isBatch;
   MP.parseIngredients = parseIngredients;
   MP.ingredientsToText = ingredientsToText;
   MP.findSimilarName = findSimilarName;

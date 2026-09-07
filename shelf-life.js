@@ -92,7 +92,7 @@ window.MP = window.MP || {};
       if (cookedDay == null) return null;
       return buildWarning(dayNum, cookedDay, "cooked_leftovers", shelfData);
     }
-    if (meal.batchCook) {
+    if (MP.isBatch(meal)) {
       const ownDays = occ[meal.id] || [];
       const cookedDay = findCookedDay(ownDays, dayNum);
       if (cookedDay != null && dayNum > cookedDay) {

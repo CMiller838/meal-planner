@@ -12,6 +12,7 @@
   let loadFailed = false;
   let pantryFirst = false;
   let pantryKeys = null;
+  let packData = null;
 
   function toast(msg) {
     const root = document.getElementById("toast-root");
@@ -38,7 +39,13 @@
       <div class="card-body">
         <h3>${esc(meal.name)}</h3>
         <p>${esc(meal.description || "")}</p>
+        ${tagRowHtml(meal)}
       </div>`;
+  }
+
+  function tagRowHtml(meal) {
+    const badge = MP.ShoppingList.costBadgeHtml(meal, packData);
+    return badge ? `<div class="tag-row">${badge}</div>` : "";
   }
 
   function makeDraggable(el) {
@@ -168,6 +175,7 @@
         <div class="card-body">
           <h3>${esc(meal.name)}</h3>
           <p>${esc(meal.description || "")}</p>
+          ${tagRowHtml(meal)}
           <div class="card-actions">
             <button class="btn add-btn">+ Add to library</button>
             <button class="ghost remove-btn">Remove</button>
@@ -242,11 +250,6 @@
     return pantryKeys;
   }
 
-  /** Count of a meal's ingredients already on hand, by normalized key. */
-  function pantryOverlap(meal, have) {
-    return (meal.ingredients || []).filter((ing) => have[MP.ShoppingList.normalizeKey(ing.key)]).length;
-  }
-
   // ponytail: raw unweighted count — one pantry staple ranks like one pantry
   // protein. Weight by pack price only if the ordering proves useless in
   // real use.
@@ -255,7 +258,7 @@
    *  on engine sort stability. */
   function orderPool(list, have) {
     return list
-      .map((m, i) => ({ m, i, s: pantryOverlap(m, have) }))
+      .map((m, i) => ({ m, i, s: MP.ShoppingList.pantryOverlap(m, have) }))
       .sort((a, b) => b.s - a.s || a.i - b.i)
       .map((x) => x.m);
   }
@@ -328,6 +331,7 @@
 
   async function init() {
     MP.initTheme();
+    packData = await MP.ShoppingList.load().catch(() => null);
     renderSaved();
     await loadPool("");
   }

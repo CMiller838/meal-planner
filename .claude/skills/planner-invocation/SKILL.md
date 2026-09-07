@@ -1,6 +1,6 @@
 ---
 name: planner-invocation
-description: Efficiency protocol for invoking the planner agent in phase mode (spec + tasks breakdown) — name exact files, reference one prior phase as the format model, bias toward zero-pause decision gates, and leave discovery/scanning to planner itself rather than pre-scanning in the coordinator session. Use whenever about to invoke @planner for a phase spec.
+description: Efficiency protocol for invoking the planner agent in phase mode (spec + tasks breakdown) — name exact files, reference one prior phase as the format model, gate genuinely important decisions (architecture, reuse-vs-build, anything contradicting the dispatch prompt's assumptions) while auto-proceeding on trivial forks, and leave discovery/scanning to planner itself rather than pre-scanning in the coordinator session. Use whenever about to invoke @planner for a phase spec.
 ---
 
 ## PLANNER INVOCATION EFFICIENCY PROTOCOL
@@ -28,10 +28,10 @@ for a phase spec + tasks breakdown:
    which single phase's `.claude/specs/phaseN_spec.md` + its `tasks.md`
    section to match for depth/structure — never "look at prior phases" or
    "other phase specs."
-4. **Bias toward zero-pause decision gates.** See the note on decision gates
-   below — ask `planner` to state its own recommendation and default to
-   proceeding on it (not pausing) for any fork that isn't genuinely high-stakes
-   or irreversible for the project.
+4. **Gate important decisions, auto-proceed on trivial ones.** See the note on
+   decision gates below — ask `planner` to always state its own recommendation,
+   but to actually pause and wait for the user's pick on anything important
+   (not just note it and move on), while still deciding trivial forks itself.
 5. **Tell `planner` to touch only its own phase's slice of `tasks.md`.**
    `tasks.md` accumulates every prior phase's full checklist — instruct
    `planner` explicitly to `Grep` for `^## Phase <N>` (its own heading) and
@@ -45,19 +45,43 @@ for a phase spec + tasks breakdown:
 ### Decision gates
 
 A fork worth pausing for is one where getting it wrong is expensive to walk
-back (schema shape, a new endpoint/dependency, something later phases build
-on). Most UI/behavior choices in a phase aren't that — they're one CSS rule or
-one function away from being changed later.
+back, or where the resolution changes the shape of the phase: schema/data
+changes, a new endpoint/dependency, which existing function or surface gets
+reused vs. a new one being built, anything later phases build on, or anything
+where planner's own finding contradicts what the roadmap/dispatch prompt
+assumed going in. Most pure UI/behavior choices in a phase aren't that —
+they're one CSS rule or one function away from being changed later.
 
-- Tell `planner` up front: *state your recommendation and proceed with it by
-  default; only pause and ask if the choice is high-stakes or hard to
-  reverse.* Don't leave "ask the user" as the implicit default for every fork
-  it notices.
+- Tell `planner` up front: *always state your recommendation. For a trivial
+  fork (one that's cheap to change later and doesn't affect other files),
+  decide it yourself and note the call in the spec. For anything important —
+  see the criteria above — actually raise a Decision Gate and HALT for the
+  user's explicit pick; do not just record your own call and proceed.* The
+  distinction that matters here is between deciding-and-noting vs.
+  deciding-and-halting — recommending is not a substitute for gating when the
+  fork is important enough to warrant one.
+- A finding that contradicts the dispatch prompt's or roadmap's stated
+  approach (e.g. "the spec assumed X could be reused, but it can't") is
+  exactly the kind of thing to gate, not silently route around — the user
+  chose that approach for a reason that may not be visible in the code.
 - If `planner` does surface gates, prefer resolving them in the **same
   message** that spawned it isn't possible after the fact — so front-load
   context (constraints, prior settled scope, what's out of bounds) into the
-  first prompt so `planner` has enough to default-decide instead of pausing.
+  first prompt so `planner` has enough to default-decide the *trivial* forks
+  without needing a round trip for those.
 - A pause-and-resume round costs roughly 2x the pre-pause transcript in
-  tokens. If a phase is likely to have 2-3 genuine forks, it's cheaper to ask
-  `planner` to list all of them at once with its recommendations, get one
-  batch answer from the user, and resume once — not one resume per gate.
+  tokens — this is the real price of gating more: expect phases with genuine
+  architectural forks to cost more than a fully zero-pause run, in exchange
+  for the user actually choosing those forks instead of inheriting planner's
+  pick after the fact. If a phase is likely to have 2-3 genuine forks, it's
+  still cheaper to ask `planner` to list all of them at once with its
+  recommendations, get one batch answer from the user, and resume once — not
+  one resume per gate.
+- **Never tell `planner` it may proceed past a gate without the user's
+  answer**, e.g. "don't block awaiting go-ahead," "proceed after presenting,"
+  or similar. `planner.md`'s Stage 2 HALT is explicitly non-negotiable and
+  says a dispatch prompt can never satisfy it on the user's behalf — but
+  wording like that still gets treated by planner as license to self-resolve
+  every gate, defeating the whole point of gating. If minimizing round trips
+  is the goal, say so via batching (list all gates in one message, one
+  resume) — never via a proceed-without-me instruction.

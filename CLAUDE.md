@@ -44,13 +44,35 @@ Installable as a PWA on Android Chrome via `manifest.json` + `sw.js`.
   source; don't hardcode macro/vitamin numbers in JS. The approximate
   high/med/low tagging system is deliberate — it's a coverage checklist, not a
   precise calorie calculator; don't "upgrade" it into fake-precise math.
+- **Cost weighting never reorders nutrition.** `generator.js`'s optional
+  `budget` step (Phase 17) only chooses among the top nutrient-ranked
+  candidates already produced by `MP.Nutrition.rankByGap`; it never changes
+  that ranking. `pack-sizes.json`'s `categories`/`keywords` fallback pricing
+  and its `planning` knobs (`shortlistSize`, `reuseCredit`) are data too, same
+  rule as above — don't hardcode them in JS. Same for `costTiers`
+  (cheap/med/pricey thresholds, Phase 18): the per-meal cost badges on
+  Browse/Discover cards are informational only — they never sort or filter
+  meals.
+- **Pantry stock never reorders nutrition either.** `generator.js`'s
+  `pickVariant` (Phase 21) only chooses which variant of an already-chosen
+  meal to schedule — nutrition ranking via `pickMeal`/`rankByGap` decides which
+  meal, same rule as cost above. The generator is a second pantry **reader**
+  (`MP.ShoppingList.pantryIndex` fed from `MP.Sync.localItems("pantry")`);
+  `plan.js`'s `commitCook` remains the only pantry **writer**.
 - **Shelf-life logic in `shelf-life.js`/`shelf-life.json` is category-based**
   (no purchase-date tracking exists) — shop day = day 1 and day 8 of each
   2-week plan, cooked day = first day a dinner is scheduled. Don't add
   per-SKU or purchase-date tracking without the user asking.
-- **Batch-cook / leftover chains** (`batchCook: true` in `meals.json`) are a
-  planning primitive — the generator must schedule leftovers into the
-  following 1-2 days, not force every ingredient into one dinner.
+- **Batch-cook / leftover chains** (`MP.isBatch(meal)` — `servings >= 2 &&
+  !leftoverOf`, `data.js`) are a planning primitive — the generator must
+  schedule leftovers into the following 1-2 days, not force every ingredient
+  into one dinner.
+- **Cook vs. portion is two events, never conflated.** `plan.js`'s
+  `commitCook` deducts the pantry exactly once per cook instance and may open
+  an `MP.Cooks` record for the leftover portions; `eatPortion` writes one
+  nutrient-log entry per sitting and must never call anything pantry-related
+  (`eatPlan`, `applyOps`, `writeLocalItems`, `queueOp`). Don't add a
+  convenience path that lets a portion-eat touch the pantry.
 - **Hard content exclusions are enforced in code, not just docs**: no
   mushrooms (including from TheMealDB results), no standalone egg meals
   (egg-within-a-dish is fine), no vegetables in toasties. These came from

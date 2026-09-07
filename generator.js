@@ -45,16 +45,47 @@ window.MP = window.MP || {};
     return meal.prepEffort || "quick";
   }
 
-  function generatePlan(library, tags, targets, shelfData, startDate) {
+  // ponytail: no plan-wide pantry depletion — two meals may both count the
+  // last tin as in stock. Upgrade path is depletion tracking if it matters.
+  /** Variant id whose ingredients best match `have`, or null for the base recipe. */
+  function pickVariant(meal, have) {
+    if (!meal.variants || !meal.variants.length) return null;
+    if (!have || !Object.keys(have).length) return null;
+    let bestId = null;
+    let bestMissing = meal.ingredients.length - MP.ShoppingList.pantryOverlap(meal, have);
+    meal.variants.forEach((v) => {
+      const candidate = MP.effectiveMeal(meal, v.id);
+      const missing = candidate.ingredients.length - MP.ShoppingList.pantryOverlap(candidate, have);
+      if (missing < bestMissing) {
+        bestMissing = missing;
+        bestId = v.id;
+      }
+    });
+    return bestId;
+  }
+
+  function generatePlan(library, tags, targets, shelfData, startDate, budget, have) {
     startDate = startDate || isoToday();
+    have = have || {};
     const mealsById = Object.fromEntries(library.map((m) => [m.id, m]));
     const dinnerPool = library.filter((m) => (m.mealTypes || []).includes("dinner"));
     const days = Array.from({ length: 14 }, (_, i) => ({ day: i + 1, slots: {} }));
     const lastUsedDay = {};
+    const halfKeys = { first: new Set(), second: new Set() };
 
-    function place(day, slotType, meal) {
-      days[day - 1].slots[slotType] = { mealId: meal ? meal.id : null };
+    function place(day, slotType, meal, countsTowardBudget) {
+      const variantId = meal ? pickVariant(meal, have) : null;
+      days[day - 1].slots[slotType] = meal
+        ? (variantId ? { mealId: meal.id, variantId } : { mealId: meal.id })
+        : { mealId: null };
       if (meal) lastUsedDay[meal.id] = day;
+      if (meal && budget && countsTowardBudget !== false) {
+        const entry = budget.costIndex[meal.id];
+        if (entry) {
+          const half = day <= 7 ? halfKeys.first : halfKeys.second;
+          entry.keys.forEach((k) => half.add(k));
+        }
+      }
     }
 
     function prevMealId(day, slotType) {
@@ -77,6 +108,24 @@ window.MP = window.MP || {};
         const rest = ranked.filter((m) => effortOf(m) !== opts.prefer);
         ranked = matches.concat(rest);
       }
+      if (budget) {
+        const half = dayNum <= 7 ? halfKeys.first : halfKeys.second;
+        const shortlist = ranked.slice(0, budget.shortlistSize).filter((m) => budget.costIndex[m.id]);
+        if (shortlist.length) {
+          const scored = shortlist.map((m) => {
+            const c = budget.costIndex[m.id];
+            const overlap = c.keys.filter((k) => half.has(k)).length;
+            return { m, score: c.cost - budget.reuseCredit * overlap };
+          });
+          const minScore = Math.min(...scored.map((s) => s.score));
+          const winners = scored.filter((s) => Math.abs(s.score - minScore) < 1e-9).map((s) => s.m);
+          const neverW = winners.filter((m) => !(m.id in lastUsedDay));
+          const usedW = winners
+            .filter((m) => m.id in lastUsedDay)
+            .sort((a, b) => lastUsedDay[a.id] - lastUsedDay[b.id]);
+          return neverW.concat(usedW)[0] || null;
+        }
+      }
       const never = ranked.filter((m) => !(m.id in lastUsedDay));
       const used = ranked
         .filter((m) => m.id in lastUsedDay)
@@ -93,7 +142,7 @@ window.MP = window.MP || {};
       const excludeIds = new Set();
       const prevId = prevMealId(d0, "dinner");
       if (prevId) excludeIds.add(prevId);
-      const batchCandidates = dinnerPool.filter((m) => m.batchCook === true);
+      const batchCandidates = dinnerPool.filter(MP.isBatch);
       // ponytail: shelf-life-safe batch candidates assume a fixed Mon/Sat shop day
       // and no freezer state — with the seed library and a Monday start only
       // chorizo-pasta survives to Friday. Real fix is freezer-aware planning
@@ -108,7 +157,7 @@ window.MP = window.MP || {};
       for (let i = 0; i < coverage; i++) {
         const day = run[i];
         const meal = i === 0 ? parent : childId ? mealsById[childId] : parent;
-        place(day, "dinner", meal);
+        place(day, "dinner", meal, i === 0);
         filled.add(day);
       }
     }
@@ -136,8 +185,8 @@ window.MP = window.MP || {};
       }
     }
 
-    return { startDate, days };
+    return { startDate, days, generatedAt: new Date().toISOString() };
   }
 
-  MP.Generator = { generatePlan, weekendRuns, weekdayOf, isoToday };
+  MP.Generator = { generatePlan, weekendRuns, weekdayOf, isoToday, pickVariant };
 })();

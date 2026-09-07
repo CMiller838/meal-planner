@@ -13,16 +13,10 @@ box to restore it. Would double as a manual backup.
 - **Revisit trigger**: if the Worker+KV store is ever unreliable/lost, or
   before removing reliance on it, add a manual export/import as a fallback.
 
-## Per-meal cost tags
+## Per-meal cost tags — shipped (Phase 18)
 
-A rough `cheap`/`med`/`pricey` tag per ingredient (same pattern as the
-nutrient tags), shown on individual meal cards.
-
-- **Why parked**: Phase 2's shopping-list feature already gives an
-  aggregate weekly cost estimate from Asda pack prices, which covers the
-  budget-awareness need without a second cost system.
-- **Revisit trigger**: if the aggregate shopping-list total isn't granular
-  enough to help decide between individual meals.
+Shipped as `~£`/cheap-med-pricey badges on Library and Discover cards, via
+`MP.ShoppingList.costBadgeHtml`. See `docs/roadmap.md` Phase 18.
 
 ## Freezer-aware batch planning
 
@@ -85,23 +79,23 @@ just applies the remote silently.
 - **Revisit trigger**: if a real overwrite is ever noticed and it matters
   which version was lost.
 
-## Pantry-driven automatic variant selection
+## Pantry-driven automatic variant selection — shipped (Phase 21)
 
-Phase 14 shipped the manual half of this idea: a meal entry can hold
-`variants` (e.g. "Chorizo & Pasta" with a cream-sauce variant), each with its
-own `ingredients`/`instructions`, and the user picks one from the plan day
-view. Still parked: having the **generator** pick a variant automatically
-based on what's in stock (`/pantry`) or other constraints, instead of always
-leaving `variantId` unset (the base recipe).
+Phase 14 shipped the manual half: a meal entry can hold `variants`, each with
+its own `ingredients`/`instructions`, picked from the plan day view. Phase 21
+shipped the automatic half: `generator.js`'s `pickVariant` scores the base
+recipe and each variant by missing-ingredient count against the pantry
+(`MP.ShoppingList.pantryOverlap`), base wins ties, and `place()` writes the
+winner's `variantId` onto the slot. No new data model — built entirely on the
+Phase 14 resolver (`MP.effectiveMeal`) and schema (`meal.variants`).
 
-- **Why parked**: the generator plans by `mealId` only (Phase 14, D6) —
-  teaching it to weigh pantry stock per-variant is a meaningfully bigger
-  piece of logic than the manual picker, and nothing yet demands it.
-- **Revisit trigger**: manually picking a variant after every generate/swap
-  proves annoying enough to want it automated. The Phase 14 resolver
-  (`MP.effectiveMeal`) and schema (`meal.variants`) are exactly what this
-  would build on — no new data model needed, just generator logic plus a
-  pantry cross-check.
+**Parked as the accepted ceiling**: no plan-wide pantry depletion — two meals
+scheduled in the same plan may each count the same single tin as "in stock,"
+since `pickVariant` scores each meal independently with no running deduction
+across the plan. Marked with a `ponytail:` comment in `generator.js`.
+
+- **Revisit trigger**: a real pantry gets thin enough (few of an item) that
+  two meals both claiming it produces a visibly wrong shopping list.
 
 ## `/coverage` endpoint for Hermes
 
@@ -115,3 +109,87 @@ than exposing `MP.Nutrition.dayCoverage()` over HTTP.
 - **Revisit trigger**: if Hermes' coverage answers ever disagree with the
   plan page's banner, expose `dayCoverage` as `GET /coverage` rather than
   teaching Hermes the scoring rules.
+
+## Persisting a built shopping list (Phase 17)
+
+Phase 17 shipped auto-build as stamp-and-invalidate (a `generatedAt` stamp
+the shopping page ticks against), not a persisted `mp_shopping_built`
+snapshot.
+
+- **Why parked**: a snapshot would be a second source of truth beside
+  `mp_plan` (the plan of record), goes stale against the 7 manual-edit
+  `savePlan()` callers, and doesn't fix anything the stamp doesn't already
+  fix.
+- **Revisit trigger**: something other than `shopping.html` needs to read
+  the built list — e.g. if Hermes is ever given it.
+
+## Hard max-line-count for the shopping list (Phase 17)
+
+"Short" list length is emergent from the reuse-credit scoring term, not a
+cap enforced separately.
+
+- **Why parked**: a hard cap would fight the nutrition targets the
+  generator is required to hit first — an unsatisfiable constraint.
+- **Revisit trigger**: a real generated plan still produces an unmanageably
+  long list after `reuseCredit`/`shortlistSize` (`pack-sizes.json`) are
+  tuned against actual use.
+
+## Synonym/plural/unit-word ingredient-key matching (Phase 17)
+
+`normalizeKey`'s exact-match-only limitation (no synonyms, no unit words like
+"tin of") is now softened by the Phase 17 category fallback — an unmatched
+key is priced approximately instead of contributing £0.
+
+- **Why parked**: the fallback removes most of the practical pain; a fuzzy
+  alias map is real added complexity for a shrinking problem.
+- **Revisit trigger**: the `estimated[]` bucket stays large/noisy after
+  `pack-sizes.json`'s `keywords` list is filled out.
+
+## Optimising cost across both shop halves jointly (Phase 17)
+
+The Phase 17 budget step is a greedy per-slot pick within one shop half; it
+never moves a meal from day 10 to day 5 to share a pack across halves.
+
+- **Why parked**: that's a scheduling search, not a per-meal scoring term —
+  a materially bigger piece of logic than this phase's scope.
+- **Revisit trigger**: generated lists still look repetitive/wasteful across
+  the two halves after the reuse term is tuned. A two-pass swap heuristic is
+  the suggested upgrade path, not a full solver.
+
+## Per-meal cost badges on Browse/Discover cards — shipped (Phase 18)
+
+Shipped. See `docs/roadmap.md` Phase 18.
+
+## Cost badge on 2-Week Plan slots
+
+Phase 18 scoped badges to Library/Discover only; `plan.js`'s `daySlotHtml`
+doesn't show one. `shopping.html` already gives the plan's real total.
+
+- **Why parked**: deliberately out of Phase 18's scope (see
+  `.claude/specs/phase18_spec.md` non-goals) — a plan slot is a decision
+  already made, not a browsing choice.
+- **Revisit trigger**: if a user wants cost visible while reviewing/editing an
+  already-generated plan, not just while picking meals.
+
+## Shared `MP.tabs(root)` helper
+
+Phase 19 wired `shopping.html`'s two tabs by hand (~8 lines in `shopping.js`
+plus the `.tab-bar`/`.tab-btn`/`.tab-panel` CSS convention) rather than
+building a reusable helper.
+
+- **Why parked**: Gate 1 Path C, rejected by the user in favour of Path B —
+  one consumer isn't enough to shape a good API; a guessed abstraction is
+  worse than copying four lines of markup.
+- **Revisit trigger**: a second page wants in-page tabs — build the helper
+  then, shaped by both pages' actual needs.
+
+## Sync `mp_cooks` to Hermes
+
+Phase 20's open-leftover-portion records (`mp_cooks`) are local-only — no KV
+key, no Worker route, no Hermes mirror.
+
+- **Why parked**: nothing asked for it; Phase 20's scope was the local
+  cook-vs-eat split, not a new sync surface.
+- **Revisit trigger**: Hermes wants to answer "what leftovers are in the
+  fridge" — e.g. to avoid proposing a placement for a meal that already has
+  an open portion sitting uneaten.

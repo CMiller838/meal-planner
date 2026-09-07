@@ -40,6 +40,12 @@ model — the plan generator should default to scheduling leftovers into the
 following 1-2 days rather than forcing every ingredient into one dinner
 (per the planning rule below).
 
+One cook, several eats: Phase 20 replaced the `batchCook` flag with the
+`servings` count already on every meal — cooking deducts the pantry once,
+each leftover portion eaten afterward is logged but never re-deducted.
+
+Phase 21: plans prefer the version of a recipe you already have ingredients for.
+
 ## Hard exclusions (never suggest, never auto-swap-in, even from the API)
 - Mushrooms — exclude entirely from any TheMealDB-sourced suggestion too
   (filter meals whose ingredient list contains "mushroom").
@@ -54,6 +60,14 @@ following 1-2 days rather than forcing every ingredient into one dinner
   dinners.
 - Leftover ingredients from one dinner should get reused in a lunch/snack
   the same or next day rather than wasted or force-fit into one meal.
+- (Phase 17) Within the nutrient-ranked shortlist, prefer cheaper meals and
+  meals that reuse ingredients already being bought in the same shop half —
+  never overriding nutrient coverage. An ingredient with no exact price is
+  priced by aisle-category estimate (labelled as an estimate) rather than
+  counted as free.
+- (Phase 18) Meal cost is visible per meal while browsing (Library and
+  Discover cards), not only as a shopping-list total after a plan is built;
+  category-estimated costs are marked as estimates, same as the shopping list.
 
 ## TheMealDB integration (free, no signup, key="1")
 Base: `https://www.themealdb.com/api/json/v1/1/`

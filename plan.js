@@ -4,6 +4,7 @@
 
   const { esc, labelize } = MP;
   const LS_PLAN = "mp_plan";
+  const LS_COOKS = "mp_cooks";
   const SLOT_TYPES = ["breakfast", "lunch", "dinner", "snack"];
 
   const WEEKDAY = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -12,6 +13,7 @@
   let mealsById = {};
   let tagsData = null;
   let shelfData = null;
+  let packData = null;
   let plan = null;
   let warnings = {}; // "day-slotType" -> { message, moveToDay, category }; owned by renderPlan
 
@@ -24,8 +26,73 @@
     setTimeout(() => el.remove(), 1800);
   }
 
+  // ---- MP.Cooks: leftover-portion bookkeeping (Phase 20) ----
+  // Bare array, same convention as mp_eatenLog. Never references
+  // MP.ShoppingList — the portion-eat path must be structurally incapable of
+  // touching the pantry.
+
+  /** shelfOverride lets tests supply shelfData without a real fetch; falls
+   *  back to the module's own shelfData (unavailable => never prune on age). */
+  function cooksAll(shelfOverride) {
+    let raw;
+    try {
+      raw = JSON.parse(localStorage.getItem(LS_COOKS) || "[]");
+    } catch {
+      raw = null;
+    }
+    if (!Array.isArray(raw)) raw = [];
+    const sd = shelfOverride !== undefined ? shelfOverride : shelfData;
+    const fridgeDays = sd && sd.cooked_leftovers && sd.cooked_leftovers.fridgeDays;
+    const now = Date.now();
+    const kept = raw.filter((r) => {
+      if (!r || r.portionsLeft <= 0) return false;
+      if (fridgeDays == null) return true;
+      return (now - new Date(r.cookedAt).getTime()) / 86400000 <= fridgeDays;
+    });
+    if (kept.length !== raw.length) localStorage.setItem(LS_COOKS, JSON.stringify(kept));
+    return kept;
+  }
+
+  function cooksOpenFor(mealId, shelfOverride) {
+    return cooksAll(shelfOverride)
+      .filter((r) => r.mealId === mealId)
+      .sort((a, b) => new Date(b.cookedAt) - new Date(a.cookedAt));
+  }
+
+  function cooksOpen(meal, variantId, portions) {
+    if (portions < 1) return null;
+    const cookedAt = new Date().toISOString();
+    const record = {
+      id: `${meal.id}:${cookedAt}`,
+      mealId: meal.id,
+      name: meal.name,
+      variantId: variantId || null,
+      cookedAt,
+      portionsLeft: portions,
+    };
+    const all = cooksAll();
+    all.push(record);
+    localStorage.setItem(LS_COOKS, JSON.stringify(all));
+    return record;
+  }
+
+  function cooksTake(cookId) {
+    const all = cooksAll();
+    const idx = all.findIndex((r) => r.id === cookId);
+    if (idx === -1) return null;
+    all[idx] = { ...all[idx], portionsLeft: all[idx].portionsLeft - 1 };
+    localStorage.setItem(LS_COOKS, JSON.stringify(all));
+    return all[idx];
+  }
+
+  MP.Cooks = { all: cooksAll, openFor: cooksOpenFor, open: cooksOpen, take: cooksTake };
+
   function generatePlan() {
-    return MP.Generator.generatePlan(library, tagsData.tags, tagsData.targets, shelfData);
+    const budget = packData
+      ? { costIndex: MP.ShoppingList.costIndex(library, packData), ...packData.planning }
+      : null;
+    const have = MP.ShoppingList.pantryIndex({ items: MP.Sync.localItems("pantry") });
+    return MP.Generator.generatePlan(library, tagsData.tags, tagsData.targets, shelfData, undefined, budget, have);
   }
 
   function loadPlan() {
@@ -36,6 +103,12 @@
   function savePlan() {
     localStorage.setItem(LS_PLAN, JSON.stringify(plan));
     window.dispatchEvent(new CustomEvent("mp:plan-saved", { detail: plan }));
+  }
+
+  function regenerate() {
+    plan = generatePlan();
+    savePlan();
+    renderPlan();
   }
 
   function mealAt(day, slotType) {
@@ -317,7 +390,7 @@
     sheet.querySelector(".close-btn").addEventListener("click", () => {
       overlay.classList.add("hidden");
     });
-    sheet.querySelector(".detail-eat-btn").addEventListener("click", () => openEatSheet(effMeal, null, null));
+    sheet.querySelector(".detail-eat-btn").addEventListener("click", () => openEatSheet(effMeal, null, null, variantId));
     overlay.classList.remove("hidden");
   }
 
@@ -408,12 +481,15 @@
     sheet.querySelectorAll(".day-eat-btn:not([disabled])").forEach((b) => {
       const meal = mealAt(day, b.dataset.slot);
       const slot = plan.days[day - 1].slots[b.dataset.slot];
-      if (meal) b.addEventListener("click", () => openEatSheet(MP.effectiveMeal(meal, slot.variantId), day, b.dataset.slot));
+      if (meal) b.addEventListener("click", () => openEatSheet(MP.effectiveMeal(meal, slot.variantId), day, b.dataset.slot, slot.variantId));
     });
   }
 
   // ---- Eat flow ----
-  let eatCtx = null; // { meal, day, slotType } — day/slotType null for a library eat
+  // eatCtx: { meal, day, slotType, variantId, open } — day/slotType null for
+  // a library eat; `open` (Phase 20) holds MP.Cooks.openFor(meal.id) results
+  // while the branch-A picker is showing, null once past it.
+  let eatCtx = null;
 
   function readEatInputs() {
     const used = {};
@@ -434,10 +510,13 @@
     </div>`;
   }
 
+  /** Branch B/C: today's pantry-row sheet, plus a leftover-portion line when
+   *  this cook will open a new cook record (servings >= 2). */
   function renderEatSheet(pantry) {
     if (!eatCtx) return;
     const used = readEatInputs();
     const { meal } = eatCtx;
+    const servings = meal.servings || 1;
     const hasInputs = Object.keys(used).length > 0;
     const currentUsed = hasInputs ? used : Object.fromEntries((meal.ingredients || []).map((i) => [i.key, i.qty || ""]));
     const { rows, ops } = MP.ShoppingList.eatPlan(meal, currentUsed, pantry);
@@ -447,6 +526,7 @@
       <button class="close-btn" aria-label="Close">✕</button>
       <h2>Eat ${esc(meal.name)}</h2>
       ${pantry === undefined ? `<p class="muted">Checking pantry…</p>` : ""}
+      ${servings >= 2 ? `<p class="muted">Cooking ${servings} portions — 1 now, ${servings - 1} saved as leftovers</p>` : ""}
       ${rows.map(eatRowHtml).join("")}
       ${shortfallCount ? `<p class="muted">${shortfallCount} item${shortfallCount === 1 ? "" : "s"} will be added to your ad-hoc list</p>` : ""}
       <div class="day-slot-actions">
@@ -455,18 +535,57 @@
       </div>`;
     sheet.querySelector(".close-btn").addEventListener("click", closeEatSheet);
     sheet.querySelector(".eat-cancel-btn").addEventListener("click", closeEatSheet);
-    sheet.querySelector(".eat-confirm-btn").addEventListener("click", () => commitEat(pantry));
+    sheet.querySelector(".eat-confirm-btn").addEventListener("click", () => commitCook(pantry));
     sheet.querySelectorAll(".eat-qty").forEach((input) => {
       input.addEventListener("input", () => renderEatSheet(pantry));
     });
   }
 
-  async function openEatSheet(meal, day, slotType) {
-    eatCtx = { meal, day, slotType };
-    renderEatSheet(undefined);
+  /** Branch A: an open cook exists — offer "ate a portion" against it, or a
+   *  way out to "cooked fresh" (re-renders as branch B/C). No pantry fetch,
+   *  no .eat-qty inputs. */
+  function renderEatPicker() {
+    if (!eatCtx || !eatCtx.open) return;
+    const { meal, open } = eatCtx;
+    const sheet = document.getElementById("eat-sheet");
+    sheet.innerHTML = `
+      <button class="close-btn" aria-label="Close">✕</button>
+      <h2>Eat ${esc(meal.name)}</h2>
+      <div class="eat-cook-options">
+        ${open
+          .map((c) => {
+            const day = new Date(c.cookedAt).toLocaleDateString(undefined, { weekday: "long" });
+            return `<button class="ghost eat-portion-btn" data-id="${esc(c.id)}">Ate a portion — cooked ${esc(day)} (${c.portionsLeft} left)</button>`;
+          })
+          .join("")}
+        <button class="ghost eat-fresh-btn">No, I cooked this fresh</button>
+      </div>`;
+    sheet.querySelector(".close-btn").addEventListener("click", closeEatSheet);
+    sheet.querySelectorAll(".eat-portion-btn").forEach((btn) => {
+      btn.addEventListener("click", () => eatPortion(btn.dataset.id));
+    });
+    sheet.querySelector(".eat-fresh-btn").addEventListener("click", async () => {
+      eatCtx.open = null;
+      renderEatSheet(undefined);
+      const pantry = await MP.Sync.fetchItems("pantry");
+      if (eatCtx && !eatCtx.open) renderEatSheet(pantry);
+    });
+  }
+
+  /** Router: branch A (an open cook exists) skips the pantry fetch entirely;
+   *  branch B/C fetches pantry as before. Computed before any pantry I/O. */
+  async function openEatSheet(meal, day, slotType, variantId) {
+    eatCtx = { meal, day, slotType, variantId: variantId || null, open: null };
+    const open = MP.Cooks.openFor(meal.id);
     document.getElementById("eat-overlay").classList.remove("hidden");
+    if (open.length > 0) {
+      eatCtx.open = open;
+      renderEatPicker();
+      return;
+    }
+    renderEatSheet(undefined);
     const pantry = await MP.Sync.fetchItems("pantry");
-    if (eatCtx && eatCtx.meal === meal) renderEatSheet(pantry);
+    if (eatCtx && eatCtx.meal === meal && !eatCtx.open) renderEatSheet(pantry);
   }
 
   function closeEatSheet() {
@@ -474,11 +593,24 @@
     eatCtx = null;
   }
 
-  function commitEat(pantry) {
+  /** Log-only tail shared by commitCook and eatPortion (§4c) — the only code
+   *  the two paths share, so sharing it can't leak a pantry write into the
+   *  portion path. Returns the promise so a caller/test can await it;
+   *  production call sites fire-and-forget. */
+  function logPortion(meal, eatenAt) {
+    return MP.Nutrition.load()
+      .then(({ tags }) => MP.Nutrition.tagsForMeal(meal, tags), () => [])
+      .then((tags) => MP.Sync.logEaten({ id: `${meal.id}:${eatenAt}`, mealId: meal.id, name: meal.name, eatenAt, tags }));
+  }
+
+  /** The only pantry writer (§4a). Deducts once per cook instance, then
+   *  opens an MP.Cooks record for the remaining servings (none for a
+   *  servings:1 meal). */
+  function commitCook(pantry) {
     if (!eatCtx) return;
-    const { meal, day, slotType } = eatCtx;
+    const { meal, day, slotType, variantId } = eatCtx;
     const used = readEatInputs();
-    const { ops, rows } = MP.ShoppingList.eatPlan(meal, used, pantry);
+    const { ops } = MP.ShoppingList.eatPlan(meal, used, pantry);
     const eatenAt = new Date().toISOString();
 
     ["pantry", "adhoc"].forEach((list) => {
@@ -495,15 +627,33 @@
     }
     if (MP.Prefs) MP.Prefs.bump(meal, "eaten");
 
+    const cook = MP.Cooks.open(meal, variantId, (meal.servings || 1) - 1);
+
     const shortfallCount = ops.filter((op) => op.list === "adhoc").length;
     closeEatSheet();
-    toast(`Eaten — pantry updated${shortfallCount ? ` · ${shortfallCount} added to ad-hoc list` : ""}`);
+    toast(`Eaten — pantry updated${shortfallCount ? ` · ${shortfallCount} added to ad-hoc list` : ""}${cook ? ` · ${cook.portionsLeft} portions saved` : ""}`);
 
     MP.Sync.flushOps();
-    MP.Nutrition.load().then(
-      ({ tags }) => MP.Nutrition.tagsForMeal(meal, tags),
-      () => []
-    ).then((tags) => MP.Sync.logEaten({ id: `${meal.id}:${eatenAt}`, mealId: meal.id, name: meal.name, eatenAt, tags }));
+    logPortion(meal, eatenAt);
+  }
+
+  /** §4b — never touches the pantry: no eatPlan, no applyOps, no
+   *  writeLocalItems, no queueOp. Decrement, log, close. */
+  function eatPortion(cookId) {
+    const cook = MP.Cooks.take(cookId);
+    if (!cook) return; // already eaten in another tab
+    const { meal, day, slotType } = eatCtx;
+    const eatenAt = new Date().toISOString();
+
+    if (day) {
+      plan.days[day - 1].slots[slotType].eatenAt = eatenAt;
+      savePlan();
+      renderPlan();
+    }
+    if (MP.Prefs) MP.Prefs.bump(meal, "eaten");
+    closeEatSheet();
+    toast(`Portion eaten — ${cook.portionsLeft} left`);
+    logPortion(meal, eatenAt);
   }
 
   let pendingRequestedAt = null;
@@ -589,7 +739,7 @@
     renderPlacementBanner(e.detail);
   });
 
-  MP.Plan = { applyPlacements };
+  MP.Plan = { applyPlacements, logPortion };
 
   async function init() {
     MP.initTheme();
@@ -607,16 +757,12 @@
     });
     document.getElementById("generate-btn").addEventListener("click", () => {
       if (confirm("Regenerate the 2-week plan? This replaces your current edits.")) {
-        plan = generatePlan();
-        savePlan();
-        renderPlan();
+        regenerate();
         toast("Plan regenerated");
       }
     });
     document.getElementById("hermes-generate").addEventListener("click", async () => {
-      plan = generatePlan();
-      savePlan();
-      renderPlan();
+      regenerate();
       await MP.Sync.ackPlanFlag(pendingRequestedAt);
       document.getElementById("hermes-banner").classList.add("hidden");
       toast("Plan regenerated by Hermes request");
@@ -626,10 +772,11 @@
       document.getElementById("hermes-banner").classList.add("hidden");
     });
 
-    [tagsData, shelfData, library] = await Promise.all([
+    [tagsData, shelfData, library, packData] = await Promise.all([
       MP.Nutrition.load(),
       MP.ShelfLife.load(),
       MP.getLibrary(),
+      MP.ShoppingList.load().catch(() => null),
     ]);
     plan = loadPlan();
     savePlan();

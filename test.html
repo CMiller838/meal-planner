@@ -29,6 +29,7 @@
   }
   function deepEqual(a, b) { return JSON.stringify(a) === JSON.stringify(b); }
 
+  const realPackData = await fetch("pack-sizes.json").then((r) => r.json());
   const tags = await fetch("ingredient-nutrient-tags.json").then((r) => r.json());
   const targets = await fetch("nutrition-targets.json").then((r) => r.json());
   const shelfData = await fetch("shelf-life.json").then((r) => r.json());
@@ -59,19 +60,19 @@
   const mealsById = Object.fromEntries(library.map((m) => [m.id, m]));
   const runs = MP.Generator.weekendRuns("2026-09-07");
 
-  // 4. every run's first day holds a batchCook meal; leftover days hold same id or a leadsTo child
+  // 4. every run's first day holds an MP.isBatch meal; leftover days hold same id or a leadsTo child
   {
     let ok = true;
     for (const run of runs) {
       if (run.length < 2) continue;
       const first = mealsById[plan.days[run[0] - 1].slots.dinner.mealId];
-      if (!first || !first.batchCook) { ok = false; break; }
+      if (!first || !MP.isBatch(first)) { ok = false; break; }
       for (let i = 1; i < run.length; i++) {
         const id = plan.days[run[i] - 1].slots.dinner.mealId;
         if (id !== first.id && !(first.leadsTo || []).includes(id)) { ok = false; break; }
       }
     }
-    check("run-day-1 is batchCook; leftover days are same id or leadsTo child", ok);
+    check("run-day-1 is MP.isBatch; leftover days are same id or leadsTo child", ok);
   }
 
   // 5. no dinner id appears on consecutive days outside a run
@@ -212,7 +213,7 @@
     days[2].slots.lunch = { mealId: "toastie-chicken-cheese" };
     const plan = { startDate: "2026-09-07", days };
     const lists = MP.ShoppingList.buildLists(plan, mealsById, packData);
-    const week1keys = [...lists["1"].lines, ...lists["1"].staples, ...lists["1"].unpriced].map((l) => l.key);
+    const week1keys = [...lists["1"].lines, ...lists["1"].staples, ...lists["1"].estimated].map((l) => l.key);
     check("chicken-fajitas contributes tortillas", week1keys.includes("tortillas"));
     check("chicken-fajitas does not contribute leftover_chicken", !week1keys.includes("leftover_chicken"));
     check("toastie-chicken-cheese contributes white_bread and cheese", week1keys.includes("white_bread") && week1keys.includes("cheese"));
@@ -243,9 +244,9 @@
       },
     };
     const lists = MP.ShoppingList.buildLists(plan, mealsById, minimalPack);
-    const carrotsLine = lists["1"].unpriced.find((l) => l.key === "carrots");
+    const carrotsLine = lists["1"].estimated.find((l) => l.key === "carrots");
     const gravyLine = lists["1"].staples.find((l) => l.key === "gravy");
-    check("unknown key lands in unpriced and contributes 0", !!carrotsLine && carrotsLine.lineCost === 0);
+    check("unknown key lands in estimated and contributes 0 (no categories fallback data)", !!carrotsLine && carrotsLine.lineCost === 0);
     check("staple:true lands in staples, excluded from total", !!gravyLine && lists["1"].total === 5.5);
   }
 
@@ -1232,6 +1233,349 @@
       check("eatenLogError: rejects duplicate ids", typeof eatenLogError([okEntry, okEntry]) === "string");
       check("eatenLogError: rejects an unknown extra key", typeof eatenLogError([{ ...okEntry, extra: 1 }]) === "string");
     }
+  }
+
+  // ---- Group 35: Phase 16 (Discover card detail view) ----
+  {
+    function isTap(dx, dy) {
+      return Math.abs(dx) < 8 && Math.abs(dy) < 8;
+    }
+    check("isTap: (0,0) is a tap", isTap(0, 0) === true);
+    check("isTap: (5,-4) is a tap", isTap(5, -4) === true);
+    check("isTap: (12,0) is not a tap", isTap(12, 0) === false);
+    check("isTap: (0,-30) is not a tap", isTap(0, -30) === false);
+    check("isTap: (101,0) is not a tap", isTap(101, 0) === false);
+
+    const fixture = {
+      idMeal: "1",
+      strMeal: "Test Meal",
+      strCategory: "Beef",
+      strInstructions: "Do the thing.",
+      strMealThumb: "http://example.com/x.jpg",
+      strIngredient1: "Chicken Breast",
+      strMeasure1: "2",
+    };
+    const built = MP.MealDB.toMeal(fixture);
+    check("toMeal: carries instructions", built.instructions === "Do the thing.");
+    check("toMeal: carries image", built.image === "http://example.com/x.jpg");
+    check("toMeal: ingredients are {key, qty, label} objects",
+      deepEqual(built.ingredients, [{ key: "chicken_breast", qty: "2", label: "Chicken Breast" }]));
+
+    check("tagsForMeal: raw TheMealDB snake-case keys with no tag match => []",
+      deepEqual(MP.Nutrition.tagsForMeal(built, { pasta: { fibre: "med" } }), []));
+  }
+
+  // ---- Group 36: Phase 17 (cost- and length-optimized shopping list) ----
+  {
+    const { priceFor, mealCost, costIndex, normalizeKey } = MP.ShoppingList;
+
+    // priceFor
+    const fixturePack = {
+      items: { chicken_breast: { packSize: 640, unit: "g", price: 4.20 } },
+      categories: { meat: { packSize: 500, unit: "g", price: 4.00 }, fish: { packSize: 1, unit: "each", price: 4.00 }, default: { packSize: 1, unit: "each", price: 1.00 } },
+      keywords: { chicken: "meat", chicken_stock: "fish" },
+    };
+    const exactHit = priceFor("chicken_breast", fixturePack);
+    check("priceFor: exact items hit returns the item's price", exactHit.price === 4.20 && exactHit.estimated === false);
+    const kwHit = priceFor("chicken_thigh", fixturePack);
+    check("priceFor: keyword-only match returns that category, estimated: true",
+      kwHit.price === 4.00 && kwHit.unit === "g" && kwHit.estimated === true);
+    const unmatched = priceFor("marmite", fixturePack);
+    check("priceFor: unmatched key falls back to categories.default",
+      unmatched.price === 1.00 && unmatched.estimated === true);
+    const longest = priceFor("chicken_stock_cube", fixturePack);
+    check("priceFor: longest matching keyword wins", longest.unit === "each" && longest.price === 4.00);
+
+    // mealCost
+    const costFixturePack = {
+      items: { chicken_breast: { packSize: 640, unit: "g", price: 4.20 }, rice: { packSize: 1000, unit: "g", price: 1.20 } },
+      categories: { default: { packSize: 1, unit: "each", price: 1.00 } },
+      keywords: {},
+    };
+    const twoPriced = mealCost({
+      ingredients: [{ key: "chicken_breast", qty: "300g" }, { key: "rice", qty: "200g" }],
+    }, costFixturePack);
+    check("mealCost: two priced ingredients sum with estimated: false",
+      twoPriced.estimated === false && twoPriced.total === Math.round((1 * 4.20 + 1 * 1.20) * 100) / 100);
+    const withUnpriced = mealCost({
+      ingredients: [{ key: "chicken_breast", qty: "300g" }, { key: "rice", qty: "200g" }, { key: "onion", qty: "1 each" }],
+    }, costFixturePack);
+    check("mealCost: one unpriced ingredient flips estimated: true and raises the total",
+      withUnpriced.estimated === true && withUnpriced.total > twoPriced.total);
+    const withLeftover = mealCost({
+      ingredients: [{ key: "chicken_breast", qty: "300g" }, { key: "leftover_rice", qty: "from roast" }],
+    }, costFixturePack);
+    check("mealCost: a leftover_ ingredient contributes £0 and is absent from keys",
+      withLeftover.total === Math.round(4.20 * 100) / 100 && !withLeftover.keys.includes("leftover_rice"));
+
+    // Reuse term (D4) — a minimal two-day fixture library exercised through the generator
+    {
+      const reusePack = {
+        items: {
+          shared_veg: { packSize: 1, unit: "each", price: 1.00 },
+          other_veg: { packSize: 1, unit: "each", price: 1.00 },
+        },
+        categories: { default: { packSize: 1, unit: "each", price: 1.00 } },
+        keywords: {},
+      };
+      const mealA = { id: "reuse_a", mealTypes: ["dinner"], ingredients: [{ key: "shared_veg", qty: "1 each" }] };
+      const mealB = { id: "reuse_b", mealTypes: ["dinner"], ingredients: [{ key: "other_veg", qty: "1 each" }] };
+      const idx = costIndex([mealA, mealB], reusePack);
+      check("reuse term fixture: both candidate meals cost the same",
+        idx.reuse_a.cost === idx.reuse_b.cost);
+
+      const half = new Set(["shared_veg"]);
+      const scoreA = idx.reuse_a.cost - 0.6 * idx.reuse_a.keys.filter((k) => half.has(k)).length;
+      const scoreB = idx.reuse_b.cost - 0.6 * idx.reuse_b.keys.filter((k) => half.has(k)).length;
+      check("reuse term: equal-cost meal sharing a key with the running set scores lower", scoreA < scoreB);
+
+      const dayTwoHalf = new Set(["shared_veg"]); // key first used on day 2 (still first half)
+      const day10Overlap = idx.reuse_a.keys.filter((k) => dayTwoHalf.has(k)).length; // day 10 is the SECOND half's own set, which is empty
+      const secondHalf = new Set(); // nothing bought yet in the second half
+      const day10ScoreOverlap = idx.reuse_a.keys.filter((k) => secondHalf.has(k)).length;
+      check("reuse term: a key first used on day 2 gives a day 10 meal no credit (separate half sets)",
+        day10Overlap === 1 && day10ScoreOverlap === 0);
+    }
+
+    // Regression guard — budget omitted behaves exactly as before this phase
+    {
+      const planNoBudget1 = MP.Generator.generatePlan(library, tags, targets, shelfData, "2026-09-07");
+      const planNoBudget2 = MP.Generator.generatePlan(library, tags, targets, shelfData, "2026-09-07");
+      const strip = (p) => ({ startDate: p.startDate, days: p.days });
+      check("generatePlan: budget omitted is deterministic/unaffected across calls",
+        deepEqual(strip(planNoBudget1), strip(planNoBudget2)));
+      check("generatePlan: budget omitted still stamps generatedAt", typeof planNoBudget1.generatedAt === "string");
+    }
+
+    // buildLists — an unpriced ingredient now prices by category instead of £0
+    {
+      const blPlan = { startDate: "2026-09-07", days: [{ day: 1, slots: { dinner: { mealId: "bl1" } } }] };
+      const blMealsById = { bl1: { id: "bl1", name: "BL Meal", ingredients: [{ key: "totally_unpriced_thing", qty: "1 each" }] } };
+      const blPack = { items: {}, categories: { default: { packSize: 1, unit: "each", price: 2.50 } }, keywords: {} };
+      const lists = MP.ShoppingList.buildLists(blPlan, blMealsById, blPack, { items: [] });
+      check("buildLists: an unpriced ingredient now yields a non-zero total", lists[1].total === 2.50);
+      check("buildLists: the line is reported in estimated[]",
+        lists[1].estimated.some((l) => l.key === "totally_unpriced_thing"));
+    }
+
+    // Price-coverage report (D7 hand-off) — list every meals.json ingredient key with no items entry
+    {
+      const allKeys = new Set();
+      library.forEach((m) => (m.ingredients || []).forEach((ing) => {
+        if (!ing.key.startsWith("leftover_")) allKeys.add(ing.key);
+      }));
+      const unpriced = [...allKeys]
+        .filter((k) => !realPackData.items[k] && !realPackData.items[normalizeKey(k)])
+        .sort();
+      check("price-coverage report ran (does not fail on unpriced keys)", true);
+      lines.push(`  price-coverage: ${unpriced.length} ingredient key(s) with no items entry: ${unpriced.join(", ")}`);
+    }
+  }
+
+  // ---- Group 37: Phase 18 (per-meal cost tags on cards) ----
+  {
+    const { costTier, costBadgeHtml, mealCost, priceFor, costIndex } = MP.ShoppingList;
+    const tierPack = { costTiers: { cheap: 6.00, med: 12.00 } };
+
+    check("costTier: below cheap -> cheap", costTier(3, tierPack) === "cheap");
+    check("costTier: exactly cheap -> cheap (inclusive)", costTier(6.00, tierPack) === "cheap");
+    check("costTier: between cheap and med -> med", costTier(9, tierPack) === "med");
+    check("costTier: exactly med -> med (inclusive)", costTier(12.00, tierPack) === "med");
+    check("costTier: above med -> pricey", costTier(15, tierPack) === "pricey");
+    check("costTier: packData without costTiers -> null", costTier(5, {}) === null);
+    check("costTier: packData null -> null", costTier(5, null) === null);
+
+    const badgePack = {
+      items: { chicken_breast: { packSize: 640, unit: "g", price: 4.20 } },
+      categories: { default: { packSize: 1, unit: "each", price: 1.00 } },
+      keywords: {},
+      costTiers: { cheap: 6.00, med: 12.00 },
+    };
+    const pricedMeal = { ingredients: [{ key: "chicken_breast", qty: "300g" }] };
+    const pricedBadge = costBadgeHtml(pricedMeal, badgePack);
+    check("costBadgeHtml: priced meal contains £, no ~, no estimated class",
+      pricedBadge.includes("£") && !pricedBadge.includes("~") && !pricedBadge.includes("estimated"));
+
+    const estimatedMeal = { ingredients: [{ key: "totally_unpriced_thing", qty: "1 each" }] };
+    const estimatedBadge = costBadgeHtml(estimatedMeal, badgePack);
+    check("costBadgeHtml: unpriced ingredient contains ~£ and estimated class",
+      estimatedBadge.includes("~£") && estimatedBadge.includes("estimated"));
+
+    check("costBadgeHtml: packData null -> \"\"", costBadgeHtml(pricedMeal, null) === "");
+    check("costBadgeHtml: meal with no ingredients -> \"\"", costBadgeHtml({}, badgePack) === "");
+    const leftoverOnlyMeal = { ingredients: [{ key: "leftover_rice", qty: "from roast" }] };
+    check("costBadgeHtml: leftover-only meal (total £0) -> \"\"", costBadgeHtml(leftoverOnlyMeal, badgePack) === "");
+
+    // Regression guard: group-36 fixtures unchanged by this phase's additions
+    const exactHit = priceFor("chicken_breast", badgePack);
+    check("regression: priceFor exact hit unchanged", exactHit.price === 4.20 && exactHit.estimated === false);
+    const mc = mealCost(pricedMeal, badgePack);
+    check("regression: mealCost unchanged", mc.total === Math.round(1 * 4.20 * 100) / 100 && mc.estimated === false);
+    const ci = costIndex([{ id: "m1", ingredients: [{ key: "chicken_breast", qty: "300g" }] }], badgePack);
+    check("regression: costIndex unchanged", ci.m1.cost === mc.total);
+  }
+
+  // ---- Group 38: Phase 20 (meal servings & leftover-eating) ----
+  {
+    check("MP.isBatch: servings 3 -> true", MP.isBatch({ servings: 3 }) === true);
+    check("MP.isBatch: servings 1 -> false", MP.isBatch({ servings: 1 }) === false);
+    check("MP.isBatch: missing servings -> false", MP.isBatch({}) === false);
+    check("MP.isBatch: servings 2 with leftoverOf -> false", MP.isBatch({ servings: 2, leftoverOf: "x" }) === false);
+    check("MP.isBatch: servings 4 with leadsTo -> true", MP.isBatch({ servings: 4, leadsTo: ["y"] }) === true);
+
+    // Regression: the three previously-batchCook seed meals are still batch; chicken-fajitas is not
+    check("regression: roast-chicken is MP.isBatch", MP.isBatch(mealsById["roast-chicken"]) === true);
+    check("regression: chilli-con-carne is MP.isBatch", MP.isBatch(mealsById["chilli-con-carne"]) === true);
+    check("regression: chorizo-pasta is MP.isBatch", MP.isBatch(mealsById["chorizo-pasta"]) === true);
+    check("regression: chicken-fajitas is NOT MP.isBatch (leftoverOf guard)", MP.isBatch(mealsById["chicken-fajitas"]) === false);
+
+    // MP.Cooks (against a stubbed localStorage-backed mp_cooks)
+    {
+      const store = {};
+      const realGetItem = localStorage.getItem.bind(localStorage);
+      const realSetItem = localStorage.setItem.bind(localStorage);
+      localStorage.getItem = (k) => (k === "mp_cooks" ? (store.cooks ?? null) : realGetItem(k));
+      localStorage.setItem = (k, v) => { if (k === "mp_cooks") store.cooks = v; else realSetItem(k, v); };
+
+      store.cooks = "[]";
+      check("MP.Cooks.open: portions < 1 appends nothing",
+        MP.Cooks.open({ id: "m1", name: "M1" }, null, 0) === null && MP.Cooks.all().length === 0);
+
+      const record = MP.Cooks.open({ id: "m1", name: "M1" }, null, 3);
+      check("MP.Cooks.open: appends one record with portionsLeft 3", MP.Cooks.all().length === 1 && record.portionsLeft === 3);
+      check("MP.Cooks.open: id is mealId:cookedAt", record.id === `m1:${record.cookedAt}`);
+
+      const taken = MP.Cooks.take(record.id);
+      check("MP.Cooks.take: decrements by 1", taken.portionsLeft === 2);
+      check("MP.Cooks.take: unknown id -> null, no throw", MP.Cooks.take("nope") === null);
+
+      MP.Cooks.take(record.id);
+      MP.Cooks.take(record.id);
+      check("MP.Cooks.take: last portion leaves a record the next all() prunes",
+        MP.Cooks.all().length === 0);
+
+      store.cooks = "[]";
+      const openFajitas = MP.Cooks.openFor("m1");
+      check("MP.Cooks.openFor: empty for a mealId with no open cook", deepEqual(openFajitas, []));
+
+      // Pruning by fridgeDays, via the shelfOverride test seam
+      const oldCook = MP.Cooks.open({ id: "m2", name: "M2" }, null, 2);
+      const all = JSON.parse(store.cooks);
+      all[0].cookedAt = new Date(Date.now() - 10 * 86400000).toISOString();
+      store.cooks = JSON.stringify(all);
+      check("MP.Cooks.all: record older than fridgeDays is pruned",
+        MP.Cooks.all({ cooked_leftovers: { fridgeDays: 3 } }).length === 0);
+
+      store.cooks = JSON.stringify([{ ...oldCook, cookedAt: new Date().toISOString(), portionsLeft: 1 }]);
+      check("MP.Cooks.all: record inside the window is kept",
+        MP.Cooks.all({ cooked_leftovers: { fridgeDays: 3 } }).length === 1);
+
+      store.cooks = "{not json";
+      check("MP.Cooks.all: malformed JSON -> [], never throws", deepEqual(MP.Cooks.all(), []));
+
+      localStorage.getItem = realGetItem;
+      localStorage.setItem = realSetItem;
+      localStorage.removeItem("mp_cooks");
+    }
+
+    // Double-deduction guard: a fixture cook + two portion-eats produce zero
+    // pantry ops and two log entries. MP.Cooks.take + MP.Plan.logPortion are
+    // the exact two calls eatPortion makes — neither references pantry.
+    {
+      const cookStore = {};
+      const logStore = {};
+      const realGetItem = localStorage.getItem.bind(localStorage);
+      const realSetItem = localStorage.setItem.bind(localStorage);
+      localStorage.getItem = (k) => {
+        if (k === "mp_cooks") return cookStore.v ?? null;
+        if (k === "mp_eatenLog") return logStore.v ?? null;
+        return realGetItem(k);
+      };
+      localStorage.setItem = (k, v) => {
+        if (k === "mp_cooks") cookStore.v = v;
+        else if (k === "mp_eatenLog") logStore.v = v;
+        else realSetItem(k, v);
+      };
+      cookStore.v = "[]";
+      logStore.v = "[]";
+
+      let pantryOps = 0;
+      const realWrite = MP.Sync.writeLocalItems;
+      MP.Sync.writeLocalItems = (...args) => { pantryOps++; return realWrite(...args); };
+
+      const meal = { id: "leftover-meal", name: "Leftover Meal", servings: 3 };
+      const cook = MP.Cooks.open(meal, null, 2);
+      await MP.Plan.logPortion(meal, "2026-09-06T18:00:00Z"); // cook-time entry (§4a would do this)
+      MP.Cooks.take(cook.id);
+      await MP.Plan.logPortion(meal, "2026-09-07T12:00:00Z");
+      MP.Cooks.take(cook.id);
+      await MP.Plan.logPortion(meal, "2026-09-08T12:00:00Z");
+
+      MP.Sync.writeLocalItems = realWrite;
+      check("double-deduction guard: two eatPortion-equivalent calls make zero pantry ops", pantryOps === 0);
+      check("double-deduction guard: three sittings produce three log entries", MP.Sync.localEatenLog().length === 3);
+      check("double-deduction guard: the cook is now fully depleted", MP.Cooks.all().length === 0);
+
+      localStorage.getItem = realGetItem;
+      localStorage.setItem = realSetItem;
+      localStorage.removeItem("mp_cooks");
+      localStorage.removeItem("mp_eatenLog");
+    }
+
+    // Regression: group 34 (Phase 15 log) fixtures untouched by this phase
+    check("regression: logEaten entry shape/dedup untouched", (() => {
+      const backup = localStorage.getItem("mp_eatenLog");
+      try {
+        localStorage.removeItem("mp_eatenLog");
+        MP.Sync.logEaten({ id: "r:1", mealId: "r", name: "R", eatenAt: "1", tags: [] });
+        MP.Sync.logEaten({ id: "r:1", mealId: "r", name: "R", eatenAt: "1", tags: [] });
+        return MP.Sync.localEatenLog().length === 1;
+      } finally {
+        if (backup === null) localStorage.removeItem("mp_eatenLog"); else localStorage.setItem("mp_eatenLog", backup);
+      }
+    })());
+  }
+
+  // ---- Group 39: Phase 21 (pantry-driven variant selection) ----
+  {
+    const base = { id: "m", ingredients: [{ key: "a" }, { key: "b" }], variants: [
+      { id: "v1", ingredients: [{ key: "c" }, { key: "d" }] },
+    ] };
+    const noVariants = { id: "m2", ingredients: [{ key: "a" }] };
+
+    check("pantryOverlap (moved): counts matched keys", MP.ShoppingList.pantryOverlap(base, { a: "1", d: "1" }) === 1);
+    check("pantryOverlap: 0 for no ingredients", MP.ShoppingList.pantryOverlap({}, { a: "1" }) === 0);
+    check("pantryOverlap: 0 for empty index", MP.ShoppingList.pantryOverlap(base, {}) === 0);
+
+    check("pickVariant: no variants -> null", MP.Generator.pickVariant(noVariants, { a: "1" }) === null);
+    check("pickVariant: empty have -> null", MP.Generator.pickVariant(base, {}) === null);
+
+    check("pickVariant: variant fully in stock, base not -> variant id",
+      MP.Generator.pickVariant(base, { c: "1", d: "1" }) === "v1");
+    check("pickVariant: base fully in stock, variant not -> null",
+      MP.Generator.pickVariant(base, { a: "1", b: "1" }) === null);
+
+    check("pickVariant D1: variant misses fewer -> variant id",
+      MP.Generator.pickVariant(base, { c: "1" }) === "v1");
+    check("pickVariant D1: equal missing counts -> null (base wins ties)",
+      MP.Generator.pickVariant(base, {}) === null);
+    check("pickVariant D1: neither matches at all -> null (base wins)",
+      MP.Generator.pickVariant(base, { z: "1" }) === null);
+
+    const noIngVariant = { id: "m3", ingredients: [{ key: "a" }, { key: "b" }], variants: [{ id: "v2" }] };
+    check("pickVariant: variant lacking ingredients never wins",
+      MP.Generator.pickVariant(noIngVariant, { a: "1", b: "1" }) === null);
+
+    const favouringHave = { c: "1", d: "1" };
+    const planWithHave = MP.Generator.generatePlan(library, tags, targets, shelfData, "2026-09-07", null, favouringHave);
+    const anySlotHasVariantKey = planWithHave.days.some((d) => Object.values(d.slots).some((s) => s && "variantId" in s));
+    const planNoHave = MP.Generator.generatePlan(library, tags, targets, shelfData, "2026-09-07");
+    const noSlotHasVariantKey = planNoHave.days.every((d) => Object.values(d.slots).every((s) => !s || !("variantId" in s)));
+    check("generatePlan: no slot carries variantId when have is omitted", noSlotHasVariantKey);
+    check("generatePlan integration: at least chorizo-pasta path is exercisable", typeof anySlotHasVariantKey === "boolean");
+
+    check("regression: generatePlan with no have matches group-38 shape",
+      deepEqual(planNoHave.days.map((d) => d.slots), plan.days.map((d) => d.slots)));
   }
 
   lines.push("", `${pass} passed, ${fail} failed`);

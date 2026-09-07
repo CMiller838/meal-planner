@@ -116,8 +116,9 @@
 
   function tagRowHtml(meal) {
     const tags = collectMealTags(meal);
-    if (!tags.length) return "";
-    return `<div class="tag-row">${tags
+    const costBadge = MP.ShoppingList.costBadgeHtml(meal, packData);
+    if (!tags.length && !costBadge) return "";
+    return `<div class="tag-row">${costBadge}${tags
       .map((t) => `<span class="tag ${t.level}">${esc(labelize(t.nutrient))} ${esc(t.level)}</span>`)
       .join("")}</div>`;
   }
@@ -437,7 +438,6 @@
         id: "user-" + name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") + "-" + Date.now().toString(36),
         source: "manual",
         prepEffort: "quick",
-        batchCook: false,
         servings: 1,
         image: null,
       }),

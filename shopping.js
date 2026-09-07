@@ -14,8 +14,8 @@
 
   function loadTicked(plan) {
     const stored = JSON.parse(localStorage.getItem(LS_TICKED) || "null");
-    if (!stored || stored.startDate !== (plan.startDate || null)) {
-      return { startDate: plan.startDate || null, keys: [] };
+    if (!stored || stored.generatedAt !== (plan.generatedAt || undefined)) {
+      return { generatedAt: plan.generatedAt, keys: [] };
     }
     return stored;
   }
@@ -42,7 +42,7 @@
         <span class="shop-qty">${esc(fmtQty(line))}</span>
         <span class="shop-name">${esc(line.label)}</span>
         ${line.pantryQty ? `<span class="have">have ${esc(line.pantryQty)}</span>` : ""}
-        ${showPrice ? `<span class="shop-price">${line.price != null ? "£" + line.lineCost.toFixed(2) : ""}</span>` : ""}
+        ${showPrice ? `<span class="shop-price${line.estimated ? " estimated" : ""}">${line.price != null ? (line.estimated ? "~£" : "£") + line.lineCost.toFixed(2) : ""}</span>` : ""}
       </label>
       ${meals ? `<span class="shop-why">${meals}</span>` : ""}
     </li>`;
@@ -56,9 +56,9 @@
         <summary>Check you have these (${list.staples.length})</summary>
         <ul class="shop-list">${list.staples.map((l) => lineHtml(list.shopDay, l, ticked, false)).join("")}</ul>
       </details>` : ""}
-      ${list.unpriced.length ? `<details class="shop-extra">
-        <summary>Unpriced — check in store (${list.unpriced.length})</summary>
-        <ul class="shop-list">${list.unpriced.map((l) => lineHtml(list.shopDay, l, ticked, false)).join("")}</ul>
+      ${list.estimated.length ? `<details class="shop-extra">
+        <summary>Estimated — category price, not exact (${list.estimated.length})</summary>
+        <ul class="shop-list">${list.estimated.map((l) => lineHtml(list.shopDay, l, ticked, true)).join("")}</ul>
       </details>` : ""}
     </section>`;
   }
@@ -136,8 +136,33 @@
     });
   }
 
+  // ponytail: no arrow-key roving tabindex; two tabs don't earn one, add it if a tab row ever grows
+  function showTab(name) {
+    for (const pairName of ["planned", "adhoc"]) {
+      const active = pairName === name;
+      document.getElementById(`panel-${pairName}`).classList.toggle("hidden", !active);
+      const btn = document.getElementById(`tab-${pairName}`);
+      btn.classList.toggle("active", active);
+      btn.setAttribute("aria-selected", String(active));
+    }
+  }
+
+  function initTabs() {
+    showTab(location.hash === "#adhoc" ? "adhoc" : "planned");
+    for (const name of ["planned", "adhoc"]) {
+      document.getElementById(`tab-${name}`).addEventListener("click", () => {
+        location.hash = `#${name}`;
+        showTab(name);
+      });
+    }
+    window.addEventListener("hashchange", () => {
+      showTab(location.hash === "#adhoc" ? "adhoc" : "planned");
+    });
+  }
+
   async function init() {
     MP.initTheme();
+    initTabs();
     renderAdhoc();
     MP.Sync.fetchItems("adhoc").then(() => renderAdhoc());
 

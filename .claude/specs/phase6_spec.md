@@ -31,7 +31,7 @@ form; the sync half is free because `MP.saveLibrary()` already stamps and fires
 | Meal-type filter chips | §5 — static markup, one `.filter()` line |
 
 **The trap that shapes §3:** an edit must preserve every field the form does not show —
-`batchCook`, `leadsTo`, `leftoverOf`, `servings`, `prepEffort`, `image`, `id`, `source`.
+`leadsTo`, `leftoverOf`, `servings`, `prepEffort`, `image`, `id`, `source`.
 Editing `roast-chicken`'s description must not quietly break its batch-cook chain into
 `chicken-fajitas`, and must not change its `id`, which a saved plan (`mp_plan`) references
 by `mealId`. Spread the original, overwrite only the five edited fields.

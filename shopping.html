@@ -27,13 +27,19 @@
 </nav>
 
 <main>
-  <section class="section">
-    <h2>Shopping list</h2>
+  <div class="tab-bar" role="tablist">
+    <button class="tab-btn active" role="tab" id="tab-planned"
+            aria-controls="panel-planned" aria-selected="true">Shopping list</button>
+    <button class="tab-btn" role="tab" id="tab-adhoc"
+            aria-controls="panel-adhoc" aria-selected="false">Ad-hoc list</button>
+  </div>
+
+  <section id="panel-planned" class="tab-panel" role="tabpanel" aria-labelledby="tab-planned">
     <p id="shopping-meta" class="muted"></p>
+    <div id="shopping-root"></div>
   </section>
-  <div id="shopping-root"></div>
-  <section class="section">
-    <h2>Ad-hoc list</h2>
+
+  <section id="panel-adhoc" class="tab-panel hidden" role="tabpanel" aria-labelledby="tab-adhoc">
     <div id="adhoc-root"></div>
   </section>
 </main>

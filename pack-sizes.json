@@ -30,5 +30,34 @@
     "tuna_tin": { "label": "Tuna, 145g tin", "packSize": 1, "unit": "tins", "price": 1.10 },
     "white_bread": { "label": "White loaf", "packSize": 16, "unit": "slices", "price": 1.10 },
     "white_sauce": { "label": "White sauce jar", "packSize": 1, "unit": "each", "price": 1.50, "staple": true }
-  }
+  },
+  "categories": {
+    "veg": { "packSize": 1, "unit": "each", "price": 0.70 },
+    "fruit": { "packSize": 1, "unit": "each", "price": 0.30 },
+    "meat": { "packSize": 500, "unit": "g", "price": 4.00 },
+    "fish": { "packSize": 1, "unit": "each", "price": 4.00 },
+    "dairy": { "packSize": 500, "unit": "g", "price": 1.80 },
+    "pantry": { "packSize": 500, "unit": "g", "price": 1.00 },
+    "bakery": { "packSize": 1, "unit": "each", "price": 1.20 },
+    "default": { "packSize": 1, "unit": "each", "price": 1.00 }
+  },
+  "keywords": {
+    "pepper": "veg", "onion": "veg", "carrot": "veg", "broccoli": "veg",
+    "potato": "veg", "tomato": "veg", "spinach": "veg", "cucumber": "veg",
+    "lettuce": "veg", "courgette": "veg", "garlic": "veg", "mushroom": "veg",
+    "leek": "veg", "cabbage": "veg", "sweetcorn": "veg", "pea": "veg",
+    "banana": "fruit", "apple": "fruit", "orange": "fruit", "berry": "fruit",
+    "lemon": "fruit", "lime": "fruit", "grape": "fruit",
+    "chicken": "meat", "beef": "meat", "mince": "meat", "pork": "meat",
+    "bacon": "meat", "sausage": "meat", "chorizo": "meat", "lamb": "meat",
+    "turkey": "meat", "ham": "meat",
+    "salmon": "fish", "tuna": "fish", "cod": "fish", "prawn": "fish",
+    "cheese": "dairy", "milk": "dairy", "yogurt": "dairy", "butter": "dairy",
+    "cream": "dairy", "egg": "dairy",
+    "bread": "bakery", "roll": "bakery", "tortilla": "bakery", "wrap": "bakery",
+    "pasta": "pantry", "rice": "pantry", "oats": "pantry", "flour": "pantry",
+    "sauce": "pantry", "beans": "pantry", "stock": "pantry", "spice": "pantry"
+  },
+  "planning": { "shortlistSize": 4, "reuseCredit": 0.60 },
+  "costTiers": { "cheap": 6.00, "med": 12.00 }
 }

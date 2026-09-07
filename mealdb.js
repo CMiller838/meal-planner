@@ -55,7 +55,6 @@
       name: detail.strMeal,
       source: "themealdb",
       mealTypes: detail.strCategory === "Breakfast" ? ["breakfast"] : ["dinner"],
-      batchCook: false,
       servings: 1,
       description: (detail.strInstructions || "").slice(0, 140).trim() + "…",
       instructions: detail.strInstructions || "",

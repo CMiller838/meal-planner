@@ -188,6 +188,11 @@ h1, h2, h3 { line-height: 1.2; }
 }
 .tag.high { color: #fff; background: var(--accent-2); border-color: var(--accent-2); }
 .tag.med { color: #3a2a10; background: var(--butter); border-color: var(--butter); }
+.tag.cost { color: var(--text-dim); background: var(--surface-alt); border-color: var(--border); }
+.tag.cost.cheap { color: #fff; background: var(--accent-2); border-color: var(--accent-2); }
+.tag.cost.med { color: #3a2a10; background: var(--butter); border-color: var(--butter); }
+.tag.cost.pricey { color: var(--text-dim); background: var(--surface-alt); border-color: var(--border); }
+.tag.cost.estimated { font-style: italic; }
 
 section.section { margin-top: 2rem; }
 section.section h2 { display: flex; align-items: center; gap: .5rem; color: #fff6ea; }
@@ -586,6 +591,7 @@ button.ghost.danger { color: var(--danger); border-color: var(--danger); }
 .shop-line input[type="checkbox"] { accent-color: var(--accent); width: 1.1rem; height: 1.1rem; }
 .shop-qty { color: var(--text-dim); font-size: .85rem; }
 .shop-price { color: var(--text-dim); font-size: .85rem; }
+.shop-price.estimated { font-style: italic; }
 .shop-why {
   display: block;
   margin: .2rem 0 0 1.6rem;
@@ -617,5 +623,25 @@ button.ghost.danger { color: var(--danger); border-color: var(--danger); }
 .eat-row .eat-qty { flex: 0 1 6rem; }
 .eat-row .eat-after { color: var(--text-dim); font-size: .8rem; }
 .eat-row.shortfall .eat-after { color: var(--danger); }
+.eat-cook-options { display: flex; flex-direction: column; gap: .5rem; margin-top: .5rem; }
+.eat-cook-options button { width: 100%; text-align: left; }
 
 ::selection { background: var(--butter); color: #3a2a10; }
+
+/* ---- Tabs (Phase 19) ---- */
+.tab-bar { display: flex; gap: .5rem; margin-top: 1.5rem; flex-wrap: nowrap; overflow-x: auto; min-width: 0; scrollbar-width: none; -ms-overflow-style: none; }
+.tab-bar::-webkit-scrollbar { display: none; }
+.tab-bar > * { flex: 0 0 auto; }
+.tab-btn {
+  color: var(--text-dim);
+  padding: .5rem .9rem;
+  border-radius: 999px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  font-size: .92rem;
+  font-weight: 700;
+  transition: background .2s ease, color .2s ease;
+}
+.tab-btn.active { color: #fff; background: var(--accent); box-shadow: 0 3px 10px rgba(212, 99, 59, .5); }
+.tab-panel { margin-top: 1rem; }

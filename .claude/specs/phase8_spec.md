@@ -24,7 +24,7 @@ so any of them can be overridden before the build starts.
 | Reading the file | `URL.createObjectURL(file)` + `<img>`, not `FileReader`. One fewer async hop and it never base64-encodes the full-size original into memory just to throw it away |
 | Downscale budget | Longest side 640px, JPEG quality ladder `[0.72, 0.6, 0.5, 0.4]`, first result whose data-URL is ≤ 70 000 chars wins; one fallback redraw at 320px/0.5 if none is. See §2b for why a fixed quality is not enough |
 | Where `shrinkImage` lives | `app.js`. Only the form uses it, it needs `document`, and `mealdb.js` must stay Worker-importable |
-| `image` becomes editable | Phase 6's tasklist froze `image` as a field an edit must not touch. **This phase deliberately unfreezes exactly that one field.** Everything else Phase 6 froze (`batchCook`, `leadsTo`, `leftoverOf`, `servings`, `prepEffort`, `source`, `id`) stays frozen |
+| `image` becomes editable | Phase 6's tasklist froze `image` as a field an edit must not touch. **This phase deliberately unfreezes exactly that one field.** Everything else Phase 6 froze (`leadsTo`, `leftoverOf`, `servings`, `prepEffort`, `source`, `id`) stays frozen |
 
 ---
 

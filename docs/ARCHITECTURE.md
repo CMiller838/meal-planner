@@ -110,6 +110,12 @@ Seven keys, all plain JSON values, no versioning scheme beyond `updatedAt`:
   `tags` are nutrient names resolved by `tagsForMeal` and **frozen at eat
   time** — re-tagging an ingredient later doesn't rewrite past entries.
 
+- `mp_cooks` (Phase 20, localStorage only) → a **bare JSON array** of
+  `{id, mealId, name, variantId, cookedAt, portionsLeft}` — open leftover
+  portions from a multi-serving cook. **Local-only: no KV key, no Worker
+  route, no Hermes mirror.** Pruned on read (`MP.Cooks.all()`) by
+  `portionsLeft <= 0` and `shelf-life.json`'s `cooked_leftovers.fridgeDays`.
+
 Writes to `pantry`, `adhoc`, `plan` and `prefs` are **local-first**: the app
 updates its localStorage mirror synchronously and renders from it, then
 either replays a pending-op log (`pantry`/`adhoc`) or does a best-effort,
@@ -160,3 +166,33 @@ path.
   instructions; every consumer of a planned meal's recipe (shopping list,
   nutrition, shelf-life, plan rendering) goes through it rather than adding
   its own variant branch.
+- **Cost-weighted generation (Phase 17), local-only, no Hermes involvement.**
+  `pack-sizes.json` gained `categories` (~8 aisle fallbacks, `default`
+  terminal), `keywords` (substring → category, longest match wins), and
+  `planning: {shortlistSize, reuseCredit}`. `shopping-list.js` exports
+  `priceFor`/`mealCost`/`costIndex` — `costIndex(library, packData)` is the
+  only thing `generator.js` ever sees of pricing, as a plain
+  `{[mealId]: {cost, keys}}` map — `plan.js`, which loads both, builds the
+  `costIndex` and passes it into `generatePlan(..., budget)` as an optional
+  6th argument. Cost only ever reorders *within* the nutrient-ranked
+  shortlist `pickMeal` already produces — it never changes that ranking.
+- **Per-meal cost badges (Phase 18), rendering only, no new pricing maths.**
+  `pack-sizes.json` gained `costTiers: {cheap, med}` (hand-tuned thresholds,
+  both bounds inclusive). `shopping-list.js` exports `costTier(total,
+  packData)` and `costBadgeHtml(meal, packData)` — both live there rather than
+  in `app.js`/`discover.js` so the render helper isn't duplicated a third
+  time. `costBadgeHtml` calls `mealCost` on the **base** meal (matching Phase
+  17) and interpolates only numbers and the fixed tier/estimated words, never
+  meal data, into the `<span>` it returns. `app.js`'s `tagRowHtml` and
+  `discover.js`'s card renderers prepend it to the existing `.tag-row`;
+  `discover.js` fetches its own `packData` via `MP.ShoppingList.load()` since
+  `app.js`'s module-level `packData` isn't shared across pages.
+- **Pantry-driven variant selection (Phase 21).** `pantryOverlap` moved from
+  `discover.js` to `shopping-list.js` (beside `normalizeKey`/`pantryIndex`) and
+  is exported from `MP.ShoppingList`; Discover's `orderPool` now calls the
+  exported version rather than a local copy. `generator.js` gained
+  `pickVariant(meal, have)`, called only from `place()`, and `generatePlan`
+  gained an optional trailing `have` argument (a pantry key index) — `plan.js`
+  builds it synchronously from `MP.ShoppingList.pantryIndex({ items:
+  MP.Sync.localItems("pantry") })` and passes it through. This is a second
+  pantry **reader**; `plan.js`'s `commitCook` remains the only pantry writer.

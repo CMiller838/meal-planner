@@ -65,11 +65,79 @@ window.MP = window.MP || {};
     return idx;
   }
 
+  /** Count of a meal's ingredients already on hand, by normalized key. */
+  function pantryOverlap(meal, have) {
+    return (meal.ingredients || []).filter((ing) => have[normalizeKey(ing.key)]).length;
+  }
+
   function isSkippedIngredient(ing) {
     return ing.key.startsWith("leftover_") || /leftover|from roast/i.test(ing.qty || "");
   }
 
-  /** Dinner-slot batch dedupe: skip if same mealId as previous day's dinner and batchCook. */
+  /** priceFor: exact items hit -> longest keyword substring -> categories.default.
+   * Never null, never throws when categories is absent (pre-Phase-17 data). */
+  function priceFor(key, packData) {
+    const norm = normalizeKey(key);
+    // items keys match meals.json's raw (unstripped-plural) keys — try that
+    // before the normalized form, since normalizeKey's plural-stripping
+    // (baked_beans -> baked_bean) would otherwise miss every existing entry.
+    const item = packData.items[key] || packData.items[norm];
+    if (item) return { packSize: item.packSize, unit: item.unit, price: item.price, estimated: false };
+    if (!packData.categories) return null;
+    let bestCat = null, bestLen = -1;
+    Object.entries(packData.keywords || {}).forEach(([kw, cat]) => {
+      if (norm.includes(kw) && kw.length > bestLen) {
+        bestCat = cat;
+        bestLen = kw.length;
+      }
+    });
+    const cat = packData.categories[bestCat] || packData.categories.default;
+    return { packSize: cat.packSize, unit: cat.unit, price: cat.price, estimated: true };
+  }
+
+  function mealCost(meal, packData) {
+    let total = 0, estimated = false;
+    const keys = [];
+    (meal.ingredients || []).forEach((ing) => {
+      if (isSkippedIngredient(ing)) return;
+      keys.push(normalizeKey(ing.key));
+      const resolved = priceFor(ing.key, packData);
+      if (!resolved) return;
+      if (resolved.estimated) estimated = true;
+      const needed = parseQty(ing.qty);
+      total += packsFor(needed, resolved) * resolved.price;
+    });
+    return { total: Math.round(total * 100) / 100, estimated, keys };
+  }
+
+  function costTier(total, packData) {
+    const tiers = packData && packData.costTiers;
+    if (!tiers) return null;
+    if (total <= tiers.cheap) return "cheap";
+    if (total <= tiers.med) return "med";
+    return "pricey";
+  }
+
+  function costBadgeHtml(meal, packData) {
+    if (!packData || !(meal.ingredients || []).length) return "";
+    const { total, estimated } = mealCost(meal, packData);
+    if (total === 0) return "";
+    const tier = costTier(total, packData);
+    const cls = ["tag", "cost", tier, estimated ? "estimated" : ""].filter(Boolean).join(" ");
+    const prefix = estimated ? "~£" : "£";
+    return `<span class="${cls}">${prefix}${total.toFixed(2)}</span>`;
+  }
+
+  function costIndex(library, packData) {
+    const idx = {};
+    library.forEach((meal) => {
+      const { total, keys } = mealCost(meal, packData);
+      idx[meal.id] = { cost: total, keys };
+    });
+    return idx;
+  }
+
+  /** Dinner-slot batch dedupe: skip if same mealId as previous day's dinner and MP.isBatch. */
   function purchaseOccurrences(plan, mealsById) {
     const occ = []; // { day, meal }
     plan.days.forEach((day, idx) => {
@@ -80,7 +148,7 @@ window.MP = window.MP || {};
         if (!meal) return;
         if (slotType === "dinner" && idx > 0) {
           const prevSlot = plan.days[idx - 1].slots.dinner;
-          if (prevSlot && prevSlot.mealId === slot.mealId && meal.batchCook) return;
+          if (prevSlot && prevSlot.mealId === slot.mealId && MP.isBatch(meal)) return;
         }
         occ.push({ day: day.day, meal: MP.effectiveMeal(meal, slot.variantId) });
       });
@@ -91,8 +159,8 @@ window.MP = window.MP || {};
   function buildLists(plan, mealsById, packData, pantry) {
     const have = pantryIndex(pantry);
     const lists = {
-      1: { shopDay: 1, lines: [], staples: [], unpriced: [], total: 0 },
-      8: { shopDay: 8, lines: [], staples: [], unpriced: [], total: 0 },
+      1: { shopDay: 1, lines: [], staples: [], estimated: [], total: 0 },
+      8: { shopDay: 8, lines: [], staples: [], estimated: [], total: 0 },
     };
     // shopDay -> key -> { parses: [{value,unit}|null], meals: Set, label }
     const groups = { 1: {}, 8: {} };
@@ -113,6 +181,7 @@ window.MP = window.MP || {};
       let total = 0;
       Object.entries(groups[shopDay]).forEach(([key, g]) => {
         const item = packData.items[key] || null;
+        const resolved = priceFor(key, packData);
         const sameUnit = g.parses.every((p) => p && p.unit === g.parses[0].unit);
         let needed = sameUnit && g.parses[0]
           ? { value: g.parses.reduce((s, p) => s + p.value, 0), unit: g.parses[0].unit }
@@ -130,33 +199,35 @@ window.MP = window.MP || {};
           }
         }
 
-        const packs = packsFor(needed, item);
-        const price = item ? item.price : null;
+        const packs = packsFor(needed, resolved);
+        const price = resolved ? resolved.price : null;
         const lineCost = price != null ? packs * price : 0;
         const line = {
           key,
           label: item && item.label ? item.label : g.label,
           needed,
-          packSize: item ? item.packSize : null,
-          unit: item ? item.unit : null,
+          packSize: resolved ? resolved.packSize : null,
+          unit: resolved ? resolved.unit : null,
           packs,
           price,
           lineCost,
+          estimated: resolved ? resolved.estimated : false,
           meals: g.meals,
         };
         if (pantryQty !== undefined) line.pantryQty = pantryQty;
         if (raw !== undefined) line.onHand = onHand;
-        if (!item) list.unpriced.push(line);
-        else if (item.staple) list.staples.push(line);
+        if (!resolved) list.estimated.push(line);
+        else if (item && item.staple) list.staples.push(line);
         else {
           list.lines.push(line);
           total += lineCost;
+          if (line.estimated) list.estimated.push(line);
         }
       });
       const byLabel = (a, b) => a.label.localeCompare(b.label);
       list.lines.sort(byLabel);
       list.staples.sort(byLabel);
-      list.unpriced.sort(byLabel);
+      list.estimated.sort(byLabel);
       list.total = Math.round(total * 100) / 100;
     });
 
@@ -224,5 +295,5 @@ window.MP = window.MP || {};
     return { rows, ops };
   }
 
-  MP.ShoppingList = { load, buildLists, parseQty, packsFor, normalizeKey, pantryIndex, fmtRemaining, eatPlan };
+  MP.ShoppingList = { load, buildLists, parseQty, packsFor, normalizeKey, pantryIndex, pantryOverlap, fmtRemaining, eatPlan, priceFor, mealCost, costIndex, costTier, costBadgeHtml };
 })();
