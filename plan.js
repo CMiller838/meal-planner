@@ -16,6 +16,7 @@
   let packData = null;
   let plan = null;
   let warnings = {}; // "day-slotType" -> { message, moveToDay, category }; owned by renderPlan
+  let prefs = {}; // { vocab, busyDays, chips } from MP.PlanPrefs, set once at init
 
   function toast(msg) {
     const root = document.getElementById("toast-root");
@@ -92,7 +93,7 @@
       ? { costIndex: MP.ShoppingList.costIndex(library, packData), ...packData.planning }
       : null;
     const have = MP.ShoppingList.pantryIndex({ items: MP.Sync.localItems("pantry") });
-    return MP.Generator.generatePlan(library, tagsData.tags, tagsData.targets, shelfData, undefined, budget, have);
+    return MP.Generator.generatePlan(library, tagsData.tags, tagsData.targets, shelfData, undefined, budget, have, prefs);
   }
 
   function loadPlan() {
@@ -265,10 +266,8 @@
       const m = effectiveMealAt(day, s);
       return m ? [m] : [];
     });
-    const gapCov = MP.Nutrition.dayCoverage(others, tagsData.tags, tagsData.targets);
-    const gapNutrients = [...gapCov.missing, ...gapCov.partial];
     const pool = library.filter((m) => m.mealTypes.includes(slotType) && m.id !== currentId);
-    return MP.Nutrition.rankByGap(pool, gapNutrients, tagsData.tags);
+    return MP.Generator.rankSlot(pool, day, others, { tags: tagsData.tags, targets: tagsData.targets, prefs });
   }
 
   function openSwapPicker(day, slotType) {
@@ -772,12 +771,15 @@
       document.getElementById("hermes-banner").classList.add("hidden");
     });
 
-    [tagsData, shelfData, library, packData] = await Promise.all([
+    let vocab;
+    [tagsData, shelfData, library, packData, vocab] = await Promise.all([
       MP.Nutrition.load(),
       MP.ShelfLife.load(),
       MP.getLibrary(),
       MP.ShoppingList.load().catch(() => null),
+      MP.PlanPrefs.loadVocab(),
     ]);
+    prefs = Object.assign({ vocab }, MP.PlanPrefs.get());
     plan = loadPlan();
     savePlan();
     renderPlan();

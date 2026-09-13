@@ -9,6 +9,15 @@ description: Efficiency protocol for invoking the planner agent in phase mode (s
 its whole prior transcript. Follow these rules whenever invoking `planner`
 for a phase spec + tasks breakdown:
 
+### Token budget
+
+A phase-mode `planner` call should cost **roughly 100k subagent tokens or
+less**. When the agent's result reports its token spend, check it against
+this budget and tell the user the actual figure — don't wait for them to
+ask. A call that comes in well over 100k is a signal something above (a
+missed decision gate, a full-file `tasks.md` read, a coordinator pre-scan)
+went wrong, not just "planner is expensive" — say which rule likely slipped.
+
 1. **Do not pre-scan the codebase yourself.** `planner.md`'s own Stage 1
    already spawns a `scanner` subagent (Haiku, read-only) whenever a phase
    needs bulk file reading, and reports back only function signatures/
@@ -23,7 +32,13 @@ for a phase spec + tasks breakdown:
    at specific files, and where possible specific functions/line
    ranges/CSS selectors, directly in the `planner` prompt — this is what lets
    planner's own Stage 1 skip straight to targeted Glob/Grep or a scanner
-   call instead of an open-ended sweep.
+   call instead of an open-ended sweep. Spend a few of your own quick, targeted
+   greps (not a full scan) up front to find those line numbers/selectors for
+   *every* file the phase touches — including CSS rules and any doc
+   (`ARCHITECTURE.md`, a prior phase spec) that already pins a shape or
+   contract — rather than naming some files precisely and leaving others as
+   "go find it." Each anchor you hand over directly is scanning work planner's
+   own subagent doesn't have to redo.
 3. **Reference exactly one prior phase as the format model.** Tell `planner`
    which single phase's `.claude/specs/phaseN_spec.md` + its `tasks.md`
    section to match for depth/structure — never "look at prior phases" or
@@ -64,6 +79,12 @@ they're one CSS rule or one function away from being changed later.
   approach (e.g. "the spec assumed X could be reused, but it can't") is
   exactly the kind of thing to gate, not silently route around — the user
   chose that approach for a reason that may not be visible in the code.
+- A question an existing doc already answers (e.g. `ARCHITECTURE.md` already
+  pins a data shape, a prior phase spec already settled a convention) is not
+  a fork at all — tell `planner` explicitly: if a checked-in doc already
+  states the answer, follow it and note the citation in the spec, don't raise
+  a gate to confirm it. Reserve gates for places where no existing doc
+  decides it and the resolution genuinely changes the phase's shape.
 - If `planner` does surface gates, prefer resolving them in the **same
   message** that spawned it isn't possible after the fact — so front-load
   context (constraints, prior settled scope, what's out of bounds) into the

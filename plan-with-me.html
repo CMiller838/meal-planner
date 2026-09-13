@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Meal Planner — Plan with me</title>
+<meta name="theme-color" content="#121212" />
+<link rel="manifest" href="manifest.json" />
+<link rel="icon" href="icons/icon-192.png" />
+<link rel="apple-touch-icon" href="icons/icon-192.png" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="Meals" />
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+<nav class="nav">
+  <span class="brand">🍽 Meal Planner</span>
+  <div class="nav-links hscroll">
+    <a href="index.html">Browse & Add</a>
+    <a href="discover.html">Discover</a>
+    <a href="plan.html" class="active">2-Week Plan</a>
+    <a href="shopping.html">Shopping</a>
+  </div>
+  <button id="theme-toggle" class="icon-btn" title="Toggle dark/light mode">🌓</button>
+</nav>
+
+<main>
+  <h2>Plan with me</h2>
+  <p class="muted">Tap the days you'll be busy, then pick anything that should nudge the week.</p>
+
+  <h3>Busy days</h3>
+  <div id="busy-grid" class="busy-grid"></div>
+
+  <h3>Preferences</h3>
+  <div id="chip-row" class="chip-row"></div>
+
+  <div class="top-actions">
+    <button id="pwm-generate-btn" class="primary">Generate Plan</button>
+    <a class="btn-secondary" href="plan.html">Cancel</a>
+  </div>
+  <p id="pref-summary" class="muted"></p>
+</main>
+
+<script src="data.js"></script>
+<script src="plan-with-me.js"></script>
+<script>if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js");</script>
+</body>
+</html>

@@ -52,7 +52,12 @@ Installable as a PWA on Android Chrome via `manifest.json` + `sw.js`.
   rule as above — don't hardcode them in JS. Same for `costTiers`
   (cheap/med/pricey thresholds, Phase 18): the per-meal cost badges on
   Browse/Discover cards are informational only — they never sort or filter
-  meals.
+  meals. Same for chip/busy preferences (Phase 22): `generator.js`'s
+  `rankSlot` layers chips (prefer-to-head / avoid-to-tail) and busy-day
+  effort bias on top of `rankByGap`'s output — a reorder, never a re-score,
+  and chips never filter a meal out of the pool. `plan-preferences.json`
+  (chip vocabulary, busy effort mapping) is data, same "data, not inline
+  constants" rule as `nutrition-targets.json`/`pack-sizes.json`.
 - **Pantry stock never reorders nutrition either.** `generator.js`'s
   `pickVariant` (Phase 21) only chooses which variant of an already-chosen
   meal to schedule — nutrition ranking via `pickMeal`/`rankByGap` decides which
@@ -73,6 +78,12 @@ Installable as a PWA on Android Chrome via `manifest.json` + `sw.js`.
   nutrient-log entry per sitting and must never call anything pantry-related
   (`eatPlan`, `applyOps`, `writeLocalItems`, `queueOp`). Don't add a
   convenience path that lets a portion-eat touch the pantry.
+- **`mp_planPrefs` is settings, not plan state** (Phase 23): it holds only
+  `{ updatedAt, busyDays, chips }`, never a meal id or date. Losing it
+  degrades to today's behaviour (no busy days, no chips). `MP.PlanPrefs`
+  (`plan-with-me.js`) is its only reader/writer; `plan.js` reads it for
+  **both** entry points, so one-tap Generate is never replaced by the
+  "Plan with me" setup screen — it only becomes preference-aware.
 - **Hard content exclusions are enforced in code, not just docs**: no
   mushrooms (including from TheMealDB results), no standalone egg meals
   (egg-within-a-dish is fine), no vegetables in toasties. These came from

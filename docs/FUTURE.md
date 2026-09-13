@@ -193,3 +193,42 @@ key, no Worker route, no Hermes mirror.
 - **Revisit trigger**: Hermes wants to answer "what leftovers are in the
   fridge" — e.g. to avoid proposing a placement for a meal that already has
   an open portion sitting uneaten.
+
+## Choice screens for breakfast/lunch/snack slots (v4 interview)
+
+v4's dinner-only 3-card picker could in principle extend to every slot, not
+just dinner.
+
+- **Why parked**: a 2-week plan has up to 56 slots total; a 3-way choice on
+  every one is a lot of taps for slots (breakfast/snack) that are already
+  well served by the existing Day A/B rotation with no real variety
+  decision to make. Dinner is where the real trade-offs (effort, leftovers,
+  cost) actually live.
+- **Revisit trigger**: if lunch/breakfast variety becomes an actual
+  complaint once the dinner-only version has been used for a while.
+
+## Free-text preference input for the pre-plan screen (v4 interview)
+
+A text box like Hermes chat ("not much fish this week, feeling curries")
+instead of structured preference chips.
+
+- **Why parked**: the app is a static, no-backend site with no client-side
+  NLP; interpreting free text would mean calling out to the hosted Hermes
+  agent mid-flow, turning a local pre-plan screen into something that needs
+  network + Hermes availability to function. Structured chips solve the
+  same "steer the mood of this plan" need without that dependency.
+- **Revisit trigger**: if structured chips prove too limiting in practice
+  and the Hermes round-trip latency/failure-state cost is judged worth it.
+
+## Hermes direct plan writes (bypassing the app's re-check) (v4 interview)
+
+Letting Hermes's `/placements` (or a future write endpoint) apply
+immediately, overriding what the app would otherwise reject — e.g. an
+already-eaten slot.
+
+- **Why parked**: explicitly rejected during the v4 interview — Hermes's
+  expanded v4 access is read/propose only; the app stays the sole write
+  authority, same safety model as the existing `docs/HERMES.md` contract.
+- **Revisit trigger**: none currently anticipated — would need a real
+  reason the propose-then-app-applies model is causing friction in
+  practice.

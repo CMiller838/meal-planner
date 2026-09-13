@@ -45,6 +45,107 @@ window.MP = window.MP || {};
     return meal.prepEffort || "quick";
   }
 
+  /** Chip definitions from prefs.vocab, or [] when absent/malformed. */
+  function chipVocab(prefs) {
+    const vocab = prefs && prefs.vocab;
+    return (vocab && Array.isArray(vocab.chips)) ? vocab.chips : [];
+  }
+
+  /** True if `meal` satisfies ANY of the chip's keywords/tags/prepEffort criteria. */
+  function chipHits(meal, chip, tags) {
+    if (chip.keywords && chip.keywords.length) {
+      const name = (meal.name || "").toLowerCase();
+      const ingredients = meal.ingredients || [];
+      if (chip.keywords.some((kw) => name.includes(kw) || ingredients.some((i) => i.key.includes(kw)))) return true;
+    }
+    if (chip.tags && chip.tags.length) {
+      const ingredients = meal.ingredients || [];
+      if (ingredients.some((i) => chip.tags.some((t) => tags[i.key] && tags[i.key][t] === "high"))) return true;
+    }
+    if (chip.prepEffort && effortOf(meal) === chip.prepEffort) return true;
+    return false;
+  }
+
+  /** Ids in prefs.chips that exist in the vocab, split by kind. Unknown ids dropped. */
+  function activeChips(prefs) {
+    const ids = new Set((prefs && prefs.chips) || []);
+    const vocab = chipVocab(prefs).filter((c) => ids.has(c.id));
+    return {
+      prefer: vocab.filter((c) => c.kind === "prefer"),
+      avoid: vocab.filter((c) => c.kind === "avoid"),
+    };
+  }
+
+  /**
+   * Ordered candidates for one slot, best first. Layers, in order:
+   *   1 nutrition (rankByGap)  2 chips  3 effort/busy  4 budget shortlist  5 recency
+   * Layers 2-5 are stable reorders of layer 1 - none of them re-score nutrition.
+   * Returns every meal in `pool` (minus exclusions); chips never filter.
+   */
+  function rankSlot(pool, dayNum, dayMealsSoFar, opts) {
+    opts = opts || {};
+    const { tags, targets, prefs, budget, halfKeys } = opts;
+    const lastUsedDay = opts.lastUsedDay || {};
+    const excludeIds = opts.excludeIds || new Set();
+    let ranked = pool.filter((m) => !excludeIds.has(m.id));
+    if (!ranked.length) ranked = pool.slice(); // too small a pool to honour the exclusion; repeat is unavoidable
+    if (!ranked.length) return [];
+    const gap = MP.Nutrition.dayCoverage(dayMealsSoFar, tags, targets);
+    const gapNutrients = [...gap.missing, ...gap.partial];
+    ranked = MP.Nutrition.rankByGap(ranked, gapNutrients, tags);
+
+    const { prefer: preferChips, avoid: avoidChips } = activeChips(prefs);
+    if (preferChips.length || avoidChips.length) {
+      const prefer = [];
+      const neither = [];
+      const avoid = [];
+      for (const m of ranked) {
+        if (preferChips.some((c) => chipHits(m, c, tags))) prefer.push(m);
+        else if (avoidChips.some((c) => chipHits(m, c, tags))) avoid.push(m);
+        else neither.push(m);
+      }
+      ranked = prefer.concat(neither, avoid);
+    }
+
+    if (opts.prefer) {
+      const matches = ranked.filter((m) => effortOf(m) === opts.prefer);
+      const rest = ranked.filter((m) => effortOf(m) !== opts.prefer);
+      ranked = matches.concat(rest);
+    }
+    const busyVocab = prefs && prefs.vocab && prefs.vocab.busy;
+    if (busyVocab && prefs.busyDays && prefs.busyDays.includes(dayNum) && opts.prefer !== "batch") {
+      const matches = ranked.filter((m) => effortOf(m) === busyVocab.preferEffort);
+      const rest = ranked.filter((m) => effortOf(m) !== busyVocab.preferEffort);
+      ranked = matches.concat(rest);
+    }
+
+    if (budget) {
+      const half = dayNum <= 7 ? halfKeys.first : halfKeys.second;
+      const shortlist = ranked.slice(0, budget.shortlistSize).filter((m) => budget.costIndex[m.id]);
+      if (shortlist.length) {
+        const scored = shortlist.map((m) => {
+          const c = budget.costIndex[m.id];
+          const overlap = c.keys.filter((k) => half.has(k)).length;
+          return { m, score: c.cost - budget.reuseCredit * overlap };
+        });
+        const minScore = Math.min(...scored.map((s) => s.score));
+        const winners = scored.filter((s) => Math.abs(s.score - minScore) < 1e-9).map((s) => s.m);
+        const neverW = winners.filter((m) => !(m.id in lastUsedDay));
+        const usedW = winners
+          .filter((m) => m.id in lastUsedDay)
+          .sort((a, b) => lastUsedDay[a.id] - lastUsedDay[b.id]);
+        const head = neverW.concat(usedW);
+        const headIds = new Set(head.map((m) => m.id));
+        return head.concat(ranked.filter((m) => !headIds.has(m.id)));
+      }
+    }
+    const never = ranked.filter((m) => !(m.id in lastUsedDay));
+    const used = ranked
+      .filter((m) => m.id in lastUsedDay)
+      .sort((a, b) => lastUsedDay[a.id] - lastUsedDay[b.id]);
+    return never.concat(used);
+  }
+
   // ponytail: no plan-wide pantry depletion — two meals may both count the
   // last tin as in stock. Upgrade path is depletion tracking if it matters.
   /** Variant id whose ingredients best match `have`, or null for the base recipe. */
@@ -64,9 +165,10 @@ window.MP = window.MP || {};
     return bestId;
   }
 
-  function generatePlan(library, tags, targets, shelfData, startDate, budget, have) {
+  function generatePlan(library, tags, targets, shelfData, startDate, budget, have, prefs) {
     startDate = startDate || isoToday();
     have = have || {};
+    prefs = prefs || {};
     const mealsById = Object.fromEntries(library.map((m) => [m.id, m]));
     const dinnerPool = library.filter((m) => (m.mealTypes || []).includes("dinner"));
     const days = Array.from({ length: 14 }, (_, i) => ({ day: i + 1, slots: {} }));
@@ -94,46 +196,19 @@ window.MP = window.MP || {};
       return slot ? slot.mealId : null;
     }
 
-    function pickMeal(pool, dayNum, dayMealsSoFar, opts) {
-      opts = opts || {};
-      const excludeIds = opts.excludeIds || new Set();
-      let ranked = pool.filter((m) => !excludeIds.has(m.id));
-      if (!ranked.length) ranked = pool.slice(); // too small a pool to honour the exclusion; repeat is unavoidable
-      if (!ranked.length) return null;
-      const gap = MP.Nutrition.dayCoverage(dayMealsSoFar, tags, targets);
-      const gapNutrients = [...gap.missing, ...gap.partial];
-      ranked = MP.Nutrition.rankByGap(ranked, gapNutrients, tags);
-      if (opts.prefer) {
-        const matches = ranked.filter((m) => effortOf(m) === opts.prefer);
-        const rest = ranked.filter((m) => effortOf(m) !== opts.prefer);
-        ranked = matches.concat(rest);
-      }
-      if (budget) {
-        const half = dayNum <= 7 ? halfKeys.first : halfKeys.second;
-        const shortlist = ranked.slice(0, budget.shortlistSize).filter((m) => budget.costIndex[m.id]);
-        if (shortlist.length) {
-          const scored = shortlist.map((m) => {
-            const c = budget.costIndex[m.id];
-            const overlap = c.keys.filter((k) => half.has(k)).length;
-            return { m, score: c.cost - budget.reuseCredit * overlap };
-          });
-          const minScore = Math.min(...scored.map((s) => s.score));
-          const winners = scored.filter((s) => Math.abs(s.score - minScore) < 1e-9).map((s) => s.m);
-          const neverW = winners.filter((m) => !(m.id in lastUsedDay));
-          const usedW = winners
-            .filter((m) => m.id in lastUsedDay)
-            .sort((a, b) => lastUsedDay[a.id] - lastUsedDay[b.id]);
-          return neverW.concat(usedW)[0] || null;
-        }
-      }
-      const never = ranked.filter((m) => !(m.id in lastUsedDay));
-      const used = ranked
-        .filter((m) => m.id in lastUsedDay)
-        .sort((a, b) => lastUsedDay[a.id] - lastUsedDay[b.id]);
-      return never.concat(used)[0] || null;
-    }
+    const pickMeal = (pool, dayNum, dayMealsSoFar, opts) =>
+      rankSlot(pool, dayNum, dayMealsSoFar, { ...opts, tags, targets, prefs, budget, halfKeys, lastUsedDay })[0] || null;
 
-    const runs = weekendRuns(startDate);
+    const runs = weekendRuns(startDate).map((run) => {
+      if (run.some((d) => !(prefs.busyDays || []).includes(d))) {
+        const firstNonBusy = run.findIndex((d) => !(prefs.busyDays || []).includes(d));
+        if (firstNonBusy > 0) return run.slice(firstNonBusy);
+      }
+      return run;
+    });
+    // ponytail: rotation only, no re-splitting of runs. A [busy, free, busy] run
+    // cooks on day 2 and covers day 3; splitting to also cover day 1 needs a
+    // second parent and isn't worth it until someone complains.
     const filled = new Set();
 
     for (const run of runs) {
@@ -188,5 +263,5 @@ window.MP = window.MP || {};
     return { startDate, days, generatedAt: new Date().toISOString() };
   }
 
-  MP.Generator = { generatePlan, weekendRuns, weekdayOf, isoToday, pickVariant };
+  MP.Generator = { generatePlan, rankSlot, weekendRuns, weekdayOf, isoToday, pickVariant };
 })();

@@ -232,3 +232,89 @@ shelf-life, hard content exclusions, dark-mode-default) unchanged.
 - Any must-have from the nice-to-have list above landing as a v2 must-have —
   this version stays scoped to usability polish.
 - Anything not listed here or in `docs/FUTURE.md`.
+
+---
+
+# Meal Planner — v4 Outline
+
+## Problem
+
+Generating a plan today is fully automatic and silent: one tap on "Generate
+plan" and the generator picks every slot with no input from Cody and no
+visibility into why. It has no idea which days are actually going to be
+rushed, and there's no way to steer a plan's mood ("feeling comfort food this
+week") before it's built. Separately, Hermes can already trigger generation
+(`PUT /planFlag`) and propose individual slot placements (`PUT /placements`),
+but can't see or explain *how* the generator actually ranks/picks meals — so
+it can't answer "why was X picked" or hand Cody a couple of real options in
+chat, only fire-and-forget requests.
+
+## Users
+
+Solo tool, one user (Cody) — unchanged.
+
+## Must-haves
+
+- **Optional "Plan with me" pre-plan screen**, entered instead of the
+  existing one-tap Generate: a 14-day grid (same visual shape as the plan
+  grid) to tap-toggle busy days, plus a small set of structured preference
+  chips (mood/avoid-this-week style — no free text, no NL parsing). Defaults
+  to the last-saved busy-days/preferences and shows what they are before
+  generating, so re-running with the same settings stays low-friction; the
+  existing instant one-tap Generate keeps working unchanged for anyone who
+  wants to skip this screen entirely.
+- **Busy days bias generation**, using the existing `prepEffort` field
+  (`generator.js` already reads it): a day marked busy prefers quick/
+  low-effort meals and prefers a slot already covered by a leftover-chain
+  day over a fresh cook, same batch-cook/leftover-chain primitive the
+  generator already uses — no new data model.
+- **Dinner-only 3-card choice screen**: for each of the ~14 dinner slots
+  (breakfast/lunch/snack stay auto-filled from the existing rotation,
+  unchanged), show the generator's top 3 ranked candidates and let Cody tap
+  one. Reuses the existing swap-picker modal styling/pattern.
+- **Final review screen**: after dinner choices are made, show the full
+  built 14-day plan with a lightweight per-slot swap affordance (same swap-
+  picker pattern) before committing — a last look/adjust step, not a second
+  round of forced choices.
+- **Hermes gets full read/propose access to the generator's ranking**, all
+  in this version together:
+  - Read-only "explain the ranking" — Hermes can answer "why was X picked"
+    or "what's this week short on" using the same scoring data the app's
+    picker uses.
+  - "Propose ranked candidates" — Hermes can ask for the top-N candidates
+    for a slot (same ranking as the in-app picker) and relay them in chat.
+  - "Trigger the interactive flow" — Hermes can kick off plan generation
+    conversationally, carrying busy-days/preferences from the conversation
+    the same way the in-app screen would.
+  - Every actual plan write still goes through the existing `/placements`
+    propose-then-app-applies queue — this version does not change that
+    safety model (see `docs/HERMES.md`'s rejection rules). Hermes's access
+    is read/propose, not a new direct-write path.
+
+## Nice-to-haves
+
+None carried into this version's scope — see `docs/FUTURE.md` for ideas
+raised during this interview but parked instead.
+
+## Constraints
+
+- Same as v1/v2 (static site, no build step, no new dependency without
+  confirming first, no backend beyond the existing Hermes Worker+KV, all
+  Phase 1 architecture invariants unchanged).
+- Preference chips need a new small, data-driven vocabulary (same pattern as
+  `ingredient-nutrient-tags.json`/`shelf-life.json` — a JSON file, not
+  hardcoded JS), since the generator needs something structured to score
+  against.
+- New Hermes read endpoints (ranking explain, ranked-candidate query) follow
+  the existing `docs/HERMES.md` contract shape (shape-validated GET, no
+  dietary-rule enforcement beyond what's already there) — exact endpoint
+  design happens at the architect/planner stage, not here.
+
+## Non-goals
+
+- Choice screens for breakfast/lunch/snack slots — dinners only, this
+  version and for the foreseeable future (see parked item below).
+- Free-text/NL preference input — structured chips only.
+- Hermes writing plan changes outside the existing `/placements` queue, or
+  bypassing the app's own re-check on a placement — full read/propose access
+  does not mean a new direct-write path.

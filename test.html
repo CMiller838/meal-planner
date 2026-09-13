@@ -16,6 +16,7 @@
 <script src="hermes-sync.js"></script>
 <script src="exclusions.js"></script>
 <script src="mealdb.js"></script>
+<script src="plan-with-me.js"></script>
 <script src="plan.js"></script>
 <script>
 (async function () {
@@ -1576,6 +1577,133 @@
 
     check("regression: generatePlan with no have matches group-38 shape",
       deepEqual(planNoHave.days.map((d) => d.slots), plan.days.map((d) => d.slots)));
+  }
+
+  // ---- Group 40: Phase 22 (rankSlot extraction + chip/busy layers) ----
+  {
+    const G = MP.Generator;
+    const vocab = await fetch("plan-preferences.json").then((r) => r.json());
+
+    const dinnerPool = library.filter((m) => (m.mealTypes || []).includes("dinner"));
+    const base = G.rankSlot(dinnerPool, 1, [], { tags, targets });
+    check("rankSlot length === pool length with empty prefs", base.length === dinnerPool.length);
+    check("rankSlot length === pool length with excludeIds covering whole pool (fallback)",
+      G.rankSlot(dinnerPool, 1, [], { tags, targets, excludeIds: new Set(dinnerPool.map((m) => m.id)) }).length === dinnerPool.length);
+
+    // Synthetic fixture: all-zero nutrient scores so layer 1 is a stable no-op,
+    // isolating layers 2-5.
+    const mA = { id: "mA", name: "Plain Bake", ingredients: [{ key: "x" }], prepEffort: "quick" };
+    const mB = { id: "mB", name: "Spicy Curry", ingredients: [{ key: "y" }], prepEffort: "quick" };
+    const mC = { id: "mC", name: "Veg Stew", ingredients: [{ key: "z" }], prepEffort: "batch" };
+    const pool3 = [mA, mB, mC];
+    const flatTags = {};
+    const noTargets = {};
+    const base3 = G.rankSlot(pool3, 1, [], { tags: flatTags, targets: noTargets });
+    check("synthetic layer-1 no-op: order unchanged with empty prefs", deepEqual(base3.map((m) => m.id), ["mA", "mB", "mC"]));
+    check("rankSlot never drops a meal (length preserved, empty prefs)", base3.length === 3);
+
+    const preferVocab = { chips: [{ id: "bake", kind: "prefer", keywords: ["bake"] }] };
+    const withPrefer = G.rankSlot(pool3, 1, [], { tags: flatTags, targets: noTargets, prefs: { chips: ["bake"], vocab: preferVocab } });
+    check("prefer chip promotes a matching meal to the head", withPrefer[0].id === "mA");
+    check("prefer chip never drops a meal", withPrefer.length === 3);
+    const withoutPrefer = G.rankSlot(pool3, 1, [], { tags: flatTags, targets: noTargets, prefs: { chips: [], vocab: preferVocab } });
+    check("removing the chip restores original order (reorder, not re-score)",
+      deepEqual(withoutPrefer.map((m) => m.id), base3.map((m) => m.id)));
+
+    const avoidVocab = { chips: [{ id: "curry", kind: "avoid", keywords: ["curry"] }] };
+    const withAvoid = G.rankSlot(pool3, 1, [], { tags: flatTags, targets: noTargets, prefs: { chips: ["curry"], vocab: avoidVocab } });
+    check("avoid chip sends a matching meal to the tail without dropping it",
+      withAvoid[withAvoid.length - 1].id === "mB" && withAvoid.length === 3);
+
+    const bothVocab = { chips: [{ id: "bake", kind: "prefer", keywords: ["bake"] }, { id: "stew", kind: "avoid", keywords: ["stew", "bake"] }] };
+    const bothHit = G.rankSlot(pool3, 1, [], { tags: flatTags, targets: noTargets, prefs: { chips: ["bake", "stew"], vocab: bothVocab } });
+    check("meal hitting both prefer and avoid lands in the prefer group", bothHit[0].id === "mA");
+
+    const unknownId = G.rankSlot(pool3, 1, [], { tags: flatTags, targets: noTargets, prefs: { chips: ["nope"], vocab: preferVocab } });
+    check("unknown chip id is a no-op", deepEqual(unknownId.map((m) => m.id), base3.map((m) => m.id)));
+
+    // chipHits direct coverage
+    check("chipHits: keyword on meal name", G.rankSlot([mA, mC], 1, [], { tags: flatTags, targets: noTargets, prefs: { chips: ["bake"], vocab: preferVocab } })[0].id === "mA");
+    const mKeyHit = { id: "mK", name: "Dinner", ingredients: [{ key: "bakedbeans" }] };
+    check("chipHits: keyword on ingredient key",
+      G.rankSlot([mC, mKeyHit], 1, [], { tags: flatTags, targets: noTargets, prefs: { chips: ["bake"], vocab: preferVocab } })[0].id === "mK");
+    const tagVocab = { chips: [{ id: "fib", kind: "prefer", tags: ["fibre"] }] };
+    const mHighFibre = { id: "mF", name: "X", ingredients: [{ key: "oats" }] };
+    const mLowFibre = { id: "mL", name: "Y", ingredients: [{ key: "rice" }] };
+    check("chipHits: tag matches only on 'high'",
+      G.rankSlot([mLowFibre, mHighFibre], 1, [], { tags, targets, prefs: { chips: ["fib"], vocab: tagVocab } })[0].id === "mF");
+    const effortVocab = { chips: [{ id: "batchy", kind: "prefer", prepEffort: "batch" }] };
+    check("chipHits: exact prepEffort match",
+      G.rankSlot(pool3, 1, [], { tags: flatTags, targets: noTargets, prefs: { chips: ["batchy"], vocab: effortVocab } })[0].id === "mC");
+    const emptyCriteriaVocab = { chips: [{ id: "empty", kind: "prefer" }] };
+    check("chipHits: empty-criteria chip hits nothing",
+      deepEqual(G.rankSlot(pool3, 1, [], { tags: flatTags, targets: noTargets, prefs: { chips: ["empty"], vocab: emptyCriteriaVocab } }).map((m) => m.id), base3.map((m) => m.id)));
+
+    // Busy-day effort bias (layer 3)
+    const busyPrefs = { busyDays: [1], vocab: { busy: vocab.busy } };
+    const busyResult = G.rankSlot(pool3, 1, [], { tags: flatTags, targets: noTargets, prefs: busyPrefs });
+    check("busy day biases quick effort to the head", busyResult[0].prepEffort === "quick");
+    const busyBatchExempt = G.rankSlot(pool3, 1, [], { tags: flatTags, targets: noTargets, prefs: busyPrefs, prefer: "batch" });
+    check("prefer:'batch' call is unaffected by busy bias", busyBatchExempt[0].id === "mC");
+
+    // Busy-day run rotation (4.4)
+    {
+      const busyLib = library;
+      const planRotated = G.generatePlan(busyLib, tags, targets, shelfData, "2026-09-07", null, {}, { busyDays: [5] });
+      const planBase = G.generatePlan(busyLib, tags, targets, shelfData, "2026-09-07", null, {}, {});
+      check("busy run rotation does not throw and still fills 14 days",
+        planRotated.days.length === 14 && planRotated.days.every((d) => d.slots.dinner));
+      const allBusyPlan = G.generatePlan(busyLib, tags, targets, shelfData, "2026-09-07", null, {}, { busyDays: [5, 6, 7, 12, 13, 14] });
+      check("all-busy run leaves weekend runs unchanged (still fills)",
+        allBusyPlan.days.length === 14 && allBusyPlan.days.every((d) => d.slots.dinner));
+    }
+
+    // Empty-prefs regression at the generatePlan level
+    const planOmitted = G.generatePlan(library, tags, targets, shelfData, "2026-09-07");
+    const planEmptyPrefs = G.generatePlan(library, tags, targets, shelfData, "2026-09-07", undefined, undefined, {});
+    check("generatePlan: omitted prefs === explicit {} prefs (ignoring generatedAt)",
+      deepEqual(planOmitted.days, planEmptyPrefs.days));
+
+    check("MP.Generator.rankSlot is exported", typeof G.rankSlot === "function");
+  }
+
+  // ---- Group 41: Phase 23 ("Plan with me" setup screen) ----
+  {
+    const P = MP.PlanPrefs;
+    const KEY = P.KEY;
+
+    localStorage.removeItem(KEY);
+    check("get() with key absent -> empty default", deepEqual(P.get(), { busyDays: [], chips: [] }));
+
+    for (const bad of ["not json", "null", "[]", "3"]) {
+      localStorage.setItem(KEY, bad);
+      check(`get() with ${JSON.stringify(bad)} -> empty default, no throw`, deepEqual(P.get(), { busyDays: [], chips: [] }));
+    }
+
+    localStorage.setItem(KEY, JSON.stringify({ busyDays: [0, 3, 15, "4", 3, 14], chips: ["comfort", 5, "no-spice", null] }));
+    const filtered = P.get();
+    check("get() filters busyDays to unique ints 1-14", deepEqual(filtered.busyDays, [3, 14]));
+    check("get() drops non-string chips, keeps unknown ids", deepEqual(filtered.chips, ["comfort", "no-spice"]));
+
+    localStorage.removeItem(KEY);
+    const saved = P.save([11, 2], ["comfort"]);
+    check("save() sorts busyDays ascending", deepEqual(saved.busyDays, [2, 11]));
+    check("save() stamps a parseable ISO updatedAt", !isNaN(new Date(saved.updatedAt).getTime()));
+    check("save() round-trips through get()", deepEqual(P.get(), { busyDays: [2, 11], chips: ["comfort"] }));
+
+    const savedEmpty = P.save([], []);
+    check("save([], []) round-trips to the empty shape", deepEqual(P.get(), { busyDays: [], chips: [] }));
+    check("save([], []) has no busyDays/chips leak", deepEqual(savedEmpty.busyDays, []) && deepEqual(savedEmpty.chips, []));
+    localStorage.removeItem(KEY);
+
+    const vocab = await P.loadVocab();
+    const withPrefs = MP.Generator.generatePlan(library, tags, targets, shelfData, "2026-09-07", null, {}, { vocab, busyDays: [2], chips: ["comfort"] });
+    const withoutPrefs = MP.Generator.generatePlan(library, tags, targets, shelfData, "2026-09-07", null, {}, {});
+    check("generatePlan: prefs with busy day + chip differs from empty prefs",
+      JSON.stringify(withPrefs.days) !== JSON.stringify(withoutPrefs.days));
+    const emptyAgain = MP.Generator.generatePlan(library, tags, targets, shelfData, "2026-09-07", null, {}, { vocab, busyDays: [], chips: [] });
+    check("generatePlan: prefs with empty busyDays/chips === plain {} prefs",
+      deepEqual(emptyAgain.days, withoutPrefs.days));
   }
 
   lines.push("", `${pass} passed, ${fail} failed`);

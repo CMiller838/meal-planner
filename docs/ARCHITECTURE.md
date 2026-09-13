@@ -63,7 +63,7 @@ Hermes (hosted agent)   <---->  Cloudflare Worker  <---->  Workers KV
 
 ## KV schema
 
-Seven keys, all plain JSON values, no versioning scheme beyond `updatedAt`:
+Nine keys, all plain JSON values, no versioning scheme beyond `updatedAt`:
 
 - `library` → `{ updatedAt: <ISO8601>, meals: [ ...same shape as meals.json items... ] }`
   Both the app and Hermes read this on load/poll and PUT the full array
@@ -109,6 +109,10 @@ Seven keys, all plain JSON values, no versioning scheme beyond `updatedAt`:
   server-side append (whole-array PUT, same relay pattern as `pantry`).
   `tags` are nutrient names resolved by `tagsForMeal` and **frozen at eat
   time** — re-tagging an ingredient later doesn't rewrite past entries.
+- `planPrefs` (v4) → `{ updatedAt, busyDays: [<1..14>], chips: [<chipId>] }` —
+  the last-used "Plan with me" settings, mirrored from local `mp_planPrefs`.
+  Two-way (both sides read and PUT), last-write-wins by `updatedAt` via the
+  existing `MP.Sync.decide`. See v4 below.
 
 - `mp_cooks` (Phase 20, localStorage only) → a **bare JSON array** of
   `{id, mealId, name, variantId, cookedAt, portionsLeft}` — open leftover
@@ -121,7 +125,8 @@ updates its localStorage mirror synchronously and renders from it, then
 either replays a pending-op log (`pantry`/`adhoc`) or does a best-effort,
 failure-silent push (`plan`/`prefs`) in the background. This keeps the app
 fully usable with the bridge unreachable — sync is never on the critical
-path.
+path. `planPrefs` (v4) follows the `prefs` pattern with one difference: it is
+also *pulled* (Hermes may write it), on open of the Plan-with-me screen only.
 
 ## Worker endpoints
 
@@ -133,6 +138,8 @@ path.
 - `GET /placements`, `PUT /placements`
 - `GET /prefs`, `PUT /prefs`
 - `GET /eaten-log`, `PUT /eaten-log`
+- `GET /planPrefs`, `PUT /planPrefs` (v4)
+- `GET /ranking` (v4, read-only — no PUT, deliberately)
 - All requests require `X-Auth-Token: <secret>`, checked against a Wrangler
   secret binding (`wrangler secret put AUTH_TOKEN`) — never committed to
   the repo (public repo, no personal data or secrets in git history).
@@ -144,9 +151,10 @@ path.
   user first — this now includes the Worker's own scope: don't grow it
   into a general API.
 - The Worker never stores anything beyond `library`, `planFlag`, `pantry`,
-  `adhoc`, `plan`, `placements`, `prefs`, and `eatenLog`. It does not compute nutrition,
-  shelf-life, or plans — it's a sync relay, and the actual logic stays in
-  the shared JS modules it imports from the app.
+  `adhoc`, `plan`, `placements`, `prefs`, `eatenLog`, and `planPrefs`. Apart
+  from `/ranking` (v4, computed read-only from keys it already holds) it does
+  not compute nutrition, shelf-life, or plans — it's a sync relay, and the
+  actual logic stays in the shared JS modules it imports from the app.
 - The `plan` mirror is one-way: written by the app, read by Hermes, never
   read back by the app. `mp_plan` in localStorage is always the plan of
   record; adding a mirror→app read path would defeat the reason the mirror
@@ -196,3 +204,188 @@ path.
   builds it synchronously from `MP.ShoppingList.pantryIndex({ items:
   MP.Sync.localItems("pantry") })` and passes it through. This is a second
   pantry **reader**; `plan.js`'s `commitCook` remains the only pantry writer.
+
+## v4 — guided planning ("Plan with me") + ranking read access
+
+Scope: an *optional* pre-plan screen (busy days + preference chips), a
+dinner-only choice walkthrough, a review step, and read-only Hermes access to
+the generator's ranking. One-tap "Generate Plan" stays exactly as it is — the
+guided flow is a second entry point, never a replacement.
+
+### Files
+
+- **New**: `plan-with-me.html` + `plan-with-me.js` (setup screen only),
+  `plan-preferences.json` (chip vocabulary + busy-day knobs).
+- **Changed**: `generator.js` (ranking export + busy/chip layers), `plan.js`
+  (walkthrough + review mode, passes prefs into `generatePlan`), `plan.html`
+  (one extra entry button beside `#generate-btn`), `hermes-sync.js`
+  (`planPrefs` pull/push), `nutrition.js` + `generator.js` (`window` →
+  `root` shim so the Worker can import them, same line exclusions.js
+  already has), `worker/worker.js` (`/planPrefs`, `/ranking`), `sw.js`
+  (shell list + cache bump), `style.css` (busy-grid cells, chip row).
+- **Deliberately unchanged**: `app.js`, `discover.js`, `shopping*.js`,
+  `prefs.js`, `data.js`'s library layer.
+
+### Screen split (why only one new page)
+
+Project convention is one HTML file per page, but the guided flow is three
+steps and only the first is new UI:
+
+1. **Setup** → `plan-with-me.html`: a compact 7×2 `.busy-grid` of 14
+   tap-toggle buttons (the plan grid's *shape*, not its markup — `.day-row`
+   is a rotated card with nested slot cards) + chip row. Prefilled from
+   `mp_planPrefs`. "Generate" writes `mp_planPrefs` and navigates to
+   `plan.html?guided=1`. From Phase 23, `plan.js` reads `mp_planPrefs` on
+   **both** entry points — one-tap Generate is preference-aware too, never
+   replaced — and `MP.PlanPrefs` (defined in `plan-with-me.js`, loaded on
+   both pages) is the key's only reader/writer.
+2. **Dinner choice (3 cards × ~14 slots)** → **reuses the existing swap
+   picker on plan.html**: `#swap-overlay`/`#swap-sheet` +
+   `renderSwapCards()`'s `.swipe-deck` already renders exactly "top 3 ranked
+   candidates, swipe right to accept". The walkthrough in `plan.js` is a
+   loop that opens it per dinner slot with generator-ranked candidates
+   instead of `candidatesFor()`'s, then advances.
+3. **Review** → **the existing plan grid on plan.html**, plus the existing
+   per-slot `.day-swap-btn` → `openSwapPicker()` affordance, with a
+   "Looks good" commit button while `guided=1`.
+
+Steps 2 and 3 add **no new component** — building a second page for them
+would mean duplicating `renderPlan`, the swipe deck and the detail sheet.
+The cost is a small step-through state machine in `plan.js`.
+
+### `plan-preferences.json`
+
+Data, not JS constants — same rule as `ingredient-nutrient-tags.json` /
+`pack-sizes.json`:
+
+Shipped shape (Phase 22) — criteria are **flat** on the chip, not nested
+under a `match` object:
+
+```json
+{
+  "busy": { "preferEffort": "quick", "demoteEffort": "batch" },
+  "chips": [
+    { "id": "comfort", "label": "Comfort food", "kind": "prefer",
+      "keywords": ["pasta", "pie", "stew"], "prepEffort": "batch" },
+    { "id": "light", "label": "Lighter week", "kind": "prefer",
+      "tags": ["fibre_g", "vitC_mg"] },
+    { "id": "no-spice", "label": "Less spice", "kind": "avoid",
+      "keywords": ["chilli", "curry"] }
+  ]
+}
+```
+
+- `kind` is only `prefer` | `avoid`. The criteria are any of `keywords`
+  (lowercase substring over meal name + ingredient keys), `tags` (suffixed
+  nutrient keys from `nutrition-targets.json` — `fibre_g`, `vitC_mg`, not
+  bare `fibre`), `prepEffort` (a single string, matched exactly against
+  `effortOf(meal)`). A chip hits if ANY listed criterion matches.
+- `busy.demoteEffort` is a single string, and there is no `leftoverBias` key —
+  the leftover/run preference is run-selection logic in `generatePlan`, not
+  data (Phase 22 §4.4).
+- Phase 23's chip UI reads `id`, `label` and `kind` only, so the criteria
+  shape can change without touching `plan-with-me.js`.
+- Chips are a **reorder**, never a filter: an `avoid` match goes to the tail
+  of the already-ranked list, not out of the pool — same
+  "pool-too-small → fall back" behaviour `pickMeal`'s `excludeIds` already
+  has, so a plan can never fail to fill because of a chip.
+- Unknown chip ids (e.g. from a stale Hermes write) are ignored silently.
+
+### Generator changes
+
+`generatePlan(library, tags, targets, shelfData, startDate, budget, have,
+prefs)` — `prefs` is `{ busyDays: [1..14], chips: [id], vocab }`, one more
+optional trailing arg, same as Phases 17/21.
+
+`pickMeal` is split into `rankSlot(...) → ranked[]` and
+`pickMeal = rankSlot(...)[0]`. `rankSlot` is exported on `MP.Generator` and
+is the **single ranking source** for all three consumers: the in-app
+walkthrough, the review swap picker, and the Worker's `/ranking`.
+
+Layer order inside `rankSlot` (each step only reorders the output of the one
+above — nutrition is never re-scored):
+
+1. `MP.Nutrition.rankByGap` — nutrient-gap ranking. **Unchanged, authoritative.**
+2. Chips — `prefer` matches to the head, `avoid` matches to the tail (stable).
+3. Effort/busy — existing `opts.prefer`, plus on a busy day
+   `busy.preferEffort` is forced and `busy.demoteEffort` entries sink to the
+   tail.
+4. Budget shortlist (Phase 17) — unchanged, now operating on the reordered list.
+5. `pickVariant` (Phase 21) at `place()` — unchanged.
+
+Busy days also touch **run selection**, not ranking: in the existing batch/
+leftover-run loop a busy day is not chosen as the cook day (`d0`) when a
+non-busy day in the run can be, and runs whose leftover days land on busy
+days are preferred. This uses the existing batch-cook/leftover primitive —
+no new data model, no `prepEffort` values added.
+
+### Hermes: `GET /planPrefs` / `PUT /planPrefs`
+
+Generic two-key relay, same style as `/pantry`. Body `{ updatedAt, busyDays,
+chips }`; shape-validated only — `busyDays` an array of integers 1–14 (unique),
+`chips` an array of non-empty strings; both may be `[]`. Chip ids are *not*
+validated against `plan-preferences.json` (the generator ignores unknowns) so
+a vocabulary edit can never lock out a write, same reasoning as `/library`'s
+no-dietary-rules rule.
+
+"Trigger the interactive flow" needs **no new endpoint**: Hermes PUTs
+`/planPrefs`, then the existing `PUT /planFlag`. The app's existing
+plan-request banner gains a second button that opens `plan-with-me.html`
+prefilled from the pulled `planPrefs` instead of generating immediately.
+
+### Hermes: `GET /ranking`
+
+One read-only endpoint covering both "why was X picked" and "give me the top
+N" — they're the same computation, so they're one route.
+
+`GET /ranking?day=<1..14>&slot=dinner&n=<1..10>` (`slot` defaults `dinner`,
+`n` defaults 3). `200`:
+
+```json
+{ "day": 5, "slot": "dinner", "shortOn": ["fibre", "vitD"],
+  "current": { "mealId": "chorizo-pasta", "variantId": null },
+  "candidates": [ { "mealId": "...", "name": "...", "rank": 1,
+                    "covers": ["fibre"], "prepEffort": "quick",
+                    "chipHits": ["comfort"] } ],
+  "busyDay": true, "approximate": true }
+```
+
+- Computed server-side by importing the app's own `nutrition.js` +
+  `generator.js` (`rankSlot`) and bundled `ingredient-nutrient-tags.json` /
+  `nutrition-targets.json` / `plan-preferences.json`, over the `library`,
+  `plan` and `planPrefs` KV values — no new state, no writes.
+- `400` on a bad `day`/`slot`/`n`; `409` if `library` or `plan` is missing.
+- `current` comes from the **stale-by-construction** `plan` mirror, so the
+  whole response is advisory: `approximate: true` is always set and also
+  flags that steps 4–5 (cost shortlist, pantry variant) are **not** applied
+  server-side — the Worker doesn't carry `pack-sizes.json` pricing or build
+  a pantry index. Hermes must phrase answers as "it's ranking these highest",
+  never as "this is what the app will pick".
+- **No `PUT /ranking`, ever.** Hermes acts on a ranking only through the
+  existing `PUT /placements` queue, which the app still re-checks against
+  local `mp_plan`. v4 adds no write path.
+
+### v4 invariants
+
+- **`rankSlot` is the one ranking implementation.** If a fourth consumer
+  appears it calls `rankSlot` — don't copy the layer order. `plan.js`'s
+  `candidatesFor` is folded into it rather than kept as a parallel ranking.
+- **Busy days and chips are layers 2–3, never layer 1.** They reorder what
+  `rankByGap` produced; anything that changes nutrient scoring itself is out
+  of scope for this feature (same rule as cost in Phase 17 and pantry in
+  Phase 21).
+- **The guided flow is optional and stateless on exit.** Abandoning it
+  leaves `mp_plan` untouched; only the final commit writes a plan, through
+  the same save path as one-tap generate (so `mp:plan-saved` → `pushPlan`
+  still fires exactly once).
+- **`mp_planPrefs` is settings, not plan state.** It never contains meal
+  ids, and losing it degrades to "no busy days, no chips" — i.e. today's
+  behaviour.
+
+**Alternatives considered**: a third HTML page for the choice/review steps
+(rejected — would duplicate `renderPlan` + the swipe deck); an app-pushed
+"ranking mirror" KV key instead of computing in the Worker (rejected — stale,
+and can't answer an arbitrary slot query); free-text preference input
+(rejected in the outline — structured chips only); a new Hermes write route
+for guided plans (rejected in the outline — `/placements` stays the only
+write path).

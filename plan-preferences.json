@@ -1,0 +1,11 @@
+{
+  "_note": "Chip vocabulary + busy-day effort bias for guided planning. Chips are a REORDER, never a filter - see .claude/specs/phase22_spec.md. A chip hits a meal if ANY listed criterion matches.",
+  "busy": { "preferEffort": "quick", "demoteEffort": "batch" },
+  "chips": [
+    { "id": "comfort", "label": "Comfort food", "kind": "prefer", "keywords": ["pasta", "pie", "stew", "roast", "bake", "mash"], "prepEffort": "batch" },
+    { "id": "light", "label": "Lighter week", "kind": "prefer", "tags": ["fibre", "vitC"] },
+    { "id": "no-spice", "label": "Less spice", "kind": "avoid", "keywords": ["chilli", "curry", "harissa", "jalapeno", "cayenne", "sriracha"] },
+    { "id": "less-red-meat", "label": "Less red meat", "kind": "avoid", "keywords": ["beef", "lamb", "mince", "steak", "pork"] },
+    { "id": "no-pasta", "label": "Less pasta", "kind": "avoid", "keywords": ["pasta", "spaghetti", "penne", "macaroni", "lasagne", "tagliatelle"] }
+  ]
+}
