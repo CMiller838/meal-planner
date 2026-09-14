@@ -2,10 +2,9 @@
 // from the liked library — nutrient-gap ranking, weeknight/weekend
 // prep-effort preference, batch-cook leftover runs, and a variety guard
 // against back-to-back repeats. See SPEC.md and docs/roadmap.md Phase 2.
-window.MP = window.MP || {};
-
-(function () {
+(function (root) {
   "use strict";
+  const MP = (root.MP = root.MP || {});
 
   const OTHER_SLOTS = ["breakfast", "lunch", "snack"];
 
@@ -263,5 +262,5 @@ window.MP = window.MP || {};
     return { startDate, days, generatedAt: new Date().toISOString() };
   }
 
-  MP.Generator = { generatePlan, rankSlot, weekendRuns, weekdayOf, isoToday, pickVariant };
-})();
+  MP.Generator = { generatePlan, rankSlot, weekendRuns, weekdayOf, isoToday, pickVariant, chipHits, activeChips };
+})(typeof globalThis !== "undefined" ? globalThis : this);

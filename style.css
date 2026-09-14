@@ -429,6 +429,7 @@ button.ghost {
   margin-bottom: 1rem;
   box-shadow: 0 6px 16px var(--shadow);
 }
+.banner.hidden { display: none; }
 .hermes-banner {
   position: relative;
   background: var(--surface);

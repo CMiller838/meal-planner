@@ -36,6 +36,13 @@ Installable as a PWA on Android Chrome via `manifest.json` + `sw.js`.
 
 ## Architecture invariants
 
+- **The `window` → `root` shim (`exclusions.js`'s pattern) now also covers
+  `nutrition.js` and `generator.js`** (Phase 26), since `worker/worker.js`
+  imports them to compute `GET /ranking`. Don't reintroduce a bare `window.`
+  reference in any of those three files. `rankSlot` (`generator.js`) now has
+  a fourth caller (the Worker) alongside `plan.js`'s three — it's still the
+  one ranking implementation; a fourth caller reimplementing any part of it
+  is the bug, not a design choice.
 - **No `innerHTML` with unescaped TheMealDB (or any external) content.** Every
   string from TheMealDB must go through `esc()` in `data.js` or use
   `textContent`/`el.value` — it's untrusted third-party content.
@@ -84,6 +91,13 @@ Installable as a PWA on Android Chrome via `manifest.json` + `sw.js`.
   (`plan-with-me.js`) is its only reader/writer; `plan.js` reads it for
   **both** entry points, so one-tap Generate is never replaced by the
   "Plan with me" setup screen — it only becomes preference-aware.
+  `hermes-sync.js`'s `fetchPlanPrefs`/`pushPlanPrefs` (Phase 25) pull/push
+  through `MP.PlanPrefs.get`/`save` and never touch `localStorage` directly.
+- **`guidedActive` is what keeps the guided walkthrough/review (Phase 24)
+  stateless on exit.** `plan.js`'s `setSlotMeal`/`setSlotVariant` only call
+  `savePlan()` when it's `false`; abandoning the walkthrough or review step
+  before "Looks good" leaves `mp_plan` untouched. Don't add a second save
+  path that bypasses the flag.
 - **Hard content exclusions are enforced in code, not just docs**: no
   mushrooms (including from TheMealDB results), no standalone egg meals
   (egg-within-a-dish is fine), no vegetables in toasties. These came from

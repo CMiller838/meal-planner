@@ -1,9 +1,8 @@
 // Approximate nutrient-coverage scoring. Not a calorie calculator - a
 // transparent high/med/low coverage checklist, as flagged in SPEC.md.
-window.MP = window.MP || {};
-
-(function () {
+(function (root) {
   "use strict";
+  const MP = (root.MP = root.MP || {});
 
   const LEVEL_WEIGHT = { high: 3, med: 2, low: 1 };
   const PROTEIN_GRAMS_APPROX = { high: 30, med: 15, low: 5 };
@@ -95,4 +94,4 @@ window.MP = window.MP || {};
   }
 
   MP.Nutrition = { load, tagsForMeal, dayCoverage, weekCoverage, rankByGap, TRACKED_NUTRIENTS };
-})();
+})(typeof globalThis !== "undefined" ? globalThis : this);

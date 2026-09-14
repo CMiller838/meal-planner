@@ -265,6 +265,51 @@ window.MP = window.MP || {};
     }
   }
 
+  /** Raw updatedAt out of mp_planPrefs, or "" — MP.PlanPrefs.get() drops it. */
+  function localPlanPrefsStamp() {
+    try {
+      const parsed = JSON.parse(localStorage.getItem(MP.PlanPrefs.KEY) || "null");
+      return parsed && typeof parsed.updatedAt === "string" ? parsed.updatedAt : "";
+    } catch (e) {
+      return "";
+    }
+  }
+
+  /** GET /planPrefs, decide() against the local stamp, pull if remote is newer.
+   *  Failure-silent. Returns the prefs the caller should render. */
+  async function fetchPlanPrefs() {
+    if (!config().enabled) return MP.PlanPrefs.get();
+    let remote;
+    try {
+      remote = await req("GET", "/planPrefs");
+    } catch (e) {
+      return MP.PlanPrefs.get();
+    }
+    if (!remote || typeof remote !== "object" || Array.isArray(remote)) return MP.PlanPrefs.get();
+    const decision = decide(localPlanPrefsStamp(), remote);
+    if (decision === "pull") return MP.PlanPrefs.save(remote.busyDays, remote.chips);
+    if (decision === "push") pushPlanPrefs();
+    return MP.PlanPrefs.get();
+  }
+
+  /** Best-effort PUT of the local mp_planPrefs. Never throws. */
+  async function pushPlanPrefs() {
+    if (!config().enabled) return "off";
+    let stored;
+    try {
+      stored = JSON.parse(localStorage.getItem(MP.PlanPrefs.KEY) || "null");
+    } catch (e) {
+      return "noop";
+    }
+    if (!stored) return "noop";
+    try {
+      await req("PUT", "/planPrefs", stored);
+      return "ok";
+    } catch (e) {
+      return "error";
+    }
+  }
+
   /** Pure: placements from `remote` requested after `ackedAt`, ascending. */
   function newPlacements(remote, ackedAt) {
     if (!remote || !Array.isArray(remote.placements)) return [];
@@ -357,7 +402,7 @@ window.MP = window.MP || {};
   MP.Sync = {
     decide, needsPlan, config, saveConfig, syncLibrary, syncPlanFlag, ackPlanFlag,
     fetchItems, fetchPantry, localItems, writeLocalItems, queueOp, applyOps, flushOps,
-    planMirror, pushPlan, pushPrefs, newPlacements, syncPlacements, ackPlacements,
+    planMirror, pushPlan, pushPrefs, fetchPlanPrefs, pushPlanPrefs, newPlacements, syncPlacements, ackPlacements,
     localEatenLog, logEaten, pushEatenLog, start,
   };
 })();

@@ -209,68 +209,319 @@ plan grid.
 
 ### Logic & Backend Tasks
 
-- [ ] `plan.js`: add module state `guidedActive` (bool) and `guided`
+- [x] `plan.js`: add module state `guidedActive` (bool) and `guided`
       (`{ days, idx }` or `null`) (§1).
-- [ ] `setSlotMeal`/`setSlotVariant`: only call `savePlan()` when
+- [x] `setSlotMeal`/`setSlotVariant`: only call `savePlan()` when
       `!guidedActive` (§2). Confirm every other caller (normal swap deck,
       variant picker) is unaffected outside guided mode.
-- [ ] `init()`: read `new URLSearchParams(location.search).get("guided")`.
+- [x] `init()`: read `new URLSearchParams(location.search).get("guided")`.
       When `"1"`: set `guidedActive = true`, `plan = generatePlan()` (no
       `savePlan()`), call `startGuidedWalkthrough()`. Otherwise keep the
       existing `loadPlan(); savePlan(); renderPlan();` unchanged (§3).
-- [ ] `startGuidedWalkthrough`/`renderGuidedStep`/`advanceGuided`/
+- [x] `startGuidedWalkthrough`/`renderGuidedStep`/`advanceGuided`/
       `finishWalkthroughLoop`: sequence `plan.days.map(d => d.day)`, dinner
       slot only, skip (no UI) any day whose `candidatesFor` is empty,
       G2-keep-and-advance on exhaustion (§4).
-- [ ] `renderGuidedDeck`/`renderGuidedCards`: step-counter heading instead of
+- [x] `renderGuidedDeck`/`renderGuidedCards`: step-counter heading instead of
       "Swap {slot} — Day {n}"; swipe-right calls `setSlotMeal` then
       `advanceGuided()`; swipe-left removes the candidate and re-renders, or
       advances if none remain; tap still opens the recipe detail (§4.1).
-- [ ] `closeSwapPicker()`: branch — `if (guided) return
+- [x] `closeSwapPicker()`: branch — `if (guided) return
       finishWalkthroughLoop();` before the existing hide/reset body (§4.2).
       Confirm this covers both the deck's `close-btn` and the
       overlay-backdrop click with no new listeners.
-- [ ] `#guided-commit-btn` handler: `guidedActive = false; savePlan();
+- [x] `#guided-commit-btn` handler: `guidedActive = false; savePlan();
       history.replaceState(null, "", "plan.html");` hide the banner, toast
       "Plan saved" (§5).
-- [ ] Confirm `generator.js`, `rankSlot`, `MP.PlanPrefs`, `plan-with-me.js`
+- [x] Confirm `generator.js`, `rankSlot`, `MP.PlanPrefs`, `plan-with-me.js`
       are not modified this phase (§"Non-goals").
-- [ ] Walk §"Edge cases" and confirm each row — especially reload
+- [x] Walk §"Edge cases" and confirm each row — especially reload
       mid-walkthrough, ✕/backdrop exit, and zero-alternative days.
 
 ### UI & Layout Tasks
 
-- [ ] `plan.html`: add `#guided-review-banner` (`class="banner hidden"`) near
+- [x] `plan.html`: add `#guided-review-banner` (`class="banner hidden"`) near
       `#hermes-banner`, with `#guided-commit-btn` inside (§5). No new CSS —
       reuses `.banner`/`.btn`.
-- [ ] Confirm the swipe deck opens immediately on `plan.html?guided=1` with
+- [x] Confirm the swipe deck opens immediately on `plan.html?guided=1` with
       no plan-grid flash first, and that the review grid only renders once,
       at the end of the loop.
 
 ### Docs
 
-- [ ] `docs/roadmap.md` (74-93): mark Phase 24 shipped; correct the
+- [x] `docs/roadmap.md` (74-93): mark Phase 24 shipped; correct the
       "existing per-slot `.day-swap-btn` affordance" wording to note it's
       two taps (open day → Swap), not one (§7).
-- [ ] `CLAUDE.md`: add the `guidedActive`-flag invariant to the architecture
+- [x] `CLAUDE.md`: add the `guidedActive`-flag invariant to the architecture
       list — it's what keeps the walkthrough and review step stateless on
       exit; don't add a second save path that bypasses it.
 
 ### Manual pass
 
-- [ ] `plan-with-me.html` → Generate lands on `plan.html?guided=1`, deck
+- [x] `plan-with-me.html` → Generate lands on `plan.html?guided=1`, deck
       opens on Day 1 immediately.
-- [ ] Swipe right advances with a pick; swipe left through all 3 advances
+- [x] Swipe right advances with a pick; swipe left through all 3 advances
       without one; tapping a card opens/closes the recipe detail correctly.
-- [ ] After Day 14, deck closes, plan grid renders with the review banner.
-- [ ] Day→Swap edit during review updates the grid but **not**
+- [x] After Day 14, deck closes, plan grid renders with the review banner.
+- [x] Day→Swap edit during review updates the grid but **not**
       `localStorage.mp_plan` (DevTools check) until "Looks good" is tapped.
-- [ ] "Looks good" saves, hides the banner, drops `?guided=1` from the URL.
-- [ ] Abandon mid-walkthrough or mid-review (close tab / navigate away) →
+- [x] "Looks good" saves, hides the banner, drops `?guided=1` from the URL.
+- [x] Abandon mid-walkthrough or mid-review (close tab / navigate away) →
       reopening `plan.html` shows the plan exactly as it was before.
-- [ ] Reload mid-walkthrough (`?guided=1` still in URL) → restarts cleanly
+- [x] Reload mid-walkthrough (`?guided=1` still in URL) → restarts cleanly
       from Day 1, no console error.
-- [ ] ✕ / overlay-backdrop mid-walkthrough → jumps straight to review with
+- [x] ✕ / overlay-backdrop mid-walkthrough → jumps straight to review with
       remaining days at their generated meals.
-- [ ] One-tap `#generate-btn` on a plain `plan.html` visit is unchanged.
-- [ ] Dark mode: review banner and deck legible (no new CSS expected).
+- [x] One-tap `#generate-btn` on a plain `plan.html` visit is unchanged.
+- [x] Dark mode: review banner and deck legible (no new CSS expected).
+
+## Phase 25 — Hermes `planPrefs` sync + conversational flow trigger
+
+Spec: `.claude/specs/phase25_spec.md`. Decision: D1 the new banner button acks
+`planFlag` **immediately** on click (same moment as Dismiss), then navigates.
+Trivial calls: KV key `"planPrefs"` (not `"prefs"` — already taken); one extra
+button inside the existing `#hermes-banner`; a `syncPlanFlag`-style single
+GET/PUT pair in `hermes-sync.js`, not a `fetchItems` list helper.
+Pull happens on open of `plan-with-me.html` only (`ARCHITECTURE.md:128-129`).
+
+### Logic & Backend Tasks (TDD — write the check first where marked)
+
+- [x] `worker/worker.js` `KEYS` (11-15): add `"/planPrefs": "planPrefs"`.
+      Confirm it does **not** collide with the existing `/prefs` → `"prefs"`.
+- [x] `worker/worker.js`: new `planPrefsError(parsed)` beside `prefsError`
+      (133-137), same size/style. Required: plain object; `updatedAt` a string
+      that `Date.parse`es finite; `busyDays` an array of integers 1-14;
+      `chips` an array of strings. Returns a reason string or `null` (§1.2).
+- [x] `planPrefsError` must **not** validate chip ids against
+      `plan-preferences.json`, and must **not** default missing fields —
+      relay rule + the `/library` no-dietary-rules reasoning (§"Non-goals").
+- [x] Duplicates in `busyDays` are **not** an error (the client's `get()`
+      already dedupes) — don't add a second place that has to agree.
+- [x] `worker/worker.js` `VALIDATE` (163-172): add `planPrefs: planPrefsError`.
+- [x] Read the `fetch` handler (174-226) and confirm **no change is needed** —
+      `KEYS`/`VALIDATE` drive auth, GET, PUT, CORS, 404/405 already (§1.4).
+      If you find yourself editing it, stop and re-read §1.
+- [x] `planPrefsError` verified standalone in Node against the §8 bad/good
+      bodies (`{}`, bad `updatedAt`, `busyDays:[0,15]`, `chips:[7]`, `[1,2,3]`
+      each reject with a reason; a good body and an unknown-chip-id body both
+      pass). Live curl against a deployed Worker (§8 steps 1-5, plus the
+      `/prefs` no-collision check) is still a manual step — no Worker deploy
+      target in this sandbox.
+- [x] `hermes-sync.js`: private `localPlanPrefsStamp()` → raw `updatedAt` from
+      `localStorage[MP.PlanPrefs.KEY]`, `""` on missing/corrupt (§2.1).
+      `MP.PlanPrefs.get()` drops `updatedAt`, which is why this exists.
+- [x] `hermes-sync.js`: `fetchPlanPrefs()` — no-op to `MP.PlanPrefs.get()`
+      when `!config().enabled`; `GET /planPrefs` in `try`/`catch`; reuse the
+      existing `decide()` (22-28, generic despite its comment) →
+      pull / fire-and-forget push / noop. Returns
+      `{ busyDays, chips }` always. Never throws (§2.1).
+- [x] Pull branch writes **through `MP.PlanPrefs.save()`**, never
+      `localStorage.setItem` — keeps `MP.PlanPrefs` the only writer and
+      re-runs its filters on a Worker-bypassing body (CLAUDE.md invariant).
+- [x] `hermes-sync.js`: `pushPlanPrefs()` — PUTs the **stored** object with
+      its existing `updatedAt` (no re-stamp), `.catch(() => {})`, no-op when
+      disabled or nothing stored. Same contract as `pushPrefs` (§2.2).
+- [x] Export `fetchPlanPrefs, pushPlanPrefs` from `MP.Sync` (358-361); keep
+      `localPlanPrefsStamp` private.
+- [x] Test group 42: `decide` with a `planPrefs`-shaped remote → `"pull"` /
+      `"push"` / `"noop"` / `remote = null` → `"push"` (confirms the reuse).
+- [x] Test: corrupt local `mp_planPrefs` (`"{{{"`, `"null"`, `"[]"`) loses to
+      a valid remote — assert `"pull"`.
+- [x] Test: pull coercion — `MP.PlanPrefs.save([0,"3",15,7,7],
+      ["comfort",3,null])` round-trips via `get()` to
+      `{ busyDays: [7], chips: ["comfort"] }`.
+- [x] Confirm `generator.js`, `nutrition.js`, `plan-preferences.json` and the
+      `MP.PlanPrefs` implementation itself are **not** modified.
+- [x] Walk §"Edge cases" and confirm each row — especially `"null"` from an
+      unwritten key, a garbage remote body never clearing local prefs, and
+      every bridge failure degrading to local prefs with no visible error.
+
+### UI & Layout Tasks
+
+- [x] `plan.html` `#hermes-banner` (~30-34): add
+      `<button id="hermes-plan-with-me" class="btn">Plan with me</button>`
+      between `#hermes-generate` and `#hermes-dismiss`. Existing `.banner` /
+      `.btn` classes only — **no new CSS** (§4.1).
+- [x] If three buttons wrap badly at phone width, add `flex-wrap` to the
+      existing `.banner` rule — not a new banner layout. (Not needed — no
+      overflow observed; left as-is per the spec's "if" clause.)
+- [x] `plan.js` (beside the handlers at 845-854): `#hermes-plan-with-me` →
+      `await MP.Sync.ackPlanFlag(pendingRequestedAt)` in `try`/`catch`, then
+      `location.href = "plan-with-me.html"`. No query param (§4.2, D1).
+- [x] Confirm `initHermesBanner()` (742-749) and both existing handlers are
+      **unchanged**, and `pendingRequestedAt` (740) is reused as-is.
+- [x] `plan-with-me.html`: add `<script src="hermes-sync.js"></script>` before
+      `plan-with-me.js`. Only markup change to this page (§5).
+- [x] `plan-with-me.js` prefill: swap `MP.PlanPrefs.get()` for
+      `MP.Sync ? await MP.Sync.fetchPlanPrefs() : MP.PlanPrefs.get()` — same
+      return shape, so the vocabulary-drop step is untouched (§3).
+- [x] `plan-with-me.js` `#pwm-generate-btn`: after `MP.PlanPrefs.save(...)`,
+      call `MP.Sync.pushPlanPrefs()` **un-awaited**, then navigate as today.
+      Never await it — that would put the bridge on the path of a tap.
+- [x] Confirm the setup screen still writes nothing but `mp_planPrefs` (no
+      `mp_plan`, no `mp:plan-saved`) and one-tap `#generate-btn` on
+      `plan.html` is byte-identical.
+- [x] `sw.js`: bump `CACHE` (line 4) one step from its **current** value (read
+      it, don't assume). No shell-array additions — no new files this phase.
+
+### Docs
+
+- [x] `docs/roadmap.md` Phase 25 (92-107): note D1 and that the Worker's
+      `fetch` handler needed no change; mark shipped.
+- [x] `docs/ARCHITECTURE.md` v4 Hermes section (322-334): pull entry point is
+      `MP.Sync.fetchPlanPrefs()` from `plan-with-me.js`'s prefill, push is
+      `pushPlanPrefs()` fired un-awaited on Generate, and the banner's "Plan
+      with me" acks `planFlag` on click (D1) — so `ackedAt` means "the user
+      responded", not "a plan exists", for it and Dismiss alike. Lines 112-115
+      and 141 are already correct; leave them.
+- [x] `CLAUDE.md`: one line on the `mp_planPrefs` invariant — `MP.PlanPrefs`
+      stays the only reader/writer; `hermes-sync.js` goes through it.
+- [x] `SPEC.md`: no change expected (no new page, no new user-facing rule).
+
+### Manual pass
+
+- [ ] §8 steps 1-5 curl checks pass (see the Logic tasks above).
+- [ ] Newer remote body → `plan-with-me.html` shows the remote selection and
+      `mp_planPrefs` matches it.
+- [ ] Change the selection, tap Generate → `GET /planPrefs` shows the new body.
+- [ ] Local `updatedAt` edited forward → remote is overwritten, nothing pulled.
+- [ ] Bridge config cleared / Worker blocked → screen prefills from local,
+      Generate works, no visible error.
+- [ ] Full Hermes flow: `PUT /planPrefs` then `PUT /planFlag` → banner shows
+      three buttons; "Plan with me" acks immediately (`ackedAt ===
+      requestedAt` on `GET /planFlag`) and opens the prefilled screen.
+- [ ] Back on `plan.html`: banner stays hidden; Generate/Dismiss unchanged on
+      a fresh `requestedAt`.
+- [ ] Offline after one load: both pages from the bumped cache, local prefill,
+      no console exception.
+- [ ] Dark + light mode: three-button banner legible, no overflow at phone
+      width.
+
+## Phase 26 — Hermes `GET /ranking` (read-only, computed in the Worker)
+
+Spec: `.claude/specs/phase26_spec.md`. Decision: D1 — export `chipHits` and
+`activeChips` from `MP.Generator` (`generator.js:266`); the Worker owns **no**
+chip logic. Trivial calls: the Worker mirrors `plan.js`'s `candidatesFor`
+(266-275) for its `rankSlot` args but **keeps the current meal in the pool**;
+`shortOn` recomputed via `dayCoverage` rather than returned out of `rankSlot`;
+`covers` needs no new export (`MP.Nutrition.tagsForMeal`); plain-string 400/409
+bodies in the existing `json(status, reason)` style; all four slot types
+accepted. **No `PUT /ranking`, ever** — the write path stays `/placements`.
+
+### Logic & Backend Tasks (TDD — write the check first where marked)
+
+- [x] `nutrition.js`: replace `window.MP = window.MP || {};` (line 3) and the
+      bare IIFE (5, 98) with the `exclusions.js` shim shape —
+      `(function (root) { const MP = (root.MP = root.MP || {}); … })(typeof
+      globalThis !== "undefined" ? globalThis : this);` (§1.1). Body unchanged.
+- [x] `generator.js`: same shim (lines 5, 7, 267). Body unchanged. Confirm no
+      `window.` reference remains in either file.
+- [x] Confirm `MP.Nutrition.load()` is **left as-is** and that nothing added
+      this phase calls it — it is browser-only `fetch` (§"Findings").
+- [x] TDD: Node harness importing both files with no `window` — assert
+      `globalThis.MP.Nutrition.dayCoverage` and `globalThis.MP.Generator.rankSlot`
+      exist and `rankSlot` runs against the seed library (§7 steps 1-2).
+- [x] `generator.js:266` (D1): export list becomes
+      `{ generatePlan, rankSlot, weekendRuns, weekdayOf, isoToday, pickVariant,
+      chipHits, activeChips }`. **No function body is touched** (§1.2).
+- [x] `worker/worker.js` (beside 4-6): `import "../nutrition.js";
+      import "../generator.js";` + default imports of
+      `ingredient-nutrient-tags.json`, `nutrition-targets.json`,
+      `plan-preferences.json`; `const Nutrition/Generator = globalThis.MP.…`
+      beside line 8 (§2). No `wrangler.toml` change, no new dependency.
+- [x] Confirm `data.js` / `shelf-life.js` / `shopping-list.js` are **not**
+      imported — `rankSlot` never touches `MP.isBatch`, `MP.ShelfLife`,
+      `MP.effectiveMeal`, `MP.ShoppingList` (§"Findings").
+- [x] `worker/worker.js` `fetch` handler: one `/ranking` branch beside
+      `/discover`'s (198-201), **before** the `KEYS` lookup; 405 on non-GET
+      (§3.1). `KEYS`/`VALIDATE`/the PUT block stay untouched.
+- [x] New `async function ranking(params, env)` near `discover` (34-62) (§3.2).
+- [x] Validation (400s): `day` required integer 1-14 (`"day must be 1-14"`);
+      `slot` defaults `"dinner"`, else must be in `SLOT_TYPES`; `n` defaults
+      `3`, else integer 1-10. Use `Number.isInteger(Number(v))`, **not**
+      `parseInt` (`parseInt("5abc") === 5`).
+- [x] State load: `Promise.all` of `library`/`plan`/`planPrefs` KV. Missing,
+      `"null"`, unparseable, empty-array `library` or `days`-less `plan` →
+      **409** `"library and plan must be synced first"`. Missing `planPrefs`
+      is **200** with `{ busyDays: [], chips: [] }` — never a 409.
+- [x] `rankSlot` call mirrors `candidatesFor`: `others` = the day's other
+      slots, `prefs = { vocab: PLAN_VOCAB, busyDays, chips }`, pool filtered by
+      `mealTypes`. **No `prefer`, no `budget`, no `halfKeys`, no
+      `lastUsedDay`, no `excludeIds`**, and the current meal stays in the pool.
+- [x] Annotation: `shortOn` from `dayCoverage(others,…).missing + .partial`;
+      per candidate `covers = tagsForMeal(m, TAGS)` ∩ `shortOn`;
+      `chipHits` = ids from `Generator.chipHits` over
+      `activeChips(prefs).prefer.concat(.avoid)` — **both** kinds listed;
+      `prepEffort` defaults `"quick"`.
+- [x] Response exactly per `ARCHITECTURE.md:351-357`: `day`, `slot`, `shortOn`,
+      `current` (`variantId` always present, `null` for base; `null` when the
+      slot is empty), `candidates` (`rank` 1-based), `busyDay`, and
+      `approximate: true` **unconditionally**.
+- [x] Confirm the Worker performs **no** `env.MP_KV.put` on this path and that
+      no `PUT /ranking` exists (§"Non-goals" — never, not "not yet").
+- [x] Confirm no chip/nutrient rule got copied into `worker.js` — if there's an
+      `if (chip.keywords…)` in the Worker, D1 was implemented wrong
+      (`ARCHITECTURE.md:377-379`).
+- [x] Test group 43: `MP.Generator.chipHits` and `activeChips` are exported
+      functions (the un-export regression guard).
+- [x] Test: `chipHits` — name keyword, ingredient-key keyword, `"high"` tag,
+      `prepEffort`, no-match → `false`, criteria-less chip → `false`, meal with
+      no `ingredients` → no throw.
+- [x] Test: `activeChips` — splits by `kind`, drops unknown ids, and `{}` /
+      `null` / no-`vocab` → `{ prefer: [], avoid: [] }`.
+- [x] Test: `covers` derivation — `tagsForMeal(m, tags).filter(t =>
+      shortOn.includes(t))` keeps only the intersection, `[]` when nothing.
+- [x] Groups 1-42 still pass — they are the real regression test for the shim.
+      `rankSlot` itself is **not** re-tested (group 22 stands; no logic change).
+- [x] Walk §"Edge cases" and confirm each row — especially the 409 vs. 200
+      split on missing `planPrefs`, an empty pool returning 200, and a
+      `mealId` absent from `library` not crashing `current`.
+
+### UI & Layout Tasks
+
+- [x] None — `/ranking` adds no page, no markup, no CSS. Confirm `plan.js`,
+      `plan.html`, `plan-with-me.*`, `style.css` are **unmodified**.
+- [x] `sw.js`: bump `CACHE` (line 4) one step from its **current** value (read
+      it, don't assume). No shell-array additions — `worker/worker.js` isn't in
+      the PWA shell and both shimmed files are already listed.
+
+### Docs
+
+- [x] `docs/roadmap.md` Phase 26 (116-140): record D1, that bundling resolved
+      to the existing `exclusions.js` import pattern (no build-step change),
+      and that `covers` needed no new export; mark shipped.
+- [x] `docs/ARCHITECTURE.md` `GET /ranking` (343-373): leave the JSON block and
+      bullets as-is; add only the two new `MP.Generator` exports in the 360-363
+      bullet, the `root` shim on `nutrition.js`/`generator.js`, and the
+      `candidatesFor`-mirroring-but-keeps-current-meal note.
+- [x] `CLAUDE.md`: one line — the `window` → `root` shim now covers
+      `nutrition.js` and `generator.js` too (the Worker imports them); don't
+      reintroduce a bare `window.` there. Optional half-line: `rankSlot` has a
+      fourth caller and still must not be copied.
+- [x] `SPEC.md`: no change (no page, no user-facing rule) — confirm explicitly.
+
+### Manual pass
+
+- [x] §7 steps 1-2: Node shim smoke test passes (see the Logic tasks above).
+- [ ] `GET /ranking?day=5` → 200, `slot:"dinner"`, 3 candidates,
+      `approximate: true`. `?day=5&slot=lunch&n=10` → `rank` 1..n ascending.
+- [ ] Every bad param → 400 with its reason: `day=0`, `day=15`, `day=abc`,
+      `day` omitted, `slot=brunch`, `n=0`, `n=11`.
+- [ ] Empty/absent `library` → 409; same for `plan`; restore → 200.
+- [ ] Delete `planPrefs` → 200, `busyDay: false`, all `chipHits` empty.
+- [ ] `PUT /planPrefs` with `busyDays:[5]` + a chip id → `busyDay: true`, the
+      chip id appears in `chipHits`, prefer-matches lead `candidates`.
+- [ ] `PUT /ranking` → 405; `OPTIONS` → 204 + CORS; no token → 401;
+      `GET /rankings` → 404.
+- [ ] Worker order matches the app: the swap picker for the same day/slot shows
+      the same order once the current meal is removed.
+- [ ] `/plan`, `/library`, `/planPrefs`, `/placements`, `/discover` all
+      unchanged — they share the handler.
+- [ ] Browser regression: `test.html` all green (1-43) — **384 passed, 1
+      failed** (`run-day-1 is MP.isBatch; leftover days are same id or
+      leadsTo child`), pre-existing and unrelated to this phase (no
+      batch/leftover code touched); group 43 itself is all green. Needs a
+      look before calling this row done. `index.html`/`plan.html` manual
+      generate/swap/save pass not yet done (no browser MCP in this sandbox).
+- [ ] Offline after one load: both pages from the bumped cache, no new failure
+      path (the app never calls `/ranking`).

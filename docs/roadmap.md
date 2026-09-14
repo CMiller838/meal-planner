@@ -71,13 +71,14 @@ being rebuilt when the vocabulary settles. Cheap to reorder if the UI is the
 more appealing thing to build first. One-tap Generate stays untouched — this
 is a second entry point, never a replacement.*
 
-## Phase 24 — Guided walkthrough + review mode in `plan.js`
+## Phase 24 — Guided walkthrough + review mode in `plan.js` — shipped
 
 **Goal:** The `guided=1` step-through state machine: loop the existing
 `#swap-overlay` / `renderSwapCards()` swipe deck over the ~14 dinner slots
 showing `rankSlot`'s top 3 candidates, then land on the existing plan grid as
-a review step with the existing per-slot `.day-swap-btn` affordance and a
-"Looks good" commit button. Breakfast/lunch/snack stay auto-filled, unchanged.
+a review step with the existing day→Swap affordance (inside the day detail
+sheet, two taps: open day → Swap) and a "Looks good" commit button.
+Breakfast/lunch/snack stay auto-filled, unchanged.
 
 *Adds no new component by design — building a second page for the choice and
 review steps would duplicate `renderPlan`, the swipe deck and the detail
@@ -88,11 +89,7 @@ abandoning it leaves `mp_plan` untouched, and only the final commit writes,
 through the same save path as one-tap generate so `mp:plan-saved` → `pushPlan`
 still fires exactly once.*
 
-*Open scoping for this phase's spec: what a back/skip action does mid-
-walkthrough, and whether an un-chosen slot falls back to `rankSlot`'s top
-candidate automatically.*
-
-## Phase 25 — Hermes `planPrefs` sync + conversational flow trigger
+## Phase 25 — Hermes `planPrefs` sync + conversational flow trigger — shipped
 
 **Goal:** `GET`/`PUT /planPrefs` on `worker/worker.js` as a generic two-key
 relay in the style of `/pantry` (body `{ updatedAt, busyDays, chips }`,
@@ -109,7 +106,14 @@ ignores unknowns), so a vocabulary edit can never lock out a write — same
 reasoning as `/library`'s no-dietary-rules rule. Depends on Phase 23 for the
 screen the banner button opens.*
 
-## Phase 26 — Hermes `GET /ranking` (read-only ranking access)
+D1: the new "Plan with me" banner button acks `planFlag` immediately on
+click (same moment as Dismiss), then navigates — `ackedAt` means "the user
+responded", not "a plan exists", for both buttons. The Worker's `fetch`
+handler needed no change at all: `KEYS`/`VALIDATE` already drive routing,
+auth, and CORS generically, so the whole Worker diff was one `KEYS` entry and
+one validator function.
+
+## Phase 26 — Hermes `GET /ranking` (read-only ranking access) — shipped
 
 **Goal:** One read-only Worker route
 (`GET /ranking?day=<1..14>&slot=dinner&n=<1..10>`) covering both "why was X
@@ -131,8 +135,14 @@ Hermes acts on a ranking only through the existing `/placements`
 propose-then-app-applies queue, which the app still re-checks against local
 `mp_plan`. v4 adds no write path.*
 
-*Open scoping for this phase's spec: how the Worker bundles/serves the shared
-JS and JSON (inlined at deploy vs. fetched), and the exact `shortOn` /
-`chipHits` derivation for the response.*
+*Resolved (D1, `.claude/specs/phase26_spec.md`): bundling is the existing
+`exclusions.js` import pattern (`wrangler` bundles the ES module imports and
+the JSON defaults at deploy, no build-step change) — no separate
+inlined-vs-fetched question. `chipHits`/`activeChips` are exported from
+`MP.Generator` and the Worker calls them per-candidate rather than
+reimplementing the chip rule; `shortOn` is `dayCoverage(others,…).missing`
+concat `.partial`, recomputed in the Worker since `rankSlot` doesn't return
+it. `covers` needed no new export — `MP.Nutrition.tagsForMeal` already
+existed.*
 
 ---

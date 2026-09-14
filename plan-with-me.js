@@ -92,8 +92,8 @@ window.MP = window.MP || {};
       : "No busy days, no preferences";
   }
 
-  function init() {
-    const prefs = MP.PlanPrefs.get();
+  async function init() {
+    const prefs = MP.Sync ? await MP.Sync.fetchPlanPrefs() : MP.PlanPrefs.get();
     prefs.busyDays.forEach((d) => busyDays.add(d));
     renderBusyGrid();
 
@@ -130,6 +130,7 @@ window.MP = window.MP || {};
 
     document.getElementById("pwm-generate-btn").addEventListener("click", () => {
       MP.PlanPrefs.save([...busyDays], [...chips]);
+      if (MP.Sync) MP.Sync.pushPlanPrefs();
       location.href = "plan.html?guided=1";
     });
   }

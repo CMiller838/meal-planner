@@ -1706,6 +1706,97 @@
       deepEqual(emptyAgain.days, withoutPrefs.days));
   }
 
+  // ---- Group 42: Phase 25 (Hermes planPrefs sync) ----
+  {
+    const KEY = MP.PlanPrefs.KEY;
+
+    check("decide: remote newer -> pull",
+      MP.Sync.decide("2026-01-01T00:00:00.000Z", { updatedAt: "2026-01-02T00:00:00.000Z" }) === "pull");
+    check("decide: local newer -> push",
+      MP.Sync.decide("2026-01-02T00:00:00.000Z", { updatedAt: "2026-01-01T00:00:00.000Z" }) === "push");
+    check("decide: equal -> noop",
+      MP.Sync.decide("2026-01-01T00:00:00.000Z", { updatedAt: "2026-01-01T00:00:00.000Z" }) === "noop");
+    check("decide: remote null, local exists -> push",
+      MP.Sync.decide("2026-01-01T00:00:00.000Z", null) === "push");
+
+    for (const bad of ["{{{", "null", "[]"]) {
+      localStorage.setItem(KEY, bad);
+      const stamp = (() => {
+        try {
+          const parsed = JSON.parse(localStorage.getItem(KEY) || "null");
+          return parsed && typeof parsed.updatedAt === "string" ? parsed.updatedAt : "";
+        } catch (e) {
+          return "";
+        }
+      })();
+      check(`corrupt mp_planPrefs (${JSON.stringify(bad)}) loses to a valid remote`,
+        MP.Sync.decide(stamp, { updatedAt: "2026-01-01T00:00:00.000Z" }) === "pull");
+    }
+    localStorage.removeItem(KEY);
+
+    MP.PlanPrefs.save([0, "3", 15, 7, 7], ["comfort", 3, null]);
+    check("pull coercion: hostile remote body round-trips to sane shape",
+      deepEqual(MP.PlanPrefs.get(), { busyDays: [7], chips: ["comfort"] }));
+    localStorage.removeItem(KEY);
+  }
+
+  // ---- Group 43: Phase 26 (Hermes GET /ranking prerequisites) ----
+  {
+    const G = MP.Generator;
+    const N = MP.Nutrition;
+
+    check("MP.Generator.chipHits is exported", typeof G.chipHits === "function");
+    check("MP.Generator.activeChips is exported", typeof G.activeChips === "function");
+
+    const mBake = { id: "mA", name: "Big Bake", ingredients: [{ key: "x" }], prepEffort: "quick" };
+    const mKeyHit = { id: "mK", name: "Dinner", ingredients: [{ key: "bakedbeans" }] };
+    const mNoHit = { id: "mN", name: "Salad", ingredients: [{ key: "lettuce" }] };
+    const mNoIngredients = { id: "mE", name: "Mystery" };
+    const bakeChip = { id: "bake", kind: "prefer", keywords: ["bake"] };
+    check("chipHits: keyword hit on meal name", G.chipHits(mBake, bakeChip, {}) === true);
+    check("chipHits: keyword hit on ingredient key", G.chipHits(mKeyHit, bakeChip, {}) === true);
+    check("chipHits: no match -> false", G.chipHits(mNoHit, bakeChip, {}) === false);
+
+    const fibChip = { id: "fib", kind: "prefer", tags: ["fibre"] };
+    const mHighFibre = { id: "mF", name: "X", ingredients: [{ key: "oats" }] };
+    const mLowFibre = { id: "mL", name: "Y", ingredients: [{ key: "rice" }] };
+    check("chipHits: tag hit on a 'high' ingredient", G.chipHits(mHighFibre, fibChip, tags) === true);
+    check("chipHits: tag no-hit on a 'low' ingredient", G.chipHits(mLowFibre, fibChip, tags) === false);
+
+    const batchChip = { id: "batchy", kind: "prefer", prepEffort: "batch" };
+    const mBatch = { id: "mC", name: "Stew", ingredients: [{ key: "z" }], prepEffort: "batch" };
+    check("chipHits: prepEffort hit", G.chipHits(mBatch, batchChip, {}) === true);
+
+    const emptyChip = { id: "empty", kind: "prefer" };
+    check("chipHits: chip with no criteria -> false", G.chipHits(mBake, emptyChip, {}) === false);
+    check("chipHits: meal with no ingredients array -> no throw, false", G.chipHits(mNoIngredients, bakeChip, {}) === false);
+
+    const vocab = { chips: [
+      { id: "comfort", kind: "prefer", keywords: ["bake"] },
+      { id: "no-spice", kind: "avoid", keywords: ["curry"] },
+    ] };
+    check("activeChips: splits by kind",
+      deepEqual(G.activeChips({ vocab, chips: ["comfort", "no-spice"] }), {
+        prefer: [vocab.chips[0]], avoid: [vocab.chips[1]],
+      }));
+    check("activeChips: drops ids absent from vocab",
+      deepEqual(G.activeChips({ vocab, chips: ["comfort", "nope"] }), { prefer: [vocab.chips[0]], avoid: [] }));
+    check("activeChips: {} -> empty", deepEqual(G.activeChips({}), { prefer: [], avoid: [] }));
+    check("activeChips: null -> empty", deepEqual(G.activeChips(null), { prefer: [], avoid: [] }));
+    check("activeChips: missing vocab -> empty", deepEqual(G.activeChips({ chips: ["comfort"] }), { prefer: [], avoid: [] }));
+
+    const shortOn = ["fibre", "vitD"];
+    const coversMeal = { id: "mCov", name: "Oats Bowl", ingredients: [{ key: "oats" }] };
+    check("covers derivation: intersects tagsForMeal with shortOn",
+      deepEqual(N.tagsForMeal(coversMeal, tags).filter((t) => shortOn.includes(t)), ["fibre"]));
+    const noCoverMeal = { id: "mNC", name: "Rice Bowl", ingredients: [{ key: "rice" }] };
+    check("covers derivation: [] when nothing short is covered",
+      deepEqual(N.tagsForMeal(noCoverMeal, tags).filter((t) => shortOn.includes(t)), []));
+
+    check("root shim: MP.Nutrition still resolves via window", typeof window.MP.Nutrition.dayCoverage === "function");
+    check("root shim: MP.Generator still resolves via window", typeof window.MP.Generator.rankSlot === "function");
+  }
+
   lines.push("", `${pass} passed, ${fail} failed`);
   document.getElementById("out").textContent = lines.join("\n");
 })();

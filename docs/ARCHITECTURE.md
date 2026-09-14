@@ -333,6 +333,13 @@ no-dietary-rules rule.
 plan-request banner gains a second button that opens `plan-with-me.html`
 prefilled from the pulled `planPrefs` instead of generating immediately.
 
+Implementation (Phase 25, shipped): the pull entry point is
+`MP.Sync.fetchPlanPrefs()`, called from `plan-with-me.js`'s prefill; the push
+is `MP.Sync.pushPlanPrefs()`, fired un-awaited from `#pwm-generate-btn` after
+`MP.PlanPrefs.save(...)`. The banner's new "Plan with me" button acks
+`planFlag` on click (D1), same moment as Dismiss — so `ackedAt` means "the
+user responded", not "a plan exists", for both buttons alike.
+
 ### Hermes: `GET /ranking`
 
 One read-only endpoint covering both "why was X picked" and "give me the top
@@ -364,6 +371,19 @@ N" — they're the same computation, so they're one route.
 - **No `PUT /ranking`, ever.** Hermes acts on a ranking only through the
   existing `PUT /placements` queue, which the app still re-checks against
   local `mp_plan`. v4 adds no write path.
+- `MP.Generator`'s export list gained `chipHits` and `activeChips` (Phase
+  26) so the Worker can annotate each candidate's `chipHits` without a
+  second copy of the chip-matching rule. `nutrition.js` and `generator.js`
+  also picked up the `window` → `root` shim `exclusions.js` already used
+  (`(function (root) { const MP = (root.MP = root.MP || {}); … })(typeof
+  globalThis !== "undefined" ? globalThis : this);`), which is what lets
+  `worker/worker.js` import them directly — no behaviour change in the
+  browser, where `globalThis === window`.
+- The Worker mirrors `plan.js`'s `candidatesFor` for the `rankSlot`
+  arguments (day's other slots, no `prefer`/`budget`/`halfKeys`/
+  `lastUsedDay`) but, unlike `candidatesFor`, **keeps the current meal in
+  the pool** — `/ranking` answers "why was X picked", so X needs its own
+  `rank` alongside the `current` field.
 
 ### v4 invariants
 
