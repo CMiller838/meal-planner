@@ -1673,11 +1673,11 @@
     const KEY = P.KEY;
 
     localStorage.removeItem(KEY);
-    check("get() with key absent -> empty default", deepEqual(P.get(), { busyDays: [], chips: [] }));
+    check("get() with key absent -> empty default", deepEqual(P.get(), { busyDays: [], chips: [], budgetTarget: 0 }));
 
     for (const bad of ["not json", "null", "[]", "3"]) {
       localStorage.setItem(KEY, bad);
-      check(`get() with ${JSON.stringify(bad)} -> empty default, no throw`, deepEqual(P.get(), { busyDays: [], chips: [] }));
+      check(`get() with ${JSON.stringify(bad)} -> empty default, no throw`, deepEqual(P.get(), { busyDays: [], chips: [], budgetTarget: 0 }));
     }
 
     localStorage.setItem(KEY, JSON.stringify({ busyDays: [0, 3, 15, "4", 3, 14], chips: ["comfort", 5, "no-spice", null] }));
@@ -1689,10 +1689,10 @@
     const saved = P.save([11, 2], ["comfort"]);
     check("save() sorts busyDays ascending", deepEqual(saved.busyDays, [2, 11]));
     check("save() stamps a parseable ISO updatedAt", !isNaN(new Date(saved.updatedAt).getTime()));
-    check("save() round-trips through get()", deepEqual(P.get(), { busyDays: [2, 11], chips: ["comfort"] }));
+    check("save() round-trips through get()", deepEqual(P.get(), { busyDays: [2, 11], chips: ["comfort"], budgetTarget: 0 }));
 
     const savedEmpty = P.save([], []);
-    check("save([], []) round-trips to the empty shape", deepEqual(P.get(), { busyDays: [], chips: [] }));
+    check("save([], []) round-trips to the empty shape", deepEqual(P.get(), { busyDays: [], chips: [], budgetTarget: 0 }));
     check("save([], []) has no busyDays/chips leak", deepEqual(savedEmpty.busyDays, []) && deepEqual(savedEmpty.chips, []));
     localStorage.removeItem(KEY);
 
@@ -1736,7 +1736,7 @@
 
     MP.PlanPrefs.save([0, "3", 15, 7, 7], ["comfort", 3, null]);
     check("pull coercion: hostile remote body round-trips to sane shape",
-      deepEqual(MP.PlanPrefs.get(), { busyDays: [7], chips: ["comfort"] }));
+      deepEqual(MP.PlanPrefs.get(), { busyDays: [7], chips: ["comfort"], budgetTarget: 0 }));
     localStorage.removeItem(KEY);
   }
 
@@ -1795,6 +1795,327 @@
 
     check("root shim: MP.Nutrition still resolves via window", typeof window.MP.Nutrition.dayCoverage === "function");
     check("root shim: MP.Generator still resolves via window", typeof window.MP.Generator.rankSlot === "function");
+  }
+
+  // ---- Group 44: Phase 27 (budget soft-preference) ----
+  {
+    const G = MP.Generator;
+
+    // Regression guard first — the test this phase exists for.
+    {
+      const p0 = G.generatePlan(library, tags, targets, shelfData, "2026-09-07", null, {}, { budgetTarget: 0 });
+      const pAbsent = G.generatePlan(library, tags, targets, shelfData, "2026-09-07", null, {}, {});
+      const pEmpty = G.generatePlan(library, tags, targets, shelfData, "2026-09-07", null, {}, {});
+      check("generatePlan: budgetTarget 0 === absent === {}",
+        deepEqual(p0.days, pAbsent.days) && deepEqual(pAbsent.days, pEmpty.days));
+    }
+
+    // Synthetic budget fixture: 5 nutrition-neutral meals (bE far cheapest, 5th-ranked).
+    const bA = { id: "bA", name: "A", ingredients: [{ key: "a" }] };
+    const bB = { id: "bB", name: "B", ingredients: [{ key: "b" }] };
+    const bC = { id: "bC", name: "C", ingredients: [{ key: "c" }] };
+    const bD = { id: "bD", name: "D", ingredients: [{ key: "d" }] };
+    const bE = { id: "bE", name: "E", ingredients: [{ key: "e" }] };
+    const budgetPool = [bA, bB, bC, bD, bE];
+    const budgetCostIndex = {
+      bA: { cost: 5, keys: ["a"] }, bB: { cost: 5, keys: ["b"] }, bC: { cost: 5, keys: ["c"] },
+      bD: { cost: 5, keys: ["d"] }, bE: { cost: 1, keys: ["e"] },
+    };
+    const flatBudgetTags = {};
+    const noBudgetTargets = {};
+    const freshHalfKeys = () => ({ first: new Set(), second: new Set() });
+    const withCfg = { costIndex: budgetCostIndex, shortlistSize: 4, reuseCredit: 0.6, budgetTarget: { max: 120, step: 5, default: 0, maxShortlist: 10 } };
+
+    const bp0 = G.rankSlot(budgetPool, 1, [], { tags: flatBudgetTags, targets: noBudgetTargets, budget: withCfg, halfKeys: freshHalfKeys(), pressure: 0 });
+    const bpAbsent = G.rankSlot(budgetPool, 1, [], { tags: flatBudgetTags, targets: noBudgetTargets, budget: withCfg, halfKeys: freshHalfKeys() });
+    check("rankSlot: pressure 0 === pressure absent", deepEqual(bp0.map((m) => m.id), bpAbsent.map((m) => m.id)));
+
+    const bp1 = G.rankSlot(budgetPool, 1, [], { tags: flatBudgetTags, targets: noBudgetTargets, budget: withCfg, halfKeys: freshHalfKeys(), pressure: 1 });
+    check("rankSlot: pressure 1 pulls the 5th-ranked cheapest meal to the head", bp1[0].id === "bE");
+    check("rankSlot: pressure 0 leaves the 5th-ranked cheapest meal at the tail", bp0[bp0.length - 1].id === "bE");
+
+    check("rankSlot: every pressure returns every meal in the pool (length)",
+      bp0.length === budgetPool.length && bp1.length === budgetPool.length);
+    check("rankSlot: every pressure returns every meal in the pool (id-set)",
+      deepEqual([...bp0.map((m) => m.id)].sort(), [...bp1.map((m) => m.id)].sort()));
+
+    const noCfg = { costIndex: budgetCostIndex, shortlistSize: 4, reuseCredit: 0.6 };
+    const bpNoCfg = G.rankSlot(budgetPool, 1, [], { tags: flatBudgetTags, targets: noBudgetTargets, budget: noCfg, halfKeys: freshHalfKeys(), pressure: 1 });
+    check("rankSlot: budgetTarget config absent -> ordering identical to pressure 0",
+      deepEqual(bpNoCfg.map((m) => m.id), bp0.map((m) => m.id)));
+
+    const smallMaxCfg = { costIndex: budgetCostIndex, shortlistSize: 4, reuseCredit: 0.6, budgetTarget: { max: 120, step: 5, default: 0, maxShortlist: 4 } };
+    const bpSmallMax = G.rankSlot(budgetPool, 1, [], { tags: flatBudgetTags, targets: noBudgetTargets, budget: smallMaxCfg, halfKeys: freshHalfKeys(), pressure: 1 });
+    check("rankSlot: maxShortlist <= shortlistSize -> ordering identical to pressure 0",
+      deepEqual(bpSmallMax.map((m) => m.id), bp0.map((m) => m.id)));
+
+    // Spend accumulation, on the real library/pack data.
+    {
+      const realCostIndex = MP.ShoppingList.costIndex(library, realPackData);
+      const realBudget = { costIndex: realCostIndex, ...realPackData.planning };
+      const totalDinnerCost = (p) => p.days.reduce((sum, d) => {
+        const slot = d.slots.dinner;
+        const entry = slot && slot.mealId && realCostIndex[slot.mealId];
+        return sum + (entry ? entry.cost : 0);
+      }, 0);
+      const allDinnersFilled = (p) => p.days.every((d) => d.slots.dinner && d.slots.dinner.mealId);
+
+      const tight = G.generatePlan(library, tags, targets, shelfData, "2026-09-07", realBudget, {}, { budgetTarget: 1 });
+      const loose = G.generatePlan(library, tags, targets, shelfData, "2026-09-07", realBudget, {}, { budgetTarget: 0 });
+      check("generatePlan: a tight target yields a lower total dinner cost than target 0",
+        totalDinnerCost(tight) < totalDinnerCost(loose));
+      check("generatePlan: a tight target still fills all 14 dinner slots", allDinnersFilled(tight));
+    }
+
+    // Leftover days don't count toward spend.
+    {
+      const bigroast = { id: "big-roast", mealTypes: ["dinner"], servings: 2, leadsTo: ["leftover1"], ingredients: [] };
+      const leftover1 = { id: "leftover1", ingredients: [] };
+      const f1 = { id: "f1", mealTypes: ["dinner"], ingredients: [] };
+      const f2 = { id: "f2", mealTypes: ["dinner"], ingredients: [] };
+      const f3 = { id: "f3", mealTypes: ["dinner"], ingredients: [] };
+      const f4 = { id: "f4", mealTypes: ["dinner"], ingredients: [] };
+      const f5 = { id: "f5", mealTypes: ["dinner"], ingredients: [] };
+      const leftoverLibrary = [bigroast, leftover1, f1, f2, f3, f4, f5];
+      const leftoverShelfData = { cooked_leftovers: { fridgeDays: 3 } };
+      const leftoverCostIndex = {
+        "big-roast": { cost: 5, keys: [] }, leftover1: { cost: 1000, keys: [] },
+        f1: { cost: 2.10, keys: [] }, f2: { cost: 2.20, keys: [] }, f3: { cost: 2.30, keys: [] },
+        f4: { cost: 2.40, keys: [] }, f5: { cost: 0.10, keys: [] },
+      };
+      const leftoverBudget = { costIndex: leftoverCostIndex, shortlistSize: 4, reuseCredit: 0, budgetTarget: { max: 120, step: 5, default: 0, maxShortlist: 10 } };
+      // Saturday start -> weekendRuns [[1,2],[7,8,9],[14]]: a 2-day run at the very
+      // start leaves days 3-7 in the same half to reveal a leaked leftover cost.
+      const leftoverPlan = G.generatePlan(leftoverLibrary, {}, {}, leftoverShelfData, "2026-09-05", leftoverBudget, {}, { budgetTarget: 50 });
+      check("leftover day (£1000, uncounted) doesn't inflate week-1 pressure: day 3 still picks the narrow-shortlist winner",
+        leftoverPlan.days[2].slots.dinner.mealId === "f1");
+    }
+
+    // Per-half reset (D2): the documented pressure formula reads only its own
+    // half's `spent[half]` — a blown week 1 (huge spent.first) cannot leak
+    // into day 8's pressure, because day 8 reads spent.second alone.
+    {
+      const pressureFormula = (spent, half, target, dayInHalf) => {
+        const expected = target * (dayInHalf - 1) / 7;
+        return Math.min(1, Math.max(0, (spent[half] - expected) / target));
+      };
+      const blownWeek1 = { first: 1000, second: 0 };
+      const cheapWeek1 = { first: 0, second: 0 };
+      check("per-half reset: day 8's pressure formula ignores a blown week 1",
+        pressureFormula(blownWeek1, "second", 50, 1) === pressureFormula(cheapWeek1, "second", 50, 1)
+        && pressureFormula(blownWeek1, "second", 50, 1) === 0);
+    }
+
+    // MP.PlanPrefs.get()/save() budgetTarget coercion.
+    {
+      const P = MP.PlanPrefs;
+      const KEY = P.KEY;
+      localStorage.removeItem(KEY);
+      check("PlanPrefs.get(): no key -> budgetTarget 0", P.get().budgetTarget === 0);
+
+      for (const [stored, expected] of [["75", 75], [null, 0], ["abc", 0], [-5, 0], [{}, 0], [NaN, 0]]) {
+        localStorage.setItem(KEY, JSON.stringify({ budgetTarget: stored }));
+        check(`PlanPrefs.get(): budgetTarget ${JSON.stringify(stored)} -> ${expected}, no throw`, P.get().budgetTarget === expected);
+      }
+      localStorage.removeItem(KEY);
+
+      const saved = P.save([2], ["comfort"], 75);
+      check("PlanPrefs.save(): round-trips budgetTarget 75 with busyDays/chips intact",
+        deepEqual(P.get(), { busyDays: [2], chips: ["comfort"], budgetTarget: 75 }));
+      check("PlanPrefs.save(): return value carries budgetTarget", saved.budgetTarget === 75);
+
+      P.save([], [], undefined);
+      check("PlanPrefs.save([], [], undefined): stores budgetTarget 0, not undefined", P.get().budgetTarget === 0);
+      localStorage.removeItem(KEY);
+    }
+  }
+
+  // ---- Group 45: Phase 28 (ingredient-substitution groups) ----
+  {
+    const G = MP.Generator;
+    const SL = MP.ShoppingList;
+
+    // groupIndex
+    check("groupIndex({}) -> {}", deepEqual(SL.groupIndex({}), {}));
+    check("groupIndex(null) -> {}", deepEqual(SL.groupIndex(null), {}));
+    check("groupIndex({groups:[]}) -> {}", deepEqual(SL.groupIndex({ groups: [] }), {}));
+    check("groupIndex: group with <2 members is inert",
+      deepEqual(SL.groupIndex({ groups: [{ id: "solo", members: [{ key: "a", label: "A" }] }] }), {}));
+    {
+      const dup = SL.groupIndex({
+        groups: [
+          { id: "first", members: [{ key: "x", label: "X1" }, { key: "y", label: "Y1" }] },
+          { id: "second", members: [{ key: "x", label: "X2" }, { key: "z", label: "Z2" }] },
+        ],
+      });
+      check("groupIndex: duplicate key resolves to first group", dup.x.groupId === "first");
+      check("groupIndex: members keyed by normalized key", "y" in dup && "z" in dup);
+    }
+
+    // MP.applySubs
+    {
+      const meal = { id: "m1", ingredients: [{ key: "onion", qty: "1", label: "Onion" }, { key: "rice", qty: "100g", label: "Rice" }] };
+      const subbed = MP.applySubs(meal, [{ from: "onion", to: "peppers", label: "Peppers" }]);
+      check("applySubs: swaps key/label, keeps qty", subbed.ingredients[0].key === "peppers" && subbed.ingredients[0].label === "Peppers" && subbed.ingredients[0].qty === "1");
+      check("applySubs: keeps meal.id", subbed.id === "m1");
+      check("applySubs: other ingredients untouched", subbed.ingredients[1].key === "rice");
+      check("applySubs: does not mutate input", meal.ingredients[0].key === "onion");
+      check("applySubs(meal, undefined) -> unchanged", MP.applySubs(meal, undefined) === meal);
+      check("applySubs(meal, []) -> unchanged", MP.applySubs(meal, []) === meal);
+      check("applySubs(meal, 'nonsense') -> unchanged, no throw", MP.applySubs(meal, "nonsense") === meal);
+      check("applySubs: unmatched from -> unchanged", deepEqual(MP.applySubs(meal, [{ from: "nope", to: "x", label: "X" }]), meal));
+    }
+
+    // MP.effectiveMeal(meal, variantId, subs)
+    {
+      const variant = { id: "v1", name: "Spicy", ingredients: [{ key: "peppers", qty: "1", label: "Peppers" }] };
+      const meal = { id: "m2", ingredients: [{ key: "onion", qty: "1", label: "Onion" }], variants: [variant] };
+      const withVariantAndSub = MP.effectiveMeal(meal, "v1", [{ from: "peppers", to: "onion", label: "Onion" }]);
+      check("effectiveMeal: variant applied then subs", withVariantAndSub.ingredients[0].key === "onion");
+      const subNotInVariant = MP.effectiveMeal(meal, "v1", [{ from: "onion", to: "peppers", label: "Peppers" }]);
+      check("effectiveMeal: sub not matching the variant's ingredients is a no-op", subNotInVariant.ingredients[0].key === "peppers");
+      check("effectiveMeal: two-arg calls behave exactly as before", MP.effectiveMeal(meal, "v1").ingredients[0].key === "peppers");
+      check("effectiveMeal: no variantId, no subs -> same object back", MP.effectiveMeal(meal, null) === meal);
+    }
+
+    // MP.subsLabel
+    check('subsLabel([]) === ""', MP.subsLabel([]) === "");
+    check('subsLabel(undefined) === ""', MP.subsLabel(undefined) === "");
+    check('subsLabel: one sub -> "with Onion"', MP.subsLabel([{ from: "peppers", to: "onion", label: "Onion" }]) === "with Onion");
+
+    // rankSlot: substitution credit (layer 4)
+    {
+      const groups = SL.groupIndex({ groups: [{ id: "veg", members: [{ key: "onion", label: "Onion" }, { key: "peppers", label: "Peppers" }] }] });
+      const bA = { id: "bA", ingredients: [{ key: "a" }] };
+      const bB = { id: "bB", ingredients: [{ key: "b" }] };
+      const bC = { id: "bC", ingredients: [{ key: "c" }] };
+      const mOnion = { id: "mOnion", ingredients: [{ key: "onion" }] };
+      const mPepper = { id: "mPepper", ingredients: [{ key: "peppers" }] };
+      const costIndex = {
+        bA: { cost: 5, keys: ["a"] }, bB: { cost: 5, keys: ["b"] }, bC: { cost: 5, keys: ["c"] },
+        mOnion: { cost: 5, keys: ["onion"] }, mPepper: { cost: 5, keys: ["peppers"] },
+      };
+      const half = { first: new Set(["onion"]), second: new Set() };
+      const flatTags = {}, noTargets = {};
+      const withCredit = { costIndex, groups, shortlistSize: 4, reuseCredit: 0.6, subCredit: 0.3 };
+      const noCredit = { costIndex, groups, shortlistSize: 4, reuseCredit: 0.6, subCredit: 0 };
+      const noGroups = { costIndex, shortlistSize: 4, reuseCredit: 0.6, subCredit: 0.3 };
+
+      const poolNoOnion = [bA, bB, bC, mPepper];
+      const rWith = G.rankSlot(poolNoOnion, 1, [], { tags: flatTags, targets: noTargets, budget: withCredit, halfKeys: half, pressure: 0 });
+      const rWithout = G.rankSlot(poolNoOnion, 1, [], { tags: flatTags, targets: noTargets, budget: noCredit, halfKeys: half, pressure: 0 });
+      const rNoGroups = G.rankSlot(poolNoOnion, 1, [], { tags: flatTags, targets: noTargets, budget: noGroups, halfKeys: half, pressure: 0 });
+      check("rankSlot: subCredit set pulls the swap-only meal to the head", rWith[0].id === "mPepper");
+      check("rankSlot: subCredit 0 leaves ordering identical to groups absent", deepEqual(rWithout.map((m) => m.id), rNoGroups.map((m) => m.id)));
+      check("rankSlot: subCredit 0 does NOT pull the swap-only meal to the head", rWithout[rWithout.length - 1].id === "mPepper");
+      check("rankSlot: returns every meal in the pool regardless of groups/subCredit",
+        deepEqual([...rWith.map((m) => m.id)].sort(), [...poolNoOnion.map((m) => m.id)].sort()));
+
+      const poolBoth = [mOnion, mPepper];
+      const rExact = G.rankSlot(poolBoth, 1, [], { tags: flatTags, targets: noTargets, budget: withCredit, halfKeys: half, pressure: 0 });
+      check("rankSlot: an exact-overlap meal still outranks a swap-only meal of the same cost", rExact[0].id === "mOnion");
+    }
+
+    // generatePlan: substitution end-to-end (writes subs, shopping-list dedupe, per-half reset)
+    {
+      const mOnion = { id: "onion-meal", name: "Onion Meal", mealTypes: ["dinner"], ingredients: [{ key: "onion", qty: "1", label: "Onion" }] };
+      const mPepper = { id: "pepper-meal", name: "Pepper Meal", mealTypes: ["dinner"], ingredients: [{ key: "peppers", qty: "1", label: "Peppers" }] };
+      const mealsById45 = { [mOnion.id]: mOnion, [mPepper.id]: mPepper };
+      const budget45 = {
+        costIndex: { [mOnion.id]: { cost: 2, keys: ["onion"] }, [mPepper.id]: { cost: 2, keys: ["pepper"] } },
+        groups: SL.groupIndex({ groups: [{ id: "veg", members: [{ key: "onion", label: "Onion" }, { key: "peppers", label: "Peppers" }] }] }),
+        shortlistSize: 4, reuseCredit: 0.6, subCredit: 0.3,
+      };
+      const swapPlan = G.generatePlan([mOnion, mPepper], {}, {}, {}, "2026-09-07", budget45, {}, {});
+
+      check("generatePlan: writes subs:[{from,to,label}] on the slot when a swap applies",
+        deepEqual(swapPlan.days[1].slots.dinner.subs, [{ from: "peppers", to: "onion", label: "Onion" }]));
+
+      check("per-half: a week-1 onion purchase never enables a week-2 swap",
+        swapPlan.days[7].slots.dinner.mealId === "pepper-meal" && !("subs" in swapPlan.days[7].slots.dinner));
+
+      const packData45 = { items: { onion: { label: "Onion", packSize: 5, unit: "each", price: 1 } } };
+      const lists45 = SL.buildLists(swapPlan, mealsById45, packData45, null);
+      const allWeek1 = [...lists45[1].lines, ...lists45[1].estimated, ...lists45[1].staples];
+      check("shopping list: the swapped-out key (peppers) does not appear in week 1",
+        !allWeek1.some((l) => l.key === "peppers"));
+      const onionLine = allWeek1.find((l) => l.key === "onion");
+      check("shopping list: one pack (onion) covers both dinners' meals",
+        !!onionLine && onionLine.meals.includes("Onion Meal") && onionLine.meals.includes("Pepper Meal"));
+    }
+
+    // Exclusion gate: a swap is rejected, never the meal.
+    {
+      const onionMeal = { id: "onion-meal", name: "Onion Meal", mealTypes: ["dinner"], ingredients: [{ key: "onion" }] };
+      const hamToastie = { id: "ham-toastie", name: "Ham Toastie", mealTypes: ["dinner"], ingredients: [{ key: "cheese" }] };
+      const groups = SL.groupIndex({ groups: [{ id: "g", members: [{ key: "cheese", label: "Cheese" }, { key: "onion", label: "Onion" }] }] });
+      const budget = {
+        costIndex: { "onion-meal": { cost: 2, keys: ["onion"] }, "ham-toastie": { cost: 2, keys: ["cheese"] } },
+        groups, shortlistSize: 4, reuseCredit: 0.6, subCredit: 0.3,
+      };
+      const p = G.generatePlan([onionMeal, hamToastie], {}, {}, {}, "2026-09-07", budget, {}, {});
+      check("exclusion gate (veg in toastie): the toastie is still placed, unswapped",
+        p.days[1].slots.dinner.mealId === "ham-toastie" && !("subs" in p.days[1].slots.dinner));
+    }
+    {
+      const mushroomMeal = { id: "mushroom-meal", name: "Mushroom Meal", mealTypes: ["dinner"], ingredients: [{ key: "mushroom" }] };
+      const garlicMeal = { id: "garlic-meal", name: "Garlic Meal", mealTypes: ["dinner"], ingredients: [{ key: "garlic" }] };
+      const groups = SL.groupIndex({ groups: [{ id: "g", members: [{ key: "garlic", label: "Garlic" }, { key: "mushroom", label: "Mushroom" }] }] });
+      const budget = {
+        costIndex: { "mushroom-meal": { cost: 2, keys: ["mushroom"] }, "garlic-meal": { cost: 2, keys: ["garlic"] } },
+        groups, shortlistSize: 4, reuseCredit: 0.6, subCredit: 0.3,
+      };
+      const p = G.generatePlan([mushroomMeal, garlicMeal], {}, {}, {}, "2026-09-07", budget, {}, {});
+      check("exclusion gate (mushroom wrongly listed as a group member): the meal is still placed, unswapped",
+        p.days[1].slots.dinner.mealId === "garlic-meal" && !("subs" in p.days[1].slots.dinner));
+    }
+
+    // At most one swap per meal, even with two swappable ingredients.
+    {
+      const filler = { id: "filler", name: "Filler", mealTypes: ["dinner"], ingredients: [{ key: "carrot" }, { key: "pepper" }] };
+      const mealX = { id: "mealX", name: "Meal X", mealTypes: ["dinner"], ingredients: [{ key: "tomato" }, { key: "onion" }] };
+      const groups = SL.groupIndex({
+        groups: [
+          { id: "gA", members: [{ key: "tomato", label: "Tomato" }, { key: "carrot", label: "Carrot" }] },
+          { id: "gB", members: [{ key: "onion", label: "Onion" }, { key: "pepper", label: "Pepper" }] },
+        ],
+      });
+      const budget = {
+        costIndex: { filler: { cost: 1, keys: ["carrot", "pepper"] }, mealX: { cost: 5, keys: ["tomato", "onion"] } },
+        groups, shortlistSize: 4, reuseCredit: 0.6, subCredit: 0.3,
+      };
+      const p = G.generatePlan([filler, mealX], {}, {}, {}, "2026-09-07", budget, {}, {});
+      check("at most one swap per meal, even with two swappable ingredients",
+        p.days[1].slots.dinner.mealId === "mealX" && p.days[1].slots.dinner.subs.length === 1);
+    }
+
+    // Leftover days never get a swap (place()'s countsTowardBudget gate).
+    {
+      const bigroast = { id: "big-roast", name: "Big Roast", mealTypes: ["dinner"], servings: 2, leadsTo: ["leftover1"], ingredients: [{ key: "chicken" }] };
+      const leftover1 = { id: "leftover1", name: "Leftover Roast", mealTypes: ["dinner"], ingredients: [{ key: "peppers" }] };
+      const f = (id) => ({ id, name: id, mealTypes: ["dinner"], ingredients: [] });
+      const fillers = ["f1", "f2", "f3", "f4", "f5"].map(f);
+      const leftoverLibrary = [bigroast, leftover1, ...fillers];
+      const groups = SL.groupIndex({ groups: [{ id: "veg", members: [{ key: "onion", label: "Onion" }, { key: "peppers", label: "Peppers" }] }] });
+      const costIndex = { "big-roast": { cost: 5, keys: ["chicken"] }, leftover1: { cost: 1000, keys: ["pepper"] } };
+      fillers.forEach((m, i) => (costIndex[m.id] = { cost: 1 + i, keys: [] }));
+      const budget = { costIndex, groups, shortlistSize: 4, reuseCredit: 0.6, subCredit: 0.3 };
+      // Saturday start -> weekendRuns [[1,2],[7,8,9],[14]]: a 2-day run at day 1-2.
+      const p = G.generatePlan(leftoverLibrary, {}, {}, { cooked_leftovers: { fridgeDays: 3 } }, "2026-09-05", budget, {}, {});
+      check("leftover day leaves no subs on the leftover slot",
+        p.days[1].slots.dinner.mealId === "leftover1" && !("subs" in p.days[1].slots.dinner));
+    }
+
+    // Regression guard: absent groups === empty groups === today's output.
+    {
+      const budgetNoGroups = { costIndex: MP.ShoppingList.costIndex(library, realPackData), ...realPackData.planning };
+      const budgetEmptyGroups = { ...budgetNoGroups, groups: {} };
+      const pNoGroups = G.generatePlan(library, tags, targets, shelfData, "2026-09-07", budgetNoGroups, {}, {});
+      const pEmptyGroups = G.generatePlan(library, tags, targets, shelfData, "2026-09-07", budgetEmptyGroups, {}, {});
+      check("generatePlan: budget.groups absent === budget.groups {}", deepEqual(pNoGroups.days, pEmptyGroups.days));
+      check("generatePlan: no slot gains a subs key when groups absent",
+        pNoGroups.days.every((d) => Object.values(d.slots).every((s) => !s || !("subs" in s))));
+    }
   }
 
   lines.push("", `${pass} passed, ${fail} failed`);

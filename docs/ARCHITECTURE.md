@@ -82,14 +82,15 @@ Nine keys, all plain JSON values, no versioning scheme beyond `updatedAt`:
   shape as `pantry`, but for a scratch "ran out of / want to buy this week"
   list, separate from the two-week planned shop (Phase 12).
 - `plan` (Phase 13) → `{ updatedAt, startDate, days: [{day, slots: {<slotType>:
-  {mealId, eatenAt, variantId?}}}] }`. **The plan of record is still `mp_plan`
-  in localStorage** — this key is a derived, best-effort, app-written mirror
-  (`mealId`/`eatenAt`/optional `variantId` only, no name or recipe data) that
-  exists so Hermes can see what's already scheduled before proposing a
-  placement. It is stale by construction (pushed on save, not
+  {mealId, eatenAt, variantId?, subs?}}}] }`. **The plan of record is still
+  `mp_plan` in localStorage** — this key is a derived, best-effort, app-written
+  mirror (`mealId`/`eatenAt`/optional `variantId`/optional `subs`, no name or
+  recipe data) that exists so Hermes can see what's already scheduled before
+  proposing a placement. It is stale by construction (pushed on save, not
   read-after-write) and **the app never reads it back** — if the mirror and
   `mp_plan` ever disagree, `mp_plan` wins. `variantId` (Phase 14) is present
-  only when the slot has one, never written as `null`.
+  only when the slot has one, never written as `null`; `subs` (Phase 28,
+  `[{from, to, label}]`) likewise only when a swap applies.
 - `placements` (Phase 13) → `{ updatedAt, placements: [{id, day, slot,
   mealId, mealName, variantId?, requestedAt}] }`. Hermes-owned request queue,
   replaced wholesale on each PUT; the app drains it, applies each entry
@@ -399,8 +400,38 @@ N" — they're the same computation, so they're one route.
   the same save path as one-tap generate (so `mp:plan-saved` → `pushPlan`
   still fires exactly once).
 - **`mp_planPrefs` is settings, not plan state.** It never contains meal
-  ids, and losing it degrades to "no busy days, no chips" — i.e. today's
-  behaviour.
+  ids, and losing it degrades to "no busy days, no chips, no budget target" —
+  i.e. today's behaviour. Phase 27 extends its shape to
+  `{ updatedAt, busyDays, chips, budgetTarget }`; `budgetTarget` is a plain
+  £/week number, `0` meaning no target.
+- **Budget soft-preference (Phase 27), local-only.** `pack-sizes.json`'s
+  `planning` block gained `budgetTarget: {max, step, default, maxShortlist}`
+  (slider config, £/week) alongside Phase 17's `shortlistSize`/`reuseCredit`.
+  `generator.js`'s `generatePlan` accumulates spend per half (`place()`) and
+  turns it into a 0..1 pro-rata "pressure" (`pressureFor`) that widens layer
+  4's shortlist (`shortlistSizeFor`) — never re-scores nutrition, never caps,
+  never leaks between halves. `plan.js` needed no change: it already spreads
+  `packData.planning` into `budget` and already assembles `prefs` from
+  `MP.PlanPrefs.get()`.
+- **Generic ingredient-substitution groups (Phase 28), local-only.** New
+  `substitution-groups.json` (`{note, groups: [{id, label, members:
+  [{key,label}]}]}`) is a *consolidation* concern, separate from
+  `substitutions.json`'s exclusion swap-ins — `shopping-list.js`'s
+  `groupIndex` flattens it to `{[normalizedKey]: {groupId, members}}`, first
+  group wins on a duplicate key. `pack-sizes.json`'s `planning` gained
+  `subCredit` (£-equivalent credit for one swap; kept below `reuseCredit` so
+  an exact overlap always outranks a swap). `generator.js`'s layer 4
+  (`subsFor`) finds at most one swap per meal that would let it reuse a key
+  already bought that half, re-checks it against `MP.Exclusions.check`, and
+  `place()` materialises it as `slot.subs: [{from, to, label}]` — written
+  only when non-empty, so a plan with no swaps is byte-identical to
+  pre-Phase-28 output. `data.js`'s `MP.applySubs`/`MP.subsLabel` and a third
+  `subs` argument on `MP.effectiveMeal` (applied *after* the variant merge)
+  are the single chokepoint every `variantId` reader already used — shopping
+  list, pantry deduction, shelf-life, plan rendering — so no consumer grew a
+  second substitution branch. Leftover days and remote (Hermes) placements
+  never carry `subs`: a leftover slot reuses its parent's recipe verbatim,
+  and a remote placement is a meal choice, not a recipe edit.
 
 **Alternatives considered**: a third HTML page for the choice/review steps
 (rejected — would duplicate `renderPlan` + the swipe deck); an app-pushed

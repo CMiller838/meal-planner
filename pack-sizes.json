@@ -58,6 +58,11 @@
     "pasta": "pantry", "rice": "pantry", "oats": "pantry", "flour": "pantry",
     "sauce": "pantry", "beans": "pantry", "stock": "pantry", "spice": "pantry"
   },
-  "planning": { "shortlistSize": 4, "reuseCredit": 0.60 },
+  "planning": {
+    "shortlistSize": 4,
+    "reuseCredit": 0.60,
+    "subCredit": 0.30,
+    "budgetTarget": { "max": 120, "step": 5, "default": 0, "maxShortlist": 10 }
+  },
   "costTiers": { "cheap": 6.00, "med": 12.00 }
 }

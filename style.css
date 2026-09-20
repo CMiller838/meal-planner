@@ -476,6 +476,8 @@ button.ghost {
 
 .section-head { display: flex; align-items: center; justify-content: space-between; gap: .5rem; }
 .chip-row { display: flex; flex-wrap: wrap; gap: .4rem; margin: .6rem 0; }
+.budget-row { display: flex; align-items: center; gap: .6rem; }
+#budget-range { flex: 1; }
 .chip {
   font-size: .8rem;
   font-weight: 700;

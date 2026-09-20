@@ -19,14 +19,17 @@ window.MP = window.MP || {};
       ? [...new Set(parsed.busyDays.filter((d) => Number.isInteger(d) && d >= 1 && d <= 14))]
       : [];
     const chips = Array.isArray(parsed.chips) ? parsed.chips.filter((c) => typeof c === "string") : [];
-    return { busyDays, chips };
+    const budgetTarget = Number(parsed.budgetTarget);
+    return { busyDays, chips, budgetTarget: isFinite(budgetTarget) && budgetTarget >= 0 ? budgetTarget : 0 };
   }
 
-  function save(busyDays, chips) {
+  function save(busyDays, chips, budgetTarget) {
+    const n = Number(budgetTarget);
     const record = {
       updatedAt: new Date().toISOString(),
       busyDays: [...busyDays].sort((a, b) => a - b),
       chips: [...chips],
+      budgetTarget: isFinite(n) && n >= 0 ? n : 0,
     };
     localStorage.setItem(KEY, JSON.stringify(record));
     return record;
@@ -50,6 +53,7 @@ window.MP = window.MP || {};
   const { esc } = MP;
   const busyDays = new Set();
   const chips = new Set();
+  let budgetTarget = 0;
 
   function weekdayShort(offset) {
     const d = new Date();
@@ -83,19 +87,51 @@ window.MP = window.MP || {};
       .join("");
   }
 
+  function budgetLabel(v) {
+    return v > 0 ? `£${v} a week` : "No target";
+  }
+
+  function renderBudget(planning) {
+    const row = document.getElementById("budget-row");
+    if (!planning || !planning.budgetTarget) {
+      row.hidden = true;
+      return;
+    }
+    row.hidden = false;
+    const cfg = planning.budgetTarget;
+    const range = document.getElementById("budget-range");
+    const label = document.getElementById("budget-label");
+    range.min = 0;
+    range.max = Math.max(cfg.max, budgetTarget);
+    range.step = cfg.step;
+    range.value = budgetTarget;
+    label.textContent = budgetLabel(budgetTarget);
+    range.addEventListener("input", () => {
+      budgetTarget = Number(range.value);
+      label.textContent = budgetLabel(budgetTarget);
+      renderSummary();
+    });
+  }
+
   function renderSummary() {
     const el = document.getElementById("pref-summary");
     const n = busyDays.size;
     const p = chips.size;
-    el.textContent = n || p
+    const base = n || p
       ? `${n} busy day${n === 1 ? "" : "s"} · ${p} preference${p === 1 ? "" : "s"}`
       : "No busy days, no preferences";
+    el.textContent = budgetTarget > 0 ? `${base} · £${budgetTarget}/wk` : base;
   }
 
   async function init() {
     const prefs = MP.Sync ? await MP.Sync.fetchPlanPrefs() : MP.PlanPrefs.get();
     prefs.busyDays.forEach((d) => busyDays.add(d));
+    budgetTarget = prefs.budgetTarget || 0;
     renderBusyGrid();
+
+    MP.ShoppingList.load()
+      .then((packData) => renderBudget(packData && packData.planning))
+      .catch(() => renderBudget(null));
 
     busyGrid.addEventListener("click", (e) => {
       const btn = e.target.closest("button[data-day]");
@@ -129,7 +165,7 @@ window.MP = window.MP || {};
     renderSummary();
 
     document.getElementById("pwm-generate-btn").addEventListener("click", () => {
-      MP.PlanPrefs.save([...busyDays], [...chips]);
+      MP.PlanPrefs.save([...busyDays], [...chips], budgetTarget);
       if (MP.Sync) MP.Sync.pushPlanPrefs();
       location.href = "plan.html?guided=1";
     });

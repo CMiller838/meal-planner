@@ -1,0 +1,13 @@
+{
+  "note": "Interchangeable ingredient groups for shopping consolidation. Any member may be swapped for any other member of the same group, in one slot's recipe, when the swap makes a pack already bought that week cover a second dinner. Cost-driven only — unrelated to substitutions.json, which is exclusion swap-ins. Swaps are always re-checked against the hard content exclusions afterwards, so a group must never list mushroom.",
+  "groups": [
+    {
+      "id": "aromatic_veg",
+      "label": "Aromatic veg",
+      "members": [
+        { "key": "onion", "label": "Onion" },
+        { "key": "peppers", "label": "Peppers" }
+      ]
+    }
+  ]
+}

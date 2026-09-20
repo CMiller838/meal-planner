@@ -36,6 +36,13 @@
   <h3>Preferences</h3>
   <div id="chip-row" class="chip-row"></div>
 
+  <h3>Weekly budget</h3>
+  <div id="budget-row" class="budget-row">
+    <input id="budget-range" type="range" min="0" max="120" step="5" value="0"
+           aria-describedby="budget-label">
+    <span id="budget-label" class="muted">No target</span>
+  </div>
+
   <div class="top-actions">
     <button id="pwm-generate-btn" class="primary">Generate Plan</button>
     <a class="btn-secondary" href="plan.html">Cancel</a>
@@ -44,6 +51,7 @@
 </main>
 
 <script src="data.js"></script>
+<script src="shopping-list.js"></script>
 <script src="hermes-sync.js"></script>
 <script src="plan-with-me.js"></script>
 <script>if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js");</script>

@@ -220,6 +220,31 @@ instead of structured preference chips.
 - **Revisit trigger**: if structured chips prove too limiting in practice
   and the Hermes round-trip latency/failure-state cost is judged worth it.
 
+## Live/official Asda data feed (v5 interview)
+
+An official Asda affiliate/partner data feed (distinct from scraping their
+consumer site, which is ruled out — see the v5 outline's constraints) that
+would give real prices/pack sizes without manual entry or Hermes-assisted
+screenshot reading.
+
+- **Why parked**: no such feed is confirmed to exist; v5 proceeds on manual +
+  Hermes-screenshot entry instead.
+- **Revisit trigger**: if Cody confirms Asda (or a comparable grocer) offers
+  a real partner/affiliate API.
+
+## Partial-ingredient leftover tracking as a hard prerequisite (v5 interview)
+
+Originally raised as blocking on filling in `meals.json` quantities wholesale
+before the feature could work at all.
+
+- **Why parked as stated, adopted differently instead**: the v5 outline
+  adopts a scoped version — pantry items gain real quantity, filled in via
+  Hermes reading shopping screenshots rather than a manual wholesale
+  data-entry pass — so this specific "block on manual bulk quantity entry"
+  framing is superseded, not carried forward as-is.
+- **Revisit trigger**: n/a — see the v5 outline's "Partial-ingredient
+  leftover tracking" must-have instead.
+
 ## Hermes direct plan writes (bypassing the app's re-check) (v4 interview)
 
 Letting Hermes's `/placements` (or a future write endpoint) apply

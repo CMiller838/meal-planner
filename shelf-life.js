@@ -124,7 +124,7 @@ window.MP = window.MP || {};
         if (!slot || !slot.mealId) return;
         const meal = mealsById[slot.mealId];
         if (!meal) return;
-        const effMeal = MP.effectiveMeal(meal, slot.variantId);
+        const effMeal = MP.effectiveMeal(meal, slot.variantId, slot.subs);
         const w = evaluateSlot(day.day, effMeal, occ, shelfData);
         if (w) warnings[`${day.day}-${slotType}`] = w;
       });

@@ -16,6 +16,30 @@ window.MP = window.MP || {};
     return cache;
   }
 
+  let groupsCache = null;
+  /** Memoised fetch of substitution-groups.json. Never throws; -> {} on failure. */
+  async function loadGroups() {
+    if (groupsCache) return groupsCache;
+    groupsCache = await fetch("substitution-groups.json").then((r) => r.json()).catch(() => ({}));
+    return groupsCache;
+  }
+
+  /** Flatten groups to a lookup: { [normalizedKey]: { groupId, members } }.
+   *  First group wins on a duplicate key. {} for missing/invalid data. */
+  function groupIndex(groupsData) {
+    const idx = {};
+    const groups = groupsData && Array.isArray(groupsData.groups) ? groupsData.groups : [];
+    groups.forEach((g) => {
+      const members = Array.isArray(g.members) ? g.members : [];
+      if (members.length < 2) return;
+      members.forEach((m) => {
+        const key = normalizeKey(m.key);
+        if (!(key in idx)) idx[key] = { groupId: g.id, members };
+      });
+    });
+    return idx;
+  }
+
   /**
    * ponytail: naive leading-number parse of a free-text qty string; the fix
    * for imprecise totals is filling in meals.json quantities, not a smarter
@@ -150,7 +174,7 @@ window.MP = window.MP || {};
           const prevSlot = plan.days[idx - 1].slots.dinner;
           if (prevSlot && prevSlot.mealId === slot.mealId && MP.isBatch(meal)) return;
         }
-        occ.push({ day: day.day, meal: MP.effectiveMeal(meal, slot.variantId) });
+        occ.push({ day: day.day, meal: MP.effectiveMeal(meal, slot.variantId, slot.subs) });
       });
     });
     return occ;
@@ -295,5 +319,5 @@ window.MP = window.MP || {};
     return { rows, ops };
   }
 
-  MP.ShoppingList = { load, buildLists, parseQty, packsFor, normalizeKey, pantryIndex, pantryOverlap, fmtRemaining, eatPlan, priceFor, mealCost, costIndex, costTier, costBadgeHtml };
+  MP.ShoppingList = { load, loadGroups, groupIndex, buildLists, parseQty, packsFor, normalizeKey, pantryIndex, pantryOverlap, fmtRemaining, eatPlan, priceFor, mealCost, costIndex, costTier, costBadgeHtml };
 })();

@@ -318,3 +318,105 @@ raised during this interview but parked instead.
 - Hermes writing plan changes outside the existing `/placements` queue, or
   bypassing the app's own re-check on a placement — full read/propose access
   does not mean a new direct-write path.
+
+---
+
+# Meal Planner — v5 Outline
+
+## Problem
+
+v4 made plan *generation* interactive but left the plan itself rigid: there's
+no way to steer cost, no way for one meal's ingredients to influence another's
+(a recipe needing peppers doesn't make the generator favour other pepper
+recipes to avoid buying a pack for one dish), and Hermes-triggered generation
+is a black box until it's done — no live view of picks landing. Separately,
+the shopping/pantry side is capped by data quality: most `meals.json`
+ingredients have no real quantity, so there's no way to track a part-used pack
+(e.g. half a bag of spinach) into the next day's cooking.
+
+## Users
+
+Solo tool, one user (Cody) — unchanged.
+
+## Must-haves
+
+- **Budget soft-preference**: a user-set target cost (per plan or per week)
+  that biases the existing cost-weighting step (`generator.js`'s `budget`
+  step, Phase 17) harder toward cheaper picks. Same invariant as today: cost
+  never reorders nutrition, it only chooses among the top nutrient-ranked
+  candidates already produced by `MP.Nutrition.rankByGap` — a target just
+  turns up how strongly that tiebreak leans cheap. No hard cap; a plan can
+  never fail to generate because of budget.
+- **Generic ingredient-substitution table**: a new data file (pattern like
+  `ingredient-nutrient-tags.json`/`pack-sizes.json` — data, not inline JS)
+  defining swappable ingredient groups (e.g. onion/pepper as an interchangeable
+  "aromatic veg" group). When one plan slot already requires an ingredient,
+  the generator can substitute an equivalent ingredient into another slot's
+  recipe from the same group, to consolidate the shopping list and cut cost.
+  Substitutions are restricted to the data file's defined groups — never a
+  free-form swap — and must still pass the existing hard content exclusions
+  (no mushroom, no standalone egg, no veg-in-toastie) after substitution.
+- **Live-build-watching for Hermes-triggered plans**: when Hermes triggers
+  generation (`PUT /planFlag`, existing), opening the app shows picks landing
+  in something closer to real time rather than only a finished plan or the
+  in-app-only guided walkthrough. Exact mechanism (poll interval vs. a Worker
+  push) is an architecture decision, not decided here — the existing
+  eventually-consistent KV (~60s) is the baseline to beat or accept.
+- **Partial-ingredient leftover tracking**: pantry items gain a real quantity
+  (not just present/absent), so a recipe that uses half a pack of something
+  leaves a trackable remainder the next day's plan can draw on. This depends
+  on `meals.json` actually carrying real quantities, which is a data-entry
+  commitment, not just code — see Constraints below for how that data gets
+  filled in.
+
+## Nice-to-haves
+
+- **Hermes weekly "use these up" priority list**: tell Hermes in chat which
+  ingredients you want prioritised that week (e.g. "I've got peppers and
+  chicken thighs to use up"); Hermes turns that into weighted entries the
+  substitution table / variant scoring reads, same as an existing pantry-like
+  priority signal — no new NL parsing in the app itself, Hermes does the
+  language part.
+- **Live cost-progress during the guided walkthrough**: as each dinner is
+  picked in the Phase 24 walkthrough, show a running total against the budget
+  target, instead of only the final shopping-list total.
+- **Near-expiry pantry nudges**: surface a pantry item close to its category
+  shelf-life as an explicit suggestion ("mince is ageing — use it this week?")
+  rather than only letting it silently affect variant selection as it does
+  today.
+
+## Constraints
+
+- Same as v1/v2/v4: static site, no build step, no new dependency without
+  confirming first, no backend beyond the existing Hermes Worker+KV, all
+  Phase 1 architecture invariants unchanged (no `innerHTML` with unescaped
+  external content, data-driven nutrient tags/substitution groups/pack sizes,
+  category-based shelf-life stays the default, hard content exclusions,
+  dark-mode-default).
+- **No Asda scraping or unofficial API use** — confirmed again this version:
+  Asda has no public API, and scraping their consumer site both risks
+  breaking on any site change and violates their terms of use. Real
+  quantity/price data instead comes from Hermes reading user-sent shopping
+  screenshots (Hermes has confirmed image-input capability) and writing
+  structured updates through the existing Worker+KV relay pattern (same shape
+  as `/pantry`/`/library` — fetch-then-write, shape-validated only), not from
+  the app or Worker fetching Asda directly.
+- Partial-quantity pantry tracking is a real, scoped relaxation of the
+  existing "category-based shelf-life, no per-SKU tracking" invariant
+  (`CLAUDE.md`) — quantities, not purchase dates. Category-based shelf-life
+  stays the default for items without a tracked quantity; this doesn't
+  replace it everywhere.
+- The substitution table must never bypass hard content exclusions — a
+  substitution that would introduce mushroom/standalone-egg/veg-in-toastie is
+  rejected the same way Discover already rejects/substitutes those today.
+
+## Non-goals
+
+- Any live/scraped Asda pricing or product data — manual entry and
+  Hermes-assisted screenshot reading only, this version and for the
+  foreseeable future.
+- Free-form NL ingredient substitution — swaps are limited to the data file's
+  defined groups, never an arbitrary model-decided swap.
+- Hermes gaining any new direct plan-write path — live-build-watching is a
+  read-side UX improvement; every plan write still goes through the existing
+  `/placements` propose-then-app-applies queue (v4's invariant, unchanged).

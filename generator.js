@@ -76,14 +76,55 @@
   }
 
   /**
+   * Shortlist width for the current budget pressure. No target / no config /
+   * pressure 0 -> budget.shortlistSize (today's 4). Never below shortlistSize,
+   * never above maxShortlist.
+   */
+  function shortlistSizeFor(budget, pressure) {
+    const cfg = budget && budget.budgetTarget;
+    if (!cfg || !pressure) return budget.shortlistSize;
+    const max = Math.max(cfg.maxShortlist, budget.shortlistSize);
+    return Math.round(budget.shortlistSize + (max - budget.shortlistSize) * pressure);
+  }
+
+  function subCreditOf(budget) {
+    return isFinite(budget.subCredit) ? budget.subCredit : 0;
+  }
+
+  /** Other members of `normKey`'s group, or [] when it has none. */
+  function groupMates(groups, normKey) {
+    const entry = groups && groups[normKey];
+    if (!entry) return [];
+    return entry.members.filter((m) => MP.ShoppingList.normalizeKey(m.key) !== normKey);
+  }
+
+  /**
+   * The single swap (or none) that would make `meal` reuse a key already
+   * bought this half. Returns [] or a one-element [{ from, to, label }].
+   */
+  function subsFor(meal, half, groups) {
+    if (!groups || !meal.ingredients) return [];
+    for (const ing of meal.ingredients) {
+      const normKey = MP.ShoppingList.normalizeKey(ing.key);
+      if (half.has(normKey)) continue;
+      const mate = groupMates(groups, normKey).find((m) => half.has(MP.ShoppingList.normalizeKey(m.key)));
+      if (!mate) continue;
+      const swap = [{ from: ing.key, to: mate.key, label: mate.label }];
+      if (MP.Exclusions.check(MP.applySubs(meal, swap)).ok) return swap;
+    }
+    return [];
+  }
+
+  /**
    * Ordered candidates for one slot, best first. Layers, in order:
-   *   1 nutrition (rankByGap)  2 chips  3 effort/busy  4 budget shortlist  5 recency
+   *   1 nutrition (rankByGap)  2 chips  3 effort/busy
+   *   4 budget shortlist (cost, pack reuse + group substitutions; width scales with budget pressure)  5 recency
    * Layers 2-5 are stable reorders of layer 1 - none of them re-score nutrition.
    * Returns every meal in `pool` (minus exclusions); chips never filter.
    */
   function rankSlot(pool, dayNum, dayMealsSoFar, opts) {
     opts = opts || {};
-    const { tags, targets, prefs, budget, halfKeys } = opts;
+    const { tags, targets, prefs, budget, halfKeys, pressure } = opts;
     const lastUsedDay = opts.lastUsedDay || {};
     const excludeIds = opts.excludeIds || new Set();
     let ranked = pool.filter((m) => !excludeIds.has(m.id));
@@ -120,12 +161,13 @@
 
     if (budget) {
       const half = dayNum <= 7 ? halfKeys.first : halfKeys.second;
-      const shortlist = ranked.slice(0, budget.shortlistSize).filter((m) => budget.costIndex[m.id]);
+      const shortlist = ranked.slice(0, shortlistSizeFor(budget, pressure)).filter((m) => budget.costIndex[m.id]);
       if (shortlist.length) {
         const scored = shortlist.map((m) => {
           const c = budget.costIndex[m.id];
           const overlap = c.keys.filter((k) => half.has(k)).length;
-          return { m, score: c.cost - budget.reuseCredit * overlap };
+          const swaps = subsFor(m, half, budget.groups).length; // 0 or 1
+          return { m, score: c.cost - budget.reuseCredit * overlap - subCreditOf(budget) * swaps };
         });
         const minScore = Math.min(...scored.map((s) => s.score));
         const winners = scored.filter((s) => Math.abs(s.score - minScore) < 1e-9).map((s) => s.m);
@@ -173,18 +215,25 @@
     const days = Array.from({ length: 14 }, (_, i) => ({ day: i + 1, slots: {} }));
     const lastUsedDay = {};
     const halfKeys = { first: new Set(), second: new Set() };
+    const spent = { first: 0, second: 0 };
 
     function place(day, slotType, meal, countsTowardBudget) {
       const variantId = meal ? pickVariant(meal, have) : null;
+      const half = day <= 7 ? halfKeys.first : halfKeys.second;
+      const subs = meal && budget && budget.groups && countsTowardBudget !== false
+        ? subsFor(MP.effectiveMeal(meal, variantId), half, budget.groups)
+        : [];
       days[day - 1].slots[slotType] = meal
-        ? (variantId ? { mealId: meal.id, variantId } : { mealId: meal.id })
+        ? { mealId: meal.id, ...(variantId ? { variantId } : {}), ...(subs.length ? { subs } : {}) }
         : { mealId: null };
       if (meal) lastUsedDay[meal.id] = day;
       if (meal && budget && countsTowardBudget !== false) {
         const entry = budget.costIndex[meal.id];
         if (entry) {
-          const half = day <= 7 ? halfKeys.first : halfKeys.second;
-          entry.keys.forEach((k) => half.add(k));
+          const subFrom = subs.length ? MP.ShoppingList.normalizeKey(subs[0].from) : null;
+          const subTo = subs.length ? MP.ShoppingList.normalizeKey(subs[0].to) : null;
+          entry.keys.forEach((k) => half.add(k === subFrom ? subTo : k));
+          spent[day <= 7 ? "first" : "second"] += entry.cost;
         }
       }
     }
@@ -195,8 +244,23 @@
       return slot ? slot.mealId : null;
     }
 
+    // ponytail: pressure is day-ordered — slots placed early in a half are
+    // picked before any overspend can register, so the last days of a half
+    // absorb most of the correction. Upgrade path, if it ever matters, is a
+    // second pass over the half; not worth it until a real plan misses badly.
+    /** How far this half is running over its pro-rata target, 0..1. */
+    function pressureFor(dayNum) {
+      const target = prefs.budgetTarget;
+      if (!budget || !budget.budgetTarget || !target || !isFinite(target) || target <= 0) return 0;
+      const dayInHalf = dayNum <= 7 ? dayNum : dayNum - 7;
+      const expected = target * (dayInHalf - 1) / 7;
+      const half = dayNum <= 7 ? "first" : "second";
+      return Math.min(1, Math.max(0, (spent[half] - expected) / target));
+    }
+
     const pickMeal = (pool, dayNum, dayMealsSoFar, opts) =>
-      rankSlot(pool, dayNum, dayMealsSoFar, { ...opts, tags, targets, prefs, budget, halfKeys, lastUsedDay })[0] || null;
+      rankSlot(pool, dayNum, dayMealsSoFar,
+        { ...opts, tags, targets, prefs, budget, halfKeys, lastUsedDay, pressure: pressureFor(dayNum) })[0] || null;
 
     const runs = weekendRuns(startDate).map((run) => {
       if (run.some((d) => !(prefs.busyDays || []).includes(d))) {

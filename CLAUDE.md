@@ -64,7 +64,10 @@ Installable as a PWA on Android Chrome via `manifest.json` + `sw.js`.
   effort bias on top of `rankByGap`'s output — a reorder, never a re-score,
   and chips never filter a meal out of the pool. `plan-preferences.json`
   (chip vocabulary, busy effort mapping) is data, same "data, not inline
-  constants" rule as `nutrition-targets.json`/`pack-sizes.json`.
+  constants" rule as `nutrition-targets.json`/`pack-sizes.json`. Same for the
+  Phase 27 budget target: `generator.js`'s `pressureFor`/`shortlistSizeFor`
+  only scale how many of `rankByGap`'s top candidates layer 4 cost-compares —
+  they never filter, cap, or re-rank.
 - **Pantry stock never reorders nutrition either.** `generator.js`'s
   `pickVariant` (Phase 21) only chooses which variant of an already-chosen
   meal to schedule — nutrition ranking via `pickMeal`/`rankByGap` decides which
@@ -86,8 +89,10 @@ Installable as a PWA on Android Chrome via `manifest.json` + `sw.js`.
   (`eatPlan`, `applyOps`, `writeLocalItems`, `queueOp`). Don't add a
   convenience path that lets a portion-eat touch the pantry.
 - **`mp_planPrefs` is settings, not plan state** (Phase 23): it holds only
-  `{ updatedAt, busyDays, chips }`, never a meal id or date. Losing it
-  degrades to today's behaviour (no busy days, no chips). `MP.PlanPrefs`
+  `{ updatedAt, busyDays, chips, budgetTarget }`, never a meal id or date.
+  `budgetTarget` (Phase 27) is a plain £/week number where `0` means no
+  target. Losing it degrades to today's behaviour (no busy days, no chips, no
+  budget target). `MP.PlanPrefs`
   (`plan-with-me.js`) is its only reader/writer; `plan.js` reads it for
   **both** entry points, so one-tap Generate is never replaced by the
   "Plan with me" setup screen — it only becomes preference-aware.
@@ -98,6 +103,19 @@ Installable as a PWA on Android Chrome via `manifest.json` + `sw.js`.
   `savePlan()` when it's `false`; abandoning the walkthrough or review step
   before "Looks good" leaves `mp_plan` untouched. Don't add a second save
   path that bypasses the flag.
+- **Substitution groups (Phase 28) are data, not inline constants.**
+  `substitution-groups.json` is the only source of swappable ingredient
+  pairs — swaps never come from free-form matching. `generator.js`'s layer 4
+  (`subsFor`) credits a swap via `pack-sizes.json`'s `subCredit`, but only
+  reorders the shortlist `rankByGap` already produced; it never re-scores
+  nutrition, never filters a meal out of the pool, and a swap is dropped
+  (never the meal) when `MP.Exclusions.check` rejects the swapped recipe —
+  the hard exclusions run *after* substitution, never bypassed by it.
+  `slot.subs` (`[{ from, to, label }]`, generator-written only, alongside the
+  existing `variantId`) is resolved through `MP.effectiveMeal`/`MP.applySubs`,
+  the same chokepoint the shopping list, pantry deduction, shelf-life pass
+  and detail sheet already read `variantId` through. `substitutions.json`
+  remains a separate, unrelated concern (exclusion swap-ins for Discover).
 - **Hard content exclusions are enforced in code, not just docs**: no
   mushrooms (including from TheMealDB results), no standalone egg meals
   (egg-within-a-dish is fine), no vegetables in toasties. These came from

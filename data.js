@@ -162,16 +162,41 @@ window.MP = window.MP || {};
     return v ? v.name : "";
   }
 
-  /** Merge a variant over its base meal. Same object back (no allocation) for
-   *  a null/undefined/unknown variantId, or one missing `ingredients` — a
-   *  stale/bad variantId degrades silently to the base rather than throwing.
+  /** Merge a variant over its base meal, then apply any slot substitutions.
+   *  Same object back (no allocation) for a null/undefined/unknown variantId
+   *  and no subs, or a variant missing `ingredients` — a stale/bad variantId
+   *  degrades silently to the base rather than throwing.
    *  Never mutates `meal`; always keeps `meal.id`. */
-  function effectiveMeal(meal, variantId) {
-    if (!meal || variantId === null || variantId === undefined) return meal;
-    const variant = findVariant(meal, variantId);
-    if (!variant || !Array.isArray(variant.ingredients)) return meal;
-    const { id, ...fields } = variant;
-    return { ...meal, ...fields };
+  function effectiveMeal(meal, variantId, subs) {
+    if (!meal) return meal;
+    let result = meal;
+    if (variantId !== null && variantId !== undefined) {
+      const variant = findVariant(meal, variantId);
+      if (variant && Array.isArray(variant.ingredients)) {
+        const { id, ...fields } = variant;
+        result = { ...meal, ...fields };
+      }
+    }
+    return applySubs(result, subs);
+  }
+
+  /** Apply slot substitutions to a recipe. Same object back (no allocation) for
+   *  a missing/empty subs list. A sub whose `from` matches no ingredient `key`
+   *  is a silent no-op — a stale sub degrades like a stale variantId rather
+   *  than throwing. Never mutates `meal`; always keeps `meal.id`. */
+  function applySubs(meal, subs) {
+    if (!meal || !Array.isArray(subs) || !subs.length || !Array.isArray(meal.ingredients)) return meal;
+    const ingredients = meal.ingredients.map((ing) => {
+      const sub = subs.find((s) => s.from === ing.key);
+      return sub ? { ...ing, key: sub.to, label: sub.label } : ing;
+    });
+    return { ...meal, ingredients };
+  }
+
+  /** "" when there are no subs, else "with <label>[, <label>...]". */
+  function subsLabel(subs) {
+    if (!Array.isArray(subs) || !subs.length) return "";
+    return `with ${subs.map((s) => s.label).join(", ")}`;
   }
 
   /** True if this meal yields leftovers worth chaining: multi-serving and not
@@ -284,6 +309,8 @@ window.MP = window.MP || {};
   MP.findVariant = findVariant;
   MP.variantLabel = variantLabel;
   MP.effectiveMeal = effectiveMeal;
+  MP.applySubs = applySubs;
+  MP.subsLabel = subsLabel;
   MP.isBatch = isBatch;
   MP.parseIngredients = parseIngredients;
   MP.ingredientsToText = ingredientsToText;

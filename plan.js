@@ -14,6 +14,7 @@
   let tagsData = null;
   let shelfData = null;
   let packData = null;
+  let groupsData = null;
   let plan = null;
   let warnings = {}; // "day-slotType" -> { message, moveToDay, category }; owned by renderPlan
   let prefs = {}; // { vocab, busyDays, chips } from MP.PlanPrefs, set once at init
@@ -90,7 +91,7 @@
 
   function generatePlan() {
     const budget = packData
-      ? { costIndex: MP.ShoppingList.costIndex(library, packData), ...packData.planning }
+      ? { costIndex: MP.ShoppingList.costIndex(library, packData), groups: MP.ShoppingList.groupIndex(groupsData), ...packData.planning }
       : null;
     const have = MP.ShoppingList.pantryIndex({ items: MP.Sync.localItems("pantry") });
     return MP.Generator.generatePlan(library, tagsData.tags, tagsData.targets, shelfData, undefined, budget, have, prefs);
@@ -122,7 +123,7 @@
     const meal = mealAt(day, slotType);
     if (!meal) return null;
     const slot = plan.days[day - 1].slots[slotType];
-    return MP.effectiveMeal(meal, slot.variantId);
+    return MP.effectiveMeal(meal, slot.variantId, slot.subs);
   }
 
   function dayMeals(day) {
@@ -468,15 +469,17 @@
     });
   }
 
-  function openDetail(meal, variantId) {
+  function openDetail(meal, variantId, subs) {
     const overlay = document.getElementById("detail-overlay");
     const sheet = document.getElementById("detail-sheet");
-    const effMeal = MP.effectiveMeal(meal, variantId);
+    const effMeal = MP.effectiveMeal(meal, variantId, subs);
     const label = MP.variantLabel(meal, variantId);
+    const subsLabel = MP.subsLabel(subs);
     sheet.innerHTML = `
       <button class="close-btn" aria-label="Close">✕</button>
       ${meal.image ? `<img src="${esc(meal.image)}" alt="${esc(meal.name)}">` : ""}
       <h2>${esc(meal.name)}${label ? ` — ${esc(label)}` : ""}</h2>
+      ${subsLabel ? `<p class="muted subs-label">${esc(subsLabel)}</p>` : ""}
       ${tagRowHtml(effMeal)}
       <p>${esc(meal.description || "")}</p>
       <h3>Ingredients</h3>
@@ -531,8 +534,9 @@
       </section>`;
     }
     const slot = plan.days[day - 1].slots[slotType];
-    const effMeal = MP.effectiveMeal(meal, slot.variantId);
+    const effMeal = MP.effectiveMeal(meal, slot.variantId, slot.subs);
     const label = MP.variantLabel(meal, slot.variantId);
+    const subsLabel = MP.subsLabel(slot.subs);
     return `<section class="day-slot">
       <div class="slot-type">${slotType}</div>
       <div class="day-slot-head">
@@ -541,6 +545,7 @@
           : `<div class="day-thumb placeholder">🍽</div>`}
         <div>
           <h3>${esc(meal.name)}${label ? ` — ${esc(label)}` : ""}</h3>
+          ${subsLabel ? `<p class="muted subs-label">${esc(subsLabel)}</p>` : ""}
           <p>${esc(meal.description || "")}</p>
         </div>
       </div>
@@ -576,12 +581,12 @@
     sheet.querySelectorAll(".day-recipe-btn").forEach((b) => {
       const meal = mealAt(day, b.dataset.slot);
       const slot = plan.days[day - 1].slots[b.dataset.slot];
-      if (meal) b.addEventListener("click", () => openDetail(meal, slot.variantId));
+      if (meal) b.addEventListener("click", () => openDetail(meal, slot.variantId, slot.subs));
     });
     sheet.querySelectorAll(".day-eat-btn:not([disabled])").forEach((b) => {
       const meal = mealAt(day, b.dataset.slot);
       const slot = plan.days[day - 1].slots[b.dataset.slot];
-      if (meal) b.addEventListener("click", () => openEatSheet(MP.effectiveMeal(meal, slot.variantId), day, b.dataset.slot, slot.variantId));
+      if (meal) b.addEventListener("click", () => openEatSheet(MP.effectiveMeal(meal, slot.variantId, slot.subs), day, b.dataset.slot, slot.variantId));
     });
   }
 
@@ -879,11 +884,12 @@
     });
 
     let vocab;
-    [tagsData, shelfData, library, packData, vocab] = await Promise.all([
+    [tagsData, shelfData, library, packData, groupsData, vocab] = await Promise.all([
       MP.Nutrition.load(),
       MP.ShelfLife.load(),
       MP.getLibrary(),
       MP.ShoppingList.load().catch(() => null),
+      MP.ShoppingList.loadGroups().catch(() => ({})),
       MP.PlanPrefs.loadVocab(),
     ]);
     prefs = Object.assign({ vocab }, MP.PlanPrefs.get());
