@@ -271,7 +271,26 @@
       return m ? [m] : [];
     });
     const pool = library.filter((m) => m.mealTypes.includes(slotType) && m.id !== currentId);
-    return MP.Generator.rankSlot(pool, day, others, { tags: tagsData.tags, targets: tagsData.targets, prefs });
+    // Same variety guard generator.js's own auto-fill loop uses: exclude the
+    // immediately adjacent day's pick, demote every other already-used meal
+    // by recency, so re-picking a slot doesn't just re-rank from scratch.
+    const lastUsedDay = {};
+    const excludeIds = new Set();
+    plan.days.forEach((d) => {
+      if (d.day === day) return;
+      const s = d.slots[slotType];
+      if (s && s.mealId) {
+        lastUsedDay[s.mealId] = d.day;
+        if (Math.abs(d.day - day) === 1) excludeIds.add(s.mealId);
+      }
+    });
+    return MP.Generator.rankSlot(pool, day, others, {
+      tags: tagsData.tags,
+      targets: tagsData.targets,
+      prefs,
+      lastUsedDay,
+      excludeIds,
+    });
   }
 
   function openSwapPicker(day, slotType) {
@@ -333,7 +352,7 @@
   function renderGuidedCards() {
     const deck = document.getElementById("swap-deck");
     deck.innerHTML = "";
-    swapCtx.candidates.slice(0, 3).forEach((meal, idx) => {
+    swapCtx.candidates.slice(0, 5).forEach((meal, idx) => {
       const card = document.createElement("div");
       card.className = "swipe-card";
       card.style.zIndex = String(10 - idx);
