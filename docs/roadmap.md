@@ -103,7 +103,7 @@ outranks a swap. Seed data ships one real group from the current library
 (`onion`/`peppers`) rather than invented pairings that don't hold up
 ingredient-for-ingredient.
 
-## Phase 29 — Live-build-watching (staged local generation render)
+## Phase 29 — Live-build-watching (staged local generation render) — Shipped
 
 **Goal:** When a Hermes-raised plan request is accepted from the existing
 banner, render the plan filling in slot-by-slot as the local `generatePlan`
@@ -124,7 +124,17 @@ so the render path isn't re-verified against two generator changes. No new
 write path — v4's rule that every Hermes plan write goes through
 `/placements` propose-then-app-applies is unchanged.*
 
-## Phase 30 — Hermes quantity ingestion (screenshot → structured quantities)
+**Shipped:** cosmetic CSS-stagger reveal of an already-final plan, not a live
+generator trace (`generator.js` gets a zero-line diff, confirmed by spec).
+`renderPlan(staged)` gains one optional boolean, defaulting falsy for every
+existing bare call site; only the `hermes-generate` handler passes `true`.
+Staged cards get `.staging` on `#plan-root` plus a per-card `animationDelay`
+(30ms/card, capped 1800ms) driving one new `@keyframes mp-slot-in` in
+`style.css`, opacity/transform only so nothing reflows; `prefers-reduced-motion:
+reduce` shows the full grid instantly. Coverage/warnings are computed once
+against the final plan, not per stage. `sw.js` cache bumped to v22.
+
+## Phase 30 — Hermes quantity ingestion (screenshot → structured quantities) — Shipped
 
 **Goal:** The data path that gives `meals.json` ingredients and pantry items
 real quantities: Hermes reads user-sent shopping screenshots and writes
@@ -141,7 +151,19 @@ first. Explicitly not Asda scraping or any unofficial API: the outline
 re-confirms that non-goal, and `docs/FUTURE.md` keeps a live/official grocer
 feed parked pending a real partner/affiliate API.*
 
-## Phase 31 — Partial-ingredient leftover tracking
+**Shipped.** Gates: 1A (`{value, unit, raw}`, all three required when
+present), 2A (extend the existing `pantry`/`adhoc` items — no new KV key, no
+new route), 3A (quantity only — no price, no pack size, no purchase date).
+`worker/worker.js`'s `itemsError` gained one validator (`qtyError`); no route,
+`KEYS`, CORS or auth change. `MP.ShoppingList.parseQty` is the only reader of
+the structure and `MP.qtyText` (`data.js`) the only reader of its display
+text; every existing pantry/ad-hoc display and arithmetic site (`buildLists`,
+`mealCost`, `applyOps`'s `"sub"` branch) got the object for free through those
+two chokepoints. A cook deduction still collapses a structured qty to a
+string via `fmtRemaining` — `raw` provenance is lost at that point, expected
+and left to Phase 31. `sw.js` cache bumped to v23, no new file.
+
+## Phase 31 — Partial-ingredient leftover tracking — Shipped
 
 **Goal:** Pantry items carry a real quantity rather than present/absent, so a
 recipe using half a pack leaves a trackable remainder the next day's plan can
@@ -162,4 +184,54 @@ not purchase dates**, and category-based shelf-life stays the default for any
 item without a tracked quantity. `commitCook` must remain the only pantry
 writer; `eatPortion` must still never touch anything pantry-related.*
 
+**Shipped.** Gates: 1B (a computed remainder is structured `{value, unit,
+raw}`, reusing Phase 30's shape — not a plain string), 2A (`pantryOverlap`
+upgraded in place to mean "on hand **in sufficient quantity**", with
+unparseable/unit-mismatched/amount-unknown stock falling back to "present"),
+3A (`eatPlan` and `applyOps` stay two callers of one shared function, no op
+field carrying a pre-computed remainder). `fmtRemaining` is renamed
+`remainingQty` and now returns `{value, unit, raw}` — `value` rounds to 3dp to
+kill float residue across repeated partial eats, `raw` is display text at
+≤1dp and keeps its unit even at zero (fixing the old bare `"0"` defect that
+caused a false "units differ" on a second cook against an emptied pack). The
+pantry is now a running balance: `hermes-sync.js`'s `applyOps` and
+`shopping-list.js`'s `eatPlan` are unchanged callers of the one shared
+implementation. `generator.js:190-192`'s plan-wide depletion ceiling
+deliberately survives — scoring still runs against one static pantry
+snapshot per generation, so two slots can still both count the same last tin;
+only per-slot "is there enough for *this* meal" is quantity-aware now.
+`worker/worker.js`, `generator.js`'s code, `discover.js`, `shelf-life.js` and
+every `*.json` data file stayed zero-line diffs. `sw.js` cache bumped to v24,
+no new file.
+
 ---
+
+## Phase 32 — Personal-assistant connector (shopping list + "I ate X" queue) — Shipped
+
+**Goal:** The personal assistant (`notion_assistant`, its Phase 15 / ADR-054)
+reads the planned two-week shopping list and queues voice-logged meals, with
+its own credential — never Hermes's.
+
+**Shipped; Worker deployed 2026-10-12** (live: `ASSISTANT_TOKEN` gets 200 on its five routes, 403 on `/pantry` and `PUT /plan`, 401 for a wrong token; the assistant's `/shopping` call returned the real 14+14-line list). `worker/worker.js` accepts a second
+token, `ASSISTANT_TOKEN`, scoped to `GET /library`, `/plan`, `/eaten-log`,
+`/shopping` and `GET`/`PUT /eat-requests` (anything else answers 403 for it).
+`GET /shopping` runs `MP.ShoppingList.buildLists` itself over the KV plan
+mirror, library and pantry, with `pack-sizes.json` imported and passed in, so
+there's still one list implementation. That's why the `window` → `root` shim
+now also covers `data.js`, `shelf-life.js` and `shopping-list.js`.
+`PUT /eat-requests` is a request queue modelled on `/placements`.
+`hermes-sync.js`'s `syncEatRequests` applies new requests on the plan page,
+after `syncPlacements`, through `plan.js`'s `applyEatRequests`. That function
+uses the same eat flow as the Eat sheet: an open cook is a portion and never
+touches the pantry, otherwise it's a cook at the planned quantities via
+`eatPlan` and the shared `applyCookOps`. The request's `eatenAt` is kept, so
+the eaten-log id matches the assistant's row. A request with no un-eaten slot
+holding that meal on that day is rejected in the existing banner, never
+forced. The `/plan` push already carried `subs` (Phase 28). Verified with 495
+passing `test.html` checks, including `matchEatRequests` and parity between
+`buildLists` over the `/plan` mirror and over the local plan. Against
+`wrangler dev`: `/shopping`, `/eat-requests` validation, 401 on a wrong token
+and 403 outside the assistant's scope. A headless run of `plan.html` applied a
+queued request and showed the rejection banner. `sw.js` is at v25.
+
+**Deploy:** `wrangler secret put ASSISTANT_TOKEN`, then `wrangler deploy`.

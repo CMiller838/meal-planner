@@ -61,19 +61,23 @@
   const mealsById = Object.fromEntries(library.map((m) => [m.id, m]));
   const runs = MP.Generator.weekendRuns("2026-09-07");
 
-  // 4. every run's first day holds an MP.isBatch meal; leftover days hold same id or a leadsTo child
+  // 4. every run's first day holds an MP.isBatch meal; leftover days within
+  // the parent's coverage (servings/fridge-life cap, same as generator.js's
+  // `place()` loop) hold same id or a leadsTo child. Days beyond coverage
+  // fall through to the normal top-up fill and are not leftover days.
   {
     let ok = true;
     for (const run of runs) {
       if (run.length < 2) continue;
       const first = mealsById[plan.days[run[0] - 1].slots.dinner.mealId];
       if (!first || !MP.isBatch(first)) { ok = false; break; }
-      for (let i = 1; i < run.length; i++) {
+      const coverage = Math.min(run.length, first.servings || 2, shelfData.cooked_leftovers.fridgeDays);
+      for (let i = 1; i < coverage; i++) {
         const id = plan.days[run[i] - 1].slots.dinner.mealId;
         if (id !== first.id && !(first.leadsTo || []).includes(id)) { ok = false; break; }
       }
     }
-    check("run-day-1 is MP.isBatch; leftover days are same id or leadsTo child", ok);
+    check("run-day-1 is MP.isBatch; leftover days within coverage are same id or leadsTo child", ok);
   }
 
   // 5. no dinner id appears on consecutive days outside a run
@@ -747,20 +751,20 @@
 
   // 31. Phase 12 — eat flow deduction/shortfall maths + op-log sync
   {
-    const { fmtRemaining, eatPlan, buildLists } = MP.ShoppingList;
+    const { remainingQty, eatPlan, buildLists } = MP.ShoppingList;
     const { applyOps } = MP.Sync;
 
     check(
-      "fmtRemaining: 800g - 300g = 500g",
-      fmtRemaining({ value: 800, unit: "g" }, { value: 300, unit: "g" }) === "500g"
+      "remainingQty: 800g - 300g = {500,g,500g}",
+      deepEqual(remainingQty({ value: 800, unit: "g" }, { value: 300, unit: "g" }), { value: 500, unit: "g", raw: "500g" })
     );
     check(
-      "fmtRemaining clamps at 0, never negative",
-      fmtRemaining({ value: 300, unit: "g" }, { value: 500, unit: "g" }) === "0"
+      "remainingQty clamps at 0, never negative",
+      deepEqual(remainingQty({ value: 300, unit: "g" }, { value: 500, unit: "g" }), { value: 0, unit: "g", raw: "0g" })
     );
     check(
-      "fmtRemaining trims trailing .0",
-      fmtRemaining({ value: 1500, unit: "g" }, { value: 500, unit: "g" }) === "1000g"
+      "remainingQty trims trailing .0",
+      deepEqual(remainingQty({ value: 1500, unit: "g" }, { value: 500, unit: "g" }), { value: 1000, unit: "g", raw: "1000g" })
     );
 
     const meal = {
@@ -778,16 +782,16 @@
       const { rows, ops } = eatPlan(meal, { beef_mince: "300g" }, pantry);
       check("eatPlan: clean deduction -> one sub op, after 500g, no shortfall",
         ops.length === 1 && ops[0].type === "sub" && ops[0].list === "pantry" &&
-        rows[0].after === "500g" && rows[0].shortfall === false);
+        deepEqual(rows[0].after, { value: 500, unit: "g", raw: "500g" }) && rows[0].shortfall === false);
     }
     {
       const pantry = { updatedAt: "x", items: [{ name: "Beef Mince", qty: "200g" }] };
       const bigMeal = { ...meal, ingredients: [{ key: "beef_mince", qty: "500g" }] };
       const { rows, ops } = eatPlan(bigMeal, { beef_mince: "500g" }, pantry);
       check("eatPlan: shortfall -> after 0, shortfall true, sub + adhoc/add for 300g remainder",
-        rows[0].after === "0" && rows[0].shortfall === true && ops.length === 2 &&
+        deepEqual(rows[0].after, { value: 0, unit: "g", raw: "0g" }) && rows[0].shortfall === true && ops.length === 2 &&
         ops.some((o) => o.type === "sub" && o.list === "pantry") &&
-        ops.some((o) => o.type === "add" && o.list === "adhoc" && o.qty === "300g"));
+        ops.some((o) => o.type === "add" && o.list === "adhoc" && deepEqual(o.qty, { value: 300, unit: "g", raw: "300g" })));
     }
     {
       const pantry = { updatedAt: "x", items: [{ name: "Beef Mince", qty: "half a bag" }] };
@@ -824,7 +828,7 @@
       const remote = [{ name: "Beef Mince", qty: "800g" }, { name: "Milk", qty: "1l" }];
       const result = applyOps(remote, [{ list: "pantry", type: "sub", name: "beef_mince", qty: "300g" }]);
       check("applyOps: sub reduces only the matched item, sibling untouched",
-        result.find((i) => i.name === "Beef Mince").qty === "500g" &&
+        deepEqual(result.find((i) => i.name === "Beef Mince").qty, { value: 500, unit: "g", raw: "500g" }) &&
         result.find((i) => i.name === "Milk").qty === "1l");
     }
     {
@@ -956,6 +960,53 @@
         { day: 1, slot: "dinner", mealId: "m2" },
       ], lib);
       check("applyPlacements: a mixed queue yields both applied and rejected", mixed.applied.length === 1 && mixed.rejected.length === 1);
+    }
+
+    // matchEatRequests (assistant "I ate X" queue)
+    {
+      const lib = [{ id: "m1", name: "Meal One" }, { id: "m2", name: "Meal Two" }];
+      const p = { startDate: "2026-09-07", days: [
+        { day: 1, slots: { lunch: { mealId: "m1" }, dinner: { mealId: "m1" } } },
+        { day: 2, slots: { dinner: { mealId: "m2", eatenAt: "2026-09-08T19:00:00.000Z" } } },
+      ] };
+      const clone = JSON.parse(JSON.stringify(p));
+      const at = (d, h) => new Date(2026, 8, d, h).toISOString();
+      const r = (mealId, iso) => ({ id: `${mealId}:${iso}`, mealId, eatenAt: iso, requestedAt: iso });
+      const two = MP.Plan.matchEatRequests(p, [r("m1", at(7, 12)), r("m1", at(7, 19)), r("m1", at(7, 20))], lib);
+      check("matchEatRequests: lands on the first un-eaten slot with that meal, then the next",
+        deepEqual(two.applied.map((a) => [a.day, a.slotType]), [[1, "lunch"], [1, "dinner"]]));
+      check("matchEatRequests: a third eat of the same meal that day is rejected as already eaten",
+        two.rejected.length === 1 && two.rejected[0].reason === "eaten");
+      check("matchEatRequests: keeps the request's eatenAt and id", two.applied[0].eatenAt === at(7, 12) && two.applied[0].id === `m1:${at(7, 12)}`);
+      check("matchEatRequests: input plan is not mutated", deepEqual(p, clone));
+      check("matchEatRequests: an eaten slot is never overwritten",
+        MP.Plan.matchEatRequests(p, [r("m2", at(8, 20))], lib).rejected[0].reason === "eaten");
+      check("matchEatRequests: a meal not on that day's plan is rejected",
+        MP.Plan.matchEatRequests(p, [r("m2", at(7, 12))], lib).rejected[0].reason === "not-planned");
+      check("matchEatRequests: a date outside the plan is rejected",
+        MP.Plan.matchEatRequests(p, [r("m1", at(20, 12))], lib).rejected[0].reason === "not-planned");
+      check("matchEatRequests: an unknown meal is rejected",
+        MP.Plan.matchEatRequests(p, [r("zzz", at(7, 12))], lib).rejected[0].reason === "unknown-meal");
+      check("newSince: only entries after the ack, ascending",
+        deepEqual(MP.Sync.newSince([r("b", at(7, 13)), r("a", at(7, 11)), r("c", at(7, 9))], at(7, 10)).map((x) => x.mealId), ["a", "b"]));
+      check("newSince: a missing list is []", deepEqual(MP.Sync.newSince(undefined, null), []));
+    }
+
+    // GET /shopping parity: the Worker runs buildLists over the /plan mirror;
+    // it must equal the shopping page's list over the full local plan.
+    {
+      const p2 = JSON.parse(JSON.stringify(plan));
+      const firstDinner = p2.days.find((d) => d.slots.dinner && d.slots.dinner.mealId);
+      const dm = library.find((m) => m.id === firstDinner.slots.dinner.mealId);
+      firstDinner.slots.dinner.subs = [{ from: dm.ingredients[0].key, to: "parity_swap", label: "Parity Swap" }];
+      firstDinner.slots.dinner.cookNote = "local-only field";
+      const byId = Object.fromEntries(library.map((m) => [m.id, m]));
+      const pantry = { items: [{ name: "onion", qty: "2" }] };
+      const local = MP.ShoppingList.buildLists(p2, byId, realPackData, pantry);
+      const worker = MP.ShoppingList.buildLists(MP.Sync.planMirror(p2), byId, realPackData, pantry);
+      check("buildLists parity: /plan mirror (Worker) === full local plan (browser)", deepEqual(worker, local));
+      check("buildLists parity: the mirror carries subs, so the swap is on the list",
+        [1, 8].some((d) => worker[d].lines.concat(worker[d].staples).some((l) => l.key === "parity_swap")));
     }
 
     // MP.Prefs.bump / score
@@ -2115,6 +2166,159 @@
       check("generatePlan: budget.groups absent === budget.groups {}", deepEqual(pNoGroups.days, pEmptyGroups.days));
       check("generatePlan: no slot gains a subs key when groups absent",
         pNoGroups.days.every((d) => Object.values(d.slots).every((s) => !s || !("subs" in s))));
+    }
+  }
+
+  // ---- Group 46: Phase 30 (structured pantry quantities) ----
+  {
+    const SL = MP.ShoppingList;
+
+    // parseQty: structured form matches the text form
+    check('parseQty({value:500,unit:"g",raw:"500g"}) == parseQty("500g")',
+      deepEqual(SL.parseQty({ value: 500, unit: "g", raw: "500g" }), SL.parseQty("500g")));
+    check('parseQty({value:2,unit:"kg",raw:"2kg"}) -> {2000,"g"}',
+      deepEqual(SL.parseQty({ value: 2, unit: "kg", raw: "2kg" }), { value: 2000, unit: "g" }));
+    check('parseQty({unit:"g",raw:"g"}) -> null (missing value)', SL.parseQty({ unit: "g", raw: "g" }) === null);
+    check('parseQty({value:NaN,unit:"g",raw:"g"}) -> null', SL.parseQty({ value: NaN, unit: "g", raw: "g" }) === null);
+    check("parseQty(null) -> null", SL.parseQty(null) === null);
+    check("parseQty(undefined) -> null", SL.parseQty(undefined) === null);
+    check('parseQty("") -> null', SL.parseQty("") === null);
+    // existing free-text cases, unchanged
+    check('parseQty("3") -> {3,"each"}', deepEqual(SL.parseQty("3"), { value: 3, unit: "each" }));
+    check('parseQty("1.5kg") -> {1500,"g"} (regression)', deepEqual(SL.parseQty("1.5kg"), { value: 1500, unit: "g" }));
+    check('parseQty("Bisto") -> null (regression)', SL.parseQty("Bisto") === null);
+
+    // qtyText
+    check('qtyText("half a bag") -> "half a bag"', MP.qtyText("half a bag") === "half a bag");
+    check('qtyText({value:500,unit:"g",raw:"500g Tesco spinach"}) -> raw',
+      MP.qtyText({ value: 500, unit: "g", raw: "500g Tesco spinach" }) === "500g Tesco spinach");
+    check('qtyText({value:500,unit:"g"}) (no raw) -> "500 g"',
+      MP.qtyText({ value: 500, unit: "g" }) === "500 g");
+    check("qtyText(undefined) -> \"\"", MP.qtyText(undefined) === "");
+    check("qtyText never returns [object Object]", !/\[object/.test(MP.qtyText({ weird: true })));
+
+    // pantryIndex / pantryOverlap keep a structured qty intact
+    {
+      const structured = { value: 500, unit: "g", raw: "500g" };
+      const idx = SL.pantryIndex({ items: [{ name: "Spinach", qty: structured }] });
+      check("pantryIndex keeps a structured qty intact", typeof idx.spinach === "object" && idx.spinach.raw === "500g");
+      check("pantryOverlap still counts a structured-qty ingredient as on hand",
+        SL.pantryOverlap({ ingredients: [{ key: "spinach" }] }, idx) === 1);
+    }
+
+    // buildLists: pantryQty is a display string; needed is reduced on unit match
+    {
+      const mealsById46 = { m46: { id: "m46", name: "Spinach Meal", mealTypes: ["dinner"], ingredients: [{ key: "spinach", qty: "700g", label: "Spinach" }] } };
+      const plan46 = { startDate: "2026-09-07", days: [{ day: 1, slots: { dinner: { mealId: "m46" } } }] };
+      const pantry46 = { items: [{ name: "spinach", qty: { value: 500, unit: "g", raw: "500g bag" } }] };
+      const packData46 = { items: { spinach: { label: "Spinach", packSize: 5, unit: "g", price: 1 } } };
+      const lists46 = SL.buildLists(plan46, mealsById46, packData46, pantry46);
+      const line46 = lists46[1].lines.find((l) => l.key === "spinach") || lists46[1].estimated.find((l) => l.key === "spinach");
+      check("buildLists: pantryQty is the raw string for a structured qty", line46.pantryQty === "500g bag");
+      check("buildLists: needed reduced by the structured qty's value on unit match", line46.needed.value === 200);
+    }
+
+    // applyOps "sub" against a structured item collapses to a correct string qty
+    {
+      const items46 = [{ name: "spinach", qty: { value: 500, unit: "g", raw: "500g bag" } }];
+      const result46 = MP.Sync.applyOps(items46, [{ list: "pantry", type: "sub", name: "spinach", qty: "150g" }]);
+      check('applyOps "sub" on a structured qty -> {value:350, unit:"g", raw:"350g"}',
+        deepEqual(result46[0].qty, { value: 350, unit: "g", raw: "350g" }));
+    }
+  }
+
+  // ---- Group 47: Phase 31 (running-balance pantry) ----
+  {
+    const SL = MP.ShoppingList;
+    const { remainingQty, pantryOverlap, eatPlan } = SL;
+
+    // remainingQty
+    check('remainingQty({500,"g"},{150,"g"}) -> {350,"g","350g"}',
+      deepEqual(remainingQty({ value: 500, unit: "g" }, { value: 150, unit: "g" }), { value: 350, unit: "g", raw: "350g" }));
+    check('remainingQty clamps to 0 and keeps the unit (the defect)',
+      deepEqual(remainingQty({ value: 100, unit: "g" }, { value: 250, unit: "g" }), { value: 0, unit: "g", raw: "0g" }));
+    {
+      const r = remainingQty({ value: 1, unit: "each" }, { value: 0.33, unit: "each" });
+      check("remainingQty: raw rounds to 1dp while value keeps 3", r.value === 0.67 && r.raw === "0.7each");
+    }
+    check("remainingQty: float residue killed (0.3 - 0.1 === 0.2 exactly)",
+      remainingQty({ value: 0.3, unit: "each" }, { value: 0.1, unit: "each" }).value === 0.2);
+    {
+      // repeated-eat drift: feed the output back through parseQty three times
+      let have = { value: 10, unit: "g" };
+      let exact = 10;
+      [1.1, 2.2, 3.3].forEach((used) => {
+        const r = remainingQty(have, { value: used, unit: "g" });
+        exact = Math.round((exact - used) * 1000) / 1000;
+        have = SL.parseQty(r);
+      });
+      check("remainingQty: repeated partial eats accumulate no rounding drift", have.value === exact);
+    }
+    {
+      const zero = remainingQty({ value: 50, unit: "g" }, { value: 50, unit: "g" });
+      const reparsed = SL.parseQty(zero);
+      check("remainingQty: unit survives an empty pack through a parseQty round-trip", reparsed.unit === "g");
+      const meal47 = { ingredients: [{ key: "spinach", qty: "50g" }] };
+      const pantry47 = { items: [{ name: "spinach", qty: zero }] };
+      const { rows } = eatPlan(meal47, { spinach: "50g" }, pantry47);
+      check("remainingQty: cooking against a zeroed item reports a shortfall, not units differ",
+        rows[0].shortfall === true && rows[0].note === null);
+    }
+
+    // pantryOverlap: "enough", not "present"
+    {
+      const meal = (key, qty) => ({ ingredients: [{ key, qty }] });
+      check("pantryOverlap: absent key -> not counted",
+        pantryOverlap(meal("spinach", "200g"), {}) === 0);
+      check("pantryOverlap: qty '' -> counted (behaviour change)",
+        pantryOverlap(meal("spinach", "200g"), { spinach: "" }) === 1);
+      check("pantryOverlap: unparseable recipe qty -> counted",
+        pantryOverlap(meal("gravy", "a splash"), { gravy: "500g" }) === 1);
+      check("pantryOverlap: unparseable pantry qty -> counted",
+        pantryOverlap(meal("gravy", "200g"), { gravy: "Bisto" }) === 1);
+      check("pantryOverlap: unit mismatch -> counted",
+        pantryOverlap(meal("herb", "200g"), { herb: "1 bunch" }) === 1);
+      check("pantryOverlap: 500g stock, needs 200g -> counted",
+        pantryOverlap(meal("spinach", "200g"), { spinach: "500g" }) === 1);
+      check("pantryOverlap: 100g stock, needs 200g -> not counted",
+        pantryOverlap(meal("spinach", "200g"), { spinach: "100g" }) === 0);
+      check("pantryOverlap: 2kg stock, needs 500g -> counted (normalized)",
+        pantryOverlap(meal("spinach", "500g"), { spinach: "2kg" }) === 1);
+      check("pantryOverlap: structured stock short of recipe need -> not counted",
+        pantryOverlap(meal("spinach", "700g"), { spinach: { value: 500, unit: "g", raw: "500g bag" } }) === 0);
+    }
+
+    // pickVariant through the new overlap
+    {
+      const meal47v = {
+        id: "v47",
+        ingredients: [{ key: "x", qty: "1" }, { key: "y", qty: "1" }, { key: "z", qty: "1" }],
+        variants: [
+          { id: "short", ingredients: [{ key: "base", qty: "1" }, { key: "cheese", qty: "200g" }] },
+          { id: "full", ingredients: [{ key: "base", qty: "1" }, { key: "bacon", qty: "200g" }] },
+        ],
+      };
+      const have47 = { base: "1", cheese: "50g", bacon: "500g" };
+      check("pickVariant: a variant short on its distinctive ingredient loses to a fully-stocked one",
+        MP.Generator.pickVariant(meal47v, have47) === "full");
+    }
+
+    // qtyText on a computed remainder
+    check("qtyText on a computed remainder returns raw, never [object Object]",
+      MP.qtyText(remainingQty({ value: 500, unit: "g" }, { value: 150, unit: "g" })) === "350g");
+
+    // end-to-end running balance
+    {
+      const meal47 = { ingredients: [{ key: "mince", qty: "150g" }] };
+      let pantry = { items: [{ name: "mince", qty: "500g" }] };
+      let { ops } = eatPlan(meal47, { mince: "150g" }, pantry);
+      pantry = { items: MP.Sync.applyOps(pantry.items, ops) };
+      check("running balance: first cook leaves a structured 350g remainder",
+        deepEqual(pantry.items[0].qty, { value: 350, unit: "g", raw: "350g" }));
+      ({ ops } = eatPlan(meal47, { mince: "150g" }, pantry));
+      pantry = { items: MP.Sync.applyOps(pantry.items, ops) };
+      check("running balance: second cook sees the reduced amount, not the original 500g",
+        deepEqual(pantry.items[0].qty, { value: 200, unit: "g", raw: "200g" }));
     }
   }
 

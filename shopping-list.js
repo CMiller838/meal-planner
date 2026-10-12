@@ -1,10 +1,9 @@
 // Shopping list logic: aggregates a 2-week plan into per-shop-day ingredient
 // lists, rounded to real pack sizes with a rough total cost. Pure module —
 // no DOM, no localStorage. See .claude/specs/phase3_spec.md.
-window.MP = window.MP || {};
-
-(function () {
+(function (root) {
   "use strict";
+  const MP = (root.MP = root.MP || {});
 
   const SLOT_TYPES = ["breakfast", "lunch", "dinner", "snack"];
   const UNIT_MULT = { kg: ["g", 1000], l: ["ml", 1000] };
@@ -44,8 +43,16 @@ window.MP = window.MP || {};
    * ponytail: naive leading-number parse of a free-text qty string; the fix
    * for imprecise totals is filling in meals.json quantities, not a smarter
    * parser. Ranges take the lower bound (regex stops at the first number).
+   * A structured {value, unit, raw} qty (Phase 30) skips the parse entirely.
    */
   function parseQty(qtyText) {
+    if (qtyText && typeof qtyText === "object") {
+      if (typeof qtyText.value !== "number" || !isFinite(qtyText.value) || typeof qtyText.unit !== "string") return null;
+      let { value, unit } = qtyText;
+      unit = unit.toLowerCase();
+      if (UNIT_MULT[unit]) [unit, value] = [UNIT_MULT[unit][0], value * UNIT_MULT[unit][1]];
+      return { value, unit };
+    }
     const text = (qtyText || "").trim();
     if (!text) return null;
     const m = text.match(/^(\d+(?:\.\d+)?)\s*(kg|g|ml|l|slices?|tins?|tbsp|tsp)?/i);
@@ -89,9 +96,20 @@ window.MP = window.MP || {};
     return idx;
   }
 
-  /** Count of a meal's ingredients already on hand, by normalized key. */
+  /** Count of a meal's ingredients on hand in sufficient quantity.
+   * Absent -> no. Unparseable/unit-mismatched/amount-unknown -> yes
+   * (fallback: "present, amount unknown"). Both parseable + unit-matched ->
+   * only enough if stock.value >= need.value. */
   function pantryOverlap(meal, have) {
-    return (meal.ingredients || []).filter((ing) => have[normalizeKey(ing.key)]).length;
+    return (meal.ingredients || []).filter((ing) => {
+      const key = normalizeKey(ing.key);
+      const stock = have[key];
+      if (stock === undefined) return false;
+      const need = parseQty(ing.qty);
+      const stockQty = parseQty(stock);
+      if (!need || !stockQty || stockQty.unit !== need.unit) return true;
+      return stockQty.value >= need.value;
+    }).length;
   }
 
   function isSkippedIngredient(ing) {
@@ -214,7 +232,7 @@ window.MP = window.MP || {};
         const raw = have[normalizeKey(key)];
         let pantryQty, onHand;
         if (raw !== undefined) {
-          pantryQty = raw || "(some)";
+          pantryQty = MP.qtyText(raw) || "(some)";
           onHand = parseQty(raw);
           if (needed && onHand && onHand.unit === needed.unit) {
             needed = { value: Math.max(0, needed.value - onHand.value), unit: needed.unit };
@@ -258,16 +276,18 @@ window.MP = window.MP || {};
     return lists;
   }
 
-  // ponytail: both shop days subtract the same pantry amount — the pantry
-  // is not a running balance in this phase. A balance belongs in Phase 12's
-  // deduction flow.
+  // ponytail: both shop days subtract the same pantry amount, so buildLists
+  // double-counts what's on hand across a fortnight. Upgrade path is
+  // per-shop-day depletion in buildLists, if it ever matters.
 
   /** have/used are {value,unit} from parseQty, already unit-matched by the
-   * caller. Returns the display/storage string for have - used, clamped at 0. */
-  function fmtRemaining(have, used) {
-    const remaining = Math.max(0, have.value - used.value);
-    if (remaining === 0) return "0";
-    return `${remaining % 1 === 0 ? remaining : remaining.toFixed(1).replace(/\.0$/, "")}${have.unit}`;
+   * caller. Returns a structured qty for have - used, clamped at 0. value
+   * keeps 3dp (kills float residue across repeated partial eats); raw is
+   * display text at <=1dp and always carries the unit, even at zero. */
+  function remainingQty(have, used) {
+    const value = Math.round(Math.max(0, have.value - used.value) * 1000) / 1000;
+    const raw = `${value % 1 === 0 ? value : value.toFixed(1).replace(/\.0$/, "")}${have.unit}`;
+    return { value, unit: have.unit, raw };
   }
 
   /**
@@ -295,23 +315,23 @@ window.MP = window.MP || {};
       const usedQty = parseQty(usedText);
       const haveQty = parseQty(haveText);
       if (!usedQty) {
-        rows.push({ key: ing.key, label, used: usedText, have: haveText, after: null, shortfall: false, note: `can't subtract from "${usedText}"` });
+        rows.push({ key: ing.key, label, used: usedText, have: haveText, after: null, shortfall: false, note: `can't subtract from "${MP.qtyText(usedText)}"` });
         return;
       }
       if (!haveQty) {
-        rows.push({ key: ing.key, label, used: usedText, have: haveText, after: null, shortfall: false, note: `can't subtract from "${haveText}"` });
+        rows.push({ key: ing.key, label, used: usedText, have: haveText, after: null, shortfall: false, note: `can't subtract from "${MP.qtyText(haveText)}"` });
         return;
       }
       if (haveQty.unit !== usedQty.unit) {
-        rows.push({ key: ing.key, label, used: usedText, have: haveText, after: null, shortfall: false, note: `units differ ("${haveText}" vs "${usedText}")` });
+        rows.push({ key: ing.key, label, used: usedText, have: haveText, after: null, shortfall: false, note: `units differ ("${MP.qtyText(haveText)}" vs "${MP.qtyText(usedText)}")` });
         return;
       }
 
-      const after = fmtRemaining(haveQty, usedQty);
+      const after = remainingQty(haveQty, usedQty);
       ops.push({ list: "pantry", type: "sub", name: ing.key, qty: usedText });
       const shortfall = haveQty.value < usedQty.value;
       if (shortfall) {
-        const remainder = fmtRemaining(usedQty, haveQty); // used - have
+        const remainder = remainingQty(usedQty, haveQty); // used - have
         ops.push({ list: "adhoc", type: "add", name: ing.key, qty: remainder });
       }
       rows.push({ key: ing.key, label, used: usedText, have: haveText, after, shortfall, note: null });
@@ -319,5 +339,5 @@ window.MP = window.MP || {};
     return { rows, ops };
   }
 
-  MP.ShoppingList = { load, loadGroups, groupIndex, buildLists, parseQty, packsFor, normalizeKey, pantryIndex, pantryOverlap, fmtRemaining, eatPlan, priceFor, mealCost, costIndex, costTier, costBadgeHtml };
-})();
+  MP.ShoppingList = { load, loadGroups, groupIndex, buildLists, parseQty, packsFor, normalizeKey, pantryIndex, pantryOverlap, remainingQty, eatPlan, priceFor, mealCost, costIndex, costTier, costBadgeHtml };
+})(typeof globalThis !== "undefined" ? globalThis : this);

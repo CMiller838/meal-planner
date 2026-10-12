@@ -187,8 +187,10 @@
     return never.concat(used);
   }
 
-  // ponytail: no plan-wide pantry depletion — two meals may both count the
-  // last tin as in stock. Upgrade path is depletion tracking if it matters.
+  // ponytail: pantryOverlap checks each slot has *enough* for that meal, but
+  // scoring still runs against one static pantry snapshot built once at
+  // plan.js:98 — two slots can still both count the same last tin. Upgrade
+  // path is depletion tracking across the plan, if it matters.
   /** Variant id whose ingredients best match `have`, or null for the base recipe. */
   function pickVariant(meal, have) {
     if (!meal.variants || !meal.variants.length) return null;

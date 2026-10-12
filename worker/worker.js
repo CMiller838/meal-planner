@@ -1,7 +1,10 @@
 // Hermes bridge: a generic key relay over KV (library, planFlag, pantry,
-// adhoc), plus a read-only /discover route onto TheMealDB. No router, no
-// framework, and no growth into a general "any key" API.
+// adhoc), plus read-only /discover, /ranking and /shopping routes. No router,
+// no framework, and no growth into a general "any key" API.
 import "../exclusions.js";
+import "../data.js";
+import "../shelf-life.js";
+import "../shopping-list.js";
 import "../mealdb.js";
 import "../nutrition.js";
 import "../generator.js";
@@ -9,17 +12,25 @@ import SUBS from "../substitutions.json";
 import TAGS from "../ingredient-nutrient-tags.json";
 import TARGETS from "../nutrition-targets.json";
 import PLAN_VOCAB from "../plan-preferences.json";
+import PACK_DATA from "../pack-sizes.json";
 
 const Exclusions = globalThis.MP.Exclusions;
 const MealDB = globalThis.MP.MealDB;
 const Nutrition = globalThis.MP.Nutrition;
 const Generator = globalThis.MP.Generator;
+const ShoppingList = globalThis.MP.ShoppingList;
 
 const KEYS = {
   "/library": "library", "/planFlag": "planFlag", "/pantry": "pantry", "/adhoc": "adhoc",
   "/plan": "plan", "/placements": "placements", "/prefs": "prefs",
-  "/eaten-log": "eatenLog", "/planPrefs": "planPrefs",
+  "/eaten-log": "eatenLog", "/planPrefs": "planPrefs", "/eat-requests": "eatRequests",
 };
+// The personal assistant's own token (ASSISTANT_TOKEN, never Hermes's
+// AUTH_TOKEN) reaches only these method+path pairs: read the plan side, queue
+// "I ate X" requests. Everything else answers 403 for it.
+const ASSISTANT_ALLOWED = new Set([
+  "GET /library", "GET /plan", "GET /eaten-log", "GET /shopping", "GET /eat-requests", "PUT /eat-requests",
+]);
 const SLOT_TYPES = ["breakfast", "lunch", "dinner", "snack"];
 const MEALDB_BASE = "https://www.themealdb.com/api/json/v1/1/";
 const DISCOVER_LIMIT = 8;
@@ -139,6 +150,57 @@ async function ranking(params, env) {
   });
 }
 
+/** The planned two-week shopping list, computed by the same
+ *  MP.ShoppingList.buildLists the shopping page runs, over the KV plan
+ *  mirror, library and pantry. As stale as the plan mirror is. */
+async function shopping(env) {
+  const [libraryRaw, planRaw, pantryRaw, adhocRaw] = await Promise.all([
+    env.MP_KV.get("library"), env.MP_KV.get("plan"), env.MP_KV.get("pantry"), env.MP_KV.get("adhoc"),
+  ]);
+  const parse = (raw) => {
+    try {
+      return JSON.parse(raw);
+    } catch (e) {
+      return null;
+    }
+  };
+  const lib = parse(libraryRaw);
+  const meals = Array.isArray(lib) ? lib : lib && Array.isArray(lib.meals) ? lib.meals : null;
+  const plan = parse(planRaw);
+  if (!meals || !plan || !Array.isArray(plan.days)) return json(409, "library and plan must be synced first");
+  const pantry = parse(pantryRaw);
+  const adhoc = parse(adhocRaw);
+  const mealsById = Object.fromEntries(meals.map((m) => [m.id, m]));
+  return json(200, {
+    updatedAt: plan.updatedAt || null,
+    startDate: plan.startDate || null,
+    lists: ShoppingList.buildLists(plan, mealsById, PACK_DATA, pantry && Array.isArray(pantry.items) ? pantry : null),
+    adhoc: adhoc && Array.isArray(adhoc.items) ? adhoc.items : [],
+  });
+}
+
+/** @param {any} parsed  @returns {string|null} */
+function eatRequestsError(parsed) {
+  if (!Array.isArray(parsed.requests)) return "requests must be an array";
+  if (parsed.requests.length > 50) return "at most 50 requests";
+  const seen = new Set();
+  const ALLOWED_KEYS = new Set(["id", "mealId", "eatenAt", "requestedAt"]);
+  for (const r of parsed.requests) {
+    if (typeof r !== "object" || r === null || Array.isArray(r)) return "each request must be an object";
+    for (const key of Object.keys(r)) {
+      if (!ALLOWED_KEYS.has(key)) return "unknown request key: " + key;
+    }
+    for (const field of ["id", "mealId", "eatenAt", "requestedAt"]) {
+      if (typeof r[field] !== "string" || !r[field]) return "each request needs a non-empty " + field;
+    }
+    if (isNaN(Date.parse(r.eatenAt)) || isNaN(Date.parse(r.requestedAt))) return "eatenAt and requestedAt must be ISO dates";
+    if (r.id !== `${r.mealId}:${r.eatenAt}`) return "id must be mealId:eatenAt";
+    if (seen.has(r.id)) return "duplicate request id: " + r.id;
+    seen.add(r.id);
+  }
+  return null;
+}
+
 /** @param {any} parsed  the already-JSON.parsed PUT body
  *  @returns {string|null}  an error reason, or null if the body is acceptable */
 function mealsError(parsed) {
@@ -167,6 +229,18 @@ function mealsError(parsed) {
   return null;
 }
 
+/** null when the qty is acceptable, else a reason string.
+ *  Accepts: absent, free-text string, or { value, unit, raw }.
+ *  @param {any} qty  @returns {string|null} */
+function qtyError(qty) {
+  if (qty === undefined || qty === null || typeof qty === "string") return null;
+  if (typeof qty !== "object" || Array.isArray(qty)) return "qty must be a string or {value, unit, raw}";
+  if (typeof qty.value !== "number" || !isFinite(qty.value) || qty.value < 0) return "qty.value must be a finite non-negative number";
+  if (typeof qty.unit !== "string" || !qty.unit) return "qty.unit must be a non-empty string";
+  if (typeof qty.raw !== "string" || !qty.raw) return "qty.raw must be a non-empty string";
+  return null;
+}
+
 /** @param {any} parsed  the already-JSON.parsed PUT body
  *  @returns {string|null}  an error reason, or null if the body is acceptable */
 function itemsError(parsed) {
@@ -178,6 +252,8 @@ function itemsError(parsed) {
     const key = item.name.trim().toLowerCase();
     if (seenNames.has(key)) return "duplicate pantry item: " + item.name;
     seenNames.add(key);
+    const qErr = qtyError(item.qty);
+    if (qErr) return qErr;
   }
   return null;
 }
@@ -261,6 +337,7 @@ const VALIDATE = {
   prefs: prefsError,
   eatenLog: eatenLogError,
   planPrefs: planPrefsError,
+  eatRequests: eatRequestsError,
 };
 
 export default {
@@ -269,9 +346,12 @@ export default {
 
     // ponytail: plain string compare, not constant-time — a remote timing
     // attack against a random token isn't this app's threat model.
-    if (request.headers.get("X-Auth-Token") !== env.AUTH_TOKEN) return json(401, "unauthorized");
-
+    const token = request.headers.get("X-Auth-Token");
     const url = new URL(request.url);
+    const isHermes = !!env.AUTH_TOKEN && token === env.AUTH_TOKEN;
+    const isAssistant = !!env.ASSISTANT_TOKEN && token === env.ASSISTANT_TOKEN;
+    if (!isHermes && !isAssistant) return json(401, "unauthorized");
+    if (!isHermes && !ASSISTANT_ALLOWED.has(`${request.method} ${url.pathname}`)) return json(403, "forbidden");
 
     if (url.pathname === "/discover") {
       if (request.method !== "GET") return json(405, "method not allowed");
@@ -281,6 +361,11 @@ export default {
     if (url.pathname === "/ranking") {
       if (request.method !== "GET") return json(405, "method not allowed");
       return ranking(url.searchParams, env);
+    }
+
+    if (url.pathname === "/shopping") {
+      if (request.method !== "GET") return json(405, "method not allowed");
+      return shopping(env);
     }
 
     const kvKey = KEYS[url.pathname];

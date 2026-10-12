@@ -77,10 +77,20 @@ Nine keys, all plain JSON values, no versioning scheme beyond `updatedAt`:
   PUTs back `ackedAt = requestedAt`.
 - `pantry` → `{ updatedAt: <ISO8601>, items: [{name, qty?}] }` — what food is
   on hand, read by the shopping list (Phase 11) and deducted from by the eat
-  flow (Phase 12).
+  flow (Phase 12). `qty` (Phase 30) is a free-text string **or** a structured
+  `{ value, unit, raw }` object — when structured, all three fields are
+  required (`value` finite non-negative, `unit`/`raw` non-empty). `raw` is
+  what a Hermes-read shopping screenshot literally said; `unit` is not
+  enum-checked. `MP.ShoppingList.parseQty` is the only reader of the
+  structure, `MP.qtyText` (`data.js`) the only reader of its display text. A
+  cook deduction (Phase 31) produces a structured remainder via
+  `MP.ShoppingList.remainingQty` — the pantry is a running balance across
+  cooks, though `raw` provenance is still lost at that point (`raw` becomes
+  freshly formatted display text, not the original pack wording).
 - `adhoc` → `{ updatedAt: <ISO8601>, items: [{name, qty?}] }` — the same
-  shape as `pantry`, but for a scratch "ran out of / want to buy this week"
-  list, separate from the two-week planned shop (Phase 12).
+  shape as `pantry` (including the string-or-structured `qty`), but for a
+  scratch "ran out of / want to buy this week" list, separate from the
+  two-week planned shop (Phase 12).
 - `plan` (Phase 13) → `{ updatedAt, startDate, days: [{day, slots: {<slotType>:
   {mealId, eatenAt, variantId?, subs?}}}] }`. **The plan of record is still
   `mp_plan` in localStorage** — this key is a derived, best-effort, app-written
@@ -205,6 +215,10 @@ also *pulled* (Hermes may write it), on open of the Plan-with-me screen only.
   builds it synchronously from `MP.ShoppingList.pantryIndex({ items:
   MP.Sync.localItems("pantry") })` and passes it through. This is a second
   pantry **reader**; `plan.js`'s `commitCook` remains the only pantry writer.
+  As of Phase 31, `pantryOverlap` is quantity-aware — "in sufficient
+  quantity", not just "present" — so `pickVariant` now prefers a variant
+  whose ingredients are fully stocked over one that's merely present but
+  short. Still a reader-only path; `generator.js` itself is unchanged.
 
 ## v4 — guided planning ("Plan with me") + ranking read access
 
@@ -432,6 +446,17 @@ N" — they're the same computation, so they're one route.
   second substitution branch. Leftover days and remote (Hermes) placements
   never carry `subs`: a leftover slot reuses its parent's recipe verbatim,
   and a remote placement is a meal choice, not a recipe edit.
+- **Staged local generation render (Phase 29), render-side only.** `plan.js`'s
+  `renderPlan` gained an optional `staged` argument (default falsy); when
+  true it adds `#plan-root.staging` and a per-`.slot-card` `animationDelay`
+  (document order, 30ms/card, capped 1800ms) driving a CSS `@keyframes` fade
+  in `style.css`. `regenerate(staged)` threads it through; only the
+  `hermes-generate` handler passes `true`, so accepting a Hermes plan request
+  is the only path where the grid fills in visibly — one-tap Generate and
+  every other `renderPlan()` caller stay instant. `generator.js`'s
+  `generatePlan` is untouched and still runs synchronously to completion
+  before any pixel changes; the reveal is cosmetic staging of an
+  already-final plan, not a live trace of the generator loop.
 
 **Alternatives considered**: a third HTML page for the choice/review steps
 (rejected — would duplicate `renderPlan` + the swipe deck); an app-pushed

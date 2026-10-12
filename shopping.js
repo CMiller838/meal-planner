@@ -88,7 +88,7 @@
     return `<li class="shop-line">
       <label>
         <input type="checkbox" data-name="${esc(item.name)}">
-        <span class="shop-qty">${esc(item.qty || "")}</span>
+        <span class="shop-qty">${esc(MP.qtyText(item.qty))}</span>
         <span class="shop-name">${esc(item.name)}</span>
       </label>
     </li>`;

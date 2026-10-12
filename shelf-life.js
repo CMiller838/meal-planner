@@ -2,10 +2,9 @@
 // flags slots where a raw ingredient or cooked leftover would be past its
 // safe window. Shop day = start of each week (day 1 and day 8); cooked day
 // = whatever day a dinner is first scheduled, per SPEC.md.
-window.MP = window.MP || {};
-
-(function () {
+(function (root) {
   "use strict";
+  const MP = (root.MP = root.MP || {});
 
   // Which shelf-life.json category each ingredient key falls under.
   // Ingredients not listed here have no perishability concern tracked
@@ -133,4 +132,4 @@ window.MP = window.MP || {};
   }
 
   MP.ShelfLife = { load, checkPlanWarnings, shopDayFor, rawSafeOn };
-})();
+})(typeof globalThis !== "undefined" ? globalThis : this);

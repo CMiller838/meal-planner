@@ -15,10 +15,12 @@ Every request carries `X-Auth-Token: <token>`. KV is eventually consistent
 | Edit ingredients in a meal | `GET /library` → modify → `PUT /library` | Always send the full `meals` array back, and set `updatedAt` to now. A `400` means the edit was malformed — re-read and retry with a corrected body, never resend the same one. |
 | "Generate a new plan" | `PUT /planFlag {"requestedAt": "<now ISO>", "ackedAt": null}` | The app shows a banner and generates on tap. Hermes replies "ready in the app" — it never renders a plan as chat text. |
 | Track what food is on hand | `GET /pantry` / `PUT /pantry` | Same relay pattern as `/library`. Body: `{ updatedAt, items: [{ name, qty? }] }`. `items` must be an array, each item needs a non-empty `name`, no duplicate names (case-insensitive). Always fetch-then-write the full array back. |
-| Add to / clear the "ran out of / want to buy" list | `GET /adhoc` / `PUT /adhoc` | Same shape and rules as `/pantry`. Use this for "add X to my shopping list" — never write that request to `/pantry`. The **planned** two-week shopping list is not on the bridge at all (it's derived from the local plan), so Hermes cannot be asked to edit it. |
+| Add to / clear the "ran out of / want to buy" list | `GET /adhoc` / `PUT /adhoc` | Same shape and rules as `/pantry`. Use this for "add X to my shopping list" — never write that request to `/pantry`. The **planned** two-week shopping list is read-only (`GET /shopping`), so Hermes cannot be asked to edit it. |
+| Read a shopping screenshot into structured pantry quantities | `GET /pantry` → merge by name → `PUT /pantry` | **Not a new endpoint.** Read the screenshot, `GET /pantry`, set each matching item's `qty` to `{ value, unit, raw }` (or add a new item with that `qty`), and `PUT` the merged array back through the existing relay. Never a source of price, pack size, or purchase-date data. |
 | See what's already on the 2-week plan | `GET /plan` | Read-only, `mealId`+`eatenAt` per filled slot only (no names or recipes — join against `/library`). **Stale by construction**: it's a best-effort mirror the app pushes on save, not read-after-write. Use it to inform a placement, never to guarantee one will be accepted — the app re-checks every placement locally. |
 | Place a meal into a specific plan slot | `PUT /placements` | See below — a request queue, not a direct write. |
 | Read what a person actually likes | `GET /prefs` | Read-only counters (`liked`/`dismissed`/`eaten` per meal). Use for softer framing ("you've liked a few chicken dishes lately"), not as a hard filter. |
+| Read the planned two-week shopping list | `GET /shopping` | Read-only, computed by the Worker with the app's own `buildLists` over `/plan` + `/library` + `/pantry`. See below. |
 | Answer "have I had enough variety lately?" over time | `GET /eaten-log` | Read-only history of what was actually eaten, unlike `/prefs`' counters or `/plan`'s current-fortnight snapshot. See below — tags are frozen at eat time. |
 
 ## `GET /discover`
@@ -53,20 +55,30 @@ everywhere else (Discover dedupe, the variety guard).
 
 Generic two-key relay, same as `/library`. Body shape: `{ updatedAt, items:
 [{ name, qty? }] }`. `items` must be an array; each item needs a non-empty
-`name` string; no duplicate names (case-insensitive, trimmed). `qty` is a
-free-text string (e.g. `"2"`, `"half a bag"`) and unvalidated. `items: []`
-is legal (empty pantry). Hermes should fetch-then-write — never PUT from
-stale/cached data, since this clobbers the whole array.
+`name` string; no duplicate names (case-insensitive, trimmed). `qty` is
+either a free-text string (e.g. `"2"`, `"half a bag"`) or a structured
+`{ value, unit, raw }` object — when structured, all three fields are
+required: `value` a finite non-negative number, `unit` and `raw` non-empty
+strings. `raw` is what the screenshot (or person) literally said; `unit` is
+not enum-checked, but prefer `g`/`ml`/`each` where the source allows.
+`items: []` is legal (empty pantry). Hermes should fetch-then-write — never
+PUT from stale/cached data, since this clobbers the whole array.
+
+As of Phase 31, the **app itself** also writes structured `qty` values here —
+a cook deduction leaves a structured remainder, and a shortfall from a cook
+lands on `/adhoc` as a structured `qty` too. So a `qty` Hermes reads back
+isn't necessarily free text just because no person typed it; treat both
+forms as equally possible on every read, regardless of who wrote them.
 
 ## `GET /adhoc` / `PUT /adhoc`
 
-Identical body shape and validation to `/pantry` — same relay, different KV
-key. This is the "ran out of / want to buy this week" scratch list, separate
-from the planned two-week shop that `buildLists` produces locally: the app's
-eat flow drops shortfalls here, and a person can add to it by hand. Fetch-
-then-write applies the same as `/pantry`. There is no bridge endpoint for
-the planned list — it only exists as a local derivation of the current
-2-week plan, so Hermes has no way to read or edit it.
+Identical body shape and validation to `/pantry` (including the string-or-
+structured `qty`) — same relay, different KV key. This is the "ran out of /
+want to buy this week" scratch list, separate from the planned two-week shop
+that `buildLists` produces locally: the app's eat flow drops shortfalls
+here, and a person can add to it by hand. Fetch-then-write applies the same
+as `/pantry`. The planned list can be read through `GET /shopping` (below)
+but never edited — it is derived from the plan.
 
 ## `GET /eaten-log` / `PUT /eaten-log`
 
@@ -131,3 +143,34 @@ Read-only. Body: `{ updatedAt, prefs: { <mealId>: { name, liked, dismissed,
 eaten, lastAt } } }` — three integer counters and a timestamp per meal, no
 history log. There is no `PUT /prefs` for Hermes: counters are app-owned,
 bumped only by the person's own like/save/dismiss/eat actions.
+
+## `GET /shopping`
+
+Read-only. Body: `{ updatedAt, startDate, lists: { "1": {...}, "8": {...} },
+adhoc: [{ name, qty? }] }`. Each list is exactly what the shopping page's
+`MP.ShoppingList.buildLists` returns — `{ shopDay, lines, staples, estimated,
+total }`, each line `{ key, label, needed, packSize, unit, packs, price,
+lineCost, estimated, meals, pantryQty?, onHand? }` — computed over the `/plan`
+mirror, `/library` and `/pantry`, so it is **as stale as the plan mirror**
+(`updatedAt` is the plan push time). `409` until library and plan have both
+been synced.
+
+## `GET /eat-requests` / `PUT /eat-requests`
+
+The personal assistant's "I ate X" queue — same pattern as `/placements`:
+the assistant proposes, the app applies (or rejects) on its next plan-page
+load/resume. Body: `{ requests: [{ id, mealId, eatenAt, requestedAt }] }`,
+whole-array replace, at most 50, no extra keys, `id` must be
+`` `${mealId}:${eatenAt}` `` (the eaten-log id the app will write, so the
+assistant can match it), dates must parse. The app acks by `requestedAt`
+locally. A request lands on the first un-eaten slot holding that meal on the
+plan day of `eatenAt`; it is rejected (banner) when there is none, never
+forced, and goes through the normal eat flow (cook, or a portion of an open
+cook) keeping `eatenAt`.
+
+## Credentials
+
+Two tokens, one per consumer: Hermes's `AUTH_TOKEN` (everything above), and
+the personal assistant's `ASSISTANT_TOKEN`, which reaches only `GET /library`,
+`GET /plan`, `GET /eaten-log`, `GET /shopping` and `GET`/`PUT /eat-requests`
+(`403` elsewhere).

@@ -6,6 +6,8 @@
   const LS_PLAN = "mp_plan";
   const LS_COOKS = "mp_cooks";
   const SLOT_TYPES = ["breakfast", "lunch", "dinner", "snack"];
+  const STAGE_STEP_MS = 30;
+  const STAGE_MAX_MS = 1800;
 
   const WEEKDAY = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
@@ -107,10 +109,10 @@
     window.dispatchEvent(new CustomEvent("mp:plan-saved", { detail: plan }));
   }
 
-  function regenerate() {
+  function regenerate(staged) {
     plan = generatePlan();
     savePlan();
-    renderPlan();
+    renderPlan(staged);
   }
 
   function mealAt(day, slotType) {
@@ -200,7 +202,12 @@
       : `Day ${day}`;
   }
 
-  function renderPlan() {
+  // ponytail: cosmetic staging of a finished plan, not a live generator
+  // trace. Upgrade path, if genuine per-pick liveness is ever wanted, is
+  // turning MP.Generator.generatePlan into a function* that yields after
+  // each place() — deliberately deferred so this render path isn't
+  // re-verified against the two generator phases that follow.
+  function renderPlan(staged) {
     mealsById = Object.fromEntries(library.map((m) => [m.id, m]));
     warnings = MP.ShelfLife.checkPlanWarnings(plan, mealsById, shelfData);
     const root = document.getElementById("plan-root");
@@ -244,6 +251,14 @@
       });
     });
     wireMoveBtns(root);
+    if (staged) {
+      root.classList.add("staging");
+      root.querySelectorAll(".slot-card").forEach((el, i) => {
+        el.style.animationDelay = Math.min(i * STAGE_STEP_MS, STAGE_MAX_MS) + "ms";
+      });
+    } else {
+      root.classList.remove("staging");
+    }
     if (dayCtx) renderDayView();
   }
 
@@ -607,7 +622,7 @@
   function eatRowHtml(row) {
     const summary = row.note
       ? `<span class="eat-after">${esc(row.note)}</span>`
-      : `<span class="eat-after">${esc(row.have)} → ${esc(row.after)}</span>`;
+      : `<span class="eat-after">${esc(MP.qtyText(row.have))} → ${esc(MP.qtyText(row.after))}</span>`;
     return `<div class="eat-row${row.shortfall ? " shortfall" : ""}">
       <span class="eat-label">${esc(row.label)}</span>
       <input type="text" class="eat-qty" data-key="${esc(row.key)}" value="${esc(row.used)}">
@@ -708,6 +723,17 @@
       .then((tags) => MP.Sync.logEaten({ id: `${meal.id}:${eatenAt}`, mealId: meal.id, name: meal.name, eatenAt, tags }));
   }
 
+  /** Pantry/ad-hoc side of a cook: apply locally, queue for the relay. Only
+   *  commitCook and applyEatRequests' cook branch call it (both cooks). */
+  function applyCookOps(ops) {
+    ["pantry", "adhoc"].forEach((list) => {
+      const listOps = ops.filter((op) => op.list === list);
+      if (!listOps.length) return;
+      MP.Sync.writeLocalItems(list, MP.Sync.applyOps(MP.Sync.localItems(list), listOps));
+    });
+    ops.forEach(MP.Sync.queueOp);
+  }
+
   /** The only pantry writer (§4a). Deducts once per cook instance, then
    *  opens an MP.Cooks record for the remaining servings (none for a
    *  servings:1 meal). */
@@ -718,12 +744,7 @@
     const { ops } = MP.ShoppingList.eatPlan(meal, used, pantry);
     const eatenAt = new Date().toISOString();
 
-    ["pantry", "adhoc"].forEach((list) => {
-      const listOps = ops.filter((op) => op.list === list);
-      if (!listOps.length) return;
-      MP.Sync.writeLocalItems(list, MP.Sync.applyOps(MP.Sync.localItems(list), listOps));
-    });
-    ops.forEach(MP.Sync.queueOp);
+    applyCookOps(ops);
 
     if (day) {
       plan.days[day - 1].slots[slotType].eatenAt = eatenAt;
@@ -838,13 +859,111 @@
     });
   }
 
+  // ---- Assistant "I ate X" requests (eat-requests queue) ----
+
+  /** Plan day (1-based) whose local date holds `iso`, or null outside the plan. */
+  function planDayOf(startDate, iso, nDays) {
+    if (!startDate || isNaN(Date.parse(iso))) return null;
+    const [y, m, d] = startDate.split("-").map(Number);
+    const at = new Date(iso);
+    const day = Math.round((new Date(at.getFullYear(), at.getMonth(), at.getDate()) - new Date(y, m - 1, d)) / 86400000) + 1;
+    return day >= 1 && day <= nDays ? day : null;
+  }
+
+  /** Pure: which plan slot each queued request lands on — the first un-eaten
+   *  slot holding that meal on the plan day of its eatenAt. Never forced:
+   *  anything else is rejected (and shown), never mutates the input. */
+  function matchEatRequests(planIn, requests, library) {
+    const byId = new Map((library || []).map((m) => [m.id, m]));
+    const taken = new Set();
+    const applied = [];
+    const rejected = [];
+    for (const r of requests) {
+      const meal = byId.get(r.mealId);
+      const base = { id: r.id, mealId: r.mealId, name: meal ? meal.name : r.mealId, eatenAt: r.eatenAt };
+      if (!meal) {
+        rejected.push({ ...base, reason: "unknown-meal" });
+        continue;
+      }
+      const day = planDayOf(planIn.startDate, r.eatenAt, planIn.days.length);
+      const slots = day ? planIn.days[day - 1].slots : {};
+      const withMeal = SLOT_TYPES.filter((s) => slots[s] && slots[s].mealId === r.mealId);
+      const slotType = withMeal.find((s) => !slots[s].eatenAt && !taken.has(`${day}-${s}`));
+      if (!slotType) {
+        rejected.push({ ...base, reason: withMeal.length ? "eaten" : "not-planned" });
+        continue;
+      }
+      taken.add(`${day}-${slotType}`);
+      applied.push({ ...base, day, slotType });
+    }
+    return { applied, rejected };
+  }
+
+  /** Applies queued requests through the same eat flow as the Eat sheet:
+   *  an open cook -> a portion (no pantry, §4b); otherwise a cook at the
+   *  planned quantities via eatPlan. Keeps the request's eatenAt so the
+   *  eaten-log id matches the assistant's row. null = not now (guided mode). */
+  async function applyEatRequests(requests) {
+    if (guidedActive || !plan) return null;
+    const result = matchEatRequests(plan, requests, library);
+    if (!result.applied.length) return result;
+    let pantry = await MP.Sync.fetchItems("pantry");
+    for (const a of result.applied) {
+      const slot = plan.days[a.day - 1].slots[a.slotType];
+      const meal = MP.effectiveMeal(mealsById[a.mealId], slot.variantId, slot.subs);
+      const open = MP.Cooks.openFor(meal.id);
+      if (open.length) {
+        MP.Cooks.take(open[0].id);
+      } else {
+        const used = Object.fromEntries((meal.ingredients || []).map((i) => [i.key, i.qty || ""]));
+        applyCookOps(MP.ShoppingList.eatPlan(meal, used, pantry).ops);
+        pantry = { items: MP.Sync.localItems("pantry") };
+        MP.Cooks.open(meal, slot.variantId, (meal.servings || 1) - 1);
+      }
+      slot.eatenAt = a.eatenAt;
+      if (MP.Prefs) MP.Prefs.bump(meal, "eaten");
+      logPortion(meal, a.eatenAt);
+    }
+    savePlan();
+    renderPlan();
+    MP.Sync.flushOps();
+    return result;
+  }
+
+  function eatBannerHtml(applied, rejected) {
+    const reasonText = { eaten: "already eaten", "not-planned": "not on that day's plan", "unknown-meal": "not in your library" };
+    let html = `<button class="ghost dismiss" aria-label="Dismiss">✕</button>`;
+    if (applied.length) {
+      html += `<p>Marked eaten from your assistant:</p><ul>`;
+      html += applied.map((a) => `<li>Day ${a.day} ${esc(a.slotType)} — ${esc(a.name || "")}</li>`).join("");
+      html += `</ul>`;
+    }
+    if (rejected.length) {
+      html += `<p class="rejected">Couldn't mark eaten:</p><ul class="rejected">`;
+      html += rejected.map((r) => `<li>${esc(r.name || "")} (${reasonText[r.reason] || esc(r.reason)})</li>`).join("");
+      html += `</ul>`;
+    }
+    return html;
+  }
+
+  window.addEventListener("mp:eat-requests-applied", (e) => {
+    const el = document.getElementById("hermes-placements-banner");
+    const { applied, rejected } = e.detail;
+    if (!el || (!applied.length && !rejected.length)) return;
+    el.innerHTML = eatBannerHtml(applied, rejected);
+    el.hidden = false;
+    el.querySelector(".dismiss").addEventListener("click", () => {
+      el.hidden = true;
+    });
+  });
+
   window.addEventListener("mp:placements-applied", (e) => {
     plan = JSON.parse(localStorage.getItem(LS_PLAN) || "null") || plan;
     renderPlan();
     renderPlacementBanner(e.detail);
   });
 
-  MP.Plan = { applyPlacements, logPortion };
+  MP.Plan = { applyPlacements, logPortion, matchEatRequests, applyEatRequests };
 
   async function init() {
     MP.initTheme();
@@ -867,7 +986,7 @@
       }
     });
     document.getElementById("hermes-generate").addEventListener("click", async () => {
-      regenerate();
+      regenerate(true);
       await MP.Sync.ackPlanFlag(pendingRequestedAt);
       document.getElementById("hermes-banner").classList.add("hidden");
       toast("Plan regenerated by Hermes request");

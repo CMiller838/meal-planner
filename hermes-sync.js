@@ -12,6 +12,7 @@ window.MP = window.MP || {};
   const LS_OPS = "mp_sync_ops";
   const LS_PLACEMENTS_ACKED = "mp_hermes_placements_acked";
   const LS_EATEN_LOG = "mp_eatenLog";
+  const LS_EAT_ACKED = "mp_eat_requests_acked";
   const SLOT_TYPES = ["breakfast", "lunch", "dinner", "snack"];
 
   function finite(n) {
@@ -180,7 +181,7 @@ window.MP = window.MP || {};
         const have = MP.ShoppingList.parseQty(result[idx].qty);
         const used = MP.ShoppingList.parseQty(op.qty);
         if (!have || !used || have.unit !== used.unit) continue;
-        result[idx] = { ...result[idx], qty: MP.ShoppingList.fmtRemaining(have, used) };
+        result[idx] = { ...result[idx], qty: MP.ShoppingList.remainingQty(have, used) };
       } else if (op.type === "add") {
         if (idx === -1) {
           const item = { name: op.name };
@@ -313,9 +314,14 @@ window.MP = window.MP || {};
 
   /** Pure: placements from `remote` requested after `ackedAt`, ascending. */
   function newPlacements(remote, ackedAt) {
-    if (!remote || !Array.isArray(remote.placements)) return [];
+    return newSince(remote && remote.placements, ackedAt);
+  }
+
+  /** Pure: queue entries requested after `ackedAt`, ascending. */
+  function newSince(list, ackedAt) {
+    if (!Array.isArray(list)) return [];
     const acked = finite(Date.parse(ackedAt)) ?? -Infinity;
-    return remote.placements
+    return list
       .filter((p) => p && p.requestedAt && (finite(Date.parse(p.requestedAt)) ?? -Infinity) > acked)
       .sort((a, b) => Date.parse(a.requestedAt) - Date.parse(b.requestedAt));
   }
@@ -341,6 +347,25 @@ window.MP = window.MP || {};
       const latest = pending[pending.length - 1].requestedAt;
       await ackPlacements(latest);
       window.dispatchEvent(new CustomEvent("mp:placements-applied", { detail: { applied, rejected } }));
+      return "applied";
+    } catch (e) {
+      return "error";
+    }
+  }
+
+  /** GET /eat-requests (the assistant's "I ate X" queue), apply new ones
+   *  through MP.Plan (plan page only — elsewhere they wait), then ack by
+   *  requestedAt like placements. Never throws into the caller. */
+  async function syncEatRequests() {
+    if (!config().enabled || !MP.Plan || !MP.Plan.applyEatRequests) return "off";
+    try {
+      const remote = await req("GET", "/eat-requests");
+      const pending = newSince(remote && remote.requests, localStorage.getItem(LS_EAT_ACKED));
+      if (!pending.length) return "noop";
+      const result = await MP.Plan.applyEatRequests(pending);
+      if (!result) return "off";
+      localStorage.setItem(LS_EAT_ACKED, pending[pending.length - 1].requestedAt);
+      window.dispatchEvent(new CustomEvent("mp:eat-requests-applied", { detail: result }));
       return "applied";
     } catch (e) {
       return "error";
@@ -391,11 +416,13 @@ window.MP = window.MP || {};
     document.addEventListener("visibilitychange", () => {
       if (document.visibilityState !== "visible") return;
       syncLibrary();
-      syncPlacements();
+      // Sequenced: syncPlacements rewrites mp_plan from localStorage, so an
+      // eat applied in parallel could be overwritten.
+      syncPlacements().then(syncEatRequests);
       pushPrefs();
     });
     syncLibrary();
-    syncPlacements();
+    syncPlacements().then(syncEatRequests);
     pushPrefs();
     flushOps();
   }
@@ -403,7 +430,7 @@ window.MP = window.MP || {};
   MP.Sync = {
     decide, needsPlan, config, saveConfig, syncLibrary, syncPlanFlag, ackPlanFlag,
     fetchItems, fetchPantry, localItems, writeLocalItems, queueOp, applyOps, flushOps,
-    planMirror, pushPlan, pushPrefs, fetchPlanPrefs, pushPlanPrefs, newPlacements, syncPlacements, ackPlacements,
+    planMirror, pushPlan, pushPrefs, fetchPlanPrefs, pushPlanPrefs, newPlacements, newSince, syncPlacements, ackPlacements, syncEatRequests,
     localEatenLog, logEaten, pushEatenLog, start,
   };
 })();

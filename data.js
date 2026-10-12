@@ -1,8 +1,7 @@
 // Shared data layer: localStorage-backed meal library, esc() helper, small utils.
-window.MP = window.MP || {};
-
-(function () {
+(function (root) {
   "use strict";
+  const MP = (root.MP = root.MP || {});
 
   const LS_LIBRARY = "mp_library";
   const LS_LIBRARY_STAMP = "mp_library_updated_at";
@@ -16,6 +15,18 @@ window.MP = window.MP || {};
     return String(str).replace(/[&<>"']/g, (c) => ({
       "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
     }[c]));
+  }
+
+  /** Display text for a pantry/ad-hoc qty in either form.
+   *  string -> itself; {value, unit, raw} -> raw (falls back to "value unit"
+   *  if raw is missing); anything else -> "". */
+  function qtyText(qty) {
+    if (typeof qty === "string") return qty;
+    if (qty && typeof qty === "object") {
+      if (qty.raw) return qty.raw;
+      if (typeof qty.value === "number" && qty.unit) return `${qty.value} ${qty.unit}`;
+    }
+    return "";
   }
 
   function labelize(key) {
@@ -297,6 +308,7 @@ window.MP = window.MP || {};
   }
 
   MP.esc = esc;
+  MP.qtyText = qtyText;
   MP.labelize = labelize;
   MP.slugify = slugify;
   MP.getLibrary = getLibrary;
@@ -322,4 +334,4 @@ window.MP = window.MP || {};
   MP.saveForLater = saveForLater;
   MP.removeSavedLater = removeSavedLater;
   MP.initTheme = initTheme;
-})();
+})(typeof globalThis !== "undefined" ? globalThis : this);

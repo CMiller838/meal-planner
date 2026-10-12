@@ -38,8 +38,16 @@ Installable as a PWA on Android Chrome via `manifest.json` + `sw.js`.
 
 - **The `window` → `root` shim (`exclusions.js`'s pattern) now also covers
   `nutrition.js` and `generator.js`** (Phase 26), since `worker/worker.js`
-  imports them to compute `GET /ranking`. Don't reintroduce a bare `window.`
-  reference in any of those three files. `rankSlot` (`generator.js`) now has
+  imports them to compute `GET /ranking`, **and `data.js`, `shelf-life.js`,
+  `shopping-list.js`** (Phase 32, `GET /shopping`). Don't reintroduce a bare
+  `window.` reference at the top level of any of those files (data.js's
+  browser-only functions, e.g. `saveLibrary`'s event, are never called by the
+  Worker). `buildLists` now has the Worker as a second caller — it stays the
+  one shopping-list implementation; pack data is imported and passed in.
+- **Two Worker credentials, never conflated** (Phase 32): `AUTH_TOKEN` is
+  Hermes's; `ASSISTANT_TOKEN` is the personal assistant's, scoped by
+  `ASSISTANT_ALLOWED` to reading the plan side and the `/eat-requests` queue.
+  Don't widen it to a key the assistant doesn't need. `rankSlot` (`generator.js`) now has
   a fourth caller (the Worker) alongside `plan.js`'s three — it's still the
   one ranking implementation; a fourth caller reimplementing any part of it
   is the bug, not a design choice.
@@ -121,6 +129,33 @@ Installable as a PWA on Android Chrome via `manifest.json` + `sw.js`.
   (egg-within-a-dish is fine), no vegetables in toasties. These came from
   explicit user dietary preference — don't relax them for "better" suggestions.
 - **Dark mode defaults on**, persisted in localStorage, toggle in shared nav.
+- **The Hermes-accepted staged plan reveal (Phase 29) is render-side only.**
+  `generatePlan` stays synchronous and `generator.js` has a zero-line diff —
+  the reveal is cosmetic staging of an already-final plan, not a live
+  generator trace. `plan.js`'s `renderPlan(staged)` is a flag on the one
+  render function (never a second render path); staging is a CSS
+  `animation-delay` stagger over already-wired `.slot-card` elements, so
+  mid-reveal interaction needs no blocking or cancellation. Coverage/warnings
+  render once against the final plan, not per stage. Only the
+  `hermes-generate` handler passes `staged: true`; every other `renderPlan()`
+  call site stays a bare, instant call.
+- **A pantry/ad-hoc `qty` (Phase 30) is a free-text string or a structured
+  `{ value, unit, raw }` object** — never a second sibling field.
+  `MP.ShoppingList.parseQty` is the only reader of its structure and
+  `MP.qtyText` (`data.js`) the only reader of its display text; every other
+  site goes through one of those two. Quantity only: no price, pack size, or
+  purchase date on a pantry item — pricing stays `pack-sizes.json`'s job and
+  shelf-life stays category-based. Quantities arrive only through the
+  existing `PUT /pantry` / `PUT /adhoc` relay; this phase added no new
+  endpoint, route, or KV key. Library ingredient `qty` (`meals.json`) is
+  unaffected and stays free text. **A computed remainder (Phase 31) is always
+  structured** — `MP.ShoppingList.remainingQty` is its only producer, so the
+  pantry is now a running balance across cooks (a partial eat leaves a real
+  `{value, unit}`, not a display string that re-rounds itself each time).
+  `pantryOverlap` means "on hand **in sufficient quantity**": absent is still
+  not counted, but unparseable/unit-mismatched/amount-unknown stock falls
+  back to "present" rather than dropping out. `commitCook` (`plan.js`) is
+  still the only pantry writer.
 
 ## Project lifecycle (start to v2)
 

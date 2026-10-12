@@ -228,6 +228,295 @@ Spec: `.claude/specs/phase28_spec.md`. Decisions: 1B (new
 
 ## Phase 29 — Live-build-watching (staged local generation render)
 
+Spec: `.claude/specs/phase29_spec.md`. No gates this phase — the roadmap gate
+(`docs/roadmap.md:106-125`, Gate 1 Path A) already fixed the mechanism as a
+staged **local** render, and both remaining forks collapse under the CSS-stagger
+approach (flag on `renderPlan`, no interaction handling needed). Render-side
+only: `generator.js` gets a **zero-line diff**.
+
+### Logic & Backend Tasks (TDD — no new test group; see §6)
+
+- [x] §6 Confirm **no new `test.html` group** is added (group 45 / Phase 28 at
+      `test.html:1933` stays the latest) — this phase adds no pure logic. Run
+      the existing suite before and after: every group must still pass, and any
+      generator assertion that changes means `generator.js` was wrongly touched
+- [x] §1 `plan.js` — `renderPlan(staged)` gains one optional parameter
+      (default falsy). Add `STAGE_STEP_MS = 30` / `STAGE_MAX_MS = 1800` as
+      module constants. Body unchanged up to and including
+      `root.innerHTML = html` (`plan.js:238`) and the handler wiring
+      (`plan.js:240-246`)
+- [x] §1 `plan.js` — after `wireMoveBtns(root)` and **before**
+      `if (dayCtx) renderDayView();`: when `staged`, `root.classList.add(
+      "staging")` and set each `.slot-card`'s `style.animationDelay` to
+      `Math.min(i * STAGE_STEP_MS, STAGE_MAX_MS) + "ms"` in `querySelectorAll`
+      document order; **`else` branch must `classList.remove("staging")`** —
+      `#plan-root` survives the `innerHTML` swap, so an unstaged re-render that
+      leaves the class on makes every card animate at once
+- [x] §1 Add the ponytail comment naming the ceiling (cosmetic staging of a
+      finished plan; upgrade path is a `function*` `generatePlan` yielding per
+      `place()`, deferred on purpose)
+- [x] §2 `plan.js:110-114` — `regenerate(staged)` gains the same pass-through;
+      last line becomes `renderPlan(staged)`. No other line moves
+- [x] §2 `plan.js:869-874` — the `hermes-generate` handler calls
+      `regenerate(true)`. **Only** call site that stages. `ackPlanFlag`,
+      hiding `#hermes-banner` and the toast are unchanged and still run
+      immediately, concurrently with the reveal
+- [x] §2 `plan.js:863-868` (`generate-btn`) and every other `renderPlan()`
+      caller (`plan.js:256, 337, 415, 459, 731, 756, 843, 904`) — **zero-line
+      diff**, all stay instant. Verify none passes `renderPlan` as a function
+      reference (none does today), so no event object can arrive as `staged`
+- [x] Confirm **zero-line diff** in `generator.js`, `worker/worker.js`,
+      `hermes-sync.js`, `nutrition.js`, `shelf-life.js`, `shopping-list.js`,
+      `data.js`. Editing any of them means the phase went wrong — no progress
+      callback, no async/yielding `generatePlan`, no endpoint, no polling
+- [x] Confirm `plan.js` still loads in `test.html` with no `#plan-root`
+      (`plan.js:917-919`) — all new code sits inside `renderPlan`, nothing new
+      runs at file-evaluation time
+
+### UI & Layout Tasks (rapid visual prototyping)
+
+- [x] §3 `style.css` — one `@keyframes mp-slot-in` (opacity 0→1,
+      `translateY(6px)`→none) and `#plan-root.staging .slot-card { opacity: 0;
+      animation: mp-slot-in 220ms ease-out forwards; }`, beside the existing
+      `.slot-card` rule. Opacity/transform only — nothing that reflows. Scoped
+      to `#plan-root` so day-sheet/swap-deck cards are untouched. First
+      `@keyframes` in the repo
+- [x] §3 `style.css` — `@media (prefers-reduced-motion: reduce)` resets
+      `#plan-root.staging .slot-card` to `opacity: 1; animation: none`.
+      Accessibility basic, not optional
+- [x] §4 `sw.js` — bump `CACHE` (line 4) `"meal-planner-v21"` →
+      `"meal-planner-v22"`. **No shell-array change** — no new file ships
+- [x] §7 Manual pass — items 1-10 (instant first paint and instant one-tap
+      Generate; banner Generate fills day-by-day over ~1.5-2s with the banner
+      gone and toast fired at once; mid-reveal day tap and mid-reveal
+      **Move to day N** both behave; later renders show no residual fading;
+      reload gives back the same `mp_plan`; reduced-motion emulation shows the
+      full grid instantly; dark + light legible with no layout shift; offline
+      on v22)
+- [x] §5 Docs — `docs/roadmap.md` Phase 29 records the resolved shape (staged
+      CSS reveal of an already-final plan, `renderPlan(staged)`,
+      `hermes-generate` only, generator untouched) and is marked shipped;
+      `CLAUDE.md` gains the invariant (render-side only, `generatePlan` stays
+      synchronous, one render function with a flag rather than a second render
+      path, coverage/warnings computed once against the final plan, mid-reveal
+      interaction needs no blocking or cancellation); `docs/ARCHITECTURE.md`
+      notes the optional `staged` argument and the `#plan-root.staging`
+      convention; `SPEC.md` untouched (no data file, plan-slot or planning-rule
+      change)
+
 ## Phase 30 — Hermes quantity ingestion (screenshot → structured quantities)
 
+Spec: `.claude/specs/phase30_spec.md`. Gates answered by the user: 1A
+(`{value, unit, raw}`, all three required when present), 2A (extend existing
+`pantry` items — no new KV key, no new route), 3A (quantity only — no price,
+no pack size).
+
+### Logic & Backend (TDD — write the group-46 assertion first, watch it fail)
+
+- [x] §7 `test.html` group 46 "Phase 30 — structured quantities" — add the
+      assertions **before** any source change: `parseQty("500g")` ===
+      `parseQty({value:500,unit:"g",raw:"500g"})` === `{500,"g"}`;
+      `{value:2,unit:"kg",raw:"2kg"}` → `{2000,"g"}`; missing `value`, `NaN`
+      `value`, `null`, `undefined`, `""` → `null`; existing free-text cases
+      unchanged (bare number, `kg`, unparseable)
+- [x] §3 `shopping-list.js` `parseQty` — one guard at the top of the existing
+      function (lines 48-59): non-null object with finite `value` + string
+      `unit` → `{value, unit}` through the same `UNIT_MULT` normalization,
+      else fall through to today's byte-identical regex path. Extend the
+      doc-comment ponytail note (lines 43-47) with one line. Group 46 goes
+      green
+- [x] §2 `data.js` `qtyText(qty)` — string → itself, `{value,unit,raw}` →
+      `raw`, missing `raw` → `value + " " + unit`, anything else → `""`.
+      Export as `MP.qtyText` beside `MP.esc` (line 299). Add its group-46
+      assertions (never returns `[object Object]`). **Do not touch
+      `parseIngredients` / meal-ingredient `qty`**
+- [x] §3 `shopping-list.js:217` — `pantryQty = MP.qtyText(raw) || "(some)"`.
+      `pantryIndex` (line 87) and `pantryOverlap` stay **zero-diff** (an object
+      is truthy and passes through `item.qty || ""`). Add the group-46
+      `pantryIndex`/`pantryOverlap`/`buildLists` assertions (structured qty
+      survives the index; `needed.value` reduced on a unit match)
+- [x] §7 `applyOps` regression assertion — a `"sub"` op against a structured
+      item yields a correct **string** qty (500 g − 150 g → `"350 g"`).
+      `hermes-sync.js` itself is a **zero-line diff**
+- [x] §1 `worker/worker.js` `qtyError(qty)` — `(any) -> string|null`: absent
+      OK, string OK, `{value: finite non-negative number, unit: non-empty
+      string, raw: non-empty string}` OK, everything else (array, number,
+      boolean, partial object) a `400` naming the offending field. Call it from
+      `itemsError`'s existing per-item loop (lines 172-183), same message
+      style, same all-or-nothing rejection. **No route, `KEYS`, CORS or auth
+      change** — Gate 2
+- [x] Confirm the zero-diff files really are zero-diff: `generator.js`,
+      `nutrition.js`, `shelf-life.js`, `plan.js`, `app.js`, `mealdb.js`,
+      `hermes-sync.js`, and every `*.json` data file
+
+### UI & Layout
+
+- [x] §4 `shopping.js:91` — `esc(item.qty || "")` → `esc(MP.qtyText(item.qty))`
+      for ad-hoc lines. `shopping.js:44` (`esc(line.pantryQty)`) needs **no**
+      change — §3 already guarantees a string. Ad-hoc add form (lines 104,
+      127-133) keeps producing free text
+- [x] Grep for any other pantry/ad-hoc `qty` interpolation; leave
+      `plan.js:186` and `app.js:167` alone (meal-ingredient qty, out of scope)
+- [x] §5 `sw.js:4` — `CACHE` `"meal-planner-v22"` → `"meal-planner-v23"`. No
+      shell-array change (no new file)
+
+### Docs
+
+- [x] §6 `docs/HERMES.md` — the phase's only externally-visible deliverable:
+      `/pantry` table row (line 17) and the `GET /pantry` / `PUT /pantry`
+      section (lines 52-59) document `qty` as free-text string **or**
+      `{value, unit, raw}` (all three required, `value` finite non-negative,
+      `unit`/`raw` non-empty, `raw` = what the screenshot said, unit not
+      enum-checked); same sentence for `/adhoc` (lines 61-69); new capability
+      row for screenshot → `GET /pantry` → merge by name → `PUT /pantry`,
+      stating explicitly that it is **not** a new endpoint and never a source
+      of price data
+- [x] §6 `docs/roadmap.md` Phase 30 (lines 137-153) — record the resolved
+      shape (dual-form `qty`, existing `PUT /pantry`, no new KV key, quantity
+      only) and mark shipped
+- [x] §6 `CLAUDE.md` — one Architecture-invariants bullet: pantry/ad-hoc `qty`
+      is a string or `{value, unit, raw}`; `MP.ShoppingList.parseQty` is the
+      only reader of its structure and `MP.qtyText` the only reader of its
+      text; quantity only (pricing stays `pack-sizes.json`, shelf-life stays
+      category-based, no purchase dates); quantities arrive through the
+      existing `PUT /pantry` relay, never a new endpoint
+- [x] §6 `docs/ARCHITECTURE.md` — note the dual-form `qty` beside the
+      pantry/sync description. `SPEC.md` untouched
+
+### Manual pass (§8)
+
+- [x] §8 Run all 8 steps: existing string quantities render unchanged; a
+      structured `PUT /pantry` → `204`, shows `have 500g bag` and reduces
+      `needed`; missing `raw` / bare number / string `value` each → `400` with
+      KV unchanged (all-or-nothing); plain-string `qty` still `204` on
+      `/pantry` and `/adhoc`; `raw` of `"<b>2kg</b>"` renders as literal text;
+      a cook deduction leaves a correct string qty and no portion-eat touches
+      the pantry; offline works on v23; long `raw` doesn't overflow in dark
+      **or** light
+
 ## Phase 31 — Partial-ingredient leftover tracking
+
+Spec: `.claude/specs/phase31_spec.md`. Gates answered by the user: 1B (a
+computed remainder is structured `{value, unit, raw}`, not a string), 2A
+(`pantryOverlap` upgraded in place to "enough", with unparseable /
+unit-mismatched / amount-unknown falling back to "present"), 3A (`eatPlan` and
+`applyOps` stay two callers of one shared function).
+
+Prerequisite: Phase 30 (shipped). **`worker/worker.js`, `generator.js`,
+`discover.js`, `shelf-life.js` and every `*.json` are zero-line diffs** — if a
+task starts editing one, stop and re-read the spec.
+
+### Logic & Backend (TDD — write the group-47 assertion first, watch it fail)
+
+- [x] §7b `test.html` group 47 "Phase 31 — running-balance pantry" — add the
+      `remainingQty` assertions **before** any source change: `({500,"g"},
+      {150,"g"})` → `{value:350, unit:"g", raw:"350g"}`; clamp to
+      `{value:0, unit:"g", raw:"0g"}` (**unit survives an empty pack** — the
+      defect); `raw` rounds to 1 dp while `value` keeps 3
+      (`({1,"each"},{0.33,"each"})` → `value 0.67`, `raw "0.7each"`); float
+      residue `({0.3},{0.1})` → `value === 0.2` exactly
+- [x] §1 `shopping-list.js:275-279` — `fmtRemaining` → **`remainingQty(have,
+      used)`** returning `{value, unit, raw}`: `value` = `Math.max(0, have.value
+      - used.value)` rounded to 3 dp, `unit` = `have.unit` verbatim, `raw` =
+      value at ≤1 dp (trailing `.0` trimmed) + `unit`, **including the zero
+      case** (`"0g"`, not `"0"`). `raw` is mandatory — `qtyError` 400s an object
+      without it. Rename all five references (`:318`, `:322`, the export at
+      `:330`, `hermes-sync.js:183`, Test 31). **No back-compat alias.** Group 47
+      goes green
+- [x] §7b + §1 Repeated-eat drift regression — feed `remainingQty`'s output back
+      through `parseQty` three times subtracting a fractional amount each round;
+      final `value` must equal the exact arithmetic. Plus: subtract to zero,
+      re-parse, assert `unit === "g"` (not `"each"`), then `eatPlan` against it
+      reports a **shortfall**, not `"units differ"`
+- [x] §7b `pantryOverlap` assertions (one per §2 decision-table row) — absent →
+      no; `qty: ""` → **yes** (behaviour change); recipe qty unparseable → yes;
+      pantry qty unparseable → yes; unit mismatch → yes; 500g vs needs 200g →
+      yes; 100g vs needs 200g → **no**; 2kg vs needs 500g → yes; structured
+      `{500,"g"}` vs needs 700g → no
+- [x] §2 `shopping-list.js:101-103` — `pantryOverlap` counts "on hand **in
+      sufficient quantity**": absence is `have[normalizeKey(ing.key)] ===
+      undefined` (the `!== undefined` test `buildLists:224` already uses, **not**
+      truthiness); `parseQty` both sides; insufficient only when both parse
+      **and** units match. Module-local helper is fine, no export.
+      **`pantryIndex` stays zero-diff** — it already stores `item.qty || ""`;
+      the bug is in the reader. Signature and all three call sites unchanged
+- [x] §3 `shopping-list.js:318, 322` — `eatPlan`'s `after` and its shortfall
+      remainder become structured qtys. Op vocabulary, row shape and the pantry
+      `sub` op's `qty: usedText` all **unchanged** (Gate 3)
+- [x] §3 `shopping-list.js:310, 314` — wrap `haveText`/`usedText` in
+      `MP.qtyText` inside the two note strings. Live Phase 30 gap: a structured
+      qty currently prints `[object Object]` mid-sentence. Wording otherwise
+      unchanged
+- [x] §4 `hermes-sync.js:183` — call `remainingQty`; write the structured result
+      to `result[idx].qty`. **That is the entire diff in this file** — the
+      `parseQty` calls (`:180-181`), the unit guard (`:182`) and the `"add"`
+      branch all stay as-is, and `applyOps` stays pure
+- [x] §7a Update the existing groups that assert the old behaviour: **Test 31**
+      (~753-855) rename + string→structured results; **group 46 line 2178**
+      `applyOps "sub"` now yields `{value:350, unit:"g", raw:"350g"}`. Rows,
+      notes, op vocabulary and shortfall detection must all still pass — if one
+      breaks, the change went wider than the spec
+- [x] §7b End-to-end balance + `pickVariant` assertions — `eatPlan` → `applyOps`
+      → `eatPlan` again sees the reduced amount; two half-pack cooks leave
+      `value: 0` with the unit intact; a variant whose extra ingredient is
+      stocked but **short** is no longer preferred over a fully-stocked one
+      (`MP.Generator.pickVariant`, exercising the zero-line-diff claim)
+- [x] §1b + §2b Ponytail comments — rewrite `shopping-list.js:269-271` (**keep**
+      the both-shop-days clause, it's still true; **drop** "not a running
+      balance" and the dead "Phase 12's deduction flow" pointer; name
+      per-shop-day depletion as the upgrade path). Amend `generator.js:190-192`
+      to say the ceiling that survives: scoring still runs against one static
+      snapshot from `plan.js:98`, so two slots can both count the last tin.
+      **Comment-only — `generator.js` gains no code change**
+- [x] Confirm the zero-diff files really are zero-diff: `worker/worker.js`
+      (`qtyError` already accepts this shape), `generator.js` (code),
+      `discover.js`, `shelf-life.js`, `nutrition.js`, `app.js`, `shopping.js`,
+      and every `*.json` data file
+
+### UI & Layout
+
+- [x] §5 `plan.js:625` — **both** halves:
+      `${esc(MP.qtyText(row.have))} → ${esc(MP.qtyText(row.after))}`.
+      `row.have` needs it for a pre-existing Phase 30 reason (structured pantry
+      qty renders `[object Object]` today), `row.after` because of Gate 1.
+      `MP.qtyText` stays **inside** `esc(...)` — `raw` is untrusted screenshot
+      text. No other `plan.js` change; `commitCook`'s call order is untouched
+      and `eatPortion` still touches nothing pantry-related
+- [x] §6 `sw.js:4` — `CACHE` `"meal-planner-v23"` → `"meal-planner-v24"`. No
+      shell-array change (no new file)
+
+### Docs
+
+- [x] §8 `CLAUDE.md` — **amend** the Phase 30 `qty` invariant bullet, don't add
+      a rival one: a computed remainder is structured
+      (`MP.ShoppingList.remainingQty`, its only producer), the pantry is a
+      running balance across cooks, `pantryOverlap` means "on hand in sufficient
+      quantity" with unparseable / unit-mismatched / amount-unknown falling back
+      to present, `commitCook` still the only writer. Keep the quantity-only
+      rule (no price, pack size or purchase date) verbatim
+- [x] §8 `docs/ARCHITECTURE.md:78-88` — the sentence "a cook deduction collapses
+      a structured `qty` back to a plain string via `fmtRemaining`" is now
+      **false**; replace with the running-balance description. Also update the
+      Phase 21 pantry-variant note (~`:207-215`): overlap is quantity-aware,
+      still reader-only
+- [x] §8 `docs/HERMES.md` — one sentence on `/pantry` and `/adhoc`: the **app
+      itself** now writes structured quantities (cook remainder, shortfall
+      ad-hoc line), so a `qty` isn't free text just because no human typed it.
+      No endpoint, route or contract change
+- [x] §8 `docs/roadmap.md` Phase 31 (lines 166-186) — mark **Shipped**, record
+      gates 1B / 2A / 3A and the outcome, same style as Phase 30's shipped block
+      (`:154-164`). Note that `generator.js:190-192`'s plan-wide depletion
+      ceiling deliberately survives. `SPEC.md` untouched
+
+### Manual pass (§9)
+
+- [x] §9 Run all 12 steps: existing string quantities unchanged; three
+      successive `150g` cooks off a `500g` pack give `350g` → `200g` → `50g`
+      with no drift; over-cooking hits `0g` plus a real ad-hoc line; a cook
+      against `0g` reports a shortfall **not** "units differ"; a Hermes-written
+      structured item shows its `raw` on the left of the eat-sheet arrow (Phase
+      30 gap fixed); the post-cook pantry sync returns `204` not `400` (proving
+      `raw` was carried); Generate picks the variant that's *sufficiently*
+      stocked; a leftover portion-eat writes nothing to the pantry; Discover
+      ordering effectively unchanged; offline works on v24; long `raw` doesn't
+      overflow the eat row in dark **or** light
