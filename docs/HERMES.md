@@ -172,5 +172,8 @@ cook) keeping `eatenAt`.
 
 Two tokens, one per consumer: Hermes's `AUTH_TOKEN` (everything above), and
 the personal assistant's `ASSISTANT_TOKEN`, which reaches only `GET /library`,
-`GET /plan`, `GET /eaten-log`, `GET /shopping` and `GET`/`PUT /eat-requests`
-(`403` elsewhere).
+`GET /plan`, `GET /eaten-log`, `GET /shopping`, `GET /nutrition?date=` (approx. protein and gaps for one day), `GET /discover`, `GET /prefs`,
+`GET`/`PUT` on `/eat-requests`, `/pantry`, `/adhoc` and `/placements`,
+`PUT /planFlag`, and `PUT /library` **append only** (a body that changes an
+existing meal, or drops one the assistant didn't add itself, is `403`). `403` elsewhere (e.g. `PUT /prefs`,
+`PUT /plan`).

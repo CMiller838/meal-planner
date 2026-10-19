@@ -235,3 +235,7 @@ and 403 outside the assistant's scope. A headless run of `plan.html` applied a
 queued request and showed the rejection banner. `sw.js` is at v25.
 
 **Deploy:** `wrangler secret put ASSISTANT_TOKEN`, then `wrangler deploy`.
+
+**Amended 2026-10-17 (assistant Phase 32a):** `ASSISTANT_ALLOWED` also covers `GET /discover`, `GET|PUT /pantry`, `/adhoc`, `/placements`, `GET /prefs`, `PUT /planFlag` and `PUT /library`. The library PUT is append only for the assistant (403 if an existing meal is dropped or changed). Deployed 2026-10-19.
+
+**Amended 2026-10-19 (assistant Phase 33a):** `ASSISTANT_ALLOWED` also covers read-only `GET /nutrition?date=YYYY-MM-DD`: the eaten log for that Europe/London day scored with `MP.Nutrition.dayCoverage`, the uneaten planned slots, and up to 3 `rankByGap(["protein"])` swaps when protein is under 80%. 400 on a bad date. Deployed 2026-10-19 (version d4b1b5bf), live call returned the real plan and swaps.

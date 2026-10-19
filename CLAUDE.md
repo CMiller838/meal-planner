@@ -46,7 +46,8 @@ Installable as a PWA on Android Chrome via `manifest.json` + `sw.js`.
   one shopping-list implementation; pack data is imported and passed in.
 - **Two Worker credentials, never conflated** (Phase 32): `AUTH_TOKEN` is
   Hermes's; `ASSISTANT_TOKEN` is the personal assistant's, scoped by
-  `ASSISTANT_ALLOWED` to reading the plan side and the `/eat-requests` queue.
+  `ASSISTANT_ALLOWED` to reading the plan side, the `/eat-requests` queue and everyday edits (pantry, ad-hoc list,
+  plan flag, placements; `/library` append only, 2026-10-17).
   Don't widen it to a key the assistant doesn't need. `rankSlot` (`generator.js`) now has
   a fourth caller (the Worker) alongside `plan.js`'s three — it's still the
   one ranking implementation; a fourth caller reimplementing any part of it

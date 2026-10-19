@@ -27,9 +27,12 @@ const KEYS = {
 };
 // The personal assistant's own token (ASSISTANT_TOKEN, never Hermes's
 // AUTH_TOKEN) reaches only these method+path pairs: read the plan side, queue
-// "I ate X" requests. Everything else answers 403 for it.
+// "I ate X" requests, everyday edits (lists, plan flag, placements), and append-
+// only library adds (see the PUT /library check). Everything else answers 403.
 const ASSISTANT_ALLOWED = new Set([
   "GET /library", "GET /plan", "GET /eaten-log", "GET /shopping", "GET /eat-requests", "PUT /eat-requests",
+  "GET /discover", "GET /pantry", "PUT /pantry", "GET /adhoc", "PUT /adhoc", "PUT /planFlag",
+  "GET /placements", "PUT /placements", "GET /prefs", "PUT /library", "GET /nutrition",
 ]);
 const SLOT_TYPES = ["breakfast", "lunch", "dinner", "snack"];
 const MEALDB_BASE = "https://www.themealdb.com/api/json/v1/1/";
@@ -147,6 +150,47 @@ async function ranking(params, env) {
     candidates,
     busyDay: (planPrefs.busyDays || []).includes(day),
     approximate: true,
+  });
+}
+
+/** One local day's approximate nutrition: what the eaten log says was eaten that
+ *  day, scored with the app's own dayCoverage, plus the day's uneaten planned
+ *  slots and (when protein is short) a few library meals ranked for protein.
+ *  Entries whose meal left the library still count by their frozen tags. */
+async function nutrition(params, env) {
+  const date = params.get("date") || "";
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || isNaN(Date.parse(date)) || new Date(date).toISOString().slice(0, 10) !== date) return json(400, "date must be YYYY-MM-DD");
+  const read = async (k) => {
+    try { return JSON.parse(await env.MP_KV.get(k)); } catch (e) { return null; }
+  };
+  const [libRaw, planRaw, logRaw] = await Promise.all([read("library"), read("plan"), read("eatenLog")]);
+  const meals = Array.isArray(libRaw) ? libRaw : libRaw && Array.isArray(libRaw.meals) ? libRaw.meals : [];
+  const byId = Object.fromEntries(meals.map((m) => [m.id, m]));
+  // ponytail: the user's zone is fixed (UK); add a tz param if that ever changes.
+  const dayFmt = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/London" });
+  const eatenToday = (Array.isArray(logRaw) ? logRaw : []).filter((e) => dayFmt.format(new Date(e.eatenAt)) === date);
+  const known = eatenToday.map((e) => byId[e.mealId]).filter(Boolean);
+  const cov = Nutrition.dayCoverage(known, TAGS, TARGETS);
+  // Frozen tags carry no levels: an orphan's nutrients count as partial, never covered.
+  const orphanTags = new Set(eatenToday.filter((e) => !byId[e.mealId]).flatMap((e) => e.tags || []));
+  const missing = cov.missing.filter((n) => !orphanTags.has(n));
+  const partial = [...cov.partial, ...cov.missing.filter((n) => orphanTags.has(n))];
+
+  const planned = [];
+  if (planRaw && Array.isArray(planRaw.days) && planRaw.startDate) {
+    const start = Date.parse(planRaw.startDate + "T00:00:00Z");
+    const idx = Math.round((Date.parse(date + "T00:00:00Z") - start) / 86400000);
+    const day = planRaw.days.find((d) => d.day === idx + 1);
+    for (const slot of SLOT_TYPES) {
+      const v = day && day.slots && day.slots[slot];
+      if (v && v.mealId && !v.eatenAt) planned.push({ slot, name: (byId[v.mealId] || {}).name || v.mealId });
+    }
+  }
+  const short = cov.proteinGramsApprox < 0.8 * cov.proteinTarget;
+  const swaps = short ? Nutrition.rankByGap(meals, ["protein"], TAGS).slice(0, 3).map((m) => ({ id: m.id, name: m.name })) : [];
+  return json(200, {
+    date, eaten: eatenToday.map((e) => e.name), planned,
+    proteinGramsApprox: cov.proteinGramsApprox, proteinTarget: cov.proteinTarget, missing, partial, swaps,
   });
 }
 
@@ -363,6 +407,11 @@ export default {
       return ranking(url.searchParams, env);
     }
 
+    if (url.pathname === "/nutrition") {
+      if (request.method !== "GET") return json(405, "method not allowed");
+      return nutrition(url.searchParams, env);
+    }
+
     if (url.pathname === "/shopping") {
       if (request.method !== "GET") return json(405, "method not allowed");
       return shopping(env);
@@ -398,6 +447,15 @@ export default {
       if (validate) {
         const reason = validate(parsed);
         if (reason) return json(400, reason);
+      }
+      // The assistant's library writes are append only: every existing meal must
+      // come back unchanged. The one exception: it may drop a meal it added itself
+      // (addedBy "assistant"), so Undo of an add works.
+      if (kvKey === "library" && !isHermes) {
+        let cur = [];
+        try { cur = JSON.parse((await env.MP_KV.get("library")) || "{}").meals || []; } catch (e) { cur = []; }
+        const next = new Map(parsed.meals.map((m) => [m.id, JSON.stringify(m)]));
+        if (cur.some((m) => next.get(m.id) !== JSON.stringify(m) && !(next.get(m.id) === undefined && m.addedBy === "assistant"))) return json(403, "assistant library writes are append only");
       }
       await env.MP_KV.put(kvKey, body);
       return new Response(null, { status: 204, headers: CORS });
