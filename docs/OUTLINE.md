@@ -415,6 +415,10 @@ Solo tool, one user (Cody) — unchanged.
 - Any live/scraped Asda pricing or product data — manual entry and
   Hermes-assisted screenshot reading only, this version and for the
   foreseeable future.
+  **Update 2026-10-20:** Hermes-assisted product records with label/Open Food
+  Facts nutrition are planned as roadmap Phase 33 (not scraping Asda). The
+  non-goal on scraping Asda stands; the "precise calorie tracking" non-goal is
+  relaxed for product records only, and never changes the nutrient tags.
 - Free-form NL ingredient substitution — swaps are limited to the data file's
   defined groups, never an arbitrary model-decided swap.
 - Hermes gaining any new direct plan-write path — live-build-watching is a
