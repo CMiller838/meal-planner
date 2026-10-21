@@ -21,7 +21,9 @@
       "Read(./.env)",
       "Read(./**/.env.local)",
       "Read(~/.ssh/**)",
-      "Read(~/.aws/**)"
+      "Read(~/.aws/**)",
+      "Bash(git commit *--no-verify*)",
+      "Bash(git add *.env*)"
     ],
     "ask": [
       "Bash(git merge *)",
