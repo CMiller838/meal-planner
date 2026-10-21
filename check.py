@@ -33,6 +33,8 @@ def python_checks():
             yield name, [sys.executable, path.name, "--selftest"]
         elif "_selftest()" in src:
             yield name, [sys.executable, path.name]
+    for path in sorted((ROOT / ".claude" / "hooks").glob("*.py")):  # hook scripts carry their own --selftest
+        yield f"hook {path.stem}", [sys.executable, str(path.relative_to(ROOT)), "--selftest"]
 
 
 def scan_secrets(files, allow=()):
@@ -89,7 +91,8 @@ def pick(files, names):
         return list(names)
     ui = any(f.startswith(f"{UI.name}/") and not f.endswith(".md") for f in files)
     web = any(f.endswith((".js", ".html", ".json", ".css")) and "/" not in f or f.startswith("worker/") for f in files)
-    return [n for n in names if n in py or (ui and n.startswith("ui ")) or (web and n.startswith("ui ") and not UI.exists())]
+    hooks = any(f.startswith(".claude/hooks/") and f.endswith(".py") for f in files)
+    return [n for n in names if n in py or (hooks and n.startswith("hook ")) or (ui and n.startswith("ui ")) or (web and n.startswith("ui ") and not UI.exists())]
 
 
 def changed_files():
