@@ -28,12 +28,29 @@ PROTECTED = {"main", "master"}
 SEPS = {";", "&&", "||", "|", "|&", "&", "(", ")", "{", "}"}
 WRAPPERS = {"env", "sudo", "nohup", "setsid", "timeout", "time", "command", "exec", "nice", "stdbuf"}
 SHELLS = {"bash", "sh", "zsh", "dash", "ksh"}
-TEXT_ONLY = {"echo", "printf", "grep", "egrep", "fgrep", "rg", "ag", "cat", "tee", "sed", "awk", "less", "more", "man",
-             "which", "type", "ls", "wc", "head", "tail", "diff", "cut", "sort", "uniq"}
+TEXT_ONLY = {"echo", "printf", "cat", "ls", "wc", "head", "tail", "which", "type"}  # programs that never run their arguments
 GIT_OPTS_WITH_VALUE = {"-C", "-c", "--git-dir", "--work-tree", "--namespace", "--exec-path"}
 PUSH_OPTS_WITH_VALUE = {"-o", "--push-option", "--receive-pack", "--exec"}
 HEREDOC = re.compile(r"<<-?[ \t]*(['\"]?)(\w+)\1([^\n]*)\n(.*?)\n[ \t]*\2[ \t]*(?=\n|$)", re.S)
-SUBST = re.compile(r"\$\(([^()]*)\)|`([^`]*)`", re.S)
+BACKTICKS = re.compile(r"`([^`]*)`", re.S)
+
+
+def substitutions(cmd):
+    """Bodies of $(...) (balanced, nested ones included in their parent's body) and `...`; None when a $( never closes."""
+    out, i = [], 0
+    while True:
+        i = cmd.find("$(", i)
+        if i < 0:
+            break
+        depth, j = 1, i + 2
+        while j < len(cmd) and depth:
+            depth += {"(": 1, ")": -1}.get(cmd[j], 0)
+            j += 1
+        if depth:
+            return None
+        out.append(cmd[i + 2:j - 1])
+        i += 2
+    return out + BACKTICKS.findall(cmd)
 
 
 def current_branch(cwd):
@@ -173,7 +190,10 @@ def analyze(cmd, cwd, branch_of=current_branch, depth=0):
     if depth > 4:
         return "commands nested too deeply to check"
     cmd, bodies = split_heredocs(cmd)
-    for inner in [b for b in bodies] + [a or b for a, b in SUBST.findall(cmd)]:
+    subs = substitutions(cmd)
+    if subs is None:
+        return "an unclosed $( cannot be checked"
+    for inner in bodies + subs:
         why = analyze(inner, cwd, branch_of, depth + 1)
         if why:
             return why
@@ -189,14 +209,15 @@ def analyze(cmd, cwd, branch_of=current_branch, depth=0):
             cwd = os.path.normpath(os.path.join(cwd or ".", os.path.expanduser(seg[1])))
             continue
         prog = first_program(seg)
-        if prog in SHELLS or prog == "eval":
-            for inner in seg[1:]:  # bash -c 'git push -f ...' / eval "..."
-                if not inner.startswith("-") and re.search(r"\bpush\b", inner):
-                    why = analyze(inner, cwd, branch_of, depth + 1)
-                    if why:
-                        return why
         if prog in TEXT_ONLY:
             continue
+        for k, t in enumerate(seg):  # a shell or eval anywhere (env bash -c, timeout 5 sh -c): its string arguments are commands
+            if os.path.basename(t) in SHELLS or t == "eval":
+                for inner in seg[k + 1:]:
+                    if not inner.startswith("-") and re.search(r"\bpush\b", inner):
+                        why = analyze(inner, cwd, branch_of, depth + 1)
+                        if why:
+                            return why
         for j, t in enumerate(seg):  # a git anywhere in the segment, whatever wraps it (timeout -s KILL 5, ssh h, then...)
             if os.path.basename(t) == "git":
                 got = push_args(seg[j:], cwd)
@@ -240,6 +261,8 @@ def _selftest():
               # substitutions, also inside quotes; heredocs a shell runs
               "echo $(git push -f origin main)", 'echo "$(git push -f origin main)"', "echo `git push -f origin main`",
               "bash <<EOF\ngit push -f origin main\nEOF", "cat <<EOF | sh\ngit push -f origin main\nEOF",
+              "timeout 5 bash -c 'git push -f origin main'", "env X=1 sh -c \"git push -f origin master\"", 'echo "$(echo $(git push -f origin main))"',
+              "echo $(git push -f origin main", "grep x f | sort | git push -f origin main",
               # --repo shifts the positionals: main is a refspec, not the remote
               "git push -f --repo origin main", "git push --repo=origin -f main", "git push -f main"]:
         assert blocked(c), c
@@ -256,7 +279,8 @@ def _selftest():
               "grep -rn 'git push' . | head && echo {a,b} $HOME `date`",
               "python3 - <<'EOF'\nprint('git push --force origin main {x}')\nEOF\ngit status",
               "cat <<EOF\ngit push -f origin main\nEOF", "git status; ls -lf; git pull --force origin main", "git push origin --delete old-branch",
-              "if true; then git status; fi", "timeout -s KILL 5 git status", "git commit -m \"$(echo hi)\""]:
+              "if true; then git status; fi", "timeout -s KILL 5 git status", "git commit -m \"$(echo hi)\"",
+              'echo "$(echo $(git status))"', "timeout 5 bash -c 'git status'"]:
         assert not blocked(c, "main"), c
     assert analyze("git push -f origin 'unterminated", ".", on("x")) is not None  # unparseable + force-looking: fail closed
     assert analyze("echo 'unterminated", ".", on("main")) is None
