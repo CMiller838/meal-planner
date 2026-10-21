@@ -74,6 +74,47 @@
     return dayCoverage(dayMealArrays.flat(), tags, targets);
   }
 
+  /** Targets copy with the gym-day uplift added; unchanged when there is no gymDay block. */
+  function withGymDay(targets) {
+    const up = targets && targets.gymDay;
+    if (!up) return targets;
+    const out = { ...targets };
+    for (const [k, v] of Object.entries(up)) if (typeof out[k] === "number") out[k] += v;
+    return out;
+  }
+
+  /** One day's eaten-log entries scored with dayCoverage. Entries whose meal left the
+   *  library carry frozen tags with no levels: their nutrients count as partial, never covered. */
+  function eatenDayCoverage(entries, byId, tags, targets) {
+    const known = entries.map((e) => byId[e.mealId]).filter(Boolean);
+    const cov = dayCoverage(known, tags, targets);
+    const orphanTags = new Set(entries.filter((e) => !byId[e.mealId]).flatMap((e) => e.tags || []));
+    return {
+      cov,
+      missing: cov.missing.filter((n) => !orphanTags.has(n)),
+      partial: [...cov.partial, ...cov.missing.filter((n) => orphanTags.has(n))],
+    };
+  }
+
+  /** Per-nutrient tally over `dates` ("YYYY-MM-DD"). dayKey(entry) gives an entry's local date
+   *  (null/throw = skip). Days with no entries are excluded from loggedDays and listed in notLogged. */
+  function weekGaps(entries, byId, dates, tags, targets, dayKey) {
+    const byDay = Object.fromEntries(dates.map((d) => [d, []]));
+    for (const e of entries) {
+      let k = null;
+      try { k = e && e.eatenAt ? dayKey(e) : null; } catch (err) { k = null; }
+      if (k && byDay[k]) byDay[k].push(e);
+    }
+    const days = dates.map((date) => ({ date, logged: byDay[date].length > 0 }));
+    const scored = days.filter((d) => d.logged).map((d) => eatenDayCoverage(byDay[d.date], byId, tags, targets));
+    const nutrients = TRACKED_NUTRIENTS.map((nutrient) => {
+      const coveredDays = scored.filter((s) => !s.missing.includes(nutrient) && !s.partial.includes(nutrient)).length;
+      const missedDays = scored.filter((s) => s.missing.includes(nutrient)).length;
+      return { nutrient, coveredDays, loggedDays: scored.length, missedDays, flag: missedDays >= 3 };
+    });
+    return { days, nutrients, notLogged: days.filter((d) => !d.logged).map((d) => d.date) };
+  }
+
   /** Sort candidate meals by how well they fill the given gap nutrients. */
   function rankByGap(candidates, gapNutrients, tags) {
     if (!gapNutrients.length) return candidates.slice();
@@ -93,5 +134,5 @@
       .map((x) => x.meal);
   }
 
-  MP.Nutrition = { load, tagsForMeal, dayCoverage, weekCoverage, rankByGap, TRACKED_NUTRIENTS };
+  MP.Nutrition = { load, tagsForMeal, dayCoverage, weekCoverage, rankByGap, TRACKED_NUTRIENTS, withGymDay, eatenDayCoverage, weekGaps };
 })(typeof globalThis !== "undefined" ? globalThis : this);

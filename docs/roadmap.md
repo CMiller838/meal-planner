@@ -337,7 +337,9 @@ frozen items are treated, and whether an expiring item can be pinned into the ne
 **Verify:** estimates are visibly marked in the response and the UI; an item with no date and no category is omitted, not guessed.
 Requires Phase 34. Assistant side: `notion_assistant` Phase 54.
 
-## Phase 35: Weekly nutrient-gap view and gym-day targets [M] — not started
+## Phase 35: Weekly nutrient-gap view and gym-day targets [M] — built 2026-10-21, live checks pending
+
+Verified 2026-10-21: check.py 7/7, test.html Phase 35 cases, Worker harness (`date=` byte-identical to HEAD, `gym=1`, `from/to`, all 400s), plan page strip at PC/390 px in both themes; tester PASS.
 
 Merged from old Phases 35, 46. Build as one phase; each part keeps its own decisions and verify.
 

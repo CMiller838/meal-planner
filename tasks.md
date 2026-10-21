@@ -532,7 +532,8 @@ task starts editing one, stop and re-read the spec.
 
 ## Phase 35: Weekly nutrient-gap view and gym-day targets
 
-- [ ] Spec and tasks: `.claude/specs/phase35.md`
+- [x] Spec and tasks: `.claude/specs/phase35.md`
+- [ ] Live: on the phone PWA, plan page after logging meals: tick "Gym day today", protein line reads "gym-day target" (+20 g); edit placeholder `gymDay` numbers in `nutrition-targets.json`
 
 ## Phase 36: Cost per 25 g protein and product ranking
 

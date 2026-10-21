@@ -207,6 +207,42 @@
   // turning MP.Generator.generatePlan into a function* that yields after
   // each place() — deliberately deferred so this render path isn't
   // re-verified against the two generator phases that follow.
+  // Last 7 days of the eaten log, per nutrient (informational; base targets). Today's protein
+  // figure uses the gym-day target while the "Gym day today" box (mp_gymDay, today only) is ticked.
+  function renderGapStrip() {
+    const el = document.getElementById("gap-strip");
+    if (!el || !tagsData) return;
+    let log = [];
+    try { log = JSON.parse(localStorage.getItem("mp_eatenLog")) || []; } catch (e) { log = []; }
+    if (!Array.isArray(log)) log = [];
+    const fmt = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/London" });
+    const dayKey = (e) => fmt.format(new Date(e.eatenAt));
+    const today = fmt.format(new Date());
+    let gym = false;
+    try { gym = (JSON.parse(localStorage.getItem("mp_gymDay")) || {}).date === today; } catch (e) { gym = false; }
+    const dates = Array.from({ length: 7 }, (_, i) => new Date(Date.parse(today + "T00:00:00Z") - (6 - i) * 86400000).toISOString().slice(0, 10));
+    const byId = Object.fromEntries(library.map((m) => [m.id, m]));
+    const g = MP.Nutrition.weekGaps(log, byId, dates, tagsData.tags, tagsData.targets, dayKey);
+    const todays = log.filter((e) => { try { return dayKey(e) === today; } catch (err) { return false; } });
+    const targets = gym ? MP.Nutrition.withGymDay(tagsData.targets) : tagsData.targets;
+    const tc = MP.Nutrition.eatenDayCoverage(todays, byId, tagsData.tags, targets).cov;
+    const loggedAny = g.days.some((d) => d.logged);
+    const rows = g.nutrients.filter((n) => n.loggedDays && (n.flag || n.coveredDays < n.loggedDays))
+      .map((n) => `<li class="${n.flag ? "gap-flag" : ""}">${esc(labelize(n.nutrient))}: ${n.coveredDays}/${n.loggedDays} days covered${n.flag ? " · missed " + n.missedDays + " days" : ""}</li>`).join("");
+    el.innerHTML = `<div class="gap-head"><strong>Last 7 days</strong>
+        <label class="gap-gym"><input type="checkbox" id="gym-toggle"${gym ? " checked" : ""}> Gym day today</label></div>` +
+      (loggedAny
+        ? `<div>Protein today ~${tc.proteinGramsApprox}g / ${tc.proteinTarget}g${gym ? " gym-day target" : ""}</div>
+           <ul class="gap-list">${rows || "<li>All logged days covered every tracked nutrient</li>"}</ul>` +
+          (g.notLogged.length ? `<div class="gap-nolog">Not logged: ${g.notLogged.map(esc).join(", ")}</div>` : "")
+        : `<div>No meals logged yet</div>`);
+    el.querySelector("#gym-toggle").addEventListener("change", (ev) => {
+      if (ev.target.checked) localStorage.setItem("mp_gymDay", JSON.stringify({ date: today }));
+      else localStorage.removeItem("mp_gymDay");
+      renderGapStrip();
+    });
+  }
+
   function renderPlan(staged) {
     mealsById = Object.fromEntries(library.map((m) => [m.id, m]));
     warnings = MP.ShelfLife.checkPlanWarnings(plan, mealsById, shelfData);
@@ -243,6 +279,7 @@
       html += `</div>`;
     }
     root.innerHTML = html;
+    renderGapStrip();
 
     root.querySelectorAll(".slot-card").forEach((el) => {
       el.addEventListener("click", (e) => {

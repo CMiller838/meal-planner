@@ -1844,6 +1844,32 @@
     check("covers derivation: [] when nothing short is covered",
       deepEqual(N.tagsForMeal(noCoverMeal, tags).filter((t) => shortOn.includes(t)), []));
 
+    // ---- Phase 35: weekGaps / eatenDayCoverage / withGymDay ----
+    {
+      const tg = { rice: { fibre: "high" }, beef: { protein: "high", iron: "high" } };
+      const tr = { protein_g: 160, energy_kcal: 2900, gymDay: { protein_g: 20 } };
+      const byId = { a: { id: "a", ingredients: [{ key: "beef" }, { key: "beef" }] }, b: { id: "b", ingredients: [{ key: "rice" }] } };
+      const dk = (e) => e.eatenAt.slice(0, 10);
+      const ent = (id, d, extra) => ({ mealId: id, eatenAt: d + "T12:00:00Z", ...extra });
+      const log = [ent("a", "2026-10-01"), ent("a", "2026-10-01"), ent("b", "2026-10-02"),
+        ent("gone", "2026-10-04", { tags: ["fibre"] }), { mealId: "a" }, { mealId: "a", eatenAt: "nope" }];
+      const g = N.weekGaps(log, byId, ["2026-10-01", "2026-10-02", "2026-10-03", "2026-10-04"], tg, tr, dk);
+      const gn = (n) => g.nutrients.find((x) => x.nutrient === n);
+      check("weekGaps: notLogged lists the empty day", deepEqual(g.notLogged, ["2026-10-03"]));
+      check("weekGaps: loggedDays excludes empty day, bad entries skipped", gn("fibre").loggedDays === 3);
+      check("weekGaps: orphan fibre is partial, not covered", gn("fibre").coveredDays === 1 && gn("fibre").missedDays === 1);
+      check("weekGaps: flag needs >=3 missed days", gn("iron").flag === false && gn("iron").missedDays === 2);
+      const e0 = N.weekGaps([], byId, ["2026-10-01"], tg, tr, dk);
+      check("weekGaps: empty log => no flags, all notLogged", e0.notLogged.length === 1 && e0.nutrients.every((x) => x.loggedDays === 0 && !x.flag));
+      const ec = N.eatenDayCoverage([ent("a", "x"), ent("gone", "x", { tags: ["fibre"] })], byId, tg, tr);
+      check("eatenDayCoverage: orphan tag moves missing->partial", ec.partial.includes("fibre") && !ec.missing.includes("fibre"));
+      const gt = N.withGymDay(tr);
+      check("withGymDay: raises protein only, input untouched", gt.protein_g === 180 && gt.energy_kcal === 2900 && tr.protein_g === 160);
+      check("withGymDay: no block => same object", N.withGymDay({ protein_g: 1 }).protein_g === 1);
+      const cands = [byId.a, byId.b];
+      check("rankByGap unaffected by targets", deepEqual(N.rankByGap(cands, ["fibre"], tg).map((m) => m.id), ["b", "a"]));
+    }
+
     check("root shim: MP.Nutrition still resolves via window", typeof window.MP.Nutrition.dayCoverage === "function");
     check("root shim: MP.Generator still resolves via window", typeof window.MP.Generator.rankSlot === "function");
   }

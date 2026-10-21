@@ -158,23 +158,37 @@ async function ranking(params, env) {
  *  slots and (when protein is short) a few library meals ranked for protein.
  *  Entries whose meal left the library still count by their frozen tags. */
 async function nutrition(params, env) {
+  const isDay = (d) => /^\d{4}-\d{2}-\d{2}$/.test(d) && !isNaN(Date.parse(d)) && new Date(d).toISOString().slice(0, 10) === d;
   const date = params.get("date") || "";
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || isNaN(Date.parse(date)) || new Date(date).toISOString().slice(0, 10) !== date) return json(400, "date must be YYYY-MM-DD");
+  const hasWindow = params.has("from") || params.has("to");
+  if (hasWindow && params.has("date")) return json(400, "use date or from/to, not both");
+  if (hasWindow && params.has("gym")) return json(400, "gym is only valid with date");
+  // ponytail: the user's zone is fixed (UK); add a tz param if that ever changes.
+  const dayFmt = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/London" });
+  let dates = null;
+  if (hasWindow) {
+    const to = params.get("to") || dayFmt.format(new Date());
+    const from = params.get("from") || new Date(Date.parse(to + "T00:00:00Z") - 6 * 86400000).toISOString().slice(0, 10);
+    if (!isDay(to) || !isDay(from)) return json(400, "from/to must be YYYY-MM-DD");
+    const n = Math.round((Date.parse(to + "T00:00:00Z") - Date.parse(from + "T00:00:00Z")) / 86400000) + 1;
+    if (n < 1 || n > 14) return json(400, "from must not be after to, and the window is at most 14 days");
+    dates = Array.from({ length: n }, (_, i) => new Date(Date.parse(from + "T00:00:00Z") + i * 86400000).toISOString().slice(0, 10));
+  } else if (!isDay(date)) return json(400, "date must be YYYY-MM-DD");
   const read = async (k) => {
     try { return JSON.parse(await env.MP_KV.get(k)); } catch (e) { return null; }
   };
   const [libRaw, planRaw, logRaw] = await Promise.all([read("library"), read("plan"), read("eatenLog")]);
   const meals = Array.isArray(libRaw) ? libRaw : libRaw && Array.isArray(libRaw.meals) ? libRaw.meals : [];
   const byId = Object.fromEntries(meals.map((m) => [m.id, m]));
-  // ponytail: the user's zone is fixed (UK); add a tz param if that ever changes.
-  const dayFmt = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/London" });
-  const eatenToday = (Array.isArray(logRaw) ? logRaw : []).filter((e) => dayFmt.format(new Date(e.eatenAt)) === date);
-  const known = eatenToday.map((e) => byId[e.mealId]).filter(Boolean);
-  const cov = Nutrition.dayCoverage(known, TAGS, TARGETS);
-  // Frozen tags carry no levels: an orphan's nutrients count as partial, never covered.
-  const orphanTags = new Set(eatenToday.filter((e) => !byId[e.mealId]).flatMap((e) => e.tags || []));
-  const missing = cov.missing.filter((n) => !orphanTags.has(n));
-  const partial = [...cov.partial, ...cov.missing.filter((n) => orphanTags.has(n))];
+  const log = Array.isArray(logRaw) ? logRaw : [];
+  if (dates) {
+    const g = Nutrition.weekGaps(log, byId, dates, TAGS, TARGETS, (e) => dayFmt.format(new Date(e.eatenAt)));
+    return json(200, { from: dates[0], to: dates[dates.length - 1], nutrients: g.nutrients, notLogged: g.notLogged });
+  }
+  const gym = params.get("gym") === "1" && !!TARGETS.gymDay;
+  const targets = gym ? Nutrition.withGymDay(TARGETS) : TARGETS;
+  const eatenToday = log.filter((e) => dayFmt.format(new Date(e.eatenAt)) === date);
+  const { cov, missing, partial } = Nutrition.eatenDayCoverage(eatenToday, byId, TAGS, targets);
 
   const planned = [];
   if (planRaw && Array.isArray(planRaw.days) && planRaw.startDate) {
@@ -190,6 +204,7 @@ async function nutrition(params, env) {
   const swaps = short ? Nutrition.rankByGap(meals, ["protein"], TAGS).slice(0, 3).map((m) => ({ id: m.id, name: m.name })) : [];
   return json(200, {
     date, eaten: eatenToday.map((e) => e.name), planned,
+    ...(gym ? { gym: true } : {}),
     proteinGramsApprox: cov.proteinGramsApprox, proteinTarget: cov.proteinTarget, missing, partial, swaps,
   });
 }
