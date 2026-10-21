@@ -12,7 +12,10 @@
   },
   "permissions": {
     "allow": [
-      "Bash(git status *)"
+      "Bash(git status *)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(AUTO_LAUNCH=0 git commit *)"
     ],
     "deny": [
       "Read(./.env)",
@@ -30,7 +33,8 @@
   },
   "skillOverrides": {
     "strategic-compact": "off",
-    "verification-loop": "off"
+    "verification-loop": "off",
+    "task-observer": "off"
   },
   "hooks": {
     "PreToolUse": [
@@ -48,7 +52,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "echo 'Before spawning: is an agent already running/completed on this task? Check ListAgents / conversation for an agentId, and use SendMessage to resume it instead of a fresh Agent call — see .claude/rules/agent-resume.md.' >&2; exit 0"
+            "command": "echo 'Before spawning: is an agent already running/completed on this task? Check ListAgents / conversation for an agentId, and use SendMessage to resume it instead of a fresh Agent call \u2014 see .claude/rules/agent-resume.md.' >&2; exit 0"
           }
         ]
       }
@@ -60,6 +64,32 @@
           {
             "type": "command",
             "command": "bash ${CLAUDE_PROJECT_DIR}/.claude/hooks/auto-lint.sh"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ${CLAUDE_PROJECT_DIR}/.claude/hooks/check-on-stop.sh",
+            "timeout": 600
+          },
+          {
+            "type": "command",
+            "command": "bash ${CLAUDE_PROJECT_DIR}/.claude/hooks/session-nudge.sh"
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 ${CLAUDE_PROJECT_DIR}/tools/workflow_audit.py",
+            "timeout": 60
           }
         ]
       }

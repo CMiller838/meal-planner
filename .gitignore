@@ -1,3 +1,8 @@
 node_modules/
 *.log
 .wrangler/
+.claude/settings.local.json
+.claude/build-status.json
+logs/
+.claude/.last-green
+__pycache__/

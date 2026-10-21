@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+# One command to start the unattended build and walk away: pre-flight, then tools/pipeline.sh detached.
+#   tools/overnight.sh [specs...]      (no args: the queue)
+# Prints a few lines and returns at once. Results arrive on Telegram and in .claude/build-status.json;
+# logs/pipeline.out is the run log. Nothing needs to watch or poll it.
+set -uo pipefail
+cd "$(dirname "$0")/.."
+
+if pgrep -f 'tools/pipeline.sh' >/dev/null; then
+    echo "ALREADY RUNNING: $(pgrep -af 'tools/pipeline.sh' | head -1). Not starting a second one."; exit 3
+fi
+
+# workflow/tooling files are safe to commit before the run; app code is not (it is someone's half-built phase)
+dirty=$(git status --porcelain --untracked-files=no | sed 's/^...//')
+if [ -n "$dirty" ]; then
+    other=$(grep -v -E '^(CLAUDE\.md|WORKFLOW\.md|tasks\.md|\.claude/(agents|skills|archive)/|tools/)' <<<"$dirty")
+    if [ -n "$other" ]; then
+        echo "DIRTY TREE, not starting. App/doc changes that are not workflow files:"; echo "$other"
+        echo "Finish and commit them, or stash them, then run again."; exit 2
+    fi
+    git add -- $dirty && git commit -q -m "chore: workflow and tooling changes before overnight run" \
+        || { echo "chore commit failed (pre-commit check?), not starting"; exit 2; }
+    echo "committed workflow files as a chore: $(git log --oneline -1)"
+fi
+
+plan=$(tools/pipeline.sh --plan "$@" 2>&1) || { echo "$plan"; exit 2; }
+setsid nohup tools/pipeline.sh "$@" > logs/pipeline.out 2>&1 < /dev/null &
+sleep 3
+pgrep -f 'tools/pipeline.sh' >/dev/null || { echo "pipeline exited at once:"; cat logs/pipeline.out; exit 1; }
+echo "STARTED. Stages:"; echo "$plan"
+echo "Results go to Telegram and .claude/build-status.json; log: logs/pipeline.out"

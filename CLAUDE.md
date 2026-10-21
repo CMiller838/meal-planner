@@ -172,3 +172,10 @@ This project shipped its MVP directly from `SPEC.md` rather than through the
 full idea-interview chain — treat `SPEC.md` as the equivalent of the
 ARCHITECTURE.md + Phase 1 spec for any retrofit. Use the lifecycle above for
 future feature phases (v2+).
+
+## Token discipline
+
+Cost is the context re-sent on every call, not output. So: Grep before Read and read line ranges, never `tasks.md`,
+`docs/roadmap.md` or any big source file whole (Grep `^## Phase N`); use Sonnet by default, Opus only for a real
+architectural fork; `/clear` between unrelated tasks and `/compact` near 100k tokens; send bulk work (check suites,
+wide greps) to `runner`/`scanner` (Haiku).

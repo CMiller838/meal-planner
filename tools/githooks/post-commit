@@ -1,0 +1,18 @@
+#!/bin/sh
+# A commit naming the phase /build last worked on closes that build, so the /next pane stops showing it in flight.
+s=.claude/build-status.json
+n=$(sed -n 's/.*"spec":"phase\([0-9a-z]*\)\.md".*/\1/p' "$s" 2>/dev/null)
+[ -n "$n" ] && git log -1 --format=%s | grep -qiw "phase $n" &&
+  printf '{"spec":"phase%s.md","stage":"committed","at":%s000,"verdict":"PASS"}\n' "$n" "$(date +%s)" > "$s"
+# Optional auto-deploy: if tools/deploy.sh exists, run it in the background after a commit that touches code
+# (TEMPLATE: adjust the pattern), report via tools/notify.py. Skip once with `AUTO_LAUNCH=0 git commit ...`.
+[ "${AUTO_LAUNCH:-1}" = 0 ] || [ ! -x tools/deploy.sh ] && exit 0
+git diff-tree --no-commit-id --name-only -r HEAD | grep -vE '\.md$' | grep -qE '\.(py|ts|tsx|js|svelte|css)$' || exit 0
+# deploy scripts usually copy the working tree, not the commit: don't ship uncommitted code along with it
+if [ -n "$(git status --porcelain --untracked-files=no | grep -vE '\.md$')" ]; then
+  echo "post-commit: not deploying, uncommitted changes would go out too"; exit 0
+fi
+cd "$(git rev-parse --show-toplevel)" && mkdir -p logs
+nohup sh -c 'tools/deploy.sh > logs/auto-deploy.log 2>&1
+  python3 tools/notify.py "auto-deploy after $(git log -1 --format=%h): $(tail -1 logs/auto-deploy.log)"' >/dev/null 2>&1 &
+echo "post-commit: deploying in the background (logs/auto-deploy.log)"
