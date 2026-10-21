@@ -1,0 +1,9 @@
+{
+  "name": "browser-check-tool",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Playwright browser driver for previewing/testing local dashboard prototypes and the dev server. Standalone tooling, not an app dependency.",
+  "devDependencies": {
+    "playwright": "^1.48.0"
+  }
+}

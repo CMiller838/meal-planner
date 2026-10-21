@@ -37,11 +37,20 @@ claim of the spec with evidence you produced yourself, or to say it is unproven.
    undo, missing config.
 2. **Static.** `git diff --stat` for what changed. Run the project's check command from `CLAUDE.md` (or have
    `runner` run it).
-3. **Live.** Start the app on temp data. Exercise each new endpoint or flow: happy path, bad input, wrong method,
-   missing fields. For UI changes, drive a real browser (see `prototype-preview`), check light and dark themes
-   and `prefers-reduced-motion` where the project has them, assert computed styles where the change is visual, and
-   save and view screenshots. If the browser or platform you need is unreachable, say so and mark the verdict
-   INCOMPLETE.
+3. **Live.** Serve the static site from WSL on a free temp port such as 8798 (`python3 -m http.server 8798`, never a
+   port the user's own server may hold). Exercise each new flow: happy path, bad input, repeat the action twice, empty
+   state. State lives in the browser's `localStorage`, so seed it from the page (`page.evaluate`) rather than editing
+   files. **Every test run includes a Playwright test in the Windows browser (Edge), not only headless Linux
+   Chromium**, for UI and non-UI changes alike (for logic-only changes, load the affected page and exercise the flow).
+   Setup lives at `C:\Users\cody\browser-check` (Windows node + `playwright`, no browser download; its `check.mjs`
+   honours `BROWSER_CHANNEL=msedge`). Run a script with `chromium.launch({channel:'msedge'})` via
+   `timeout 110 powershell.exe -NoProfile -Command "cd C:\Users\cody\browser-check; node <script>.mjs"` with the Bash
+   sandbox off; the Windows browser reaches WSL localhost ports, so load `http://127.0.0.1:<port>/<page>.html`. Check
+   both themes (`data-theme` on `<html>`, stored as `localStorage.mp_theme`), `reducedMotion` and 390 px, assert computed
+   styles where the change is visual, save screenshots to that folder and view them. For Linux runs use `tools/browser-check`
+   (`node check.mjs <url-or-file> --screenshot out.png`) or the `prototype-preview` skill. Network to TheMealDB and
+   Hermes is blocked in the sandbox, so Discover renders empty there: not a defect. If Windows or Edge is unreachable, say
+   so and mark the verdict INCOMPLETE.
 4. **Regression.** Run the whole check set, not only the touched files, and exercise two or three pre-existing
    endpoints or pages to confirm nothing nearby broke.
 5. **Invariants.** Read `CLAUDE.md` "Architecture invariants" and grep the diff for each one: new dependencies,

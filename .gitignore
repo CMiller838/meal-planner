@@ -6,3 +6,4 @@ node_modules/
 logs/
 .claude/.last-green
 __pycache__/
+tools/browser-check/.browsers/

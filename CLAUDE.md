@@ -19,7 +19,13 @@ python3 -m http.server 8000
 # then visit http://localhost:8000/index.html
 ```
 
-No lint/build/formatter/test runner — don't invent one unless asked.
+```
+python3 check.py              # secret scan + test.html (495 assertions, headless Chrome); `--changed` = only what the diff needs
+cd tools/browser-check && node check.mjs <url-or-file> --screenshot out.png   # Playwright (test tooling, not an app dependency)
+```
+
+No lint/build/formatter — don't invent one unless asked. `tools/browser-check` is test tooling kept apart from the app;
+the app itself stays zero-dependency.
 
 ## Stack
 

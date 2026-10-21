@@ -16,7 +16,7 @@ The one place the project's UI facts live. `ui-prototyper`, `restyle-from-protot
 
 ## Preview
 - Run: `python3 -m http.server 8000`, then `http://localhost:8000/<page>.html`. State is browser `localStorage`, so there is no real data to
-  protect. In the sandbox use the `browser-check` skill (`prototype-preview` points to it).
+  protect. Linux checks: `prototype-preview` (Playwright in `tools/browser-check`) and the `browser-check` skill for `test.html`. The tester also runs Edge on Windows.
 - Pages worth checking: index, discover, plan, plan-with-me, shopping, test.html (the pass/fail count).
 - Themes: `data-theme="dark"` (default) or `"light"` on `<html>`, applied by `MP.initTheme` and the toggle button.
 - Phone width to check: 390. Mobile-first single column; `@media (min-width: 640px)` widens grids.

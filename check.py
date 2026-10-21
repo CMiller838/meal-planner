@@ -12,9 +12,9 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
-LEGACY = {"check"}  # TEMPLATE: top-level modules to skip
-CORE = {"check"}  # TEMPLATE: modules everything imports; a change to one re-runs every check
-UI = ROOT / "ui"  # TEMPLATE: the UI package (needs `selftest` and `build` npm scripts); skipped if absent
+LEGACY = {"check"}  # top-level modules to skip
+CORE = {"check"}  # modules everything imports; a change to one re-runs every check
+UI = ROOT / "ui"  # no UI package here (static site); skipped if absent
 TAIL = 30
 SECRET_RE = re.compile(r"AIza[0-9A-Za-z_-]{35}|ghp_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|\b\d{8,10}:[A-Za-z0-9_-]{35}"
                        r"|sk-[A-Za-z0-9_-]{20,}|xox[abp]-[A-Za-z0-9-]{20,}|AKIA[0-9A-Z]{16}|-----BEGIN [A-Z ]*PRIVATE KEY-----")
@@ -57,6 +57,9 @@ def secrets_check():
 def all_checks():
     yield from python_checks()
     yield "secrets", [sys.executable, "check.py", "--secrets"]
+    if (ROOT / "test.html").exists():
+        # the browser suite (headless Chrome); the runner always exits 0, so fail unless the summary says 0 failed
+        yield "test.html", ["bash", "-c", 'o=$(.claude/skills/browser-check/scripts/browser_check.sh test 2>&1); echo "$o"; grep -q " 0 failed" <<<"$o"']
     if (UI / "package.json").exists():
         yield "ui selftest", ["npm", "run", "--silent", "selftest"]
         yield "ui build", ["npm", "run", "--silent", "build"]
@@ -78,7 +81,8 @@ def pick(files, names):
     if py & CORE:
         return list(names)
     ui = any(f.startswith(f"{UI.name}/") and not f.endswith(".md") for f in files)
-    return [n for n in names if n in py or (ui and n.startswith("ui "))]
+    web = any(f.endswith((".js", ".html", ".json", ".css")) and "/" not in f for f in files)
+    return [n for n in names if n in py or (ui and n.startswith("ui ")) or (web and n == "test.html")]
 
 
 def changed_files():
@@ -121,6 +125,7 @@ def _selftest():
     assert pick(["server.py", "tools/x.py"], names) == ["server"]
     assert pick(["ui/src/a.svelte"], names) == ["ui selftest", "ui build"]
     assert pick(["check.py"], names) == names
+    assert pick(["plan.js", "style.css"], names + ["test.html"]) == ["test.html"]
     print("selftest ok")
 
 
