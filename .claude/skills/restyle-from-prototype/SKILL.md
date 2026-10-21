@@ -23,8 +23,11 @@ reads or writes real data through it.
 List what's available and confirm which one to use if the user hasn't already
 named it unambiguously:
 
-<!-- TEMPLATE: fill in the actual prototypes directory, e.g.
-`ls design-prototypes/ui-concepts/*.html` -->
+Prototypes live in the **Prototypes dir** from `docs/UI_STYLE.md` (default `design-prototypes/ui-concepts/`):
+
+```
+ls <prototypes dir>/*.html
+```
 
 If the user names a style loosely ("the dark one", "the ledger one"), match it
 against filenames rather than guessing — prototypes often share a mood, and
@@ -85,8 +88,8 @@ markup change has to carry its data and behavior with it in the same edit:
 A restyle that looks right in the diff but breaks at runtime is a regression,
 not a style choice. After editing:
 
-1. Get the dev server/app running (use this project's `run-server`-equivalent
-   skill if one exists, or ask how to start it).
+1. Get the app running on temp data (the **Preview** section of `docs/UI_STYLE.md` says how; if it is unset, work it
+   out from `CLAUDE.md` Commands and write it down in step 6).
 2. Restart it if templates aren't hot-reloaded by this stack.
 3. Exercise the real routes/pages that changed — via `curl`, or a browser MCP
    if one's configured (see the `ui-prototyper` agent for the same check).
@@ -95,6 +98,24 @@ not a style choice. After editing:
 
 ## 5. Report back
 
-Say which prototype was applied, which files changed, and flag anything you
+Say which prototype was applied, that `docs/UI_STYLE.md` was updated, which files changed, and flag anything you
 deliberately left unstyled (a vendored widget) or anywhere the prototype's
 pattern didn't have an equivalent in the real page and you had to improvise.
+
+## 6. Record the style in `docs/UI_STYLE.md`
+
+This is what makes the next feature, the next prototype round and `ui-build` match what you just applied, so do it in
+the same change. Fill or update every section from the prototype you applied (not from memory):
+
+- **Status:** `from-prototype: <file>`.
+- **Paths:** the stylesheet or token file that now holds the tokens, the component and page folders, the shared
+  header and empty/error/loading components.
+- **Preview:** the command and env that run the app on temp data, the pages to check, how themes switch.
+- **Tokens:** the role table, with the real token names and per-theme values now in the stylesheet.
+- **Motion** and **Patterns:** the durations, easing and enter/press/reorder rules, and the layout structures you saw.
+- **Component sources:** anything you adapted from elsewhere.
+
+Keep it short (a page, tables over prose). Anything the prototype did not decide stays `(unset)`: do not invent it.
+
+**Existing app, no prototype** (a project whose UI already has a style): run only steps 2 and 6 against the current
+stylesheet and components, with Status `from-existing-app`, and change no app files.

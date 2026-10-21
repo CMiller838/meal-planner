@@ -179,3 +179,10 @@ Cost is the context re-sent on every call, not output. So: Grep before Read and 
 `docs/roadmap.md` or any big source file whole (Grep `^## Phase N`); use Sonnet by default, Opus only for a real
 architectural fork; `/clear` between unrelated tasks and `/compact` near 100k tokens; send bulk work (check suites,
 wide greps) to `runner`/`scanner` (Haiku).
+
+## UI work
+
+Every UI change follows the `ui-build` skill and the house style in `docs/UI_STYLE.md` (Cork Kitchen: tokens in
+`style.css`, dark default, animated, both themes plus 390 px checked with `browser-check`). `ui-prototyper` is only for new
+visual ideas the user asks for; the user's pick is applied by `restyle-from-prototype`, which updates `docs/UI_STYLE.md`.
+No new dependency or CDN script without confirming.
