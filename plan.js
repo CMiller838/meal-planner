@@ -19,6 +19,9 @@
   let groupsData = null;
   let plan = null;
   let warnings = {}; // "day-slotType" -> { message, moveToDay, category }; owned by renderPlan
+  let basePrefs = {}; // user prefs without assistant day hints
+  let dayHints = null; // raw blob from GET /dayHints
+  let hintByDay = {}; // day number -> { effort, why, date }, from MP.DayHints.resolve
   let prefs = {}; // { vocab, busyDays, chips } from MP.PlanPrefs, set once at init
 
   function toast(msg) {
@@ -110,6 +113,7 @@
   }
 
   function regenerate(staged) {
+    applyHints();
     plan = generatePlan();
     savePlan();
     renderPlan(staged);
@@ -196,6 +200,20 @@
     });
   }
 
+  /** Re-derive prefs (and the chips) from basePrefs + current hints; dismissals take effect at once. */
+  function applyHints(startDate) {
+    const resolved = MP.DayHints.resolve(dayHints, startDate || MP.Generator.isoToday(), MP.Generator.isoToday(), MP.DayHints.offMap());
+    hintByDay = resolved.byDay;
+    prefs = MP.DayHints.merge(basePrefs, resolved);
+  }
+
+  function hintChipHtml(day) {
+    const h = hintByDay[day];
+    if (!h) return "";
+    const label = (h.effort === "busy" ? "Busy" : "Free") + (h.why ? " · " + h.why : "");
+    return ` <button type="button" class="chip hint-chip" data-day="${day}" title="Tap to dismiss this hint">${esc(label)}</button>`;
+  }
+
   function dayHeading(day) {
     return plan.startDate
       ? `Day ${day} · ${WEEKDAY[MP.Generator.weekdayOf(plan.startDate, day)]}`
@@ -261,7 +279,7 @@
       for (const d of weekDays) {
         const heading = dayHeading(d.day);
         html += `<div class="day-row" data-day="${d.day}">
-          <h3>${heading}</h3>
+          <h3>${heading}${hintChipHtml(d.day)}</h3>
           <div class="slot-grid">
             ${SLOT_TYPES.map((slotType) => {
               const meal = mealAt(d.day, slotType);
@@ -281,6 +299,15 @@
     root.innerHTML = html;
     renderGapStrip();
 
+    root.querySelectorAll(".hint-chip").forEach((el) => {
+      el.addEventListener("click", () => {
+        const h = hintByDay[Number(el.dataset.day)];
+        if (!h || !dayHints) return;
+        MP.DayHints.dismiss(h.date, dayHints.updatedAt);
+        applyHints(plan.startDate);
+        renderPlan();
+      });
+    });
     root.querySelectorAll(".slot-card").forEach((el) => {
       el.addEventListener("click", (e) => {
         if (e.target.closest(".move-btn")) return;
@@ -1048,7 +1075,9 @@
       MP.ShoppingList.loadGroups().catch(() => ({})),
       MP.PlanPrefs.loadVocab(),
     ]);
-    prefs = Object.assign({ vocab }, MP.PlanPrefs.get());
+    basePrefs = Object.assign({ vocab }, MP.PlanPrefs.get());
+    dayHints = await MP.Sync.fetchDayHints();
+    applyHints((JSON.parse(localStorage.getItem(LS_PLAN) || "null") || {}).startDate);
     const guidedParam = new URLSearchParams(location.search).get("guided") === "1";
     if (guidedParam) {
       guidedActive = true;

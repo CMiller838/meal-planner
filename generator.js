@@ -159,6 +159,11 @@
       ranked = matches.concat(rest);
     }
 
+    if (prefs && prefs.freeDays && prefs.freeDays.includes(dayNum)) {
+      // pool is already slot-filtered; breakfasts/snacks are never batch, so this is a no-op there
+      ranked = ranked.filter((m) => effortOf(m) === "batch").concat(ranked.filter((m) => effortOf(m) !== "batch"));
+    }
+
     if (budget) {
       const half = dayNum <= 7 ? halfKeys.first : halfKeys.second;
       const shortlist = ranked.slice(0, shortlistSizeFor(budget, pressure)).filter((m) => budget.costIndex[m.id]);

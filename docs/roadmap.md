@@ -381,7 +381,7 @@ cost badges (Phase 18): it never sorts or filters meals.
 mark as estimate), how to treat products whose protein is a label value versus an estimate (rank them, show the marker), and
 whether to add it to the shopping list rows. Requires Phase 33.
 
-## Phase 37: Per-day effort hints from the assistant [M] — not started
+## Phase 37: Per-day effort hints from the assistant [M] — built 2026-10-21, live checks pending
 
 **Added 2026-10-19.** The assistant knows the calendar (lectures, shifts, gym); the planner knows meals. The assistant sends
 a per-day hint (`busy` / `normal` / `free`) and the planner uses its existing busy-mode mapping (`preferEffort: quick`,
@@ -391,6 +391,7 @@ never a re-score, same as the existing busy chip. A hint is a suggestion the use
 plan already syncs), how stale hints expire, and whether the user can see why a day was marked busy ("2 lectures + gym").
 **Verify:** a `busy` day ranks quick meals first and never changes the nutrient ranking; hints for past days are ignored.
 Requires Phase 32 (assistant token). Assistant side: `notion_assistant` Phase 52.
+**Verified 2026-10-21:** `test.html` (resolve/merge/dismiss, freeDays reorder keeps in-group order), Worker harness (assistant GET/PUT `/dayHints` 204/200, bad effort/>28 dates/long `why` 400, other writes 403, `/ranking` marks the day busy + returns `hint`), plan chip at PC and 390 px with `<b>` shown as text and tap-dismiss persisting, `check.py`. Live check left in `tasks.md`.
 
 ## Phase 39: "Ran out" items steer the plan [S] — not started
 

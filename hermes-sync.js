@@ -294,6 +294,16 @@ window.MP = window.MP || {};
     return MP.PlanPrefs.get();
   }
 
+  /** GET /dayHints (assistant-written, read-only here). Failure-silent: null. */
+  async function fetchDayHints() {
+    if (!config().enabled) return null;
+    try {
+      return await req("GET", "/dayHints");
+    } catch (e) {
+      return null;
+    }
+  }
+
   /** Best-effort PUT of the local mp_planPrefs. Never throws. */
   async function pushPlanPrefs() {
     if (!config().enabled) return "off";
@@ -430,7 +440,7 @@ window.MP = window.MP || {};
   MP.Sync = {
     decide, needsPlan, config, saveConfig, syncLibrary, syncPlanFlag, ackPlanFlag,
     fetchItems, fetchPantry, localItems, writeLocalItems, queueOp, applyOps, flushOps,
-    planMirror, pushPlan, pushPrefs, fetchPlanPrefs, pushPlanPrefs, newPlacements, newSince, syncPlacements, ackPlacements, syncEatRequests,
+    planMirror, pushPlan, pushPrefs, fetchPlanPrefs, fetchDayHints, pushPlanPrefs, newPlacements, newSince, syncPlacements, ackPlacements, syncEatRequests,
     localEatenLog, logEaten, pushEatenLog, start,
   };
 })();

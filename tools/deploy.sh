@@ -6,7 +6,7 @@ set -uo pipefail
 cd "$(dirname "$0")/.."
 [ "$(git branch --show-current)" = main ] || { echo "not on main: not deploying"; exit 0; }
 SITE=https://cmiller838.github.io/meal-planner
-WORKER_FILES='^(worker/|(exclusions|data|shelf-life|shopping-list|mealdb|nutrition|generator)\.js$|(substitutions|ingredient-nutrient-tags|nutrition-targets|plan-preferences|pack-sizes)\.json$)'
+WORKER_FILES='^(worker/|(exclusions|day-hints|data|shelf-life|shopping-list|mealdb|nutrition|generator)\.js$|(substitutions|ingredient-nutrient-tags|nutrition-targets|plan-preferences|pack-sizes)\.json$)'
 
 cache=$(grep -o 'meal-planner-v[0-9]*' sw.js | head -1)
 changed=$(git diff --name-only origin/main..HEAD)

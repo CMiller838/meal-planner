@@ -150,6 +150,7 @@ also *pulled* (Hermes may write it), on open of the Plan-with-me screen only.
 - `GET /prefs`, `PUT /prefs`
 - `GET /eaten-log`, `PUT /eaten-log`
 - `GET /planPrefs`, `PUT /planPrefs` (v4)
+- `GET /dayHints`, `PUT /dayHints` (Phase 37; assistant-written `{ updatedAt, days: { ISO date: { effort, why } } }`, read-only in the app)
 - `GET /ranking` (v4, read-only — no PUT, deliberately)
 - All requests require `X-Auth-Token: <secret>`, checked against a Wrangler
   secret binding (`wrangler secret put AUTH_TOKEN`) — never committed to

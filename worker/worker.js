@@ -8,6 +8,7 @@ import "../shopping-list.js";
 import "../mealdb.js";
 import "../nutrition.js";
 import "../generator.js";
+import "../day-hints.js";
 import SUBS from "../substitutions.json";
 import TAGS from "../ingredient-nutrient-tags.json";
 import TARGETS from "../nutrition-targets.json";
@@ -18,12 +19,14 @@ const Exclusions = globalThis.MP.Exclusions;
 const MealDB = globalThis.MP.MealDB;
 const Nutrition = globalThis.MP.Nutrition;
 const Generator = globalThis.MP.Generator;
+const DayHints = globalThis.MP.DayHints;
 const ShoppingList = globalThis.MP.ShoppingList;
 
 const KEYS = {
   "/library": "library", "/planFlag": "planFlag", "/pantry": "pantry", "/adhoc": "adhoc",
   "/plan": "plan", "/placements": "placements", "/prefs": "prefs",
   "/eaten-log": "eatenLog", "/planPrefs": "planPrefs", "/eat-requests": "eatRequests",
+  "/dayHints": "dayHints",
 };
 // The personal assistant's own token (ASSISTANT_TOKEN, never Hermes's
 // AUTH_TOKEN) reaches only these method+path pairs: read the plan side, queue
@@ -33,6 +36,7 @@ const ASSISTANT_ALLOWED = new Set([
   "GET /library", "GET /plan", "GET /eaten-log", "GET /shopping", "GET /eat-requests", "PUT /eat-requests",
   "GET /discover", "GET /pantry", "PUT /pantry", "GET /adhoc", "PUT /adhoc", "PUT /planFlag",
   "GET /placements", "PUT /placements", "GET /prefs", "PUT /library", "GET /nutrition",
+  "GET /dayHints", "PUT /dayHints",
 ]);
 const SLOT_TYPES = ["breakfast", "lunch", "dinner", "snack"];
 const MEALDB_BASE = "https://www.themealdb.com/api/json/v1/1/";
@@ -98,8 +102,9 @@ async function ranking(params, env) {
   const n = nRaw === null ? 3 : Number(nRaw);
   if (!Number.isInteger(n) || n < 1 || n > 10) return json(400, "n must be 1-10");
 
-  const [libraryRaw, planRaw, prefsRaw] = await Promise.all([
+  const [libraryRaw, planRaw, prefsRaw, hintsRaw] = await Promise.all([
     env.MP_KV.get("library"), env.MP_KV.get("plan"), env.MP_KV.get("planPrefs"),
+    env.MP_KV.get("dayHints"),
   ]);
 
   let library, plan;
@@ -126,7 +131,13 @@ async function ranking(params, env) {
   const others = SLOT_TYPES.filter((s) => s !== slot)
     .map((s) => dayObj.slots[s] && byId[dayObj.slots[s].mealId])
     .filter(Boolean);
-  const prefs = { vocab: PLAN_VOCAB, busyDays: planPrefs.busyDays || [], chips: planPrefs.chips || [] };
+  let hints = null;
+  try {
+    hints = JSON.parse(hintsRaw);
+  } catch (e) {}
+  const resolved = DayHints.resolve(hints, plan.startDate, Generator.isoToday(), {});
+  const prefs = DayHints.merge({ vocab: PLAN_VOCAB, busyDays: planPrefs.busyDays || [], chips: planPrefs.chips || [] }, resolved);
+  const hint = resolved.byDay[day] ? { effort: resolved.byDay[day].effort, why: resolved.byDay[day].why } : null;
   const pool = library.filter((m) => (m.mealTypes || []).includes(slot));
   const ranked = Generator.rankSlot(pool, day, others, { tags: TAGS, targets: TARGETS, prefs });
 
@@ -148,7 +159,8 @@ async function ranking(params, env) {
     day, slot, shortOn,
     current: slotVal ? { mealId: slotVal.mealId, variantId: slotVal.variantId ?? null } : null,
     candidates,
-    busyDay: (planPrefs.busyDays || []).includes(day),
+    busyDay: prefs.busyDays.includes(day),
+    hint,
     approximate: true,
   });
 }
@@ -362,6 +374,25 @@ function planPrefsError(parsed) {
   return null;
 }
 
+/** Assistant-written; keyed by ISO date. Bounded so the blob cannot grow.
+ *  @param {any} parsed  @returns {string|null} */
+function dayHintsError(parsed) {
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) return "expected an object";
+  if (typeof parsed.updatedAt !== "string" || isNaN(Date.parse(parsed.updatedAt))) return "updatedAt must be an ISO date string";
+  const days = parsed.days;
+  if (typeof days !== "object" || days === null || Array.isArray(days)) return "days must be an object";
+  const dates = Object.keys(days);
+  if (dates.length > 28) return "at most 28 dates";
+  for (const d of dates) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(d) || isNaN(Date.parse(d))) return "bad date key: " + d;
+    const h = days[d];
+    if (typeof h !== "object" || h === null || Array.isArray(h)) return "hint must be an object";
+    if (!["busy", "normal", "free"].includes(h.effort)) return "effort must be busy, normal or free";
+    if (h.why !== undefined && (typeof h.why !== "string" || h.why.length > 80)) return "why must be a string of at most 80 chars";
+  }
+  return null;
+}
+
 /** @param {any} parsed  the already-JSON.parsed PUT body (a bare array, D1)
  *  @returns {string|null} */
 function eatenLogError(parsed) {
@@ -397,6 +428,7 @@ const VALIDATE = {
   eatenLog: eatenLogError,
   planPrefs: planPrefsError,
   eatRequests: eatRequestsError,
+  dayHints: dayHintsError,
 };
 
 export default {

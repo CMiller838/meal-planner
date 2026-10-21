@@ -140,6 +140,9 @@ Installable as a PWA on Android Chrome via `manifest.json` + `sw.js`.
   the same chokepoint the shopping list, pantry deduction, shelf-life pass
   and detail sheet already read `variantId` through. `substitutions.json`
   remains a separate, unrelated concern (exclusion swap-ins for Discover).
+- **`dayHints` (Phase 37) is assistant-written and read-only in the app**: a KV key keyed by ISO date, never a field of
+  `plan` or `mp_planPrefs`. `MP.DayHints.merge` adds busy hints to the user's `busyDays` (user busy beats `free`); hints
+  only reorder (`rankSlot`'s `freeDays`/busy layer). Dismissals are local (`mp_dayHintOff`), never pushed.
 - **Hard content exclusions are enforced in code, not just docs**: no
   mushrooms (including from TheMealDB results), no standalone egg meals
   (egg-within-a-dish is fine), no vegetables in toasties. These came from

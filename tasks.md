@@ -549,7 +549,8 @@ but shows the "est." marker; no shopping-list rows (YAGNI). Informational only, 
 
 ## Phase 37: Per-day effort hints from the assistant
 
-- [ ] Spec and tasks: `.claude/specs/phase37.md`
+- [x] Spec and tasks: `.claude/specs/phase37.md` (all spec tasks built; Node harness for `/dayHints` + `/ranking`, `test.html`, `check.py`, chip checked at PC and 390 px)
+- [ ] Live: the assistant sends a busy hint for tomorrow; the chip shows on the phone PWA's plan page, and tapping it dismisses it
 
 
 ## Phase 39: "Ran out" items steer the plan

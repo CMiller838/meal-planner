@@ -65,12 +65,12 @@ dayHintsError(parsed) -> string|null   // worker
 ## Tasks
 
 ### Logic (TDD)
-- [ ] `day-hints.js`: `resolve`, `merge`, `dismiss`/`offMap` + `test.html` assertions
-- [ ] `generator.js`: `prefs.freeDays` → batch-first reorder; assertion that the nutrient order within groups is unchanged
-- [ ] Worker: key, allowlist, `dayHintsError`, `ranking()` integration; Node harness checks
-- [ ] `hermes-sync.js` `fetchDayHints()`; `plan.js` fetch + merge at init
+- [x] `day-hints.js`: `resolve`, `merge`, `dismiss`/`offMap` + `test.html` assertions
+- [x] `generator.js`: `prefs.freeDays` → batch-first reorder; assertion that the nutrient order within groups is unchanged
+- [x] Worker: key, allowlist, `dayHintsError`, `ranking()` integration; Node harness checks
+- [x] `hermes-sync.js` `fetchDayHints()`; `plan.js` fetch + merge at init
 ### UI
-- [ ] Day-header hint chip with `why`, tap to dismiss, via `ui-build`
-- [ ] Bump `sw.js` `CACHE` and add `day-hints.js` to SHELL; add to `plan.html`/`test.html`; ARCHITECTURE/CLAUDE.md lines
-- [ ] `python3 check.py`; roadmap heading `— done` with what was verified
-- [ ] `- [ ] Live:` line in `tasks.md`: assistant sends a busy hint for tomorrow, chip shows on the phone PWA
+- [x] Day-header hint chip with `why`, tap to dismiss, via `ui-build`
+- [x] Bump `sw.js` `CACHE` and add `day-hints.js` to SHELL; add to `plan.html`/`test.html`; ARCHITECTURE/CLAUDE.md lines
+- [x] `python3 check.py`; roadmap heading `— done` with what was verified
+- [x] `- [ ] Live:` line in `tasks.md`: assistant sends a busy hint for tomorrow, chip shows on the phone PWA

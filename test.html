@@ -17,6 +17,7 @@
 <script src="exclusions.js"></script>
 <script src="mealdb.js"></script>
 <script src="plan-with-me.js"></script>
+<script src="day-hints.js"></script>
 <script src="plan.js"></script>
 <script>
 (async function () {
@@ -1981,6 +1982,42 @@
       check("per-half reset: day 8's pressure formula ignores a blown week 1",
         pressureFormula(blownWeek1, "second", 50, 1) === pressureFormula(cheapWeek1, "second", 50, 1)
         && pressureFormula(blownWeek1, "second", 50, 1) === 0);
+    }
+
+    // Phase 37: MP.DayHints resolve/merge/dismiss + generator freeDays reorder.
+    {
+      const H = MP.DayHints;
+      const hints = { updatedAt: "T1", days: {
+        "2026-10-20": { effort: "busy" }, "2026-10-22": { effort: "busy", why: "<b>x</b>" },
+        "2026-10-23": { effort: "free" }, "2026-10-24": { effort: "normal" }, "2026-10-25": { effort: "bogus" },
+        "2026-12-30": { effort: "busy" } } };
+      const r = H.resolve(hints, "2026-10-21", "2026-10-21", {});
+      check("DayHints.resolve: past/normal/unknown/out-of-range dropped, dates mapped to day numbers",
+        deepEqual(r.busyDays, [2]) && deepEqual(r.freeDays, [3]) && r.byDay[2].why === "<b>x</b>");
+      check("DayHints.resolve: dismissed hint ignored until updatedAt changes",
+        H.resolve(hints, "2026-10-21", "2026-10-21", { "2026-10-22": "T1" }).busyDays.length === 0
+        && H.resolve({ ...hints, updatedAt: "T2" }, "2026-10-21", "2026-10-21", { "2026-10-22": "T1" }).busyDays.length === 1);
+      check("DayHints.resolve: null/malformed -> no effect",
+        deepEqual(H.resolve(null, "2026-10-21", "2026-10-21", {}).busyDays, []) && deepEqual(H.resolve({ days: 5 }, "2026-10-21", "2026-10-21", {}).freeDays, []));
+      const m = H.merge({ busyDays: [3, 5], chips: ["a"] }, { busyDays: [2, 5], freeDays: [3, 4] });
+      check("DayHints.merge: busy union, user-busy beats free", deepEqual(m.busyDays, [2, 3, 5]) && deepEqual(m.freeDays, [4]) && deepEqual(m.chips, ["a"]));
+      localStorage.removeItem("mp_dayHintOff");
+      H.dismiss("2026-10-22", "T1");
+      check("DayHints.dismiss/offMap round-trip", H.offMap()["2026-10-22"] === "T1");
+      localStorage.removeItem("mp_dayHintOff");
+
+      const pool = [
+        { id: "q1", name: "q1", prepEffort: "quick", mealTypes: ["dinner"], ingredients: [] },
+        { id: "b1", name: "b1", prepEffort: "batch", mealTypes: ["dinner"], ingredients: [] },
+        { id: "q2", name: "q2", prepEffort: "quick", mealTypes: ["dinner"], ingredients: [] },
+      ];
+      const ctx = { tags, targets };
+      const base = MP.Generator.rankSlot(pool, 3, [], { ...ctx, prefs: {} }).map((x) => x.id);
+      const free = MP.Generator.rankSlot(pool, 3, [], { ...ctx, prefs: { freeDays: [3] } }).map((x) => x.id);
+      const other = MP.Generator.rankSlot(pool, 4, [], { ...ctx, prefs: { freeDays: [3] } }).map((x) => x.id);
+      check("rankSlot freeDays: batch first, same set, order within groups unchanged",
+        free[0] === "b1" && free.length === base.length
+        && deepEqual(free.filter((i) => i !== "b1"), base.filter((i) => i !== "b1")) && deepEqual(other, base));
     }
 
     // MP.PlanPrefs.get()/save() budgetTarget coercion.
