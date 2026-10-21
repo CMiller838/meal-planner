@@ -636,5 +636,69 @@
       }
     ],
     "methodStatus": "drafted"
+  },
+  {
+    "id": "magnesium-tea",
+    "name": "Magnesium tea",
+    "source": "liked",
+    "mealTypes": [
+      "snack"
+    ],
+    "prepEffort": "quick",
+    "servings": 1,
+    "description": "Evening magnesium drink. Logged, never scheduled.",
+    "instructions": "Stir a serving of magnesium powder into a mug of hot water.",
+    "ingredients": [
+      {
+        "key": "magnesium_tea",
+        "qty": "1 mug"
+      }
+    ],
+    "image": null,
+    "method": [
+      {
+        "text": "Stir a serving of magnesium powder into a mug of hot water.",
+        "minutes": 2
+      }
+    ],
+    "methodStatus": "drafted",
+    "routine": {
+      "when": "daily",
+      "time": "21:30"
+    }
+  },
+  {
+    "id": "protein-shake",
+    "name": "Protein shake",
+    "source": "liked",
+    "mealTypes": [
+      "snack"
+    ],
+    "prepEffort": "quick",
+    "servings": 1,
+    "description": "Post-gym shake. Logged, never scheduled.",
+    "instructions": "Shake the powder with the milk.",
+    "ingredients": [
+      {
+        "key": "protein_powder",
+        "qty": "1 scoop"
+      },
+      {
+        "key": "milk",
+        "qty": "300ml"
+      }
+    ],
+    "image": null,
+    "method": [
+      {
+        "text": "Shake the powder with the milk.",
+        "minutes": 1
+      }
+    ],
+    "methodStatus": "drafted",
+    "routine": {
+      "when": "gymDays",
+      "time": "18:00"
+    }
   }
 ]

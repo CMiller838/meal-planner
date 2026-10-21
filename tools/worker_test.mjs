@@ -46,6 +46,12 @@ for (const bad of [
   { mealId: "a", method: Array(31).fill({ text: "x" }) }, [], "str",
 ]) assert.equal((await call("PUT", "/meal-method", "a", bad)).status, 400, JSON.stringify(bad).slice(0, 60));
 assert.equal((await call("PUT", "/meal-method", "bad", { mealId: "a", method: steps })).status, 401);
+// Phase 41: /today round trip with the assistant token
+const today = { date: "2026-10-22", water: 3, caffeine: 2, gym: true, routineDone: ["protein-shake"] };
+assert.equal((await call("PUT", "/today", "a", today)).status, 204);
+assert.deepEqual((await call("GET", "/today", "a")).body, today);
+for (const bad of [{ ...today, water: 100 }, { ...today, water: -1 }, { ...today, caffeine: 1.5 }, { ...today, date: "22/10" }, { ...today, gym: "yes" }, { ...today, routineDone: [1] }, []])
+  assert.equal((await call("PUT", "/today", "a", bad)).status, 400, JSON.stringify(bad));
 // the assistant token still can't reach other writes
 assert.equal((await call("PUT", "/plan", "a", { days: [] })).status, 403);
 assert.equal((await call("PUT", "/planPrefs", "a", {})).status, 403);

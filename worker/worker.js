@@ -26,7 +26,7 @@ const KEYS = {
   "/library": "library", "/planFlag": "planFlag", "/pantry": "pantry", "/adhoc": "adhoc",
   "/plan": "plan", "/placements": "placements", "/prefs": "prefs",
   "/eaten-log": "eatenLog", "/planPrefs": "planPrefs", "/eat-requests": "eatRequests",
-  "/dayHints": "dayHints",
+  "/dayHints": "dayHints", "/today": "today",
 };
 // The personal assistant's own token (ASSISTANT_TOKEN, never Hermes's
 // AUTH_TOKEN) reaches only these method+path pairs: read the plan side, queue
@@ -36,7 +36,7 @@ const ASSISTANT_ALLOWED = new Set([
   "GET /library", "GET /plan", "GET /eaten-log", "GET /shopping", "GET /eat-requests", "PUT /eat-requests",
   "GET /discover", "GET /pantry", "PUT /pantry", "GET /adhoc", "PUT /adhoc", "PUT /planFlag",
   "GET /placements", "PUT /placements", "GET /prefs", "PUT /library", "GET /nutrition",
-  "GET /dayHints", "PUT /dayHints", "PUT /meal-method",
+  "GET /dayHints", "PUT /dayHints", "PUT /meal-method", "GET /today", "PUT /today",
 ]);
 const METHOD_PATH = /^\/meal\/([^/]+)\/method$/;
 const SLOT_TYPES = ["breakfast", "lunch", "dinner", "snack"];
@@ -447,6 +447,18 @@ function dayHintsError(parsed) {
   return null;
 }
 
+/** Today's one-tap counters (Phase 41). @param {any} parsed  @returns {string|null} */
+function todayError(parsed) {
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) return "expected an object";
+  if (typeof parsed.date !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(parsed.date) || isNaN(Date.parse(parsed.date))) return "date must be YYYY-MM-DD";
+  for (const f of ["water", "caffeine"]) {
+    if (!Number.isInteger(parsed[f]) || parsed[f] < 0 || parsed[f] > 99) return f + " must be an integer 0..99";
+  }
+  if (typeof parsed.gym !== "boolean") return "gym must be a boolean";
+  if (!Array.isArray(parsed.routineDone) || parsed.routineDone.some((i) => typeof i !== "string")) return "routineDone must be an array of strings";
+  return null;
+}
+
 /** @param {any} parsed  the already-JSON.parsed PUT body (a bare array, D1)
  *  @returns {string|null} */
 function eatenLogError(parsed) {
@@ -483,6 +495,7 @@ const VALIDATE = {
   planPrefs: planPrefsError,
   eatRequests: eatRequestsError,
   dayHints: dayHintsError,
+  today: todayError,
 };
 
 export default {

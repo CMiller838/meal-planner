@@ -571,3 +571,6 @@ Spec: `.claude/specs/phase40.md` (tasks live there).
 
 ## Phase 41: One-tap logs: routine items and water/caffeine counters
 - Spec: `.claude/specs/phase41.md`
+- [x] Logic: `MP.Today`, pool filter (generator `rankSlot`/`generatePlan`), Worker `/today` + `VALIDATE.today`, `counters.json` + `data_check`, `sw.js` bump
+- [x] UI: Today card on `plan.html` (routine chips, water/caffeine, gym toggle)
+- [ ] Live: assistant sets `gym` via `PUT /today` and the protein shake chip appears on the phone PWA's Today card

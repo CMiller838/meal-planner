@@ -36,6 +36,9 @@ def bad_meals(meals):
         seen.add(mid)
         if not m.get("ingredients") or not all(x.get("key") for x in m["ingredients"]):
             errs.append(f"meals.json {mid}: ingredients need a key each")
+        r = m.get("routine")
+        if r is not None and (r.get("when") not in ("daily", "gymDays") or not re.fullmatch(r"([01]\d|2[0-3]):[0-5]\d", str(r.get("time")))):
+            errs.append(f"meals.json {mid}: bad routine {r}")
         steps = m.get("method")
         if not steps or m.get("methodStatus") not in ("drafted", "accepted"):
             errs.append(f"meals.json {mid}: seeded meals need a method and a methodStatus")
@@ -65,6 +68,10 @@ def check():
     if errs:
         return errs
     errs += bad_meals(json.loads((ROOT / "meals.json").read_text(encoding="utf-8")))
+    c = json.loads((ROOT / "counters.json").read_text(encoding="utf-8"))
+    mg = c.get("caffeine", {}).get("cupMg", {})
+    if not mg or not all(isinstance(v, int) and v > 0 for v in mg.values()) or not isinstance(c.get("waterGoal"), int) or c["waterGoal"] < 0:
+        errs.append("counters.json: need caffeine.cupMg (positive ints) and waterGoal (int >= 0)")
     sw = (ROOT / "sw.js").read_text(encoding="utf-8")
     shell = shell_list(sw)
     errs += [f"sw.js SHELL lists missing file {s}" for s in shell if s != "./" and not (ROOT / s).exists()]

@@ -29,5 +29,7 @@
   "gravy": { "sodium": "high" },
   "teriyaki_sauce": { "sodium": "high" },
   "white_sauce": { "calcium": "med", "fat": "med" },
-  "potatoes": { "potassium": "med", "fibre": "med", "vitC": "low" }
+  "potatoes": { "potassium": "med", "fibre": "med", "vitC": "low" },
+  "protein_powder": { "protein": "high" },
+  "magnesium_tea": { "magnesium": "low" }
 }

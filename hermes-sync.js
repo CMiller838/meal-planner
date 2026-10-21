@@ -418,6 +418,80 @@ window.MP = window.MP || {};
     return capped;
   }
 
+  /** Remove one entry (routine undo) and push the shorter log. */
+  function unlogEaten(id) {
+    const kept = localEatenLog().filter((e) => e.id !== id);
+    try { localStorage.setItem(LS_EATEN_LOG, JSON.stringify(kept)); } catch (e) { /* quota: ignored like logEaten */ }
+    pushEatenLog(kept);
+  }
+
+  // Phase 41: today's one-tap counters. Local first (mp_today), push best-effort; a stored date != today reads as zeros.
+  const LS_TODAY = "mp_today";
+  const londonDate = (d) => new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/London" }).format(d || new Date());
+  const Today = {
+    get() {
+      const zero = { date: londonDate(), water: 0, caffeine: 0, gym: false, routineDone: [] };
+      try {
+        const o = JSON.parse(localStorage.getItem(LS_TODAY));
+        if (!o || o.date !== zero.date) return zero;
+        const n = (v) => (Number.isInteger(v) && v > 0 ? Math.min(v, 99) : 0);
+        return { date: o.date, water: n(o.water), caffeine: n(o.caffeine), gym: o.gym === true,
+          routineDone: Array.isArray(o.routineDone) ? o.routineDone.filter((i) => typeof i === "string") : [] };
+      } catch (e) { return zero; }
+    },
+    save(t) {
+      try { localStorage.setItem(LS_TODAY, JSON.stringify(t)); } catch (e) { /* quota: ignored */ }
+      if (t.gym) localStorage.setItem("mp_gymDay", JSON.stringify({ date: t.date })); // Phase 35's reader stays unchanged
+      else localStorage.removeItem("mp_gymDay");
+      Today.push(t);
+      return t;
+    },
+    bump(field, delta) {
+      const t = Today.get();
+      t[field] = Math.max(0, Math.min(99, t[field] + delta));
+      return Today.save(t);
+    },
+    setGym(on) { return Today.save({ ...Today.get(), gym: !!on }); },
+    /** Second tap undoes: same entry id means a double-log is impossible. Never touches the pantry. */
+    toggleRoutine(meal, tags) {
+      const t = Today.get();
+      const id = `routine:${meal.id}:${t.date}`;
+      if (t.routineDone.includes(meal.id)) {
+        unlogEaten(id);
+        t.routineDone = t.routineDone.filter((i) => i !== meal.id);
+        Today.save(t);
+        return "undone";
+      }
+      logEaten({ id, mealId: meal.id, name: meal.name, eatenAt: new Date().toISOString(), tags: tags || [] });
+      t.routineDone.push(meal.id);
+      Today.save(t);
+      return "logged";
+    },
+    /** Pure: daily routines always, gymDays only when today.gym. Meals deleted from the library simply aren't passed in. */
+    dueRoutines(meals, today) {
+      return meals.filter((m) => m.routine && (m.routine.when === "daily" || (m.routine.when === "gymDays" && today.gym)))
+        .sort((a, b) => a.routine.time.localeCompare(b.routine.time));
+    },
+    async push(t) {
+      if (!config().enabled) return "off";
+      try { await req("PUT", "/today", t); return "ok"; } catch (e) { return "error"; }
+    },
+    /** Adopt the Worker copy when it is for today (the assistant may have set gym). */
+    async pull() {
+      if (!config().enabled) return false;
+      try {
+        const r = await req("GET", "/today");
+        if (!r || r.date !== londonDate() || JSON.stringify(r) === JSON.stringify(Today.get())) return false;
+        localStorage.setItem(LS_TODAY, JSON.stringify(r));
+        if (r.gym) localStorage.setItem("mp_gymDay", JSON.stringify({ date: r.date }));
+        else localStorage.removeItem("mp_gymDay");
+        return true;
+      } catch (e) { return false; }
+    },
+    londonDate,
+  };
+  MP.Today = Today;
+
   // ponytail: no debounce/retry — the inflight guard plus human-paced
   // triggers (save, resume) are enough. Queue/backoff is a FUTURE.md item.
   function start() {
@@ -441,6 +515,6 @@ window.MP = window.MP || {};
     decide, needsPlan, config, saveConfig, syncLibrary, syncPlanFlag, ackPlanFlag,
     fetchItems, fetchPantry, localItems, writeLocalItems, queueOp, applyOps, flushOps,
     planMirror, pushPlan, pushPrefs, fetchPlanPrefs, fetchDayHints, pushPlanPrefs, newPlacements, newSince, syncPlacements, ackPlacements, syncEatRequests,
-    localEatenLog, logEaten, pushEatenLog, start,
+    localEatenLog, logEaten, unlogEaten, pushEatenLog, start,
   };
 })();

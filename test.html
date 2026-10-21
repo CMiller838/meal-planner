@@ -2416,6 +2416,42 @@
     }
   }
 
+    // Phase 41: MP.Today (rollover, bump floor, dueRoutines, routine toggle/undo) + routine meals leave the planning pool.
+    {
+      const keys = ["mp_today", "mp_gymDay", "mp_eatenLog"];
+      const saved = keys.map((k) => localStorage.getItem(k));
+      keys.forEach((k) => localStorage.removeItem(k));
+      const T = MP.Today, d0 = T.londonDate();
+      const shake = { id: "protein-shake", name: "Protein shake", routine: { when: "gymDays", time: "18:00" } };
+      const tea = { id: "magnesium-tea", name: "Tea", routine: { when: "daily", time: "21:30" } };
+      check("Today: untouched day reads zeros", deepEqual(T.get(), { date: d0, water: 0, caffeine: 0, gym: false, routineDone: [] }));
+      T.bump("water", -1);
+      check("Today: -1 at 0 stays 0", T.get().water === 0);
+      T.bump("water", 1); T.bump("water", 1);
+      check("Today: bump counts up", T.get().water === 2);
+      localStorage.setItem("mp_today", JSON.stringify({ date: "2000-01-01", water: 5, caffeine: 5, gym: true, routineDone: ["x"] }));
+      check("Today: stale date rolls over to zeros", T.get().water === 0 && !T.get().gym);
+      localStorage.setItem("mp_today", "{corrupt");
+      check("Today: corrupt mp_today -> zeros", T.get().water === 0);
+      check("dueRoutines: gymDays hidden until gym is on",
+        deepEqual(T.dueRoutines([shake, tea, { id: "p" }], { gym: false }).map((m) => m.id), ["magnesium-tea"]));
+      check("dueRoutines: gym on adds the shake, sorted by time",
+        deepEqual(T.dueRoutines([tea, shake], { gym: true }).map((m) => m.id), ["protein-shake", "magnesium-tea"]));
+      T.setGym(true);
+      check("setGym mirrors mp_gymDay", JSON.parse(localStorage.getItem("mp_gymDay")).date === d0);
+      check("toggleRoutine logs", T.toggleRoutine(shake, ["protein"]) === "logged" && MP.Sync.localEatenLog().filter((e) => e.id === `routine:protein-shake:${d0}`).length === 1);
+      check("toggleRoutine twice undoes", T.toggleRoutine(shake, ["protein"]) === "undone" && MP.Sync.localEatenLog().length === 0 && T.get().routineDone.length === 0);
+      T.setGym(false);
+      check("setGym(false) clears mp_gymDay", localStorage.getItem("mp_gymDay") === null);
+      keys.forEach((k, i) => { if (saved[i] === null) localStorage.removeItem(k); else localStorage.setItem(k, saved[i]); });
+
+      const lib41 = library.concat([shake, tea].map((m) => ({ ...m, id: "r41-" + m.id, mealTypes: ["breakfast", "lunch", "dinner", "snack"], ingredients: [{ key: "milk", qty: "1" }] })));
+      const withR = MP.Generator.generatePlan(lib41, tags, targets, shelfData, "2026-09-07");
+      const withoutR = MP.Generator.generatePlan(library, tags, targets, shelfData, "2026-09-07");
+      check("generator output identical with and without routine meals", deepEqual(withR.days, withoutR.days));
+      check("rankSlot never returns a routine meal", MP.Generator.rankSlot(lib41, 1, [], { tags, targets }).every((m) => !m.routine));
+    }
+
   lines.push("", `${pass} passed, ${fail} failed`);
   document.getElementById("out").textContent = lines.join("\n");
 })();

@@ -127,7 +127,7 @@
     const { tags, targets, prefs, budget, halfKeys, pressure } = opts;
     const lastUsedDay = opts.lastUsedDay || {};
     const excludeIds = opts.excludeIds || new Set();
-    let ranked = pool.filter((m) => !excludeIds.has(m.id));
+    let ranked = pool.filter((m) => !m.routine && !excludeIds.has(m.id)); // routine items are logged, never scheduled (Phase 41)
     if (!ranked.length) ranked = pool.slice(); // too small a pool to honour the exclusion; repeat is unavoidable
     if (!ranked.length) return [];
     const gap = MP.Nutrition.dayCoverage(dayMealsSoFar, tags, targets);
@@ -218,6 +218,7 @@
     have = have || {};
     prefs = prefs || {};
     const mealsById = Object.fromEntries(library.map((m) => [m.id, m]));
+    library = library.filter((m) => !m.routine); // routine items are logged, never scheduled (Phase 41)
     const dinnerPool = library.filter((m) => (m.mealTypes || []).includes("dinner"));
     const days = Array.from({ length: 14 }, (_, i) => ({ day: i + 1, slots: {} }));
     const lastUsedDay = {};

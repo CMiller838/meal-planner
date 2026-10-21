@@ -416,8 +416,9 @@ method falls back to its ingredient list only.
 still recorded. Requires Phase 32. Assistant side: `notion_assistant` Phase 57.
 **Verified 2026-10-22:** `check.py` 8/8 (incl. new `tools/worker_test.mjs` against the real Worker: 400/403/404/409); confirm-cook replay/duplicate rejected in `matchEatRequests` (test.html); UI at PC and 390 px, both themes. Confirm-cook uses the existing `PUT /eat-requests` (no new route).
 
-## Phase 41: One-tap logs: routine items and water/caffeine counters [M] — not started
+## Phase 41: One-tap logs: routine items and water/caffeine counters [M] — built 2026-10-22, live checks pending
 
+Verified 2026-10-22: check.py 8/8, worker_test round trip, test.html Phase 41 cases, Today card at PC and 390 px in both themes; tester PASS.
 Merged from old Phases 41, 45. Build as one phase; each part keeps its own decisions and verify.
 
 ### Part: Routine items (magnesium tea, protein shake): one-tap "had it"

@@ -236,8 +236,7 @@
     const fmt = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/London" });
     const dayKey = (e) => fmt.format(new Date(e.eatenAt));
     const today = fmt.format(new Date());
-    let gym = false;
-    try { gym = (JSON.parse(localStorage.getItem("mp_gymDay")) || {}).date === today; } catch (e) { gym = false; }
+    const gym = MP.Today.get().gym;
     const dates = Array.from({ length: 7 }, (_, i) => new Date(Date.parse(today + "T00:00:00Z") - (6 - i) * 86400000).toISOString().slice(0, 10));
     const byId = Object.fromEntries(library.map((m) => [m.id, m]));
     const g = MP.Nutrition.weekGaps(log, byId, dates, tagsData.tags, tagsData.targets, dayKey);
@@ -255,9 +254,56 @@
           (g.notLogged.length ? `<div class="gap-nolog">Not logged: ${g.notLogged.map(esc).join(", ")}</div>` : "")
         : `<div>No meals logged yet</div>`);
     el.querySelector("#gym-toggle").addEventListener("change", (ev) => {
-      if (ev.target.checked) localStorage.setItem("mp_gymDay", JSON.stringify({ date: today }));
-      else localStorage.removeItem("mp_gymDay");
+      MP.Today.setGym(ev.target.checked);
+      renderTodayCard();
       renderGapStrip();
+    });
+  }
+
+  // Phase 41: one-tap routine items + water/caffeine counters. Counters never touch the eaten log, pantry or generator.
+  let countersData = { caffeine: { cupMg: {} }, waterGoal: 0 };
+  function renderTodayCard() {
+    const el = document.getElementById("today-card");
+    if (!el) return;
+    const t = MP.Today.get();
+    const due = MP.Today.dueRoutines(library, t);
+    const cup = el.dataset.cup || "";
+    const mg = countersData.caffeine.cupMg[cup];
+    const goal = countersData.waterGoal;
+    const counter = (field, label, extra) => `<div class="today-count"><span>${label}</span>
+        <button class="btn" data-bump="${field}" data-d="-1" aria-label="One less ${field}">−</button>
+        <strong>${t[field]}</strong>
+        <button class="btn" data-bump="${field}" data-d="1" aria-label="One more ${field}">+</button>${extra || ""}</div>`;
+    el.innerHTML = `<div class="gap-head"><strong>Today</strong>
+        <label class="gap-gym"><input type="checkbox" id="today-gym"${t.gym ? " checked" : ""}> Gym day today</label></div>
+      ${due.length ? `<div class="today-routines">${due.map((m) => {
+        const done = t.routineDone.includes(m.id);
+        return `<button class="btn today-chip${done ? " done" : ""}" data-routine="${esc(m.id)}" aria-pressed="${done}">${esc(m.name)} · ${done ? "Done ✓" : "Had it"}</button>`;
+      }).join("")}</div>` : ""}
+      ${counter("water", "Water (cups)", goal ? ` <small>of ${goal}</small>` : "")}
+      ${counter("caffeine", "Caffeine (cups)",
+        ` <select id="today-cup" aria-label="Cup type"><option value="">type?</option>${Object.keys(countersData.caffeine.cupMg).map((k) => `<option value="${esc(k)}"${k === cup ? " selected" : ""}>${esc(k)}</option>`).join("")}</select>` +
+        (mg ? ` <small>~${mg * t.caffeine} mg (approx.)</small>` : ""))}`;
+    el.querySelectorAll("[data-bump]").forEach((b) => b.addEventListener("click", () => {
+      MP.Today.bump(b.dataset.bump, Number(b.dataset.d));
+      renderTodayCard();
+    }));
+    el.querySelectorAll("[data-routine]").forEach((b) => b.addEventListener("click", () => {
+      const meal = library.find((m) => m.id === b.dataset.routine);
+      if (!meal) return;
+      const tags = MP.Nutrition.tagsForMeal(meal, tagsData.tags);
+      toast(MP.Today.toggleRoutine(meal, tags) === "logged" ? `Logged ${meal.name}` : `Undid ${meal.name}`);
+      renderTodayCard();
+      renderGapStrip();
+    }));
+    el.querySelector("#today-gym").addEventListener("change", (ev) => {
+      MP.Today.setGym(ev.target.checked);
+      renderTodayCard();
+      renderGapStrip();
+    });
+    el.querySelector("#today-cup").addEventListener("change", (ev) => {
+      el.dataset.cup = ev.target.value;
+      renderTodayCard();
     });
   }
 
@@ -1098,6 +1144,11 @@
       renderPlan();
     }
     initHermesBanner();
+    countersData = await fetch("counters.json").then((r) => r.json()).catch(() => countersData);
+    renderTodayCard();
+    const pullToday = () => MP.Today.pull().then((changed) => { if (changed) { renderTodayCard(); renderGapStrip(); } });
+    pullToday();
+    document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") pullToday(); });
 
     document.getElementById("guided-commit-btn").addEventListener("click", () => {
       guidedActive = false;
