@@ -2,7 +2,8 @@
 """Send one line to Telegram, or do nothing when it isn't set up. Stdlib only.
 
 `python3 tools/notify.py "text"`. Reads NOTIFY_BOT_TOKEN and NOTIFY_CHAT_ID from the environment, else from ./.env.
-Used by tools/pipeline.sh, tools/githooks/post-commit and tools/workflow_audit.py. Never fails the caller.
+Every message is prefixed `[<project>]` (NOTIFY_PROJECT, else the repo folder name with _ and - as spaces) so one bot
+can serve several projects. Used by tools/pipeline.sh, tools/githooks/post-commit and tools/workflow_audit.py. Never fails the caller.
 """
 import json
 import os
@@ -26,12 +27,16 @@ def env(name):
     return ""
 
 
+def project():
+    return env("NOTIFY_PROJECT") or ROOT.name.replace("_", " ").replace("-", " ")
+
+
 def send(text):
     token, chat = env("NOTIFY_BOT_TOKEN"), env("NOTIFY_CHAT_ID")
     if not (token and chat):
         return False
     req = urllib.request.Request(f"https://api.telegram.org/bot{token}/sendMessage", method="POST",
-                                 data=json.dumps({"chat_id": chat, "text": text[:4000]}).encode(),
+                                 data=json.dumps({"chat_id": chat, "text": f"[{project()}] {text}"[:4000]}).encode(),
                                  headers={"Content-Type": "application/json"})
     with urllib.request.urlopen(req, timeout=15):
         return True

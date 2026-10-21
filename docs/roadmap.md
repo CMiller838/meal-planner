@@ -45,7 +45,7 @@ chips, busy-day effort, pantry variants and now substitutions are all
 them re-score nutrition, and none of them can filter a meal out of the pool,
 so a plan can never fail to generate.
 
-## Phase 27 — Budget soft-preference (shipped)
+## Phase 27: Budget soft-preference — done
 
 **Goal:** A user-set target cost (per plan or per week) that turns up how
 hard `generator.js`'s existing `budget` step (layer 4, `generator.js:121-140`)
@@ -70,7 +70,7 @@ never biases week 2. Stored as `mp_planPrefs.budgetTarget` (3A), a plain
 £/week number where `0` means no target, same settings-not-plan-state class as
 `busyDays`/`chips`.
 
-## Phase 28 — Generic ingredient-substitution groups — Shipped
+## Phase 28: Generic ingredient-substitution groups — done
 
 **Goal:** A data file of swappable ingredient groups (e.g. onion/pepper as
 "aromatic veg"), letting the generator substitute an equivalent ingredient
@@ -103,7 +103,7 @@ outranks a swap. Seed data ships one real group from the current library
 (`onion`/`peppers`) rather than invented pairings that don't hold up
 ingredient-for-ingredient.
 
-## Phase 29 — Live-build-watching (staged local generation render) — Shipped
+## Phase 29: Live-build-watching (staged local generation render) — done
 
 **Goal:** When a Hermes-raised plan request is accepted from the existing
 banner, render the plan filling in slot-by-slot as the local `generatePlan`
@@ -134,7 +134,7 @@ Staged cards get `.staging` on `#plan-root` plus a per-card `animationDelay`
 reduce` shows the full grid instantly. Coverage/warnings are computed once
 against the final plan, not per stage. `sw.js` cache bumped to v22.
 
-## Phase 30 — Hermes quantity ingestion (screenshot → structured quantities) — Shipped
+## Phase 30: Hermes quantity ingestion (screenshot → structured quantities) — done
 
 **Goal:** The data path that gives `meals.json` ingredients and pantry items
 real quantities: Hermes reads user-sent shopping screenshots and writes
@@ -163,7 +163,7 @@ two chokepoints. A cook deduction still collapses a structured qty to a
 string via `fmtRemaining` — `raw` provenance is lost at that point, expected
 and left to Phase 31. `sw.js` cache bumped to v23, no new file.
 
-## Phase 31 — Partial-ingredient leftover tracking — Shipped
+## Phase 31: Partial-ingredient leftover tracking — done
 
 **Goal:** Pantry items carry a real quantity rather than present/absent, so a
 recipe using half a pack leaves a trackable remainder the next day's plan can
@@ -206,7 +206,7 @@ no new file.
 
 ---
 
-## Phase 32 — Personal-assistant connector (shopping list + "I ate X" queue) — Shipped
+## Phase 32: Personal-assistant connector (shopping list + "I ate X" queue) — done
 
 **Goal:** The personal assistant (`notion_assistant`, its Phase 15 / ADR-054)
 reads the planned two-week shopping list and queues voice-logged meals, with

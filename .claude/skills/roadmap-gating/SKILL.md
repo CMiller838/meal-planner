@@ -33,7 +33,8 @@ Once the files are discovered:
 
     Grep the active Roadmap File for the current phase heading (the one your task belongs to) and read only that section to check its exit criteria — not the whole file.
     Evaluate whether your completed work satisfies the criteria for that phase.
-    If a phase or milestone is complete, mark it as done (- [x]) and update any progress metrics (e.g. (Status: Complete) or (100%)).
+    If a phase or milestone is complete, append `— done` to its heading in `docs/roadmap.md` plus a line recording what was verified (this project's convention per CLAUDE.md; don't use `- [x]` on roadmap headings).
+    Then move that whole phase section, unchanged, to the end of `.claude/archive/roadmap-done.md` and add its number to the "Done phases" list near the top of `docs/roadmap.md`, so the active roadmap only holds open work.
 
 STEP 4: Atomic Progress Commits
 

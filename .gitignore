@@ -7,3 +7,6 @@ logs/
 .claude/.last-green
 __pycache__/
 tools/browser-check/.browsers/
+.env
+.env.*
+!.env.example

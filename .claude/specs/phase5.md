@@ -1,7 +1,7 @@
 # Phase 5 Spec — Hermes conversational capabilities
 
 Roadmap: `docs/roadmap.md` → Phase 5. Source of scope: `docs/OUTLINE.md` lines 26–39.
-Builds directly on Phase 4 (`.claude/specs/phase4_spec.md`) — read its §0 traps before
+Builds directly on Phase 4 (`.claude/specs/phase4.md`) — read its §0 traps before
 touching `hermes-sync.js` or the Worker.
 
 The repo is public. No library data, no Worker URL and no token may ever be committed.

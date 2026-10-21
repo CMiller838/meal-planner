@@ -85,6 +85,6 @@ desktop and a phone width (edit the viewport in `check.mjs` for that run) and in
 ## Meal Planner notes
 
 - Pages: see **Preview** in `docs/UI_STYLE.md`. Themes are `localStorage.mp_theme` = `dark` | `light` (read by `getTheme` in `data.js`).
-- `test.html` (the pass/fail suite) is also run by `python3 check.py`, through the older no-npm `browser-check` skill.
-  Use that skill for a quick test count, this one for screenshots and interaction.
+- `python3 check.py ui` already runs `test.html` and every page at PC and phone in both themes; use this skill for
+  screenshots (`node ui-check.mjs --shots dir`, `node walk.mjs --shots dir`) and one-off interaction.
 - TheMealDB and Hermes are blocked in the sandbox: Discover renders empty there. Expected.

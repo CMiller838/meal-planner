@@ -15,7 +15,7 @@ pantry).
 | 3 | **Double-deduction is prevented structurally, not by convention** — the portion-eat path never fetches the pantry, never calls `MP.ShoppingList.eatPlan`, and shares no code with `commitCook` except a log-only helper | The coordinator's requirement was explicit that this be impossible by construction. See §4 |
 | 4 | **`MP.isBatch(meal)` is one shared predicate in `data.js`**, not the same expression re-derived at four call sites | `batchCook` has four live consumers (§1). A derived rule copy-pasted four times is the version that drifts |
 | 5 | **Batch eligibility is `servings >= 2 && !leftoverOf`** — the `!leftoverOf` guard is mine, not the coordinator's; see "Flagged forks" | A `leftoverOf` meal is a chain *child*. Without the guard `chicken-fajitas` can be picked as a run *anchor* and cooked fresh, but its ingredients assume leftover roast chicken already exists |
-| 6 | **Everything stays in `plan.js`; no new `eat.js`, no new file** | The Eat action stays plan-grid-only (see non-goals), so `phase12_spec.md` decision 5 still holds: a new file would be a new `sw.js` SHELL entry and a new script tag to buy nothing |
+| 6 | **Everything stays in `plan.js`; no new `eat.js`, no new file** | The Eat action stays plan-grid-only (see non-goals), so `phase12.md` decision 5 still holds: a new file would be a new `sw.js` SHELL entry and a new script tag to buy nothing |
 | 7 | **`mp_cooks` is local-only — no KV key, no Worker route, no Hermes mirror** | Nothing asked for it. `sw.js`/`worker.js` stay untouched |
 | 8 | **Cook records expire on the existing `cooked_leftovers.fridgeDays` window**, not on an invented cap | Leftovers past the fridge window are not edible, so an expired record is not data worth keeping. Reuses `shelf-life.json`, no new number |
 
@@ -112,7 +112,7 @@ same commit — this phase edits eight cached files, and an installed PWA would
 otherwise serve the old JS against the new `meals.json`. `SHELL` is unchanged.
 
 **Docs freeze:** Phases 6 and 8 froze `batchCook` as a field an edit must
-preserve (`phase6_spec.md:34`, `phase8_spec.md:27`). That frozen-field list must
+preserve (`phase6.md:34`, `phase8.md:27`). That frozen-field list must
 drop `batchCook` in the same commit, or the edit path preserves a field that no
 longer exists.
 
@@ -177,7 +177,7 @@ from a TheMealDB import (`CLAUDE.md` trust boundary).
 ### 4a. `commitCook(pantry)` — the only pantry writer
 
 `plan.js:487`'s `commitEat` renamed and extended. Steps 1-6 of
-`phase12_spec.md` §3c are unchanged (`eatPlan` → apply ops to both mirrors →
+`phase12.md` §3c are unchanged (`eatPlan` → apply ops to both mirrors →
 `queueOp` → `slot.eatenAt` when `day` → `Prefs.bump` → toast → `flushOps`). Two
 additions, after the ops are applied:
 
@@ -279,7 +279,7 @@ Group 37 is Phase 18 and Phase 19 added none, so this is **group 38**.
 - `SPEC.md` — one line: one cook, several eats.
 - `docs/FUTURE.md` — park syncing `mp_cooks` to Hermes ("what leftovers are in
   the fridge") as deliberately skipped.
-- `phase6_spec.md` / `phase8_spec.md` frozen-field lists — see §1.
+- `phase6.md` / `phase8.md` frozen-field lists — see §1.
 
 ## §7 Manual pass
 

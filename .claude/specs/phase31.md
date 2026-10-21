@@ -15,7 +15,7 @@ Two things make that true, and they are the whole phase:
    zero-line diff in `generator.js`.
 
 Last phase of v5, and the only one with a hard prerequisite: Phase 30
-(`.claude/specs/phase30_spec.md`) shipped the `{value, unit, raw}` shape this
+(`.claude/specs/phase30.md`) shipped the `{value, unit, raw}` shape this
 phase now produces as well as consumes.
 
 ## Decisions

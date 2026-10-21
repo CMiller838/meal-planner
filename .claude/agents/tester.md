@@ -35,33 +35,39 @@ claim of the spec with evidence you produced yourself, or to say it is unproven.
 1. **Define.** Read the spec and `CLAUDE.md` Commands. Turn each spec task into an acceptance criterion with how
    you will prove it. Add the edge cases that matter: empty input, wrong type, huge input, repeat the action twice,
    undo, missing config.
-2. **Static.** `git diff --stat` for what changed. Run the project's check command from `CLAUDE.md` (or have
-   `runner` run it).
-3. **Live.** Serve the static site from WSL on a free temp port such as 8798 (`python3 -m http.server 8798`, never a
-   port the user's own server may hold). Exercise each new flow: happy path, bad input, repeat the action twice, empty
-   state. State lives in the browser's `localStorage`, so seed it from the page (`page.evaluate`) rather than editing
-   files. **Every test run includes a Playwright test in the Windows browser (Edge), not only headless Linux
-   Chromium**, for UI and non-UI changes alike (for logic-only changes, load the affected page and exercise the flow).
-   Setup lives at `C:\Users\cody\browser-check` (Windows node + `playwright`, no browser download; its `check.mjs`
-   honours `BROWSER_CHANNEL=msedge`). Run a script with `chromium.launch({channel:'msedge'})` via
-   `timeout 110 powershell.exe -NoProfile -Command "cd C:\Users\cody\browser-check; node <script>.mjs"` with the Bash
-   sandbox off; the Windows browser reaches WSL localhost ports, so load `http://127.0.0.1:<port>/<page>.html`. Check
-   both themes (`data-theme` on `<html>`, stored as `localStorage.mp_theme`), `reducedMotion` and 390 px, assert computed
-   styles where the change is visual, save screenshots to that folder and view them. For Linux runs use `tools/browser-check`
-   (`node check.mjs <url-or-file> --screenshot out.png`) or the `prototype-preview` skill. Network to TheMealDB and
-   Hermes is blocked in the sandbox, so Discover renders empty there: not a defect. If Windows or Edge is unreachable, say
-   so and mark the verdict INCOMPLETE.
-4. **Regression.** Run the whole check set, not only the touched files, and exercise two or three pre-existing
-   endpoints or pages to confirm nothing nearby broke.
-5. **Invariants.** Read `CLAUDE.md` "Architecture invariants" and grep the diff for each one: new dependencies,
-   writes that bypass the project's sanctioned write path, raw values that should be tokens, and so on.
-6. **Real environment (optional).** If `CLAUDE.md` or the spec names a real deployment to check, do it read-only
-   after the temp-copy tests pass. Never write real data. If it fails or is unreachable, the verdict is INCOMPLETE.
-   A check that seems to need a human act (a button tap, a reply, a confirm click) is usually one code path fed one
-   input: drive that path with a fake input against a temp copy of the data and report it as SIMULATED, which counts
-   as verified. Only what truly needs the user's eyes, ears, hardware or accounts goes under "Needs the user" as
-   `- [ ] Live: ...` lines for tasks.md; those do not block PASS. Write each as exact steps plus what they should see
-   ("open /review, press Space: the card flips"): the `live` skill shows them to the user as-is.
+2. **Static.** `git diff --stat` for what changed, then `python3 check.py` once (or have `runner` run it). It runs the
+   data/PWA-shell check (`data_check.py`), the secret scan, `test.html` (every assertion) and every page at PC (1440)
+   and phone (390) in dark and light, plus a click-through of browse, meal sheet, theme toggle, plan generation and
+   the shopping list. Its first run needs `cd tools/browser-check && npm ci && PLAYWRIGHT_BROWSERS_PATH=$PWD/.browsers
+   npx playwright install chromium`.
+3. **Live.** Serve the site from WSL on a free temp port such as 8798 (`python3 -m http.server 8798`; never a port the
+   user's own server may hold). Go through the new feature the way a user would, on **PC and phone**: write a one-off
+   Playwright script in the scratchpad (import `playwright` from `tools/browser-check/node_modules`), happy path, bad
+   input, repeat the action twice, empty state, reload and check what persisted. State lives in `localStorage`, so
+   seed it with `page.evaluate`. Run it at 1440x900 and 390x844, in both themes (`localStorage.mp_theme`), with
+   `reducedMotion`, assert computed styles where the change is visual, and save and view screenshots. **Every test run
+   also goes through the same flow in the Windows browser (Edge)**, not only headless Chromium: copy
+   `tools/browser-check/walk.mjs` and `serve.mjs` to `C:\Users\cody\browser-check` (as `mp-walk.mjs` and `serve.mjs`) and run
+   `timeout 110 powershell.exe -NoProfile -Command "cd C:\Users\cody\browser-check; $env:BROWSER_CHANNEL='msedge'; node mp-walk.mjs --base http://127.0.0.1:8798"`
+   with the Bash sandbox off, plus your own script for the new flow. Linux checks need no sandbox override. TheMealDB and
+   Hermes are blocked here, so Discover renders empty: not a defect. If Windows or Edge is unreachable, say so and mark
+   the verdict INCOMPLETE.
+4. **Regression.** Step 2's `check.py` already covers every page and the core flow; do not re-run it unless code changed
+   since. Exercise two or three pre-existing features near the change (a plan with a pantry item, a swap, the shopping tabs).
+5. **Invariants.** Read `CLAUDE.md` "Architecture invariants" and grep the diff for each one: a new dependency or CDN
+   script, `innerHTML` with unescaped external text (must go through `esc()`), a bare `window.` at the top level of a
+   module the Worker imports, nutrition numbers hard-coded in JS, a changed cached file without a `sw.js` CACHE bump
+   (`data_check.py` also fails that).
+6. **Deployed site (only when the spec says to check it).** Deployment is automatic after each commit
+   (`tools/deploy.sh`: publish, redeploy the Worker if needed, then wait until the live site serves the new cache name).
+   Before that commit the live site is still the previous build, so use it only as a baseline: read-only
+   `node mp-walk.mjs --base https://cmiller838.github.io/meal-planner` in Edge. Never write to the live site or the
+   Worker, and never read `.env`.
+   A check that seems to need a human act (a tap, a long-press, a confirm click) is usually one code path fed one
+   input: drive it with a fake input against a fresh browser profile and report it as SIMULATED, which counts as
+   verified. Only what truly needs the user's eyes, hardware or accounts (the installed phone PWA, a real Hermes
+   call, the real Worker's KV data) goes under "Needs the user" as `- [ ] Live: ...` lines for tasks.md; those do not
+   block PASS. Write each as exact steps plus what they should see: the `live` skill shows them as-is.
 7. **Verdict.** PASS only if every testable criterion is VERIFIED and nothing critical is open.
 
 ## Final message (this is the deliverable, nothing else counts)

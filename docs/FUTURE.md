@@ -41,7 +41,7 @@ most `meals.json` ingredients have blank or unparseable `qty` (e.g. `""`,
 `"handful, grated"`, `"whole"`), so most lines resolve to "1 pack of the
 default size" rather than a precise amount.
 
-- **Why parked**: the spec (`.claude/specs/phase3_spec.md` §0) is explicit
+- **Why parked**: the spec (`.claude/specs/phase3.md` §0) is explicit
   that this is a data problem, not a code problem — a smarter parser can't
   extract a quantity nobody wrote down.
 - **Revisit trigger**: none needed — this is an ongoing "fill in `qty` as
@@ -166,7 +166,7 @@ Phase 18 scoped badges to Library/Discover only; `plan.js`'s `daySlotHtml`
 doesn't show one. `shopping.html` already gives the plan's real total.
 
 - **Why parked**: deliberately out of Phase 18's scope (see
-  `.claude/specs/phase18_spec.md` non-goals) — a plan slot is a decision
+  `.claude/specs/phase18.md` non-goals) — a plan slot is a decision
   already made, not a browsing choice.
 - **Revisit trigger**: if a user wants cost visible while reviewing/editing an
   already-generated plan, not just while picking meals.

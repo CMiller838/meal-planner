@@ -32,7 +32,7 @@ Decision Gates (both matching my recommendation).
 - **The review step's "Looks good" button reuses `.banner`** (style.css:420,
   already used for `#hermes-banner`) rather than new banner CSS.
 - **No `sw.js` cache bump.** Phase 22 set this precedent
-  (`.claude/specs/phase22_spec.md:330`): a bump is for shell-file-list
+  (`.claude/specs/phase22.md:330`): a bump is for shell-file-list
   changes (new files), not content edits to files already in `SHELL`. This
   phase only edits `plan.js`/`plan.html`/`style.css`, all already listed.
 - **Cooking/eating during the review step is out of scope.** The review grid

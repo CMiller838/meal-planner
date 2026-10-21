@@ -98,7 +98,7 @@ New file at repo root, house style matching `shelf-life.json` (leading
 
 ```jsonc
 {
-  "_note": "Chip vocabulary + busy-day effort bias for guided planning. Chips are a REORDER, never a filter — see .claude/specs/phase22_spec.md. A chip hits a meal if ANY listed criterion matches.",
+  "_note": "Chip vocabulary + busy-day effort bias for guided planning. Chips are a REORDER, never a filter — see .claude/specs/phase22.md. A chip hits a meal if ANY listed criterion matches.",
   "busy": { "preferEffort": "quick", "demoteEffort": "batch" },
   "chips": [
     { "id": "comfort",        "label": "Comfort food",   "kind": "prefer", "keywords": [...], "prepEffort": "batch" },

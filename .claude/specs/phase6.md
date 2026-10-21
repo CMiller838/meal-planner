@@ -39,7 +39,7 @@ by `mealId`. Spread the original, overwrite only the five edited fields.
 **The trap that shapes §2:** `toastie-chicken-cheese` carries
 `{"key":"chicken_breast","qty":"leftover, sliced"}` with **no label**. Phase 3's shopping
 list excludes that line by matching `/leftover|from roast/i` against `qty`
-(`.claude/specs/phase3_spec.md` §2). A textarea round-trip that folds a non-numeric `qty`
+(`.claude/specs/phase3.md` §2). A textarea round-trip that folds a non-numeric `qty`
 into the label silently un-excludes it and buys the chicken twice. §2's `label — qty`
 form exists solely to stop that.
 

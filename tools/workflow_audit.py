@@ -67,13 +67,13 @@ def report(scans):
 
 def phases(roadmap):
     """roadmap: docs/roadmap.md text. Returns [(number, heading)] of open phases with 'not started' in the heading."""
-    return re.findall(r"^## Phase (\w+)\s*[:\u2014-]\s*(.*not started.*)$", roadmap, re.M | re.I)  # Meal_Planner: "## Phase N \u2014 Title \u2014 Not started"
+    return re.findall(r"^## Phase (\w+): (.*not started.*)$", roadmap, re.M)
 
 
 def queue(roadmap, specs):
     """Spec names the pipeline should build, in roadmap order: not-started phases whose spec (or sub-specs
     phaseNa.md, phaseNb.md, ...) exists in `specs`."""
-    return [s[:-3] for n, _ in phases(roadmap) for s in sorted(specs) if re.fullmatch(rf"phase{n.lower()}[a-z]?(_spec)?\.md", s)]
+    return [s[:-3] for n, _ in phases(roadmap) for s in sorted(specs) if re.fullmatch(rf"phase{n.lower()}[a-z]?\.md", s)]
 
 
 def open_checks(tasks):

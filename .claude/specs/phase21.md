@@ -191,7 +191,7 @@ code change. That is the intended effect (buy what completes the recipe you
 can actually cook), and it is the thing to sanity-check in the manual pass.
 
 Cost badges (Phase 18) deliberately keep using the **base** meal — that
-behaviour is specified in `phase18_spec.md` and must not be "fixed" here.
+behaviour is specified in `phase18.md` and must not be "fixed" here.
 
 ---
 

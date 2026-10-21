@@ -33,11 +33,6 @@
     ],
     "defaultMode": "auto"
   },
-  "skillOverrides": {
-    "strategic-compact": "off",
-    "verification-loop": "off",
-    "task-observer": "off"
-  },
   "hooks": {
     "PreToolUse": [
       {

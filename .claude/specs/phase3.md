@@ -2,7 +2,7 @@
 
 Roadmap: `docs/roadmap.md` → Phase 3. Source of scope: `docs/OUTLINE.md` lines 40–46.
 Read `SPEC.md` before touching planning logic. Phase 2's generator output
-(`.claude/specs/phase2_spec.md` §3) is what this phase aggregates — batch runs and
+(`.claude/specs/phase2.md` §3) is what this phase aggregates — batch runs and
 `leadsTo` chains are load-bearing here, not incidental.
 
 ## Decisions taken (user-confirmed)

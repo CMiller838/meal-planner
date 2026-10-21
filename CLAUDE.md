@@ -4,28 +4,47 @@ Guidance for Claude Code in this repo.
 
 ## Project state
 
-Meal Planner is built: two pages (Browse & Add, 2-Week Plan) backed by seeded
-`meals.json`, TheMealDB-sourced Discover suggestions, nutrient-coverage scoring,
-shelf-life/leftover warnings, and PWA install support. Full requirements and
-rationale live in `SPEC.md` — read it before changing planning logic, nutrition
-targets, or shelf-life rules; those numbers are deliberate, not placeholders.
-History lives in `git log`.
+Meal Planner is built and live on GitHub Pages: Browse & Add, Discover, 2-Week Plan, Plan with me and Shopping pages,
+backed by seeded `meals.json`, TheMealDB-sourced suggestions, nutrient-coverage scoring, shelf-life/leftover warnings,
+a PWA shell, and a Cloudflare Worker (`worker/`) that bridges it to Hermes and the personal assistant. The active
+roadmap is `docs/roadmap.md` (v5, Phases 27+). Requirements and rationale live in `SPEC.md` (read it before changing
+planning logic, nutrition targets or shelf-life rules: those numbers are deliberate), the stack in
+`docs/ARCHITECTURE.md`, parked ideas in `docs/FUTURE.md`, history in `git log`.
+
+- "What's next" = read the `/next` pane's sources fresh (`docs/roadmap.md`, `tasks.md`, `.claude/build-status.json`),
+  never a dated memory or handoff note.
+- `docs/roadmap.md` is the single active roadmap. Superseded versions live in `.claude/archive/`. Never create a new
+  versioned roadmap file: overwrite `docs/roadmap.md` in place, archiving its prior content first. Phase headings are
+  `## Phase N: Title [S|M|L] — not started` and the `/next` pane and `/overnight` queue parse exactly that.
+- **Before every commit, mark the roadmap.** A commit that finishes a phase appends `— done` to its heading and
+  records what was verified. Enforcement: the `roadmap-gating` skill.
+- **One phase, one commit.** Commit each phase once the tester passes it, so phases never pile up and interleave in
+  shared files. Live checks only the user can do are `- [ ] Live: ...` lines in `tasks.md`, cleared later with `/live`.
+  Planning is the exception: several specs in one sitting, left uncommitted, then `/overnight` builds and commits them
+  one phase each.
+- **Every commit that touches site files or the Worker redeploys itself** (post-commit hook, `tools/deploy.sh`):
+  it publishes `main`, redeploys the Worker if it or a module it bundles changed, waits until the live site serves
+  the new `sw.js` cache name and reports to Telegram. Skip once with `AUTO_LAUNCH=0` before the commit command.
+  Bump `CACHE` in `sw.js` whenever a cached file changes (`data_check.py` fails the commit otherwise).
 
 ## Commands
 
 ```
-# No build step. Serve the static files and open in a browser, e.g.:
-python3 -m http.server 8000
-# then visit http://localhost:8000/index.html
+python3 -m http.server 8000   # serve the static site, then open http://localhost:8000/index.html (no build step)
+python3 check.py              # every self-check, one line each (non-zero exit on failure):
+                              #   data_check = JSON data, PWA shell, worker imports, sw.js cache bump
+                              #   secrets    = secret scan of tracked files
+                              #   ui pages   = test.html (all assertions) + every page at PC and phone, dark and light
+                              #   ui walk    = click-through: browse, meal sheet, theme, plan generation, shopping
+python3 check.py --changed    # only what the uncommitted changes need (the Stop hook); `python3 check.py ui` = browser checks
+python3 data_check.py         # the data/PWA-shell check alone
+cd tools/browser-check && npm ci && PLAYWRIGHT_BROWSERS_PATH=$PWD/.browsers npx playwright install chromium   # once
+node tools/browser-check/ui-check.mjs --theme-key mp_theme --shots out/   # pages check with screenshots (run from tools/browser-check)
 ```
 
-```
-python3 check.py              # secret scan + test.html (495 assertions, headless Chrome); `--changed` = only what the diff needs
-cd tools/browser-check && node check.mjs <url-or-file> --screenshot out.png   # Playwright (test tooling, not an app dependency)
-```
-
-No lint/build/formatter — don't invent one unless asked. `tools/browser-check` is test tooling kept apart from the app;
-the app itself stays zero-dependency.
+No lint/build/formatter: don't invent one unless asked. `tools/browser-check` is test tooling kept apart from the app;
+the app itself stays zero-dependency. Secrets live in the gitignored `.env` (Telegram: `NOTIFY_BOT_TOKEN`,
+`NOTIFY_CHAT_ID`, `NOTIFY_PROJECT`: the same bot as the assistant, every message starts `[Meal Planner]`).
 
 ## Stack
 
@@ -164,31 +183,47 @@ Installable as a PWA on Android Chrome via `manifest.json` + `sw.js`.
   back to "present" rather than dropping out. `commitCook` (`plan.js`) is
   still the only pantry writer.
 
-## Project lifecycle (start to v2)
+## Working style: plan with the user, build and test alone
 
-Full detail, including exactly what each step reads/writes and why:
-`WORKFLOW.md`. Short version: `idea-interview` (MVP outline + FUTURE.md) →
-`@architect` (stack → ARCHITECTURE.md) → `@planner` roadmap mode (phases) →
-per phase: `@planner Phase N` (spec + tasks.md) → build (TDD + ponytail; UI
-via `ui-prototyper` → `restyle-from-prototype`) → `/code-review` or
-`/simplify` → commit → repeat until the roadmap is done → `project-retro` →
-v2 repeats the chain, seeded from the retro.
+Planning stays interactive (`plan-phase` gates, decisions asked). Once a spec is agreed, build and test **without
+checking in**:
+- run `python3 check.py` (or the `runner` agent);
+- serve the site and drive the feature yourself (Playwright via `tools/browser-check`, `prototype-preview`), on PC and
+  phone widths, both themes;
+- try bad input, and use a fresh browser profile for data.
 
-This project shipped its MVP directly from `SPEC.md` rather than through the
-full idea-interview chain — treat `SPEC.md` as the equivalent of the
-ARCHITECTURE.md + Phase 1 spec for any retrofit. Use the lifecycle above for
-future feature phases (v2+).
+Ask only for a real blocker: real data, a credential, a live human step (the installed phone PWA), or a decision the
+spec leaves open.
+
+`/build` (the `build-handoff` mod) hands the newest spec to a fresh builder (always Sonnet), then to the `tester`
+agent, with one fix round. `/overnight` does the same for every queued spec, unattended, one commit per phase, each
+deployed on commit. Otherwise never commit or push unasked.
+
+## Project lifecycle
+
+Full detail: `WORKFLOW.md`. Short version: `idea-interview` (outline + FUTURE.md) → `architect` (stack →
+ARCHITECTURE.md) → `plan-phase` roadmap mode → per phase: `plan-phase` phase mode (spec + tasks) → build (TDD for
+logic; UI via `ui-build`) → `tester` → commit (auto-deploy) → `/live` for human-only checks → repeat until the
+roadmap is done → `project-retro` → v2. This project shipped its MVP directly from `SPEC.md`: treat it as the
+equivalent of the ARCHITECTURE.md plus Phase 1 spec.
 
 ## Token discipline
 
 Cost is the context re-sent on every call, not output. So: Grep before Read and read line ranges, never `tasks.md`,
-`docs/roadmap.md` or any big source file whole (Grep `^## Phase N`); use Sonnet by default, Opus only for a real
-architectural fork; `/clear` between unrelated tasks and `/compact` near 100k tokens; send bulk work (check suites,
-wide greps) to `runner`/`scanner` (Haiku).
+`docs/roadmap.md`, `docs/ARCHITECTURE.md` or any big source file whole (`tasks.md`: Grep `^## Phase N`); use Sonnet by
+default, Opus only for a real architectural fork; `/clear` between unrelated tasks and `/compact` near 100k tokens;
+send bulk work (check suites, wide greps) to `runner`/`scanner` (Haiku); a long `[L]` build is built and committed one
+section at a time.
 
 ## UI work
 
 Every UI change follows the `ui-build` skill and the house style in `docs/UI_STYLE.md` (Cork Kitchen: tokens in
-`style.css`, dark default, animated, both themes plus 390 px checked with `browser-check`). `ui-prototyper` is only for new
+`style.css`, dark default, animated, both themes at PC and 390 px checked with `prototype-preview`). `ui-prototyper` is only for new
 visual ideas the user asks for; the user's pick is applied by `restyle-from-prototype`, which updates `docs/UI_STYLE.md`.
 No new dependency or CDN script without confirming.
+
+## Keeping Claude's own files current
+
+A user-level SessionStart hook (`~/.claude/hooks/stale_check.py`, weekly per project) checks CLAUDE.md, WORKFLOW.md,
+`.claude` agents and skills, and memory. It flags broken path references and long-untouched files. When it reports
+findings, tell the user briefly, propose specific fixes and apply only the approved ones; never delete on your own.

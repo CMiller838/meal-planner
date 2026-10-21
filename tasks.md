@@ -1,6 +1,6 @@
 # Tasks
 
-Per-phase breakdowns are written by `@planner` in phase mode, just before each
+Per-phase breakdowns are written by `plan-phase` (phase mode), just before each
 phase is built. Placeholders below track roadmap progress only.
 
 Previous checklist (Phases 1-15, all shipped) archived at
@@ -10,9 +10,9 @@ shipped) archived at `.claude/archive/tasks_20260913.md`. Previous checklist
 
 ---
 
-## Phase 27 — Budget soft-preference
+## Phase 27: Budget soft-preference
 
-Spec: `.claude/specs/phase27_spec.md`. Decisions: 1B (adaptive pressure),
+Spec: `.claude/specs/phase27.md`. Decisions: 1B (adaptive pressure),
 2A (per-week), 3A (extend `mp_planPrefs`).
 
 ### Logic & Backend Tasks (TDD — write the group 44 assertions first, then the code)
@@ -109,9 +109,9 @@ Spec: `.claude/specs/phase27_spec.md`. Decisions: 1B (adaptive pressure),
       `planning.budgetTarget` block; `SPEC.md` only if it enumerates plan
       preferences
 
-## Phase 28 — Generic ingredient-substitution groups
+## Phase 28: Generic ingredient-substitution groups
 
-Spec: `.claude/specs/phase28_spec.md`. Decisions: 1B (new
+Spec: `.claude/specs/phase28.md`. Decisions: 1B (new
 `substitution-groups.json`), 2B (materialised swap on the plan slot).
 
 ### Logic & Backend Tasks (TDD — write the group 45 assertions first, then the code)
@@ -226,9 +226,9 @@ Spec: `.claude/specs/phase28_spec.md`. Decisions: 1B (new
       the new data file, `planning.subCredit` and the slot `subs` field;
       `SPEC.md` only if it enumerates data files or the plan-slot shape
 
-## Phase 29 — Live-build-watching (staged local generation render)
+## Phase 29: Live-build-watching (staged local generation render)
 
-Spec: `.claude/specs/phase29_spec.md`. No gates this phase — the roadmap gate
+Spec: `.claude/specs/phase29.md`. No gates this phase — the roadmap gate
 (`docs/roadmap.md:106-125`, Gate 1 Path A) already fixed the mechanism as a
 staged **local** render, and both remaining forks collapse under the CSS-stagger
 approach (flag on `renderPlan`, no interaction handling needed). Render-side
@@ -304,9 +304,9 @@ only: `generator.js` gets a **zero-line diff**.
       convention; `SPEC.md` untouched (no data file, plan-slot or planning-rule
       change)
 
-## Phase 30 — Hermes quantity ingestion (screenshot → structured quantities)
+## Phase 30: Hermes quantity ingestion (screenshot → structured quantities)
 
-Spec: `.claude/specs/phase30_spec.md`. Gates answered by the user: 1A
+Spec: `.claude/specs/phase30.md`. Gates answered by the user: 1A
 (`{value, unit, raw}`, all three required when present), 2A (extend existing
 `pantry` items — no new KV key, no new route), 3A (quantity only — no price,
 no pack size).
@@ -394,9 +394,9 @@ no pack size).
       the pantry; offline works on v23; long `raw` doesn't overflow in dark
       **or** light
 
-## Phase 31 — Partial-ingredient leftover tracking
+## Phase 31: Partial-ingredient leftover tracking
 
-Spec: `.claude/specs/phase31_spec.md`. Gates answered by the user: 1B (a
+Spec: `.claude/specs/phase31.md`. Gates answered by the user: 1B (a
 computed remainder is structured `{value, unit, raw}`, not a string), 2A
 (`pantryOverlap` upgraded in place to "enough", with unparseable /
 unit-mismatched / amount-unknown falling back to "present"), 3A (`eatPlan` and

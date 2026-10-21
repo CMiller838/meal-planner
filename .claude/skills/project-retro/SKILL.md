@@ -1,6 +1,6 @@
 ---
 name: project-retro
-description: Whole-project retrospective run once every phase in docs/roadmap.md is marked done. Walks the shipped project against the original outline, interviews the user for what to change/add/remove, files findings into docs/FUTURE.md, and flags whether the tech stack itself needs revisiting. Use when the user says things like "the roadmap's done, let's review", "what should we change before v2", "I want to go through the project and list things for later", or "let's do a retro" — not for reviewing a single phase or a single PR, and not for planning what's next (that's idea-interview seeded from this retro's output, then planner).
+description: Whole-project retrospective run once every phase in docs/roadmap.md is marked done. Walks the shipped project against the original outline, interviews the user for what to change/add/remove, files findings into docs/FUTURE.md, and flags whether the tech stack itself needs revisiting. Use when the user says things like "the roadmap's done, let's review", "what should we change before v2", "I want to go through the project and list things for later", or "let's do a retro" — not for reviewing a single phase or a single PR, and not for planning what's next (that's idea-interview seeded from this retro's output, then plan-phase in roadmap mode).
 ---
 
 # Project Retro
@@ -82,10 +82,5 @@ goes in:
 
 End by stating plainly: the retro is filed, and the next step (whenever the
 user is ready) is a seeded `idea-interview` pass reading this retro's
-`docs/FUTURE.md` entries, followed by `planner` in roadmap mode for v2. Don't
+`docs/FUTURE.md` entries, followed by `plan-phase` in roadmap mode for v2. Don't
 start that yourself — this skill's job ends at filing the retro.
-
-Also recommend, as an optional aside (not a blocking step): now is the right
-point in the lifecycle to run `/task-observer` — it mines this whole version's
-session history for skill-improvement patterns, and it's designed to run once
-per version, right after a retro like this one, before v2's chain starts.

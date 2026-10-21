@@ -1,0 +1,21 @@
+# Runs check.py on every push and PR: data/PWA-shell check, secret scan, test.html and every page at PC and phone
+# width in both themes (Playwright), plus the click-through.
+name: check
+on: [push, pull_request]
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: tools/browser-check/package-lock.json
+      - run: npm ci --prefix tools/browser-check
+      - run: npx playwright install --with-deps chromium
+        working-directory: tools/browser-check
+      - run: python check.py

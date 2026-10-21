@@ -6,6 +6,7 @@
 Top-level modules with a `--selftest` flag get it (their bare run may do real work); modules defining `_selftest()`
 without the flag self-check when run bare. Failures print the tail of their output.
 """
+import os
 import re
 import subprocess
 import sys
@@ -15,6 +16,8 @@ ROOT = Path(__file__).resolve().parent
 LEGACY = {"check"}  # top-level modules to skip
 CORE = {"check"}  # modules everything imports; a change to one re-runs every check
 UI = ROOT / "ui"  # no UI package here (static site); skipped if absent
+BROWSER = ROOT / "tools" / "browser-check"  # Playwright test tooling (ui-check.mjs, walk.mjs)
+THEME_KEY = "mp_theme"  # localStorage key the app reads its theme from
 TAIL = 30
 SECRET_RE = re.compile(r"AIza[0-9A-Za-z_-]{35}|ghp_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|\b\d{8,10}:[A-Za-z0-9_-]{35}"
                        r"|sk-[A-Za-z0-9_-]{20,}|xox[abp]-[A-Za-z0-9-]{20,}|AKIA[0-9A-Z]{16}|-----BEGIN [A-Z ]*PRIVATE KEY-----")
@@ -57,18 +60,22 @@ def secrets_check():
 def all_checks():
     yield from python_checks()
     yield "secrets", [sys.executable, "check.py", "--secrets"]
-    if (ROOT / "test.html").exists():
-        # the browser suite (headless Chrome); the runner always exits 0, so fail unless the summary says 0 failed
-        yield "test.html", ["bash", "-c", 'o=$(.claude/skills/browser-check/scripts/browser_check.sh test 2>&1); echo "$o"; grep -q " 0 failed" <<<"$o"']
+    if (BROWSER / "ui-check.mjs").exists():
+        # real-browser checks: test.html + every page at PC and phone width in both themes; then the click-through
+        rel = BROWSER.relative_to(ROOT)
+        pre = f'cd {rel} && {{ test -d node_modules || {{ echo "run: cd {rel} && npm ci"; exit 1; }}; }} && '
+        yield "ui pages", ["bash", "-c", pre + f"node ui-check.mjs --theme-key {THEME_KEY}"]
+        yield "ui walk", ["bash", "-c", pre + "node walk.mjs"]
     if (UI / "package.json").exists():
         yield "ui selftest", ["npm", "run", "--silent", "selftest"]
         yield "ui build", ["npm", "run", "--silent", "build"]
 
 
 def run(name, cmd):
-    cwd = UI if name.startswith("ui ") else ROOT
+    cwd = UI if name.startswith("ui ") and UI.exists() else ROOT
+    env = {**os.environ, "PLAYWRIGHT_BROWSERS_PATH": str(BROWSER / ".browsers")} if (BROWSER / ".browsers").exists() else None
     try:
-        p = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True, timeout=300)
+        p = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True, timeout=300, env=env)
     except (OSError, subprocess.TimeoutExpired) as e:
         return False, repr(e)
     return p.returncode == 0, (p.stdout + p.stderr)
@@ -81,8 +88,8 @@ def pick(files, names):
     if py & CORE:
         return list(names)
     ui = any(f.startswith(f"{UI.name}/") and not f.endswith(".md") for f in files)
-    web = any(f.endswith((".js", ".html", ".json", ".css")) and "/" not in f for f in files)
-    return [n for n in names if n in py or (ui and n.startswith("ui ")) or (web and n == "test.html")]
+    web = any(f.endswith((".js", ".html", ".json", ".css")) and "/" not in f or f.startswith("worker/") for f in files)
+    return [n for n in names if n in py or (ui and n.startswith("ui ")) or (web and n.startswith("ui ") and not UI.exists())]
 
 
 def changed_files():
@@ -125,7 +132,7 @@ def _selftest():
     assert pick(["server.py", "tools/x.py"], names) == ["server"]
     assert pick(["ui/src/a.svelte"], names) == ["ui selftest", "ui build"]
     assert pick(["check.py"], names) == names
-    assert pick(["plan.js", "style.css"], names + ["test.html"]) == ["test.html"]
+    assert pick(["plan.js", "style.css"], ["data_check", "ui pages", "ui walk"]) == ["ui pages", "ui walk"]
     print("selftest ok")
 
 
