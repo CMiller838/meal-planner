@@ -30,6 +30,13 @@ notify() {
     echo "$1"
     python3 tools/notify.py "$1" >/dev/null 2>&1 || true
 }
+# PIPELINE_SLEEP=1 (set by `overnight.sh sleep`): suspend Windows 60 s after the queue ends, whatever the outcome
+pc_sleep() {
+    notify "pipeline: finished, putting the PC to sleep in 60 s"
+    sleep 60
+    powershell.exe -NoProfile -Command 'Add-Type -AssemblyName System.Windows.Forms; [void][System.Windows.Forms.Application]::SetSuspendState("Suspend", $false, $false)'
+}
+[ "$PLAN" = 0 ] && [ "${PIPELINE_SLEEP:-0}" = 1 ] && trap pc_sleep EXIT
 status() { printf '{"spec":"%s","stage":"%s","at":%s000,"verdict":"%s"}\n' "$1" "$2" "$(date +%s)" "$3" > .claude/build-status.json; }
 
 # stages_for <spec.md>: one "kind|label" line per build stage

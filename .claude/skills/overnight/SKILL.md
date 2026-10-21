@@ -11,7 +11,8 @@ the pipeline reports to Telegram.
 
 1. Run, with the Bash sandbox off (`dangerouslyDisableSandbox: true`: `claude -p` and the Telegram
    report need network): `tools/overnight.sh [specs...]` (specs only if the user named phases, e.g.
-   `phase38 phase39`; otherwise no arguments = the queue).
+   `phase38 phase39`; otherwise no arguments = the queue). If the user wrote `/overnight sleep` (or "sleep mode"),
+   add `sleep` as an argument: the PC suspends 60 s after the queue ends. Never add it unless they asked.
 2. Relay its output in two or three lines and end the turn:
    - `STARTED` + stages: say which specs and stages are queued. Results arrive on Telegram and in
      `.claude/build-status.json`. Say nothing else; do not check on it.

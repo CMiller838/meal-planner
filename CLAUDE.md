@@ -85,23 +85,13 @@ Installable as a PWA on Android Chrome via `manifest.json` + `sw.js`.
   source; don't hardcode macro/vitamin numbers in JS. The approximate
   high/med/low tagging system is deliberate — it's a coverage checklist, not a
   precise calorie calculator; don't "upgrade" it into fake-precise math.
-- **Cost weighting never reorders nutrition.** `generator.js`'s optional
-  `budget` step (Phase 17) only chooses among the top nutrient-ranked
-  candidates already produced by `MP.Nutrition.rankByGap`; it never changes
-  that ranking. `pack-sizes.json`'s `categories`/`keywords` fallback pricing
-  and its `planning` knobs (`shortlistSize`, `reuseCredit`) are data too, same
-  rule as above — don't hardcode them in JS. Same for `costTiers`
-  (cheap/med/pricey thresholds, Phase 18): the per-meal cost badges on
-  Browse/Discover cards are informational only — they never sort or filter
-  meals. Same for chip/busy preferences (Phase 22): `generator.js`'s
-  `rankSlot` layers chips (prefer-to-head / avoid-to-tail) and busy-day
-  effort bias on top of `rankByGap`'s output — a reorder, never a re-score,
-  and chips never filter a meal out of the pool. `plan-preferences.json`
-  (chip vocabulary, busy effort mapping) is data, same "data, not inline
-  constants" rule as `nutrition-targets.json`/`pack-sizes.json`. Same for the
-  Phase 27 budget target: `generator.js`'s `pressureFor`/`shortlistSizeFor`
-  only scale how many of `rankByGap`'s top candidates layer 4 cost-compares —
-  they never filter, cap, or re-rank.
+- **Later ranking layers only reorder `rankByGap`'s output, never re-score or filter.** Nutrition (`MP.Nutrition.rankByGap`)
+  decides which meal. On top of it, `generator.js` may: cost-compare its top candidates (`budget` step, Phase 17;
+  `pressureFor`/`shortlistSizeFor`, Phase 27, only scale how many it compares); apply chips (prefer-to-head /
+  avoid-to-tail) and busy-day effort bias in `rankSlot` (Phase 22; chips never filter a meal out of the pool). Per-meal
+  cost badges (`costTiers`, Phase 18) are informational: they never sort or filter. `pack-sizes.json` (`categories`/
+  `keywords` pricing, `planning` knobs `shortlistSize`/`reuseCredit`, `costTiers`) and `plan-preferences.json` are data,
+  not inline constants.
 - **Pantry stock never reorders nutrition either.** `generator.js`'s
   `pickVariant` (Phase 21) only chooses which variant of an already-chosen
   meal to schedule — nutrition ranking via `pickMeal`/`rankByGap` decides which
@@ -165,23 +155,15 @@ Installable as a PWA on Android Chrome via `manifest.json` + `sw.js`.
   render once against the final plan, not per stage. Only the
   `hermes-generate` handler passes `staged: true`; every other `renderPlan()`
   call site stays a bare, instant call.
-- **A pantry/ad-hoc `qty` (Phase 30) is a free-text string or a structured
-  `{ value, unit, raw }` object** — never a second sibling field.
-  `MP.ShoppingList.parseQty` is the only reader of its structure and
-  `MP.qtyText` (`data.js`) the only reader of its display text; every other
-  site goes through one of those two. Quantity only: no price, pack size, or
-  purchase date on a pantry item — pricing stays `pack-sizes.json`'s job and
-  shelf-life stays category-based. Quantities arrive only through the
-  existing `PUT /pantry` / `PUT /adhoc` relay; this phase added no new
-  endpoint, route, or KV key. Library ingredient `qty` (`meals.json`) is
-  unaffected and stays free text. **A computed remainder (Phase 31) is always
-  structured** — `MP.ShoppingList.remainingQty` is its only producer, so the
-  pantry is now a running balance across cooks (a partial eat leaves a real
-  `{value, unit}`, not a display string that re-rounds itself each time).
-  `pantryOverlap` means "on hand **in sufficient quantity**": absent is still
-  not counted, but unparseable/unit-mismatched/amount-unknown stock falls
-  back to "present" rather than dropping out. `commitCook` (`plan.js`) is
-  still the only pantry writer.
+- **A pantry/ad-hoc `qty` (Phase 30) is a free-text string or a structured `{ value, unit, raw }` object**, never a
+  second sibling field. `MP.ShoppingList.parseQty` is the only reader of its structure and `MP.qtyText` (`data.js`) the
+  only reader of its display text. Quantity only: no price, pack size or purchase date on a pantry item (pricing is
+  `pack-sizes.json`'s job, shelf-life stays category-based). Quantities arrive only through the existing `PUT /pantry` /
+  `PUT /adhoc` relay: no new endpoint, route or KV key. Library ingredient `qty` (`meals.json`) stays free text.
+  **A computed remainder (Phase 31) is always structured**: `MP.ShoppingList.remainingQty` is its only producer (the
+  pantry is a running balance, never a re-rounded display string). `pantryOverlap` means "on hand **in sufficient
+  quantity**": absent is not counted, unparseable/unit-mismatched/amount-unknown stock falls back to "present".
+  `commitCook` (`plan.js`) is still the only pantry writer.
 
 ## Working style: plan with the user, build and test alone
 

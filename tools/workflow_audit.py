@@ -76,6 +76,20 @@ def queue(roadmap, specs):
     return [s[:-3] for n, _ in phases(roadmap) for s in sorted(specs) if re.fullmatch(rf"phase{n.lower()}[a-z]?\.md", s)]
 
 
+def order(names, texts):
+    """names: queue in roadmap order; texts: {name: spec text}. A failed stage stops the queue, so specs with a
+    `Risk: high` line go last, together with every spec that `Requires Phase <theirs>` (transitively)."""
+    moved = {n for n in names if re.search(r"^Risk: high", texts.get(n, ""), re.M)}
+    grew = True
+    while grew:
+        grew = False
+        for n in names:
+            if n not in moved and any(re.search(rf"Requires Phase {re.match(r'phase(\w+)', m).group(1)}\b", texts.get(n, "")) for m in moved):
+                moved.add(n)
+                grew = True
+    return [n for n in names if n not in moved] + [n for n in names if n in moved]
+
+
 def open_checks(tasks):
     """tasks: tasks.md text. Returns ['Phase N: item', ...] for every unticked box, under its ## heading."""
     out, head = [], ""
@@ -153,6 +167,9 @@ def _selftest():
     assert queue(rm, {"phase40b.md", "phase38.md", "phase9.md"}) == ["phase38", "phase40b"]
     assert queue("## Phase 4: X — not started\n## Phase 43: Y — not started\n",
                  {"phase43b.md", "phase43a.md", "phase40.md", "phase4.md"}) == ["phase4", "phase43a", "phase43b"]
+    t = {"phase33a": "Risk: high\n", "phase33b": "Requires Phase 33a (x)", "phase34": "**Requires Phase 33a**", "phase35": "", "phase41": "Requires Phase 35"}
+    assert order(["phase33a", "phase33b", "phase34", "phase35", "phase41"], t) == ["phase35", "phase41", "phase33a", "phase33b", "phase34"]
+    assert order(["phase1", "phase2"], {}) == ["phase1", "phase2"]
     assert open_checks("## Phase 10\n- x\n  - [ ] sub\n") == ["Phase 10: sub"]
     assert open_checks("## Phase 36 — done\n- [x] a\n- [ ] tap Snooze\n## Phase 37 [M]\n- [ ] live\n") == [
         "Phase 36: tap Snooze", "Phase 37: live"]
@@ -165,6 +182,7 @@ if __name__ == "__main__":
     elif sys.argv[1:] == ["--checks"]:
         print("\n".join(open_checks(_read("tasks.md"))))
     elif sys.argv[1:] == ["--queue"]:
-        print(" ".join(queue(_read("docs/roadmap.md"), {p.name for p in (ROOT / ".claude/specs").glob("*.md")})))
+        q = queue(_read("docs/roadmap.md"), {p.name for p in (ROOT / ".claude/specs").glob("*.md")})
+        print(" ".join(order(q, {n: _read(f".claude/specs/{n}.md") for n in q})))
     else:
         main("--force" in sys.argv)

@@ -72,6 +72,9 @@ wrong, say so in one line and update the heading.
    **Write one file** `.claude/specs/phaseN.md` (or the sub-specs above) (legacy `phaseN_spec.md` names stay valid):
    Decisions (user-chosen vs own call, labelled) · Files touched · Signatures/schemas (no
    bodies) · Edge cases · Verification · Tasks as `- [ ]` split Logic (TDD) / UI.
+   Before moving on run `python3 tools/spec_lint.py phaseN`: it fails a spec with no tier tag, no `## Files touched`,
+   or a `## Verification` without a runnable command in backticks (`/overnight` refuses to start on the same check).
+   Anything only the user can verify goes in `tasks.md` as a `- [ ] Live: ...` line, not in Verification.
    Then under `## Phase N` in `tasks.md` (Edit that heading only) put one pointer line to the
    spec. Do not duplicate the task list there. If `tasks.md` has no `## Phase N` heading yet (later phases often
    don't), append `## Phase N: Title` plus the pointer line at the end of the file instead.

@@ -54,6 +54,9 @@ claim of the spec with evidence you produced yourself, or to say it is unproven.
    the verdict INCOMPLETE.
 4. **Regression.** Step 2's `check.py` already covers every page and the core flow; do not re-run it unless code changed
    since. Exercise two or three pre-existing features near the change (a plan with a pantry item, a swap, the shopping tabs).
+   **Test integrity.** Read `git diff` of `test.html`, `data_check.py` and `tools/browser-check/*.mjs`: any deleted,
+   skipped or loosened assertion (a hard-coded expected value, a widened tolerance) is a HIGH defect unless the spec
+   asks for it. `tools/test_guard.py` blocks the plain removals at commit; you catch the subtle ones.
 5. **Invariants.** Read `CLAUDE.md` "Architecture invariants" and grep the diff for each one: a new dependency or CDN
    script, `innerHTML` with unescaped external text (must go through `esc()`), a bare `window.` at the top level of a
    module the Worker imports, nutrition numbers hard-coded in JS, a changed cached file without a `sw.js` CACHE bump

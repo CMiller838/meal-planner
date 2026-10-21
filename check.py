@@ -62,6 +62,8 @@ def secrets_check():
 def all_checks():
     yield from python_checks()
     yield "secrets", [sys.executable, "check.py", "--secrets"]
+    yield "test guard", [sys.executable, "tools/test_guard.py"]  # staged diff must not loosen the test files
+    yield "spec lint", [sys.executable, "tools/spec_lint.py", "--selftest"]
     if (BROWSER / "ui-check.mjs").exists():
         # real-browser checks: test.html + every page at PC and phone width in both themes; then the click-through
         rel = BROWSER.relative_to(ROOT)
