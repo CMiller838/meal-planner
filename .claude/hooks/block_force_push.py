@@ -2,16 +2,18 @@
 """PreToolUse(Bash): refuse a force-push to main/master. Exit 2 blocks; stderr is the reason Claude sees.
 
 Parses the command with shlex instead of regex-matching the whole string, so text that merely mentions a push (a heredoc
-body, a commit message, `echo`, `$?` in another command of the chain) is never mistaken for one. Only a real
-`git [opts] push ...` is judged, and only on its own arguments:
-  force = --force* / an unambiguous abbreviation (--for...) / --mirror / a short-flag group holding f (-f, -uf) / a +refspec
-  target = a refspec naming main or master (HEAD and @ mean the current branch), or no refspec at all (a bare push
-           sends the current branch; its branch is read from the directory the command runs in, following `cd`)
-Fails closed where it cannot tell: a push with a force flag whose arguments hold a shell expansion ($, backtick, {}, *),
-`--all`/`--mirror` with force (touches main), `bash -c '...'`/`eval` wrappers (the inner string is parsed the same way),
-and a command shlex cannot parse (falls back to "git ... push" plus any force-looking flag anywhere).
-ponytail: a parser, not a shell (a git alias or a script that pushes can still hide it); GitHub branch protection (no
-force-push on main) is the real backstop.
+body, a commit message, `echo`, `$?` in another command of the chain) is never mistaken for one. Any `git [opts] push ...`
+found in a command segment is judged on its own arguments, wherever it sits (after `timeout -s KILL 5`, `env -u X`,
+`ssh host`, `then`, `xargs`...), except in segments whose program only prints text (echo, grep, cat...):
+  force  = --force* / an unambiguous abbreviation (--for...) / --mirror / a short-flag group holding f / a +refspec
+  target = a refspec naming main or master (HEAD and @ mean the current branch), or no refspec at all (a bare push sends
+           the current branch, read from the directory the command runs in, following `cd` and `git -C`)
+Fails closed: a push whose arguments hold a shell expansion ($ ` {} * ?), forced --mirror/--all, a current branch that
+cannot be read, an unparseable command that looks like a force push, `$(...)` and backticks (parsed as commands, also
+inside double quotes), `bash -c '...'`/`eval` and heredocs fed to a shell (parsed the same way), and any error in this
+script or an unreadable payload (the wrapper turns every non-zero, non-zero-but-not-2 exit into a block too).
+ponytail: a parser, not a shell (an alias, a script, or an interpreter heredoc such as `python3 - <<EOF` can still hide a
+push); GitHub branch protection (no force-push on main) is the real backstop.
 
 `python3 .claude/hooks/block_force_push.py --selftest` runs the cases at the bottom.
 """
@@ -26,19 +28,38 @@ PROTECTED = {"main", "master"}
 SEPS = {";", "&&", "||", "|", "|&", "&", "(", ")", "{", "}"}
 WRAPPERS = {"env", "sudo", "nohup", "setsid", "timeout", "time", "command", "exec", "nice", "stdbuf"}
 SHELLS = {"bash", "sh", "zsh", "dash", "ksh"}
+TEXT_ONLY = {"echo", "printf", "grep", "egrep", "fgrep", "rg", "ag", "cat", "tee", "sed", "awk", "less", "more", "man",
+             "which", "type", "ls", "wc", "head", "tail", "diff", "cut", "sort", "uniq"}
 GIT_OPTS_WITH_VALUE = {"-C", "-c", "--git-dir", "--work-tree", "--namespace", "--exec-path"}
-PUSH_OPTS_WITH_VALUE = {"-o", "--push-option", "--repo", "--receive-pack", "--exec"}
+PUSH_OPTS_WITH_VALUE = {"-o", "--push-option", "--receive-pack", "--exec"}
+HEREDOC = re.compile(r"<<-?[ \t]*(['\"]?)(\w+)\1([^\n]*)\n(.*?)\n[ \t]*\2[ \t]*(?=\n|$)", re.S)
+SUBST = re.compile(r"\$\(([^()]*)\)|`([^`]*)`", re.S)
 
 
 def current_branch(cwd):
-    r = subprocess.run(["git", "-C", cwd or ".", "symbolic-ref", "--short", "HEAD"], capture_output=True, text=True)
-    return r.stdout.strip()
+    try:
+        r = subprocess.run(["git", "-C", cwd or ".", "symbolic-ref", "--short", "HEAD"], capture_output=True, text=True, timeout=10)
+        return r.stdout.strip()
+    except Exception:
+        return ""  # unreadable: the caller fails closed
+
+
+def split_heredocs(cmd):
+    """Return (command with heredoc bodies removed, bodies that a shell will execute)."""
+    bodies = []
+
+    def drop(m):
+        header = cmd[cmd.rfind("\n", 0, m.start()) + 1:m.start()] + m.group(3)
+        if re.search(r"\b(bash|sh|zsh|dash|ksh|eval|source)\b", header):
+            bodies.append(m.group(4))
+        return f"<<{m.group(2)}{m.group(3)}"
+
+    return HEREDOC.sub(drop, cmd), bodies
 
 
 def tokens_of(cmd):
-    """Split into shell tokens; heredoc bodies removed, newlines treated as `;`."""
-    cmd = re.sub(r"<<-?\s*(['\"]?)(\w+)\1([^\n]*)\n.*?\n[ \t]*\2[ \t]*(?=\n|$)", r"<<\2\3", cmd, flags=re.S)
-    lex = shlex.shlex(cmd.replace("\n", " ; "), posix=True, punctuation_chars=True)
+    """Shell tokens; backticks and newlines act as command separators."""
+    lex = shlex.shlex(cmd.replace("`", " ; ").replace("\n", " ; "), posix=True, punctuation_chars=True)
     lex.whitespace_split = True
     return list(lex)
 
@@ -58,7 +79,7 @@ def segments(tokens):
 
 def drop_redirections(seg):
     out, skip = [], False
-    for i, t in enumerate(seg):
+    for t in seg:
         if skip:
             skip = False
         elif re.fullmatch(r"[<>&|]+", t):
@@ -70,20 +91,12 @@ def drop_redirections(seg):
     return out
 
 
-def split_program(seg):
-    """Strip VAR=value and wrapper commands; return the real argv."""
-    i = 0
-    while i < len(seg):
-        t = seg[i]
-        if re.match(r"^[A-Za-z_]\w*=", t):
-            i += 1
-        elif os.path.basename(t) in WRAPPERS:
-            i += 1
-            while i < len(seg) and (seg[i].startswith("-") or re.fullmatch(r"[\d.]+[smhd]?", seg[i]) or re.match(r"^[A-Za-z_]\w*=", seg[i])):
-                i += 1
-        else:
-            break
-    return seg[i:]
+def first_program(seg):
+    """Basename of the first real program (VAR=value assignments skipped)."""
+    for t in seg:
+        if not re.match(r"^[A-Za-z_]\w*=", t):
+            return os.path.basename(t)
+    return ""
 
 
 def push_args(argv, cwd):
@@ -102,18 +115,27 @@ def push_args(argv, cwd):
     return None
 
 
-def force_target(args, cwd, branch_of):
-    """Reason string if this push force-updates a protected branch, else None."""
-    force = mirror = all_refs = False
+def force_target(args, cwd, branch_of, stdin_args=False):
+    """Reason string if this push cannot be shown safe, i.e. it force-updates (or may force-update) a protected branch.
+    stdin_args: more arguments arrive on stdin (xargs), so the target is unknown."""
+    if any(re.search(r"[$`{}*?]", x) for x in args):
+        return "a push whose arguments hold a shell expansion cannot be checked (write the remote and branch out)"
+    force = mirror = all_refs = has_repo = False
     pos, i = [], 0
     while i < len(args):
         a = args[i]
         if a in PUSH_OPTS_WITH_VALUE:
             i += 2
             continue
+        if a == "--repo":
+            has_repo = True
+            i += 2
+            continue
         if a.startswith("--"):
             name = a.split("=")[0]
-            if name.startswith("--force") or (len(name) >= 5 and "--force".startswith(name)):
+            if name == "--repo":
+                has_repo = True
+            elif name.startswith("--force") or (len(name) >= 5 and "--force".startswith(name)):
                 force = True
             elif len(name) >= 4 and "--mirror".startswith(name):
                 force = mirror = True
@@ -126,16 +148,16 @@ def force_target(args, cwd, branch_of):
         else:
             pos.append(a)
         i += 1
-    refs = pos[1:]
+    refs = pos if has_repo else pos[1:]  # the first positional is the remote unless --repo named it
     force = force or any(r.startswith("+") for r in refs)
     if not force:
         return None
-    if any(re.search(r"[$`{}*?]", x) for x in args):
-        return "a force push whose arguments hold a shell expansion cannot be checked"
+    if stdin_args:
+        return "a force push whose arguments come from stdin (xargs) cannot be checked"
     if mirror or all_refs:
         return "a forced --mirror/--all push updates every branch, main included"
     branch = branch_of(cwd)
-    for r in refs or ["HEAD"]:
+    for r in pos + ([] if refs else ["HEAD"]):  # every positional is checked: the remote cannot be told from a ref reliably
         dst = r.lstrip("+").split(":")[-1].removeprefix("refs/heads/")
         if dst in ("HEAD", "@", ""):
             if not branch:
@@ -148,6 +170,13 @@ def force_target(args, cwd, branch_of):
 
 def analyze(cmd, cwd, branch_of=current_branch, depth=0):
     """Reason string if the command contains a banned force-push, else None."""
+    if depth > 4:
+        return "commands nested too deeply to check"
+    cmd, bodies = split_heredocs(cmd)
+    for inner in [b for b in bodies] + [a or b for a, b in SUBST.findall(cmd)]:
+        why = analyze(inner, cwd, branch_of, depth + 1)
+        if why:
+            return why
     try:
         toks = tokens_of(cmd)
     except ValueError:  # unbalanced quotes: crude fallback, fail closed
@@ -159,30 +188,34 @@ def analyze(cmd, cwd, branch_of=current_branch, depth=0):
         if seg[:1] == ["cd"] and len(seg) > 1:
             cwd = os.path.normpath(os.path.join(cwd or ".", os.path.expanduser(seg[1])))
             continue
-        argv = split_program(seg)
-        if not argv:
-            continue
-        prog = os.path.basename(argv[0])
-        if prog == "git":
-            got = push_args(argv, cwd)
-            if got:
-                why = force_target(got[0], got[1], branch_of)
-                if why:
-                    return why
-        elif (prog in SHELLS or prog == "eval") and depth < 3:
-            for inner in argv[1:]:  # bash -c 'git push -f ...' / eval "..."
+        prog = first_program(seg)
+        if prog in SHELLS or prog == "eval":
+            for inner in seg[1:]:  # bash -c 'git push -f ...' / eval "..."
                 if not inner.startswith("-") and re.search(r"\bpush\b", inner):
                     why = analyze(inner, cwd, branch_of, depth + 1)
+                    if why:
+                        return why
+        if prog in TEXT_ONLY:
+            continue
+        for j, t in enumerate(seg):  # a git anywhere in the segment, whatever wraps it (timeout -s KILL 5, ssh h, then...)
+            if os.path.basename(t) == "git":
+                got = push_args(seg[j:], cwd)
+                if got:
+                    why = force_target(got[0], got[1], branch_of, stdin_args=prog == "xargs")
                     if why:
                         return why
     return None
 
 
 def main():
-    payload = json.load(sys.stdin)
-    cmd = payload.get("tool_input", {}).get("command", "")
-    cwd = payload.get("cwd") or os.environ.get("CLAUDE_PROJECT_DIR") or "."
-    why = analyze(cmd, cwd)
+    try:
+        payload = json.load(sys.stdin)
+        cmd = payload.get("tool_input", {}).get("command", "")
+        cwd = payload.get("cwd") or os.environ.get("CLAUDE_PROJECT_DIR") or "."
+        why = analyze(cmd, cwd)
+    except Exception as e:  # never fail open: an error here blocks the command
+        print(f"Blocked: the force-push guard failed ({type(e).__name__}: {e}).", file=sys.stderr)
+        return 2
     if why:
         print(f"Blocked: {why}. Force-pushing to main/master is banned.", file=sys.stderr)
         return 2
@@ -192,31 +225,45 @@ def main():
 def _selftest():
     on = lambda b: (lambda cwd: b)
     blocked = lambda c, b="feature": analyze(c, ".", on(b)) is not None
-    # real force pushes to main/master, in every spelling
+    # real force pushes to main/master, in every spelling and wrapper
     for c in ["git push -f origin main", "git push --force origin master", "git push origin main --force", "git push -uf origin main",
               "git push --force-with-lease origin main", "git push --for origin main", "git push origin +main", "git push origin +HEAD:main",
               "git push origin HEAD:refs/heads/main -f", "git push -f origin 'main'", 'git push "--force" origin main',
               "git -C /x push -f origin main", "cd /x && git push -f origin master", "FOO=1 git push -f origin main",
               "timeout 60 git push -f origin main", "git add . && git commit -m x && git push -f origin main",
               "bash -c 'git push -f origin main'", 'eval "git push --force origin main"', "git push --mirror -f", "git push --mirror",
-              "git push -f origin $BRANCH", "git push -f origin {main,x}"]:
+              "git push -f origin $BRANCH", "git push -f origin {main,x}", "git push origin $BRANCH",
+              # wrappers with option values, shell keywords, remote shells, xargs
+              "timeout -s KILL 5 git push -f origin main", "env -u X git push -f origin main", "sudo -u bob git push -f origin main",
+              "nice -n 5 git push -f origin main", "if true; then git push -f origin main; fi", "while x; do git push -f origin main; done",
+              "ssh host git push -f origin main", "echo main | xargs git push -f origin", "! git push -f origin main", "time git push -f origin main",
+              # substitutions, also inside quotes; heredocs a shell runs
+              "echo $(git push -f origin main)", 'echo "$(git push -f origin main)"', "echo `git push -f origin main`",
+              "bash <<EOF\ngit push -f origin main\nEOF", "cat <<EOF | sh\ngit push -f origin main\nEOF",
+              # --repo shifts the positionals: main is a refspec, not the remote
+              "git push -f --repo origin main", "git push --repo=origin -f main", "git push -f main"]:
         assert blocked(c), c
-    # a bare / HEAD force push is judged by the current branch
+    # a bare / HEAD force push is judged by the current branch; an unreadable branch fails closed
     assert blocked("git push -f", "main") and blocked("git push --force origin HEAD", "master") and blocked("git push -f origin", "main")
     assert not blocked("git push -f", "feature") and not blocked("git push --force origin HEAD", "feature")
-    # not force pushes: must pass (these were false positives of the old regex guard)
+    assert blocked("git push -f", "")
+    # not force pushes, no expansions: must pass (these were false positives of the old regex guard)
     for c in ["git push origin main", "git push", "git push -u origin main", "git push origin feature", "git push --follow-tags origin main",
               "git push -f origin feature", "git push --force-with-lease origin my-branch", "git push origin main && echo done",
               "git push 2>&1 | tail -1; cd /x; echo exit=$?", "git push origin main 2>&1 | tail -1",
-              "git commit -m 'docs: explain git push -f and --force on main'", "echo 'git push -f origin main'",
+              "git commit -m 'docs: explain git push -f and --force on main'", "echo 'git push -f origin main'", "echo git push -f origin main",
               "git log --format=%h --follow main && git push origin feature", "tail -f log.txt; git push",
               "grep -rn 'git push' . | head && echo {a,b} $HOME `date`",
               "python3 - <<'EOF'\nprint('git push --force origin main {x}')\nEOF\ngit status",
-              "cat <<EOF\ngit push -f origin main\nEOF", "git status; ls -lf; git pull --force origin main", "git push origin --delete old-branch"]:
+              "cat <<EOF\ngit push -f origin main\nEOF", "git status; ls -lf; git pull --force origin main", "git push origin --delete old-branch",
+              "if true; then git status; fi", "timeout -s KILL 5 git status", "git commit -m \"$(echo hi)\""]:
         assert not blocked(c, "main"), c
-    assert blocked("git push -f", "")  # branch unreadable (cd into a missing dir): fail closed
     assert analyze("git push -f origin 'unterminated", ".", on("x")) is not None  # unparseable + force-looking: fail closed
     assert analyze("echo 'unterminated", ".", on("main")) is None
+    # main() never fails open
+    import io
+    sys.stdin = io.StringIO("not json")
+    assert main() == 2
     print("selftest ok")
 
 
