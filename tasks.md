@@ -566,6 +566,8 @@ but shows the "est." marker; no shopping-list rows (YAGNI). Informational only, 
 ## Phase 40: Cooking mode data: steps, timers and a confirm-cook route
 
 Spec: `.claude/specs/phase40.md` (tasks live there).
+- [ ] Live: spot-check the seeded method times (roast chicken 90 min oven, chilli 40 min simmer) against the sources in the commit body.
+- [ ] Live: with the real ASSISTANT_TOKEN, `PUT /meal-method` on a meal; Browse shows "Drafted", Accept clears it, a repeat PUT returns 409.
 
 ## Phase 41: One-tap logs: routine items and water/caffeine counters
 - Spec: `.claude/specs/phase41.md`

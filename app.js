@@ -161,6 +161,7 @@
   }
 
   function openDetail(meal) {
+    const method = MP.methodOf(meal);
     const overlay = document.getElementById("modal-overlay");
     const sheet = document.getElementById("modal-sheet");
     const ingredientsHtml = (meal.ingredients || [])
@@ -174,15 +175,24 @@
       <p>${esc(meal.description || "")}</p>
       <h3>Ingredients</h3>
       <ul class="ingredient-list">${ingredientsHtml}</ul>
-      <h3>Instructions</h3>
-      <p>${esc(meal.instructions || "")}</p>
+      <h3>Instructions ${method.status === "drafted" ? `<span class="tag drafted-badge">Drafted</span>` : ""}</h3>
+      ${MP.methodHtml(meal)}
+      ${meal.variants && meal.variants.length && method.steps.length ? `<p class="muted">Steps are for the base recipe; variants have no steps of their own.</p>` : ""}
       <div class="modal-actions">
+        ${method.status === "drafted" ? `<button id="detail-accept" class="btn">Accept steps</button>` : ""}
         <button id="detail-edit" class="btn">Edit</button>
         <button id="detail-delete" class="ghost danger">Delete</button>
       </div>
     `;
     sheet.querySelector(".close-btn").addEventListener("click", closeDetail);
     sheet.querySelector("#detail-edit").addEventListener("click", () => openForm(meal));
+    const accept = sheet.querySelector("#detail-accept");
+    if (accept) accept.addEventListener("click", () => {
+      const accepted = { ...meal, methodStatus: "accepted" };
+      library = MP.upsertMeal(accepted);
+      renderLibrary();
+      openDetail(accepted);
+    });
     sheet.querySelector("#detail-delete").addEventListener("click", () => deleteMeal(meal));
     overlay.classList.remove("hidden");
   }
@@ -229,6 +239,44 @@
         <button type="button" class="ghost variant-delete-btn" data-id="${esc(v.id)}">Delete</button>
       </span>
     </div>`;
+  }
+
+  let formSteps = [];
+
+  /** Pull the step inputs back into formSteps (call before any re-render or save). */
+  function readSteps() {
+    if (!document.getElementById("form-steps")) return;
+    formSteps = [...document.querySelectorAll("#form-steps .step-row")].map((r) => {
+      const m = parseInt(r.querySelector(".step-min").value, 10);
+      return { text: r.querySelector(".step-text").value.trim(), minutes: m >= 1 && m <= 600 ? m : null };
+    });
+  }
+
+  function renderStepList() {
+    const container = document.getElementById("form-steps");
+    if (!container) return;
+    container.innerHTML = formSteps.map((_, i) => `<div class="step-row">
+      <span class="step-num">${i + 1}.</span>
+      <input type="text" class="step-text" maxlength="300" aria-label="Step ${i + 1}">
+      <input type="number" class="step-min" min="1" max="600" step="1" placeholder="min" aria-label="Minutes for step ${i + 1}">
+      <span class="variant-row-actions">
+        <button type="button" class="ghost step-up" data-i="${i}" aria-label="Move step ${i + 1} up"${i === 0 ? " disabled" : ""}>↑</button>
+        <button type="button" class="ghost step-down" data-i="${i}" aria-label="Move step ${i + 1} down"${i === formSteps.length - 1 ? " disabled" : ""}>↓</button>
+        <button type="button" class="ghost step-del" data-i="${i}" aria-label="Remove step ${i + 1}">✕</button>
+      </span>
+    </div>`).join("");
+    container.querySelectorAll(".step-row").forEach((row, i) => {
+      row.querySelector(".step-text").value = formSteps[i].text;
+      row.querySelector(".step-min").value = formSteps[i].minutes || "";
+    });
+    const act = (sel, fn) => container.querySelectorAll(sel).forEach((b) => b.addEventListener("click", () => {
+      readSteps();
+      fn(Number(b.dataset.i));
+      renderStepList();
+    }));
+    act(".step-up", (i) => formSteps.splice(i - 1, 0, formSteps.splice(i, 1)[0]));
+    act(".step-down", (i) => formSteps.splice(i + 1, 0, formSteps.splice(i, 1)[0]));
+    act(".step-del", (i) => formSteps.splice(i, 1));
   }
 
   function renderVariantList() {
@@ -310,6 +358,10 @@
       <label class="sync-field">Recipe
         <textarea id="form-instructions" rows="6"></textarea>
       </label>
+      <div class="sync-field">Steps (optional; shown instead of the recipe text when filled in)
+        <div id="form-steps"></div>
+        <button type="button" id="form-step-add" class="ghost">Add step</button>
+      </div>
       <label class="sync-field">Ingredients
         <textarea id="form-ingredients" rows="6" placeholder="500g chicken breast&#10;or: chicken breast — 500g"></textarea>
       </label>
@@ -357,6 +409,15 @@
     sheet.querySelector("#form-description").value = meal ? meal.description || "" : "";
     sheet.querySelector("#form-instructions").value = meal ? meal.instructions || "" : "";
     sheet.querySelector("#form-ingredients").value = meal ? MP.ingredientsToText(meal.ingredients) : "";
+    formSteps = MP.methodOf(meal).steps.map((x) => ({ ...x }));
+    renderStepList();
+    sheet.querySelector("#form-step-add").addEventListener("click", () => {
+      readSteps();
+      if (formSteps.length < 30) formSteps.push({ text: "", minutes: null });
+      renderStepList();
+      const rows = sheet.querySelectorAll(".step-text");
+      rows[rows.length - 1].focus();
+    });
     formVariants = meal && Array.isArray(meal.variants) ? meal.variants.map((v) => ({ ...v })) : [];
     renderVariantList();
     sheet.querySelector("#form-variant-add").addEventListener("click", () => openVariantEditor(null));
@@ -448,6 +509,16 @@
       ingredients,
       image: formImage,
     };
+    readSteps();
+    const steps = formSteps.filter((x) => x.text).map((x) => (x.minutes ? { text: x.text, minutes: x.minutes } : { text: x.text }));
+    if (!steps.length) {
+      delete record.method;
+      delete record.methodStatus;
+    } else if (JSON.stringify(steps) !== JSON.stringify((original && original.method) || null)) {
+      // a hand edit (or a new method) is the user's own: accepted. Untouched steps keep their status.
+      record.method = steps;
+      record.methodStatus = "accepted";
+    }
     if (formVariants.length) record.variants = formVariants.slice();
     else delete record.variants;
     return record;

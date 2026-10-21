@@ -564,7 +564,9 @@
       <h3>Ingredients</h3>
       <ul class="ingredient-list">${ingredientListHtml(effMeal)}</ul>
       <h3>Instructions</h3>
-      <p>${esc(effMeal.instructions || "")}</p>
+      ${variantId && MP.methodOf(meal).steps.length ? `<p class="muted">Steps are for the base recipe.</p>` : ""}
+      ${MP.methodOf(meal).steps.length ? MP.methodHtml(meal) : `<p>${esc(effMeal.instructions || "")}</p>`}
+      ${MP.methodOf(meal).status === "drafted" ? `<p class="muted">Drafted by your assistant — accept it in Browse.</p>` : ""}
       <div class="day-slot-actions">
         <button class="ghost detail-eat-btn">Eat this</button>
       </div>
@@ -940,6 +942,7 @@
   function matchEatRequests(planIn, requests, library) {
     const byId = new Map((library || []).map((m) => [m.id, m]));
     const taken = new Set();
+    const seen = new Set();
     const applied = [];
     const rejected = [];
     for (const r of requests) {
@@ -952,6 +955,12 @@
       const day = planDayOf(planIn.startDate, r.eatenAt, planIn.days.length);
       const slots = day ? planIn.days[day - 1].slots : {};
       const withMeal = SLOT_TYPES.filter((s) => slots[s] && slots[s].mealId === r.mealId);
+      // Idempotent: a request id already applied (this batch, or earlier: its slot carries that eatenAt) is never applied twice.
+      if (seen.has(r.id) || withMeal.some((s) => slots[s].eatenAt === r.eatenAt)) {
+        rejected.push({ ...base, reason: "eaten" });
+        continue;
+      }
+      seen.add(r.id);
       const slotType = withMeal.find((s) => !slots[s].eatenAt && !taken.has(`${day}-${s}`));
       if (!slotType) {
         rejected.push({ ...base, reason: withMeal.length ? "eaten" : "not-planned" });

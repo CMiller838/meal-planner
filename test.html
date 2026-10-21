@@ -963,6 +963,24 @@
       check("applyPlacements: a mixed queue yields both applied and rejected", mixed.applied.length === 1 && mixed.rejected.length === 1);
     }
 
+    // methodOf / fillMethods (cooking-mode steps)
+    {
+      const st = [{ text: " Boil ", minutes: 10 }, { text: "Serve" }];
+      check("methodOf: no method is none", deepEqual(MP.methodOf({}), { status: "none", steps: [] }));
+      check("methodOf: null meal is none", MP.methodOf(null).status === "none");
+      check("methodOf: steps without a status read as accepted, text trimmed, missing minutes null",
+        deepEqual(MP.methodOf({ method: st }), { status: "accepted", steps: [{ text: "Boil", minutes: 10 }, { text: "Serve", minutes: null }] }));
+      check("methodOf: drafted status is kept", MP.methodOf({ method: st, methodStatus: "drafted" }).status === "drafted");
+      check("methodOf: bad shapes read as none",
+        [{ method: "x" }, { method: [] }, { method: [{ text: "" }, null, { text: 5 }] }, { method: {} }].every((m) => MP.methodOf(m).status === "none"));
+      check("methodOf: bad minutes become null", MP.methodOf({ method: [{ text: "a", minutes: -3 }, { text: "b", minutes: "5" }] }).steps.every((x) => x.minutes === null));
+      const seed = [{ id: "a", method: st, methodStatus: "drafted" }, { id: "b", method: st, methodStatus: "drafted" }];
+      const lib = [{ id: "a" }, { id: "b", method: [{ text: "mine" }], methodStatus: "accepted" }, { id: "c" }];
+      check("fillMethods: fills only a meal with none", MP.fillMethods(lib, seed) === true && lib[0].methodStatus === "drafted" && lib[2].method === undefined);
+      check("fillMethods: never overwrites an edited method", lib[1].method[0].text === "mine" && lib[1].methodStatus === "accepted");
+      check("fillMethods: second pass changes nothing", MP.fillMethods(lib, seed) === false);
+    }
+
     // matchEatRequests (assistant "I ate X" queue)
     {
       const lib = [{ id: "m1", name: "Meal One" }, { id: "m2", name: "Meal Two" }];
@@ -988,6 +1006,19 @@
         MP.Plan.matchEatRequests(p, [r("m1", at(20, 12))], lib).rejected[0].reason === "not-planned");
       check("matchEatRequests: an unknown meal is rejected",
         MP.Plan.matchEatRequests(p, [r("zzz", at(7, 12))], lib).rejected[0].reason === "unknown-meal");
+      {
+        const dup = [{ id: "m1", name: "Meal One" }];
+        const p2 = { startDate: "2026-09-07", days: [{ day: 1, slots: { lunch: { mealId: "m1" }, dinner: { mealId: "m1" } } }] };
+        const once = MP.Plan.matchEatRequests(p2, [r("m1", at(7, 12)), r("m1", at(7, 12))], dup);
+        check("confirm-cook: two identical queue entries apply once, the duplicate is reported eaten",
+          once.applied.length === 1 && once.rejected.length === 1 && once.rejected[0].reason === "eaten");
+        p2.days[0].slots.lunch.eatenAt = at(7, 12);
+        const replay = MP.Plan.matchEatRequests(p2, [r("m1", at(7, 12))], dup);
+        check("confirm-cook: replay after eatenAt is set does not take the other slot",
+          replay.applied.length === 0 && replay.rejected[0].reason === "eaten");
+        check("confirm-cook: a different eatenAt still takes the free slot",
+          MP.Plan.matchEatRequests(p2, [r("m1", at(7, 19))], dup).applied.length === 1);
+      }
       check("newSince: only entries after the ack, ascending",
         deepEqual(MP.Sync.newSince([r("b", at(7, 13)), r("a", at(7, 11)), r("c", at(7, 9))], at(7, 10)).map((x) => x.mealId), ["a", "b"]));
       check("newSince: a missing list is []", deepEqual(MP.Sync.newSince(undefined, null), []));

@@ -151,6 +151,7 @@ also *pulled* (Hermes may write it), on open of the Plan-with-me screen only.
 - `GET /eaten-log`, `PUT /eaten-log`
 - `GET /planPrefs`, `PUT /planPrefs` (v4)
 - `GET /dayHints`, `PUT /dayHints` (Phase 37; assistant-written `{ updatedAt, days: { ISO date: { effort, why } } }`, read-only in the app)
+- `GET /meal/:id/method`, `PUT /meal-method` (Phase 40; meal `method: [{text, minutes?}]` + `methodStatus`; the assistant's PUT forces `drafted`, 409 on an accepted meal; confirm-cook is the existing `PUT /eat-requests`, no new route)
 - `GET /ranking` (v4, read-only — no PUT, deliberately)
 - All requests require `X-Auth-Token: <secret>`, checked against a Wrangler
   secret binding (`wrangler secret put AUTH_TOKEN`) — never committed to

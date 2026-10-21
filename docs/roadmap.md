@@ -403,7 +403,7 @@ is set above zero, and a ran-out tick on a never-stocked item is ignored. **Veri
 `commitCook`/merge only; the out flag cannot make a quantity go negative.
 Requires Phase 32. Assistant side: `notion_assistant` Phase 49.
 
-## Phase 40: Cooking mode data: steps, timers and a confirm-cook route [M] — not started
+## Phase 40: Cooking mode data: steps, timers and a confirm-cook route [M] — built 2026-10-22, live checks pending
 
 **Added 2026-10-19.** Cooking mode itself is the assistant's (voice, timers, step by step). The planner supplies what it needs:
 (1) a method for each meal, as an ordered list of short steps, each with an optional timer in minutes, kept in the meal data
@@ -414,6 +414,7 @@ draft steps from the ingredient list, which are then marked `drafted` in the UI 
 method falls back to its ingredient list only.
 **Verify:** confirm-cook twice does not deduct twice (idempotent per cook id); partial-ingredient leftovers from Phase 31 are
 still recorded. Requires Phase 32. Assistant side: `notion_assistant` Phase 57.
+**Verified 2026-10-22:** `check.py` 8/8 (incl. new `tools/worker_test.mjs` against the real Worker: 400/403/404/409); confirm-cook replay/duplicate rejected in `matchEatRequests` (test.html); UI at PC and 390 px, both themes. Confirm-cook uses the existing `PUT /eat-requests` (no new route).
 
 ## Phase 41: One-tap logs: routine items and water/caffeine counters [M] — not started
 

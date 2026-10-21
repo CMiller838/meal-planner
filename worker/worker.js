@@ -36,8 +36,9 @@ const ASSISTANT_ALLOWED = new Set([
   "GET /library", "GET /plan", "GET /eaten-log", "GET /shopping", "GET /eat-requests", "PUT /eat-requests",
   "GET /discover", "GET /pantry", "PUT /pantry", "GET /adhoc", "PUT /adhoc", "PUT /planFlag",
   "GET /placements", "PUT /placements", "GET /prefs", "PUT /library", "GET /nutrition",
-  "GET /dayHints", "PUT /dayHints",
+  "GET /dayHints", "PUT /dayHints", "PUT /meal-method",
 ]);
+const METHOD_PATH = /^\/meal\/([^/]+)\/method$/;
 const SLOT_TYPES = ["breakfast", "lunch", "dinner", "snack"];
 const MEALDB_BASE = "https://www.themealdb.com/api/json/v1/1/";
 const DISCOVER_LIMIT = 8;
@@ -272,6 +273,59 @@ function eatRequestsError(parsed) {
   return null;
 }
 
+/** @param {any} method  the PUT /meal-method `method` value
+ *  @returns {string|null} */
+function methodError(method) {
+  if (!Array.isArray(method) || method.length < 1 || method.length > 30) return "method must be 1-30 steps";
+  for (const s of method) {
+    if (typeof s !== "object" || s === null || Array.isArray(s)) return "each step must be an object";
+    for (const key of Object.keys(s)) if (key !== "text" && key !== "minutes") return "unknown step key: " + key;
+    if (typeof s.text !== "string" || !s.text.trim() || s.text.length > 300) return "step text must be 1-300 characters";
+    if (s.minutes !== undefined && (!Number.isInteger(s.minutes) || s.minutes < 1 || s.minutes > 600)) return "step minutes must be an integer 1-600";
+  }
+  return null;
+}
+
+/** The library KV value (object or bare array), or null. */
+async function readLibrary(env) {
+  try { return JSON.parse(await env.MP_KV.get("library")); } catch (e) { return null; }
+}
+
+/** GET /meal/:id/method — steps for cooking mode; ingredients always, so a meal with no method falls back to them. */
+async function mealMethod(env, mealId) {
+  const lib = await readLibrary(env);
+  const meals = Array.isArray(lib) ? lib : lib && Array.isArray(lib.meals) ? lib.meals : null;
+  const meal = meals && meals.find((m) => m.id === mealId);
+  if (!meal) return json(404, "unknown meal");
+  const steps = Array.isArray(meal.method) ? meal.method : [];
+  return json(200, {
+    mealId: meal.id, name: meal.name,
+    status: steps.length ? (meal.methodStatus === "drafted" ? "drafted" : "accepted") : "none",
+    steps, ingredients: (meal.ingredients || []).map((i) => ({ key: i.key, qty: i.qty })),
+  });
+}
+
+/** PUT /meal-method — the assistant's one meal write: sets method + "drafted", never touches another field, never over an accepted one. */
+async function putMealMethod(request, env) {
+  let body;
+  try { body = JSON.parse(await request.text()); } catch (e) { return json(400, "invalid JSON"); }
+  if (typeof body !== "object" || body === null || Array.isArray(body)) return json(400, "expected a JSON object");
+  if (Object.keys(body).some((k) => k !== "mealId" && k !== "method")) return json(400, "unknown key");
+  if (typeof body.mealId !== "string" || !body.mealId) return json(400, "mealId required");
+  const reason = methodError(body.method);
+  if (reason) return json(400, reason);
+  const lib = await readLibrary(env);
+  const meals = Array.isArray(lib) ? lib : lib && Array.isArray(lib.meals) ? lib.meals : null;
+  const meal = meals && meals.find((m) => m.id === body.mealId);
+  if (!meal) return json(404, "unknown meal");
+  if (Array.isArray(meal.method) && meal.method.length && meal.methodStatus !== "drafted") return json(409, "method already accepted");
+  meal.method = body.method;
+  meal.methodStatus = "drafted";
+  if (!Array.isArray(lib)) lib.updatedAt = new Date().toISOString(); // so the app's last-write-wins pull picks it up
+  await env.MP_KV.put("library", JSON.stringify(lib));
+  return json(200, { mealId: meal.id, status: "drafted" });
+}
+
 /** @param {any} parsed  the already-JSON.parsed PUT body
  *  @returns {string|null}  an error reason, or null if the body is acceptable */
 function mealsError(parsed) {
@@ -442,7 +496,17 @@ export default {
     const isHermes = !!env.AUTH_TOKEN && token === env.AUTH_TOKEN;
     const isAssistant = !!env.ASSISTANT_TOKEN && token === env.ASSISTANT_TOKEN;
     if (!isHermes && !isAssistant) return json(401, "unauthorized");
-    if (!isHermes && !ASSISTANT_ALLOWED.has(`${request.method} ${url.pathname}`)) return json(403, "forbidden");
+    const methodMatch = METHOD_PATH.exec(url.pathname);
+    if (!isHermes && !(request.method === "GET" && methodMatch) && !ASSISTANT_ALLOWED.has(`${request.method} ${url.pathname}`)) return json(403, "forbidden");
+
+    if (methodMatch) {
+      if (request.method !== "GET") return json(405, "method not allowed");
+      return mealMethod(env, decodeURIComponent(methodMatch[1]));
+    }
+    if (url.pathname === "/meal-method") {
+      if (request.method !== "PUT") return json(405, "method not allowed");
+      return putMealMethod(request, env);
+    }
 
     if (url.pathname === "/discover") {
       if (request.method !== "GET") return json(405, "method not allowed");

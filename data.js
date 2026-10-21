@@ -38,10 +38,56 @@
     return res.json();
   }
 
+  /** Normalised cooking method: status "accepted" | "drafted" | "none", steps [{text, minutes|null}].
+   *  Anything malformed (non-array, empty, non-string text) reads as none. */
+  function methodOf(meal) {
+    const steps = ((meal && Array.isArray(meal.method)) ? meal.method : [])
+      .filter((s) => s && typeof s.text === "string" && s.text.trim())
+      .map((s) => ({ text: s.text.trim(), minutes: Number.isInteger(s.minutes) && s.minutes > 0 ? s.minutes : null }));
+    if (!steps.length) return { status: "none", steps };
+    return { status: meal.methodStatus === "drafted" ? "drafted" : "accepted", steps };
+  }
+
+  /** Pure: copies a seed meal's method onto the library meal with the same id, only where that meal has none
+   *  (never over an edited, accepted or assistant-drafted method). @returns {boolean} whether anything changed */
+  function fillMethods(library, seed) {
+    const byId = new Map(seed.map((m) => [m.id, m]));
+    let changed = false;
+    for (const m of library) {
+      const s = byId.get(m.id);
+      if (s && methodOf(m).status === "none" && methodOf(s).status !== "none") {
+        m.method = s.method;
+        m.methodStatus = s.methodStatus;
+        changed = true;
+      }
+    }
+    return changed;
+  }
+
+  /** Method steps as an <ol> (esc'd), or the plain instructions text when the meal has none. */
+  function methodHtml(meal) {
+    const { steps } = methodOf(meal);
+    if (!steps.length) return `<p>${esc(meal.instructions || "")}</p>`;
+    return `<ol class="method-list">${steps.map((s) =>
+      `<li>${esc(s.text)}${s.minutes ? ` <span class="method-min">${s.minutes} min</span>` : ""}</li>`).join("")}</ol>`;
+  }
+
+  let methodsFilled = false;
+
   /** Liked library = seed meals + any user-added discover meals, persisted in localStorage. */
   async function getLibrary() {
     const stored = localStorage.getItem(LS_LIBRARY);
-    if (stored) return JSON.parse(stored);
+    if (stored) {
+      const lib = JSON.parse(stored);
+      if (!methodsFilled) {
+        methodsFilled = true;
+        try {
+          // Not saveLibrary(): a stamp here would make this fill look like a newer edit than a real Hermes library.
+          if (fillMethods(lib, await loadSeedMeals())) localStorage.setItem(LS_LIBRARY, JSON.stringify(lib));
+        } catch (e) { /* offline: try again next page load */ methodsFilled = false; }
+      }
+      return lib;
+    }
     const seed = await loadSeedMeals();
     // Bypass saveLibrary(): stamping the seed would make a fresh browser's
     // 14 defaults look newer than a real Hermes library and push over it.
@@ -324,6 +370,9 @@
   MP.applySubs = applySubs;
   MP.subsLabel = subsLabel;
   MP.isBatch = isBatch;
+  MP.methodOf = methodOf;
+  MP.methodHtml = methodHtml;
+  MP.fillMethods = fillMethods;
   MP.parseIngredients = parseIngredients;
   MP.ingredientsToText = ingredientsToText;
   MP.findSimilarName = findSimilarName;

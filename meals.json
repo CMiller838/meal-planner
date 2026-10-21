@@ -3,104 +3,281 @@
     "id": "toastie-ham-cheese",
     "name": "Ham & Cheese Toastie",
     "source": "liked",
-    "mealTypes": ["lunch", "snack"],
+    "mealTypes": [
+      "lunch",
+      "snack"
+    ],
     "prepEffort": "quick",
     "servings": 1,
     "description": "White bread, ham & cheese, toasted. No vegetables, ever.",
     "instructions": "Butter two slices of white bread on the outside. Layer ham and cheese between them. Toast in a sandwich press or frying pan until golden and the cheese has melted.",
     "ingredients": [
-      { "key": "white_bread", "qty": "2 slices" },
-      { "key": "cheese", "qty": "handful, grated" }
+      {
+        "key": "white_bread",
+        "qty": "2 slices"
+      },
+      {
+        "key": "cheese",
+        "qty": "handful, grated"
+      }
     ],
-    "image": null
+    "image": null,
+    "method": [
+      {
+        "text": "Butter one side of each slice of bread."
+      },
+      {
+        "text": "Put ham and cheese between the slices, buttered sides out."
+      },
+      {
+        "text": "Toast in a sandwich press or frying pan until golden and the cheese has melted.",
+        "minutes": 4
+      }
+    ],
+    "methodStatus": "drafted"
   },
   {
     "id": "toastie-chicken-cheese",
     "name": "Chicken & Cheese Toastie",
     "source": "liked",
-    "mealTypes": ["lunch", "snack"],
+    "mealTypes": [
+      "lunch",
+      "snack"
+    ],
     "prepEffort": "quick",
     "servings": 1,
     "description": "White bread, chicken & cheese, toasted. No vegetables, ever.",
     "instructions": "Butter two slices of white bread on the outside. Layer cooked chicken and cheese between them. Toast in a sandwich press or frying pan until golden and the cheese has melted.",
     "ingredients": [
-      { "key": "white_bread", "qty": "2 slices" },
-      { "key": "chicken_breast", "qty": "leftover, sliced" },
-      { "key": "cheese", "qty": "handful, grated" }
+      {
+        "key": "white_bread",
+        "qty": "2 slices"
+      },
+      {
+        "key": "chicken_breast",
+        "qty": "leftover, sliced"
+      },
+      {
+        "key": "cheese",
+        "qty": "handful, grated"
+      }
     ],
-    "image": null
+    "image": null,
+    "method": [
+      {
+        "text": "Butter one side of each slice of bread."
+      },
+      {
+        "text": "Put cooked chicken and cheese between the slices, buttered sides out."
+      },
+      {
+        "text": "Toast in a sandwich press or frying pan until golden and the cheese has melted.",
+        "minutes": 4
+      }
+    ],
+    "methodStatus": "drafted"
   },
   {
     "id": "roast-chicken",
     "name": "Sunday Roast Chicken",
     "source": "liked",
-    "mealTypes": ["dinner"],
+    "mealTypes": [
+      "dinner"
+    ],
     "prepEffort": "batch",
-    "leadsTo": ["chicken-fajitas"],
+    "leadsTo": [
+      "chicken-fajitas"
+    ],
     "servings": 4,
     "description": "Whole roast chicken with roast potatoes, carrots and Bisto gravy. Batch-cooked - leftover chicken carries into fajitas the next day or two.",
     "instructions": "Roast the chicken (oven, ~180C, ~20 min per 500g plus 20 min). Parboil and roast the potatoes in the same oven until crisp. Boil or steam the carrots. Make gravy from Bisto granules with the roasting juices. Set aside leftover chicken for fajitas.",
     "ingredients": [
-      { "key": "chicken_roast", "qty": "whole" },
-      { "key": "potatoes", "qty": "roasted" },
-      { "key": "carrots", "qty": "" },
-      { "key": "gravy", "qty": "Bisto" }
+      {
+        "key": "chicken_roast",
+        "qty": "whole"
+      },
+      {
+        "key": "potatoes",
+        "qty": "roasted"
+      },
+      {
+        "key": "carrots",
+        "qty": ""
+      },
+      {
+        "key": "gravy",
+        "qty": "Bisto"
+      }
     ],
-    "image": "https://www.themealdb.com/images/media/meals/nlxald1764112200.jpg"
+    "image": "https://www.themealdb.com/images/media/meals/nlxald1764112200.jpg",
+    "method": [
+      {
+        "text": "Heat the oven to 200C and take the chicken out of the fridge.",
+        "minutes": 20
+      },
+      {
+        "text": "Roast the chicken for 20 min at 200C, then turn down to 180C and roast about 20 min per 500g more, until the juices run clear.",
+        "minutes": 90
+      },
+      {
+        "text": "Parboil the potatoes, drain, shake to roughen the edges, then roast them in the same oven until crisp.",
+        "minutes": 50
+      },
+      {
+        "text": "Boil or steam the carrots.",
+        "minutes": 15
+      },
+      {
+        "text": "Rest the chicken, then make gravy from Bisto granules with the roasting juices. Set aside leftover chicken for fajitas.",
+        "minutes": 15
+      }
+    ],
+    "methodStatus": "drafted"
   },
   {
     "id": "chicken-fajitas",
     "name": "Chicken Fajitas",
     "source": "liked",
-    "mealTypes": ["dinner", "lunch"],
+    "mealTypes": [
+      "dinner",
+      "lunch"
+    ],
     "prepEffort": "quick",
     "leftoverOf": "roast-chicken",
     "servings": 2,
     "description": "Tortillas, cheese, rice, peppers, onion and cannellini beans with leftover roast chicken.",
     "instructions": "Fry sliced peppers and onion until softened. Add shredded leftover roast chicken and cannellini beans to warm through. Serve in tortillas with rice and grated cheese.",
     "ingredients": [
-      { "key": "tortillas", "qty": "" },
-      { "key": "cheese", "qty": "grated" },
-      { "key": "rice", "qty": "" },
-      { "key": "peppers", "qty": "" },
-      { "key": "onion", "qty": "" },
-      { "key": "cannellini_beans", "qty": "" },
-      { "key": "leftover_chicken", "qty": "from roast" }
+      {
+        "key": "tortillas",
+        "qty": ""
+      },
+      {
+        "key": "cheese",
+        "qty": "grated"
+      },
+      {
+        "key": "rice",
+        "qty": ""
+      },
+      {
+        "key": "peppers",
+        "qty": ""
+      },
+      {
+        "key": "onion",
+        "qty": ""
+      },
+      {
+        "key": "cannellini_beans",
+        "qty": ""
+      },
+      {
+        "key": "leftover_chicken",
+        "qty": "from roast"
+      }
     ],
-    "image": "https://www.themealdb.com/images/media/meals/tvtxpq1511464705.jpg"
+    "image": "https://www.themealdb.com/images/media/meals/tvtxpq1511464705.jpg",
+    "method": [
+      {
+        "text": "Slice the peppers and onion and fry until softened.",
+        "minutes": 8
+      },
+      {
+        "text": "Add shredded leftover roast chicken and cannellini beans and warm through.",
+        "minutes": 5
+      },
+      {
+        "text": "Cook the rice.",
+        "minutes": 12
+      },
+      {
+        "text": "Serve in tortillas with rice and grated cheese."
+      }
+    ],
+    "methodStatus": "drafted"
   },
   {
     "id": "chilli-con-carne",
     "name": "Chilli",
     "source": "liked",
-    "mealTypes": ["dinner"],
+    "mealTypes": [
+      "dinner"
+    ],
     "prepEffort": "batch",
     "servings": 3,
     "description": "Beef mince chilli (500g = 3 servings) with carrots, peppers, chilli beans, rice and cheese on top.",
     "instructions": "Brown 500g beef mince. Add diced carrots, peppers and chilli beans, simmer until thick. Serve over rice with grated cheese on top. Makes 3 servings - eat over following days or freeze.",
     "ingredients": [
-      { "key": "beef_mince", "qty": "500g" },
-      { "key": "carrots", "qty": "" },
-      { "key": "peppers", "qty": "" },
-      { "key": "chilli_beans", "qty": "" },
-      { "key": "rice", "qty": "" },
-      { "key": "cheese", "qty": "grated, on top" }
+      {
+        "key": "beef_mince",
+        "qty": "500g"
+      },
+      {
+        "key": "carrots",
+        "qty": ""
+      },
+      {
+        "key": "peppers",
+        "qty": ""
+      },
+      {
+        "key": "chilli_beans",
+        "qty": ""
+      },
+      {
+        "key": "rice",
+        "qty": ""
+      },
+      {
+        "key": "cheese",
+        "qty": "grated, on top"
+      }
     ],
-    "image": null
+    "image": null,
+    "method": [
+      {
+        "text": "Brown 500g beef mince in a large pan until no pink is left.",
+        "minutes": 8
+      },
+      {
+        "text": "Add diced carrots, peppers and chilli beans."
+      },
+      {
+        "text": "Simmer, stirring now and then, until thick.",
+        "minutes": 40
+      },
+      {
+        "text": "Cook the rice and serve the chilli over it with grated cheese. Makes 3 servings: eat over following days or freeze.",
+        "minutes": 12
+      }
+    ],
+    "methodStatus": "drafted"
   },
   {
     "id": "chorizo-pasta",
     "name": "Chorizo & Pasta",
     "source": "liked",
-    "mealTypes": ["dinner"],
+    "mealTypes": [
+      "dinner"
+    ],
     "prepEffort": "batch",
     "servings": 2,
     "description": "Any pasta shape with chorizo, white sauce preferred.",
     "instructions": "Cook pasta. Fry sliced chorizo until the oil renders out. Stir through a white sauce and the cooked pasta.",
     "ingredients": [
-      { "key": "pasta", "qty": "any shape" },
-      { "key": "chorizo", "qty": "" },
-      { "key": "white_sauce", "qty": "" }
+      {
+        "key": "pasta",
+        "qty": "any shape"
+      },
+      {
+        "key": "chorizo",
+        "qty": ""
+      },
+      {
+        "key": "white_sauce",
+        "qty": ""
+      }
     ],
     "image": null,
     "variants": [
@@ -108,140 +285,356 @@
         "id": "cream-sauce",
         "name": "cream sauce",
         "ingredients": [
-          { "key": "pasta", "qty": "any shape" },
-          { "key": "chorizo", "qty": "" },
-          { "key": "cream", "qty": "" }
+          {
+            "key": "pasta",
+            "qty": "any shape"
+          },
+          {
+            "key": "chorizo",
+            "qty": ""
+          },
+          {
+            "key": "cream",
+            "qty": ""
+          }
         ],
         "instructions": "Cook pasta. Fry sliced chorizo until the oil renders out. Stir through cream and the cooked pasta."
       }
-    ]
+    ],
+    "method": [
+      {
+        "text": "Cook the pasta in boiling water to the packet time.",
+        "minutes": 11
+      },
+      {
+        "text": "Fry sliced chorizo until the oil renders out.",
+        "minutes": 5
+      },
+      {
+        "text": "Stir the white sauce through, then the drained pasta.",
+        "minutes": 3
+      }
+    ],
+    "methodStatus": "drafted"
   },
   {
     "id": "salmon-rice-broccoli",
     "name": "Salmon, Rice & Broccoli",
     "source": "liked",
-    "mealTypes": ["dinner"],
+    "mealTypes": [
+      "dinner"
+    ],
     "prepEffort": "quick",
     "servings": 1,
     "description": "Salmon with rice, broccoli and teriyaki sauce.",
     "instructions": "Pan-fry or bake the salmon. Cook rice and steam broccoli. Serve together drizzled with teriyaki sauce.",
     "ingredients": [
-      { "key": "salmon", "qty": "" },
-      { "key": "rice", "qty": "" },
-      { "key": "broccoli", "qty": "" },
-      { "key": "teriyaki_sauce", "qty": "" }
+      {
+        "key": "salmon",
+        "qty": ""
+      },
+      {
+        "key": "rice",
+        "qty": ""
+      },
+      {
+        "key": "broccoli",
+        "qty": ""
+      },
+      {
+        "key": "teriyaki_sauce",
+        "qty": ""
+      }
     ],
-    "image": "https://www.themealdb.com/images/media/meals/xxyupu1468262513.jpg"
+    "image": "https://www.themealdb.com/images/media/meals/xxyupu1468262513.jpg",
+    "method": [
+      {
+        "text": "Start the rice.",
+        "minutes": 12
+      },
+      {
+        "text": "Pan-fry the salmon, skin side down first, or bake it.",
+        "minutes": 10
+      },
+      {
+        "text": "Steam the broccoli.",
+        "minutes": 5
+      },
+      {
+        "text": "Serve together drizzled with teriyaki sauce."
+      }
+    ],
+    "methodStatus": "drafted"
   },
   {
     "id": "french-toast",
     "name": "French Toast",
     "source": "liked",
-    "mealTypes": ["breakfast"],
+    "mealTypes": [
+      "breakfast"
+    ],
     "prepEffort": "quick",
     "servings": 1,
     "description": "Egg-coated bread, fried until golden. Egg within a dish is fine.",
     "instructions": "Whisk egg with a splash of milk. Dip bread slices and fry in a buttered pan until golden on both sides.",
     "ingredients": [
-      { "key": "white_bread", "qty": "2 slices" },
-      { "key": "egg", "qty": "1-2" },
-      { "key": "milk", "qty": "splash" }
+      {
+        "key": "white_bread",
+        "qty": "2 slices"
+      },
+      {
+        "key": "egg",
+        "qty": "1-2"
+      },
+      {
+        "key": "milk",
+        "qty": "splash"
+      }
     ],
-    "image": null
+    "image": null,
+    "method": [
+      {
+        "text": "Whisk the egg with a splash of milk in a shallow dish."
+      },
+      {
+        "text": "Dip the bread slices, turning to coat both sides."
+      },
+      {
+        "text": "Fry in a buttered pan until golden on both sides.",
+        "minutes": 6
+      }
+    ],
+    "methodStatus": "drafted"
   },
   {
     "id": "porridge",
     "name": "Porridge",
     "source": "liked",
-    "mealTypes": ["breakfast"],
+    "mealTypes": [
+      "breakfast"
+    ],
     "prepEffort": "quick",
     "servings": 1,
     "description": "Simple oat porridge made with milk.",
     "instructions": "Simmer oats with milk (or water), stirring until thick and creamy.",
     "ingredients": [
-      { "key": "oats", "qty": "" },
-      { "key": "milk", "qty": "" }
+      {
+        "key": "oats",
+        "qty": ""
+      },
+      {
+        "key": "milk",
+        "qty": ""
+      }
     ],
-    "image": "https://www.themealdb.com/images/media/meals/sng9bm1765320170.jpg"
+    "image": "https://www.themealdb.com/images/media/meals/sng9bm1765320170.jpg",
+    "method": [
+      {
+        "text": "Put the oats and milk (or water) in a pan."
+      },
+      {
+        "text": "Simmer, stirring, until thick and creamy.",
+        "minutes": 5
+      }
+    ],
+    "methodStatus": "drafted"
   },
   {
     "id": "oats-yogurt-banana",
     "name": "Oats, Greek Yogurt & Banana",
     "source": "liked",
-    "mealTypes": ["breakfast"],
+    "mealTypes": [
+      "breakfast"
+    ],
     "prepEffort": "quick",
     "servings": 1,
     "description": "Existing rotation breakfast: oats, Greek yogurt, milk and banana.",
     "instructions": "Mix oats with Greek yogurt and a splash of milk. Top with sliced banana.",
     "ingredients": [
-      { "key": "oats", "qty": "" },
-      { "key": "greek_yogurt", "qty": "" },
-      { "key": "milk", "qty": "splash" },
-      { "key": "banana", "qty": "1" }
+      {
+        "key": "oats",
+        "qty": ""
+      },
+      {
+        "key": "greek_yogurt",
+        "qty": ""
+      },
+      {
+        "key": "milk",
+        "qty": "splash"
+      },
+      {
+        "key": "banana",
+        "qty": "1"
+      }
     ],
-    "image": null
+    "image": null,
+    "method": [
+      {
+        "text": "Mix the oats with Greek yogurt and a splash of milk."
+      },
+      {
+        "text": "Top with sliced banana."
+      }
+    ],
+    "methodStatus": "drafted"
   },
   {
     "id": "chicken-rice-veg-lunch",
     "name": "Chicken, Rice & Frozen Veg",
     "source": "liked",
-    "mealTypes": ["lunch"],
+    "mealTypes": [
+      "lunch"
+    ],
     "prepEffort": "quick",
     "servings": 1,
     "description": "Existing rotation lunch: chicken breast/thigh, rice and frozen veg.",
     "instructions": "Cook chicken breast or thigh (pan or oven). Cook rice and heat frozen veg. Serve together.",
     "ingredients": [
-      { "key": "chicken_breast", "qty": "" },
-      { "key": "rice", "qty": "" },
-      { "key": "frozen_veg", "qty": "" }
+      {
+        "key": "chicken_breast",
+        "qty": ""
+      },
+      {
+        "key": "rice",
+        "qty": ""
+      },
+      {
+        "key": "frozen_veg",
+        "qty": ""
+      }
     ],
-    "image": null
+    "image": null,
+    "method": [
+      {
+        "text": "Cook the chicken breast or thigh in a pan or the oven until no pink remains and the juices run clear.",
+        "minutes": 20
+      },
+      {
+        "text": "Cook the rice.",
+        "minutes": 12
+      },
+      {
+        "text": "Heat the frozen veg.",
+        "minutes": 4
+      },
+      {
+        "text": "Serve together."
+      }
+    ],
+    "methodStatus": "drafted"
   },
   {
     "id": "beef-mince-baked-beans",
     "name": "Beef Mince & Baked Beans",
     "source": "liked",
-    "mealTypes": ["dinner"],
+    "mealTypes": [
+      "dinner"
+    ],
     "prepEffort": "quick",
     "servings": 1,
     "description": "Existing rotation dinner: beef mince with baked beans.",
     "instructions": "Brown the beef mince and heat through with baked beans.",
     "ingredients": [
-      { "key": "beef_mince", "qty": "" },
-      { "key": "baked_beans", "qty": "" }
+      {
+        "key": "beef_mince",
+        "qty": ""
+      },
+      {
+        "key": "baked_beans",
+        "qty": ""
+      }
     ],
-    "image": "https://www.themealdb.com/images/media/meals/9tddhg1764443699.jpg"
+    "image": "https://www.themealdb.com/images/media/meals/9tddhg1764443699.jpg",
+    "method": [
+      {
+        "text": "Brown the beef mince until no pink is left.",
+        "minutes": 8
+      },
+      {
+        "text": "Add the baked beans and heat through.",
+        "minutes": 5
+      }
+    ],
+    "methodStatus": "drafted"
   },
   {
     "id": "tuna-rice-veg",
     "name": "Tuna, Rice & Veg",
     "source": "liked",
-    "mealTypes": ["dinner"],
+    "mealTypes": [
+      "dinner"
+    ],
     "prepEffort": "quick",
     "servings": 1,
     "description": "Existing rotation dinner: tinned tuna with rice and veg.",
     "instructions": "Cook rice and heat veg. Flake tinned tuna through.",
     "ingredients": [
-      { "key": "tuna_tin", "qty": "1 tin" },
-      { "key": "rice", "qty": "" },
-      { "key": "frozen_veg", "qty": "" }
+      {
+        "key": "tuna_tin",
+        "qty": "1 tin"
+      },
+      {
+        "key": "rice",
+        "qty": ""
+      },
+      {
+        "key": "frozen_veg",
+        "qty": ""
+      }
     ],
-    "image": null
+    "image": null,
+    "method": [
+      {
+        "text": "Cook the rice.",
+        "minutes": 12
+      },
+      {
+        "text": "Heat the veg.",
+        "minutes": 4
+      },
+      {
+        "text": "Flake the tinned tuna through and serve."
+      }
+    ],
+    "methodStatus": "drafted"
   },
   {
     "id": "egg-pb-toast-snack",
     "name": "Boiled Egg & Peanut Butter Toast",
     "source": "liked",
-    "mealTypes": ["snack"],
+    "mealTypes": [
+      "snack"
+    ],
     "prepEffort": "quick",
     "servings": 1,
     "description": "Existing rotation snack: boiled egg with peanut butter toast.",
     "instructions": "Boil an egg to your liking. Toast bread and spread with peanut butter.",
     "ingredients": [
-      { "key": "egg", "qty": "1" },
-      { "key": "white_bread", "qty": "1 slice" },
-      { "key": "peanut_butter", "qty": "" }
+      {
+        "key": "egg",
+        "qty": "1"
+      },
+      {
+        "key": "white_bread",
+        "qty": "1 slice"
+      },
+      {
+        "key": "peanut_butter",
+        "qty": ""
+      }
     ],
-    "image": null
+    "image": null,
+    "method": [
+      {
+        "text": "Boil the egg: about 6 min for soft, 10 min for hard.",
+        "minutes": 8
+      },
+      {
+        "text": "Toast the bread and spread with peanut butter.",
+        "minutes": 3
+      }
+    ],
+    "methodStatus": "drafted"
   }
 ]

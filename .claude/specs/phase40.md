@@ -49,13 +49,13 @@ Drafted badge + Accept/Edit in the meal sheet), `plan.js` (detail sheet shows st
 
 ## Tasks
 Logic (TDD)
-- [ ] `MP.methodOf` normaliser + test.html cases (none / drafted / accepted / bad shape)
-- [ ] Worker `GET /meal/:id/method`, `PUT /meal-method`, allowlist prefix match, validator; worker test cases incl. 409/400/403
-- [ ] Seed-merge fill for `method` without overwriting edits
-- [ ] Confirm-cook idempotency test through `matchEatRequests`/`applyEatRequests` (duplicate id + already eaten)
-- [ ] Seed `meals.json` methods (drafted), each step/time researched and checked; note sources in commit body
+- [x] `MP.methodOf` normaliser + test.html cases (none / drafted / accepted / bad shape)
+- [x] Worker `GET /meal/:id/method`, `PUT /meal-method`, allowlist prefix match, validator; worker test cases incl. 409/400/403
+- [x] Seed-merge fill for `method` without overwriting edits
+- [x] Confirm-cook idempotency test through `matchEatRequests`/`applyEatRequests` (duplicate id + already eaten)
+- [x] Seed `meals.json` methods (drafted), each step/time researched and checked; note sources in commit body
 
 UI
-- [ ] Step editor (add/remove/reorder, optional minutes) in the meal form; save marks `accepted`
-- [ ] Drafted badge + Accept / Edit in meal sheet; steps list in plan detail sheet (`esc()`)
-- [ ] Bump `sw.js` `CACHE`; mark roadmap Phase 40 `— done` with what was verified
+- [x] Step editor (add/remove/reorder, optional minutes) in the meal form; save marks `accepted`
+- [x] Drafted badge + Accept / Edit in meal sheet; steps list in plan detail sheet (`esc()`)
+- [x] Bump `sw.js` `CACHE`; mark roadmap Phase 40 `— done` with what was verified
