@@ -90,6 +90,30 @@ def order(names, texts):
     return [n for n in names if n not in moved] + [n for n in names if n in moved]
 
 
+def block(roadmap, spec, reason, date):
+    """Mark the phase of `spec` (phase33a -> Phase 33a, else Phase 33) blocked in its heading: any trailing
+    '— status' is replaced by '— blocked <date>: <reason>'. The queue parser needs 'not started', so it is not requeued."""
+    n = spec.removesuffix(".md").removeprefix("phase")
+    for cand in (n, n.rstrip("abcdefghijklmnopqrstuvwxyz")):
+        pat = re.compile(rf"^(## Phase {re.escape(cand)}: .*?)(?: — [^\n]*)?$", re.M)
+        if pat.search(roadmap):
+            reason = " ".join(reason.split())[:160]
+            return pat.sub(lambda m: f"{m.group(1)} — blocked {date}: {reason}", roadmap, count=1)
+    return roadmap
+
+
+def dependents(blocked, names, texts):
+    """Specs in `names` that (transitively) say `Requires Phase <id>` of a blocked spec: they cannot be built either."""
+    out, grew = set(blocked), True
+    while grew:
+        grew = False
+        for n in names:
+            if n not in out and any(re.search(rf"Requires Phase {b.removeprefix('phase')}\b", texts.get(n, "")) for b in out):
+                out.add(n)
+                grew = True
+    return [n for n in names if n in out and n not in blocked]
+
+
 def open_checks(tasks):
     """tasks: tasks.md text. Returns ['Phase N: item', ...] for every unticked box, under its ## heading."""
     out, head = [], ""
@@ -173,6 +197,11 @@ def _selftest():
     assert open_checks("## Phase 10\n- x\n  - [ ] sub\n") == ["Phase 10: sub"]
     assert open_checks("## Phase 36 — done\n- [x] a\n- [ ] tap Snooze\n## Phase 37 [M]\n- [ ] live\n") == [
         "Phase 36: tap Snooze", "Phase 37: live"]
+    rb = "## Phase 33: A [L] — not started\n## Phase 40b: B [M] — added 2026-10-17, not started\n"
+    assert block(rb, "phase33a.md", "needs\nsandbox", "D") == "## Phase 33: A [L] — blocked D: needs sandbox\n## Phase 40b: B [M] — added 2026-10-17, not started\n"
+    assert "## Phase 40b: B [M] — blocked D: x\n" in block(rb, "phase40b", "x", "D")
+    assert dependents(["phase33a"], ["phase33a", "phase33b", "phase34", "phase35"],
+                      {"phase33b": "Requires Phase 33a", "phase34": "Requires Phase 33b"}) == ["phase33b", "phase34"]
     print("selftest ok")
 
 
@@ -181,6 +210,11 @@ if __name__ == "__main__":
         _selftest()
     elif sys.argv[1:] == ["--checks"]:
         print("\n".join(open_checks(_read("tasks.md"))))
+    elif sys.argv[1:2] == ["--block"]:  # --block <spec> <reason>: mark its roadmap heading blocked
+        rm = ROOT / "docs/roadmap.md"
+        rm.write_text(block(rm.read_text(), sys.argv[2], sys.argv[3], time.strftime("%Y-%m-%d")))
+    elif sys.argv[1:2] == ["--dependents"]:  # --dependents <blocked> <spec...>: those that require it
+        print(" ".join(dependents([sys.argv[2]], sys.argv[3:], {n: _read(f".claude/specs/{n}.md") for n in sys.argv[3:]})))
     elif sys.argv[1:] == ["--queue"]:
         q = queue(_read("docs/roadmap.md"), {p.name for p in (ROOT / ".claude/specs").glob("*.md")})
         print(" ".join(order(q, {n: _read(f".claude/specs/{n}.md") for n in q})))

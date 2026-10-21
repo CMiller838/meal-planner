@@ -4,7 +4,8 @@
 #   - 2+ numbered task sections (`### 1. ...`): one session per section, each tested and committed
 #   - an [L] spec with `### Logic` and `### UI` tasks: Logic session (left uncommitted), then UI + tester + commit
 #   - anything else: one session
-# Stops at the first stage that is not PASS. Reports each result to Telegram via tools/notify.py (NOTIFY_BOT_TOKEN / NOTIFY_CHAT_ID) when set, and to .claude/build-status.json for the /next pane. Never pushes.
+# A spec whose stage is not PASS is parked (its work saved to logs/blocked-<spec>.*, tree reset), its roadmap heading marked
+# "— blocked <date>: <reason>", and the queue goes on, skipping only the specs that "Requires Phase <it>". Exit 1 if any blocked. Reports each result to Telegram via tools/notify.py (NOTIFY_BOT_TOKEN / NOTIFY_CHAT_ID) when set, and to .claude/build-status.json for the /next pane. Never pushes.
 #   tools/pipeline.sh phase37 phase38        (spec names in .claude/specs, .md optional)
 #   tools/pipeline.sh                        (the queue: not-started phases with a spec; the /overnight skill)
 #   tools/pipeline.sh --plan [specs...]      (print the stages it would run, change nothing)
@@ -143,8 +144,24 @@ run_stage() {
     done
 }
 
+# park <spec> <reason>: save the unfinished work, reset the tree, mark the phase blocked in the roadmap, commit only that
+park() {
+    local spec=$1 reason=$2 base=logs/blocked-${1%.md}-$(date +%Y%m%d-%H%M) f
+    git diff HEAD --binary > "$base.patch"
+    git ls-files --others --exclude-standard | grep -vxFf "$UNTRACKED0" > "$base.untracked" || true
+    [ -s "$base.untracked" ] && tar -cf "$base.tar" -T "$base.untracked"
+    git checkout HEAD -- . && while IFS= read -r f; do rm -rf -- "$f"; done < "$base.untracked"
+    python3 tools/workflow_audit.py --block "$spec" "$reason"
+    git add docs/roadmap.md && git commit -q -m "docs: ${spec%.md} blocked, work saved in $base.patch" -m "Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>" \
+        || notify "pipeline: could not commit the blocked mark for $spec (roadmap.md left edited)"
+}
+UNTRACKED0=$(mktemp); git ls-files --others --exclude-standard > "$UNTRACKED0"
+SKIP=" "; BLOCKED=0
+mapfile -t ALL < <(printf '%s\n' "$@" | sed 's/\.md$//')
+
 for arg in "$@"; do
     spec=${arg%.md}.md
+    case "$SKIP" in *" ${spec%.md} "*) notify "pipeline: skipping $spec (requires a blocked phase)"; continue;; esac
     [ -f ".claude/specs/$spec" ] || { notify "pipeline: no spec .claude/specs/$spec"; exit 2; }
     mapfile -t stages < <(stages_for "$spec")
     if [ "$PLAN" = 1 ]; then echo "$spec: ${stages[*]}"; continue; fi
@@ -163,9 +180,13 @@ for arg in "$@"; do
         fi
         status "$spec" "${verdict:-stopped}" "${verdict:-UNKNOWN}"
         notify "pipeline: $spec stage $((i + 1))/$n ${line:-ended without a verdict (see $log)}. Resume: claude -r $sid"
-        exit 1
+        park "$spec" "${line:-ended without a verdict}"
+        BLOCKED=1
+        SKIP="$SKIP$(python3 tools/workflow_audit.py --dependents "${spec%.md}" "${ALL[@]}") "
+        continue 2
     done
     status "$spec" PASS PASS
     notify "pipeline: $spec $line"
 done
-[ "$PLAN" = 1 ] || notify "pipeline: all done ($*)"
+[ "$PLAN" = 1 ] || notify "pipeline: queue finished ($*)$([ "$BLOCKED" = 1 ] && echo ', some blocked: see the roadmap')"
+exit "$BLOCKED"
