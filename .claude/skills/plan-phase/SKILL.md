@@ -28,7 +28,9 @@ wrong, say so in one line and update the heading.
 
 ## Phase mode (M/L)
 
-1. **Read narrowly.** Roadmap section for this phase only (Grep `^## Phase N`), the
+1. **Read narrowly.** First, right after the roadmap section, grep the code for every named UI surface
+   (a "Today view", strip, sheet) so a missing one is found before any other reading (step 2's check, run early).
+   Roadmap section for this phase only (Grep `^## Phase N`), the
    `CLAUDE.md` invariants, `docs/PROJECT_OUTLINE.md` bullets cited in brackets. For
    ARCHITECTURE.md, Grep for the relevant headings (or read `docs/ADR_INDEX.md` if the
    project keeps one, then Grep `^### ADR-0NN`) and Read only those spans — never the whole file. Code: Grep/Glob, then Read exact spans. For a broad sweep
@@ -42,6 +44,9 @@ wrong, say so in one line and update the heading.
    grep for the symbols the spec depends on: found means met, not found means a stated fallback.
    For a dependency on a sibling repo's phase (e.g. "<other app> Phase N"; CLAUDE.md names the repo path), grep
    `^## Phase N ` in that repo's `docs/roadmap.md`; a heading not marked done is unbuilt.
+   Also check every UI surface the roadmap names (a page, tab, strip, sheet): grep the code, then `.claude/specs/`.
+   Found only in an unbuilt spec means the phase depends on that spec's phase: state "Requires Phase Na" in the spec.
+   Check whether the roadmap's "no UI to do X" assumption holds (e.g. the app may have no editor for the field).
    If most of a phase's dependencies are unbuilt, that is the first gate (split, fallbacks or wait), asked before any code reading.
 3. **Gates.** Gate only a fork that changes user-facing behaviour or is expensive to undo
    AND is a genuine toss-up. Confident recommendation → decide it, note it in the spec.
@@ -68,7 +73,8 @@ wrong, say so in one line and update the heading.
    Decisions (user-chosen vs own call, labelled) · Files touched · Signatures/schemas (no
    bodies) · Edge cases · Verification · Tasks as `- [ ]` split Logic (TDD) / UI.
    Then under `## Phase N` in `tasks.md` (Edit that heading only) put one pointer line to the
-   spec. Do not duplicate the task list there.
+   spec. Do not duplicate the task list there. If `tasks.md` has no `## Phase N` heading yet (later phases often
+   don't), append `## Phase N: Title` plus the pointer line at the end of the file instead.
 5. Finish with a 3-line summary and the spec path, then build or `/clear`. Add one
    **Self-improvement** line: one concrete change to this skill (or the builder/tester)
    that would have made this plan cheaper (efficiency) or caught a miss (effectiveness),

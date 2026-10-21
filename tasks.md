@@ -520,3 +520,50 @@ task starts editing one, stop and re-read the spec.
       stocked; a leftover portion-eat writes nothing to the pantry; Discover
       ordering effectively unchanged; offline works on v24; long `raw` doesn't
       overflow the eat row in dark **or** light
+
+## Phase 33: Product nutrition reference (scan a barcode, read a photo)
+
+- [ ] 33a: records, `/products`, barcode scan, Pantry tab: `.claude/specs/phase33a.md`
+- [ ] 33b: CoFID vitamin/mineral fill-in: `.claude/specs/phase33b.md`
+
+## Phase 34: Use-by dates, expiring-soon route and "use it up"
+
+- [ ] Spec and tasks (requires 33a): `.claude/specs/phase34.md`
+
+## Phase 35: Weekly nutrient-gap view and gym-day targets
+
+- [ ] Spec and tasks: `.claude/specs/phase35.md`
+
+## Phase 36: Cost per 25 g protein and product ranking
+
+Requires 33a (`MP.Products`, `/products`). Decisions (own calls): price = product `price`+`pack`; if absent, fall back to
+`MP.ShoppingList.priceFor(ingredient)` and mark "est."; a product with an estimate/`off`-less protein basis still ranks
+but shows the "est." marker; no shopping-list rows (YAGNI). Informational only, never sorts or filters meals.
+- [ ] Logic (TDD): `MP.Products.proteinValue(product, packData)` → `{ per25g, estimated } | null` (null when no protein, no pack size, or a non-g pack; ml products excluded); `rank(products, packData)` ascending by `per25g`
+- [ ] `products.js` is under the `window`→`root` shim; check it stays Worker-importable (`data_check.py`)
+- [ ] Worker: read-only `GET /product-ranking` (calls `rank` on KV `products` + `pack-sizes.json`), added to `ASSISTANT_ALLOWED`; 405 on non-GET
+- [ ] UI: "£x.xx / 25 g protein" line on the product sheet (view mode) and a "Best protein value" list under All products on the Pantry tab, "est." marker where price or protein is an estimate
+- [ ] Bump `CACHE` in `sw.js`; both themes, PC + 390 px; `docs/HERMES.md` one line for the route; mark roadmap `— done`
+
+
+## Phase 37: Per-day effort hints from the assistant
+
+- [ ] Spec and tasks: `.claude/specs/phase37.md`
+
+
+## Phase 39: "Ran out" items steer the plan
+
+- [ ] Roadmap: `docs/roadmap.md` Phase 39 [S]. Requires Phase 32 (done). Design: an out item stays in the pantry list with `out: true`; no new endpoint/KV key (rides `PUT /pantry`).
+- [ ] Logic (TDD): `pantryIndex` (`shopping-list.js`) skips `out` items, so `pantryOverlap`, `buildLists` and the generator's pantry reads treat them as absent (meal kept, ingredient lands on the shopping list). One change, all readers.
+- [ ] Logic (TDD): `markOut(name)` helper in the pantry write path: sets `out: true` and drops qty; ignored when the name isn't already in the pantry (never-stocked). Never writes a negative qty.
+- [ ] Logic (TDD): clear `out` when the item is ticked bought on Shopping, or when its pantry qty is set above zero (`commitCook` stays the only deduction writer; it must not set or clear `out`).
+- [ ] Worker: allow `out` through the `PUT /pantry` merge and `ASSISTANT_ALLOWED` validation; add to `data_check`/worker tests (no new route; do not widen `ASSISTANT_TOKEN`).
+- [ ] UI: "Ran out" toggle on a pantry row (Pantry/Shopping surface), `esc()` on names, checked PC + 390 px, both themes (`ui-build`).
+- [ ] Verify: out flag + `qty` zero never goes negative; ran-out on unknown item no-ops; bump `CACHE` in `sw.js`; mark roadmap `— done`.
+
+## Phase 40: Cooking mode data: steps, timers and a confirm-cook route
+
+Spec: `.claude/specs/phase40.md` (tasks live there).
+
+## Phase 41: One-tap logs: routine items and water/caffeine counters
+- Spec: `.claude/specs/phase41.md`
