@@ -129,7 +129,9 @@
     const excludeIds = opts.excludeIds || new Set();
     const ratings = opts.ratings || {};
     // `never` (Phase 51) is the one hard filter: no too-small-pool fallback, so an all-never pool yields []
-    const allowed = pool.filter((m) => !(ratings[m.id] && ratings[m.id].never));
+    const profile = opts.profile; // Phase 52: hard terms (allergies + never) filter like `never`; likes/dislikes are soft groups
+    const hard = (profile && profile.hard) || [];
+    const allowed = pool.filter((m) => !(ratings[m.id] && ratings[m.id].never) && !(hard.length && MP.Exclusions.termHit(m, hard)));
     let ranked = allowed.filter((m) => !m.routine && !excludeIds.has(m.id)); // routine items are logged, never scheduled (Phase 41)
     if (!ranked.length) ranked = allowed.slice(); // too small a pool to honour the exclusion; repeat is unavoidable
     if (!ranked.length) return [];
@@ -138,13 +140,15 @@
     ranked = MP.Nutrition.rankByGap(ranked, gapNutrients, tags);
 
     const { prefer: preferChips, avoid: avoidChips } = activeChips(prefs);
-    if (preferChips.length || avoidChips.length) {
+    const likes = (profile && profile.likes) || [];
+    const dislikes = (profile && profile.dislikes) || [];
+    if (preferChips.length || avoidChips.length || likes.length || dislikes.length) {
       const prefer = [];
       const neither = [];
       const avoid = [];
       for (const m of ranked) {
-        if (preferChips.some((c) => chipHits(m, c, tags))) prefer.push(m);
-        else if (avoidChips.some((c) => chipHits(m, c, tags))) avoid.push(m);
+        if (preferChips.some((c) => chipHits(m, c, tags)) || (likes.length && MP.Exclusions.termHit(m, likes))) prefer.push(m);
+        else if (avoidChips.some((c) => chipHits(m, c, tags)) || (dislikes.length && MP.Exclusions.termHit(m, dislikes))) avoid.push(m);
         else neither.push(m);
       }
       ranked = prefer.concat(neither, avoid);
@@ -276,7 +280,7 @@
 
     const pickMeal = (pool, dayNum, dayMealsSoFar, opts) =>
       rankSlot(pool, dayNum, dayMealsSoFar,
-        { ...opts, tags, targets, prefs, budget, halfKeys, lastUsedDay, ratings, pressure: pressureFor(dayNum) })[0] || null;
+        { ...opts, tags, targets, prefs, budget, halfKeys, lastUsedDay, ratings, profile: prefs.profile, pressure: pressureFor(dayNum) })[0] || null;
 
     const runs = weekendRuns(startDate).map((run) => {
       if (run.some((d) => !(prefs.busyDays || []).includes(d))) {

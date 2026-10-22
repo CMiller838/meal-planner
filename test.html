@@ -2652,6 +2652,26 @@
     check("mealsUsing: hits named", deepEqual(mu[0].hits, ["Milk", "Chicken breast"]));
   }
 
+  // ---- Phase 52: profile settings ----
+  {
+    const tg = { energy_kcal: 2900, protein_g: 160 };
+    check("withProfile: null settings returns same object", MP.Nutrition.withProfile(tg, null) === tg);
+    check("withProfile: per-key merge", deepEqual(MP.Nutrition.withProfile(tg, { targets: { protein_g: 170 } }), { energy_kcal: 2900, protein_g: 170 }));
+    check("withProfile: empty targets = defaults", MP.Nutrition.withProfile(tg, { targets: {} }) === tg);
+    const m = { ingredients: [{ key: "peanut_butter", label: "Peanut butter" }] };
+    check("termHit: matches key/label", MP.Exclusions.termHit(m, ["olive", "peanut"]) === "peanut");
+    check("termHit: none / empty terms", MP.Exclusions.termHit(m, ["olive"]) === null && MP.Exclusions.termHit(m, []) === null);
+    check("check(meal, terms) adds reason", MP.Exclusions.check(m, ["peanut"]).reasons.includes("contains peanut") && MP.Exclusions.check(m).ok);
+    const G = MP.Generator;
+    const mk = (id, key) => ({ id, mealTypes: ["dinner"], ingredients: [{ key, label: key }] });
+    const pool = [mk("o", "olives"), mk("p", "peanut"), mk("e", "rice"), mk("l", "salmon")];
+    const ids = (r) => r.map((x) => x.id).join();
+    const base = G.rankSlot(pool, 1, [], { tags: {}, targets: {} });
+    check("rankSlot profile: absent/empty equals today's order", ids(G.rankSlot(pool, 1, [], { tags: {}, targets: {}, profile: { hard: [], likes: [], dislikes: [] } })) === ids(base));
+    const r = G.rankSlot(pool, 1, [], { tags: {}, targets: {}, profile: { hard: ["peanut"], likes: ["salmon"], dislikes: ["olive"] } });
+    check("rankSlot profile: hard filtered, like first, dislike last", ids(r) === "l,e,o");
+  }
+
   lines.push("", `${pass} passed, ${fail} failed`);
   document.getElementById("out").textContent = lines.join("\n");
 })();

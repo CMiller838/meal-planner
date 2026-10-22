@@ -143,6 +143,7 @@
       .map(toMeal)
       .map((m) => root.MP.Exclusions.sanitize(m, subs))
       .filter(Boolean)
+      .filter((r) => { const hard = root.MP.Sync && root.MP.Sync.hardTerms(); return !(hard && hard.length && root.MP.Exclusions.termHit(r.meal, hard)); })
       .slice(0, POOL_LIMIT)
       .map((r) => r.meal);
   }

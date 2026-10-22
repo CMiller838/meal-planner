@@ -190,3 +190,26 @@ assert.equal(JSON.stringify(JSON.parse(kv.get("library")).meals.map((m) => m.id)
 kv.delete("drafts");
 assert.deepEqual((await call("GET", "/drafts", "a")).body.drafts, []);
 console.log("worker_test: ok");
+// Phase 52: /settings (Phase 48's logWrite/ITEMS are absent, so no activity-log assert)
+assert.equal((await call("GET", "/settings", "")).status, 401);
+assert.deepEqual((await call("GET", "/settings", "a")).body, {});
+r = await call("PUT", "/settings", "a", { targets: { calories: 2400, protein: 170, weight: 80 }, allergies: [" Peanut "], dislikes: ["olives"], budget: 35 });
+assert.equal(r.status, 200);
+assert.deepEqual([r.body.settings.targets, r.body.settings.allergies, r.body.settings.dislikes, r.body.settings.budgetTarget, r.body.ignored],
+  [{ energy_kcal: 2400, protein_g: 170 }, ["peanut"], ["olives"], 35, ["weight"]]);
+assert.equal((await call("GET", "/settings", "a")).body.targets.protein_g, 170);
+for (const bad of [{ targets: { protein: -1 } }, { targets: { protein: 99999 } }, { allergies: "nuts" }, { likes: ["x".repeat(41)] }, []])
+  assert.equal((await call("PUT", "/settings", "a", bad)).status, 400, JSON.stringify(bad));
+assert.equal((await call("PUT", "/settings", "h", { targets: {} })).status, 200);
+assert.equal((await call("PUT", "/settings", "a", { targets: { calories: 2400 }, allergies: ["peanut"], dislikes: ["olives"] })).status, 200);
+// ranking: peanut meal never returned, olive meal after an otherwise-equal one
+kv.set("library", JSON.stringify([
+  { id: "p", name: "P", mealTypes: ["dinner"], ingredients: [{ key: "peanut butter", label: "Peanut butter" }] },
+  { id: "o", name: "O", mealTypes: ["dinner"], ingredients: [{ key: "olives", label: "Olives" }] },
+  { id: "e", name: "E", mealTypes: ["dinner"], ingredients: [{ key: "rice", label: "Rice" }] },
+]));
+kv.set("plan", JSON.stringify({ startDate: "2026-10-22", days: Array.from({ length: 14 }, (_, i) => ({ day: i + 1, slots: {} })) }));
+r = await call("GET", "/ranking?day=1&slot=dinner&n=10", "h");
+assert.equal(r.status, 200);
+const ids = r.body.candidates.map((m) => m.mealId);
+assert.ok(ids.length && !ids.includes("p") && ids.indexOf("e") < ids.indexOf("o"), JSON.stringify(r.body).slice(0, 200));

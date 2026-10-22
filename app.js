@@ -214,7 +214,7 @@
 
   function acceptDraft(d, resolutions) {
     const meal = MP.draftToMeal(d, resolutions);
-    const { ok, reasons } = MP.Exclusions.check(meal);
+    const { ok, reasons } = MP.Exclusions.check(meal, MP.Sync.hardTerms());
     if (!ok) return toast(`Can't accept — ${reasons.join(", ")}.`);
     const similar = MP.findSimilarName(library, meal.name, null);
     try {
@@ -636,7 +636,7 @@
       return;
     }
     const candidate = readForm(original);
-    const { ok, reasons } = MP.Exclusions.check(candidate);
+    const { ok, reasons } = MP.Exclusions.check(candidate, MP.Sync.hardTerms());
     if (!ok) {
       msg.classList.add("error");
       msg.textContent = `Can't save — ${reasons.join(", ")}.`;
@@ -755,7 +755,16 @@
     initSyncSettings();
     MP.Sync.start();
     MP.Sync.fetchRatings().then(renderLibrary);
+    MP.Sync.fetchSettings().then(renderProfileLine);
     MP.Sync.fetchDrafts().then((r) => { drafts = r.drafts; renderDrafts(); });
+  }
+
+  function renderProfileLine() {
+    const s = MP.Sync.settings();
+    const el = document.getElementById("profile-line");
+    if (!s) { el.textContent = "Profile: not set"; return; }
+    const rules = ["allergies", "dislikes", "likes", "never"].reduce((n, k) => n + (s[k] || []).length, 0);
+    el.textContent = `Profile: ${Object.keys(s.targets || {}).length + (s.budgetTarget > 0 ? 1 : 0)} targets, ${rules} food rules, updated ${new Date(s.updatedAt).toLocaleDateString()}`;
   }
 
   init();

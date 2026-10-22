@@ -317,6 +317,31 @@ window.MP = window.MP || {};
     return MP.Ratings.get();
   }
 
+  /** Profile.md settings (Phase 52), mirrored to mp_settings. null when absent or corrupt. */
+  function settings() {
+    try {
+      const s = JSON.parse(localStorage.getItem("mp_settings"));
+      return s && typeof s === "object" && !Array.isArray(s) && s.updatedAt ? s : null;
+    } catch (e) { return null; }
+  }
+
+  /** Allergies + never terms: hard-filtered from Discover, the add-meal check and the planner. */
+  function hardTerms() {
+    const s = settings();
+    return s ? [...new Set((s.allergies || []).concat(s.never || []))] : [];
+  }
+
+  /** GET /settings and cache it. Failure-silent: keeps the last cache. */
+  async function fetchSettings() {
+    if (!config().enabled) return settings();
+    try {
+      const remote = await req("GET", "/settings");
+      if (remote && remote.updatedAt) localStorage.setItem("mp_settings", JSON.stringify(remote));
+      else if (remote && !Object.keys(remote).length) localStorage.removeItem("mp_settings");
+    } catch (e) {}
+    return settings();
+  }
+
   /** GET /drafts (Phase 50), mirrored to mp_drafts. Never throws; { drafts: [] } when sync is off or fails. */
   async function fetchDrafts() {
     if (!config().enabled) return { drafts: [] };
@@ -615,7 +640,7 @@ window.MP = window.MP || {};
   MP.Sync = {
     decide, needsPlan, config, saveConfig, syncLibrary, syncPlanFlag, ackPlanFlag,
     fetchItems, fetchPantry, localItems, writeLocalItems, queueOp, applyOps, flushOps,
-    planMirror, pushPlan, pushPrefs, fetchPlanPrefs, fetchDayHints, fetchRatings, fetchDrafts, deleteDraft, pushRating, pushPlanPrefs, newPlacements, newSince, syncPlacements, ackPlacements, syncEatRequests,
+    planMirror, pushPlan, pushPrefs, fetchPlanPrefs, fetchDayHints, fetchRatings, fetchSettings, settings, hardTerms, fetchDrafts, deleteDraft, pushRating, pushPlanPrefs, newPlacements, newSince, syncPlacements, ackPlacements, syncEatRequests,
     localEatenLog, logEaten, unlogEaten, pushEatenLog, start,
     syncProducts, localProducts, saveProduct,
   };

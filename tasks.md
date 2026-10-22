@@ -604,6 +604,7 @@ Spec: `.claude/specs/phase40.md` (tasks live there).
 
 ## Phase 52: Vault data layer and personal profile
 - Spec: `.claude/specs/phase52.md`
+- [x] Worker `/settings` + normalizeSettings, termHit/withProfile, rankSlot profile, sync/plan/UI wiring, docs; check.py 8/8, worker_test ok, tester PASS (browser: hard-term generate, budget lock, Profile line). Phase 48 absent: no `logWrite`/`ITEMS.settings`; no `/nutrition` targets assert
 - [ ] Live: edit `Meals/Profile.md` (calories, an allergy, budget), Apply in the assistant, reload the phone PWA: targets, Plan-with-me budget and generated plan reflect it
 
 ## Phase 53: Portion scaling route

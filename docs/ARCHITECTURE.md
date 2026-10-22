@@ -157,6 +157,7 @@ also *pulled* (Hermes may write it), on open of the Plan-with-me screen only.
 - `GET /meal/:id/method`, `PUT /meal-method` (Phase 40; meal `method: [{text, minutes?}]` + `methodStatus`; the assistant's PUT forces `drafted`, 409 on an accepted meal; confirm-cook is the existing `PUT /eat-requests`, no new route)
 - `GET /ratings`, `PUT /meal/:id/rating`, `GET /why` (Phase 51; KV `ratings` = `{ meals: { id: { rating, note, never, at } } }`, written only through the per-meal route, both tokens; `/why` reasons share `slotContext` with `/ranking`)
 - `POST /drafts`, `GET /drafts`, `DELETE /drafts/:id` (Phase 50; KV `drafts` = `{ updatedAt, drafts: Draft[] }`, newest first, max 20; both tokens; no PUT. Ingredients matched on POST via `snapKey`; hard exclusions 422. Accept is app-side: `upsertMeal` + `DELETE`, meal carries `fromDraft`)
+- `GET /settings`, `PUT /settings` (Phase 52; KV `settings` = `{ updatedAt, targets, budgetTarget, allergies, dislikes, likes, never }`, written only by the PUT through `normalizeSettings`, both tokens; GET answers `{}` when absent)
 - `GET /products`, `PUT /products` (Phase 33a; whole-key product reference records, shape-checked by `productsError`)
 - `GET /ranking` (v4, read-only — no PUT, deliberately)
 - All requests require `X-Auth-Token: <secret>`, checked against a Wrangler
@@ -498,3 +499,13 @@ the app's own syncs (library push, plan mirror, eaten log) would flood a 200-ent
 entries worth undoing; the app already has its own undo toasts. Undo restores the recorded `before` per item, only when
 each item still equals its recorded `after` (otherwise 409 listing what changed, with `force` to override), and is itself
 an appended entry, so the log stays append-only. Spec: `.claude/specs/phase48.md`.
+
+## v8 - profile settings (Phase 52)
+Profile.md in the vault (assistant side) is the one editor; the Worker stores its normalised form in KV `settings` and the
+app only reads it (`MP.Sync.fetchSettings` -> `mp_settings`). Targets merge per key over `nutrition-targets.json`
+(`Nutrition.withProfile`, applied by `Nutrition.load` and the Worker's `/ranking`, `/why`, `/nutrition`). Allergies and
+`never` are hard terms matched with `Exclusions.termHit` (substring of ingredient key/label): `rankSlot` filters them with
+no small-pool fallback, `/discover`, `mealdb.js` and the add-meal check reject them. Likes and dislikes join `rankSlot`'s
+chip prefer/avoid groups (reorder only). While `budgetTarget > 0` it overrides `mp_planPrefs.budgetTarget` at read time
+(`PlanPrefs.get`) and the slider is disabled. Phase 48's `logWrite` was absent when built, so `PUT /settings` is not logged.
+Spec: `.claude/specs/phase52.md`.

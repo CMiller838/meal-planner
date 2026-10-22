@@ -32,7 +32,7 @@ const KEYS = {
   "/library": "library", "/planFlag": "planFlag", "/pantry": "pantry", "/adhoc": "adhoc",
   "/plan": "plan", "/placements": "placements", "/prefs": "prefs",
   "/eaten-log": "eatenLog", "/planPrefs": "planPrefs", "/eat-requests": "eatRequests",
-  "/dayHints": "dayHints", "/today": "today", "/products": "products",
+  "/dayHints": "dayHints", "/today": "today", "/products": "products", "/settings": "settings",
 };
 // The personal assistant's own token (ASSISTANT_TOKEN, never Hermes's
 // AUTH_TOKEN) reaches only these method+path pairs: read the plan side, queue
@@ -44,7 +44,7 @@ const ASSISTANT_ALLOWED = new Set([
   "GET /placements", "PUT /placements", "GET /prefs", "PUT /library", "GET /nutrition",
   "GET /dayHints", "PUT /dayHints", "PUT /meal-method", "GET /today", "PUT /today", "GET /products", "PUT /products",
   "GET /expiring", "GET /product-ranking", "GET /ratings", "GET /why", "GET /scale",
-  "GET /drafts", "POST /drafts",
+  "GET /drafts", "POST /drafts", "GET /settings", "PUT /settings",
 ]);
 const METHOD_PATH = /^\/meal\/([^/]+)\/method$/;
 const DRAFT_PATH = /^\/drafts\/([^/]+)$/;
@@ -67,7 +67,70 @@ function json(status, body) {
   });
 }
 
-async function discover(q) {
+const LIST_KEYS = ["allergies", "dislikes", "likes", "never"];
+
+/** Phase 52: Profile.md body -> stored settings. Unknown keys are dropped and listed; a known key with a bad value is an error. */
+function normalizeSettings(body, fileTargets) {
+  if (!body || typeof body !== "object" || Array.isArray(body)) return { error: "body: expected a JSON object" };
+  const keys = Object.keys(fileTargets).filter((k) => k !== "_note" && k !== "gymDay" && typeof fileTargets[k] === "number");
+  const resolve = (k) => {
+    if (keys.includes(k)) return k;
+    if (k === "calories" || k === "kcal") return "energy_kcal";
+    const m = keys.filter((x) => x.split("_")[0] === k);
+    return m.length === 1 ? m[0] : null;
+  };
+  const num = (k, v, max) => (typeof v === "number" && isFinite(v) && v > 0 && v <= max ? null : `${k}: must be a positive number${max < Infinity ? " within 10x the default" : ""}`);
+  const settings = { updatedAt: new Date().toISOString(), targets: {}, budgetTarget: 0, allergies: [], dislikes: [], likes: [], never: [] };
+  const ignored = [];
+  const budget = (k, v) => {
+    if (v === 0) return null; // 0 = no override
+    const bad = num(k, v, Infinity);
+    if (!bad) settings.budgetTarget = v;
+    return bad;
+  };
+  for (const [k, v] of Object.entries(body)) {
+    if (k === "targets") {
+      if (!v || typeof v !== "object" || Array.isArray(v)) return { error: "targets: expected an object" };
+      for (const [tk, tv] of Object.entries(v)) {
+        if (tk === "budget") { const bad = budget("budget", tv); if (bad) return { error: bad }; continue; }
+        const real = resolve(tk);
+        if (!real) { ignored.push(tk); continue; }
+        const bad = num(tk, tv, fileTargets[real] * 10);
+        if (bad) return { error: bad };
+        settings.targets[real] = tv;
+      }
+    } else if (k === "budget") {
+      const bad = budget(k, v);
+      if (bad) return { error: bad };
+    } else if (LIST_KEYS.includes(k)) {
+      if (!Array.isArray(v)) return { error: `${k}: expected an array` };
+      const out = [...new Set(v.map((x) => (typeof x === "string" ? x.trim().toLowerCase() : "")).filter(Boolean))];
+      if (out.length > 50 || out.some((x) => x.length > 40)) return { error: `${k}: at most 50 items of 40 characters` };
+      settings[k] = out;
+    } else ignored.push(k);
+  }
+  return { settings, ignored };
+}
+
+async function readSettings(env) {
+  try {
+    const s = JSON.parse(await env.MP_KV.get("settings"));
+    return s && typeof s === "object" && !Array.isArray(s) ? s : null;
+  } catch (e) { return null; }
+}
+
+async function putSettings(request, env) {
+  const text = await request.text();
+  if (text.length > 16384) return json(400, "body: over 16 KB");
+  let body;
+  try { body = JSON.parse(text); } catch (e) { return json(400, "invalid JSON"); }
+  const r = normalizeSettings(body, TARGETS);
+  if (r.error) return json(400, r.error);
+  await env.MP_KV.put("settings", JSON.stringify(r.settings));
+  return json(200, { ok: true, settings: r.settings, ignored: r.ignored });
+}
+
+async function discover(q, hard) {
   const url = q && q.trim()
     ? `${MEALDB_BASE}search.php?s=${encodeURIComponent(q.trim())}`
     : `${MEALDB_BASE}random.php`;
@@ -87,7 +150,10 @@ async function discover(q) {
     if (meals.length >= DISCOVER_LIMIT || rejected.length >= DISCOVER_LIMIT) break;
     const candidate = MealDB.toMeal(detail);
     const result = Exclusions.sanitize(candidate, SUBS);
-    if (result) {
+    const hit = result && hard.length && Exclusions.termHit(result.meal, hard);
+    if (hit) {
+      rejected.push({ name: candidate.name, reasons: ["contains " + hit] });
+    } else if (result) {
       meals.push({ ...result.meal, substituted: result.substituted });
     } else {
       rejected.push({ name: candidate.name, reasons: Exclusions.check(candidate).reasons });
@@ -140,9 +206,10 @@ async function slotContext(day, slot, env) {
   const prefs = DayHints.merge({ vocab: PLAN_VOCAB, busyDays: planPrefs.busyDays || [], chips: planPrefs.chips || [] }, resolved);
   const hint = resolved.byDay[day] ? { effort: resolved.byDay[day].effort, why: resolved.byDay[day].why } : null;
   const pool = library.filter((m) => (m.mealTypes || []).includes(slot));
-  const ranked = Generator.rankSlot(pool, day, others, { tags: TAGS, targets: TARGETS, prefs, ratings });
+  const settings = await readSettings(env);
+  const ranked = Generator.rankSlot(pool, day, others, { tags: TAGS, targets: Nutrition.withProfile(TARGETS, settings), prefs, ratings, profile: Nutrition.profileOf(settings) });
 
-  const gap = Nutrition.dayCoverage(others, TAGS, TARGETS);
+  const gap = Nutrition.dayCoverage(others, TAGS, Nutrition.withProfile(TARGETS, settings));
   const shortOn = [...gap.missing, ...gap.partial];
   const { prefer, avoid } = Generator.activeChips(prefs);
   return { library, slotVal, byId, prefs, ratings, ranked, shortOn, chips: prefer.concat(avoid), preferChips: prefer, hint };
@@ -227,11 +294,12 @@ async function nutrition(params, env) {
   const byId = Object.fromEntries(meals.map((m) => [m.id, m]));
   const log = Array.isArray(logRaw) ? logRaw : [];
   if (dates) {
-    const g = Nutrition.weekGaps(log, byId, dates, TAGS, TARGETS, (e) => dayFmt.format(new Date(e.eatenAt)));
+    const g = Nutrition.weekGaps(log, byId, dates, TAGS, Nutrition.withProfile(TARGETS, await readSettings(env)), (e) => dayFmt.format(new Date(e.eatenAt)));
     return json(200, { from: dates[0], to: dates[dates.length - 1], nutrients: g.nutrients, notLogged: g.notLogged });
   }
   const gym = params.get("gym") === "1" && !!TARGETS.gymDay;
-  const targets = gym ? Nutrition.withGymDay(TARGETS) : TARGETS;
+  const baseTargets = Nutrition.withProfile(TARGETS, await readSettings(env));
+  const targets = gym ? Nutrition.withGymDay(baseTargets) : baseTargets;
   const eatenToday = log.filter((e) => dayFmt.format(new Date(e.eatenAt)) === date);
   const { cov, missing, partial } = Nutrition.eatenDayCoverage(eatenToday, byId, TAGS, targets);
 
@@ -754,6 +822,11 @@ export default {
       if (request.method !== "PUT") return json(405, "method not allowed");
       return putMealRating(request, env, decodeURIComponent(ratingMatch[1]));
     }
+    if (url.pathname === "/settings") {
+      if (request.method === "PUT") return putSettings(request, env);
+      if (request.method !== "GET") return json(405, "method not allowed");
+      return json(200, (await readSettings(env)) || {});
+    }
     if (url.pathname === "/ratings") {
       if (request.method !== "GET") return json(405, "method not allowed");
       return getRatings(env);
@@ -778,7 +851,7 @@ export default {
 
     if (url.pathname === "/discover") {
       if (request.method !== "GET") return json(405, "method not allowed");
-      return discover(url.searchParams.get("q"));
+      return discover(url.searchParams.get("q"), Nutrition.profileOf(await readSettings(env))?.hard || []);
     }
 
     if (url.pathname === "/ranking") {

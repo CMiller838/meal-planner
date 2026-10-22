@@ -18,7 +18,8 @@
       fetch("ingredient-nutrient-tags.json").then((r) => r.json()),
       fetch("nutrition-targets.json").then((r) => r.json()),
     ]);
-    cache = { tags, targets };
+    const sync = MP.Sync && MP.Sync.settings && MP.Sync.settings();
+    cache = { tags, targets: withProfile(targets, sync) };
     return cache;
   }
 
@@ -83,6 +84,21 @@
     return out;
   }
 
+  /** Targets copy with a Profile.md `settings.targets` merged per key (Phase 52); null settings = same object. */
+  function withProfile(targets, settings) {
+    const t = settings && settings.targets;
+    if (!t || !Object.keys(t).length) return targets;
+    return { ...targets, ...t };
+  }
+
+  /** rankSlot's `opts.profile` from settings; undefined when there is nothing to apply. */
+  function profileOf(settings) {
+    if (!settings) return undefined;
+    const l = (k) => (Array.isArray(settings[k]) ? settings[k] : []);
+    const p = { hard: [...new Set(l("allergies").concat(l("never")))], likes: l("likes"), dislikes: l("dislikes") };
+    return p.hard.length || p.likes.length || p.dislikes.length ? p : undefined;
+  }
+
   /** One day's eaten-log entries scored with dayCoverage. Entries whose meal left the
    *  library carry frozen tags with no levels: their nutrients count as partial, never covered. */
   function eatenDayCoverage(entries, byId, tags, targets) {
@@ -134,5 +150,5 @@
       .map((x) => x.meal);
   }
 
-  MP.Nutrition = { load, tagsForMeal, dayCoverage, weekCoverage, rankByGap, TRACKED_NUTRIENTS, withGymDay, eatenDayCoverage, weekGaps };
+  MP.Nutrition = { load, tagsForMeal, dayCoverage, weekCoverage, rankByGap, TRACKED_NUTRIENTS, withGymDay, withProfile, profileOf, eatenDayCoverage, weekGaps };
 })(typeof globalThis !== "undefined" ? globalThis : this);

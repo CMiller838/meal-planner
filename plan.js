@@ -99,7 +99,7 @@
       ? { costIndex: MP.ShoppingList.costIndex(library, packData), groups: MP.ShoppingList.groupIndex(groupsData), ...packData.planning }
       : null;
     const have = MP.ShoppingList.pantryIndex({ items: MP.Sync.localItems("pantry") });
-    return MP.Generator.generatePlan(library, tagsData.tags, tagsData.targets, shelfData, undefined, budget, have, prefs, MP.Ratings.get());
+    return MP.Generator.generatePlan(library, tagsData.tags, tagsData.targets, shelfData, undefined, budget, have, Object.assign({}, prefs, { profile: MP.Nutrition.profileOf(MP.Sync.settings()) }), MP.Ratings.get());
   }
 
   function loadPlan() {
@@ -418,6 +418,7 @@
       lastUsedDay,
       excludeIds,
       ratings: MP.Ratings.get(),
+      profile: MP.Nutrition.profileOf(MP.Sync.settings()),
     });
   }
 
@@ -1132,6 +1133,7 @@
     });
 
     let vocab;
+    await MP.Sync.fetchSettings(); // before Nutrition.load so the targets apply on this load
     [tagsData, shelfData, library, packData, groupsData, vocab] = await Promise.all([
       MP.Nutrition.load(),
       MP.ShelfLife.load(),

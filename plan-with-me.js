@@ -7,7 +7,7 @@ window.MP = window.MP || {};
 
   const KEY = "mp_planPrefs";
 
-  function get() {
+  function get(raw) {
     let parsed;
     try {
       parsed = JSON.parse(localStorage.getItem(KEY) || "{}");
@@ -20,7 +20,13 @@ window.MP = window.MP || {};
       : [];
     const chips = Array.isArray(parsed.chips) ? parsed.chips.filter((c) => typeof c === "string") : [];
     const budgetTarget = Number(parsed.budgetTarget);
-    return { busyDays, chips, budgetTarget: isFinite(budgetTarget) && budgetTarget >= 0 ? budgetTarget : 0 };
+    return { busyDays, chips, budgetTarget: (!raw && profileBudget()) || (isFinite(budgetTarget) && budgetTarget >= 0 ? budgetTarget : 0) };
+  }
+
+  /** Profile.md's budget (Phase 52) wins over the local slider while it is > 0. */
+  function profileBudget() {
+    const s = MP.Sync && MP.Sync.settings();
+    return s && s.budgetTarget > 0 ? s.budgetTarget : 0;
   }
 
   function save(busyDays, chips, budgetTarget) {
@@ -44,7 +50,7 @@ window.MP = window.MP || {};
     return vocabCache;
   }
 
-  MP.PlanPrefs = { KEY, get, save, loadVocab };
+  MP.PlanPrefs = { KEY, get, save, loadVocab, profileBudget };
 
   // ---- Page controller (no-ops when not on plan-with-me.html) ----
   const busyGrid = document.getElementById("busy-grid");
@@ -106,6 +112,14 @@ window.MP = window.MP || {};
     range.step = cfg.step;
     range.value = budgetTarget;
     label.textContent = budgetLabel(budgetTarget);
+    const locked = profileBudget();
+    if (locked) {
+      range.disabled = true;
+      range.max = Math.max(range.max, locked);
+      range.value = locked;
+      label.textContent = `£${locked}/wk · set in Profile.md`;
+      return;
+    }
     range.addEventListener("input", () => {
       budgetTarget = Number(range.value);
       label.textContent = budgetLabel(budgetTarget);
@@ -124,6 +138,7 @@ window.MP = window.MP || {};
   }
 
   async function init() {
+    if (MP.Sync) await MP.Sync.fetchSettings();
     const prefs = MP.Sync ? await MP.Sync.fetchPlanPrefs() : MP.PlanPrefs.get();
     prefs.busyDays.forEach((d) => busyDays.add(d));
     budgetTarget = prefs.budgetTarget || 0;
@@ -165,7 +180,7 @@ window.MP = window.MP || {};
     renderSummary();
 
     document.getElementById("pwm-generate-btn").addEventListener("click", () => {
-      MP.PlanPrefs.save([...busyDays], [...chips], budgetTarget);
+      MP.PlanPrefs.save([...busyDays], [...chips], profileBudget() ? MP.PlanPrefs.get(true).budgetTarget : budgetTarget);
       if (MP.Sync) MP.Sync.pushPlanPrefs();
       location.href = "plan.html?guided=1";
     });

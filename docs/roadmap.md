@@ -538,7 +538,7 @@ reads the existing ranking inputs. (2) Per-meal user flags: `never` (excluded fr
 **Verify:** every reason shown corresponds to a real term in the ranking; a `never` meal is never generated until un-flagged.
 Requires Phases 42 and 48. Assistant side: `notion_assistant` Phase 73.
 
-## Phase 52: Vault data layer and personal profile [M] — not started
+## Phase 52: Vault data layer and personal profile [M] — built 2026-10-22, live checks pending
 
 **Added 2026-10-19.** The user wants all meal data in Obsidian so every tool (the assistant, Gemini, NotebookLM) can read it.
 The planner runs on Workers KV so the phone app works anywhere with no PC on, and the vault is a folder on the PC. Both facts

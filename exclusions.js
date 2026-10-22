@@ -42,11 +42,19 @@
     return (meal.ingredients || []).some((ing) => ingredientMatches(ing, TOASTIE_VEG));
   }
 
-  function check(meal) {
+  /** First of `terms` (already trimmed/lowercased) found in an ingredient key/label, else null (Phase 52). */
+  function termHit(meal, terms) {
+    const ings = (meal && meal.ingredients) || [];
+    return (terms || []).find((t) => ings.some((ing) => ingredientMatches(ing, [t]))) || null;
+  }
+
+  function check(meal, terms) {
     const reasons = [];
     if (isStandaloneEgg(meal)) reasons.push("standalone egg");
     if (hasVegInToastie(meal)) reasons.push("vegetables in toastie");
     if (hasMushroom(meal.ingredients || [])) reasons.push("contains mushroom");
+    const hit = termHit(meal, terms);
+    if (hit) reasons.push("contains " + hit);
     return { ok: reasons.length === 0, reasons };
   }
 
@@ -70,5 +78,5 @@
   }
 
   root.MP = root.MP || {};
-  root.MP.Exclusions = { hasMushroom, isStandaloneEgg, hasVegInToastie, check, sanitize };
+  root.MP.Exclusions = { hasMushroom, isStandaloneEgg, hasVegInToastie, check, sanitize, termHit };
 })(typeof globalThis !== "undefined" ? globalThis : this);
