@@ -312,7 +312,6 @@ assert.equal((await call("DELETE", "/drafts/" + first, "a")).status, 404);
 assert.equal(JSON.stringify(JSON.parse(kv.get("library")).meals.map((m) => m.id)), '["chilli"]'); // library untouched
 kv.delete("drafts");
 assert.deepEqual((await call("GET", "/drafts", "a")).body.drafts, []);
-console.log("worker_test: ok");
 // Phase 52: /settings (Phase 48's logWrite/ITEMS are absent, so no activity-log assert)
 assert.equal((await call("GET", "/settings", "")).status, 401);
 assert.deepEqual((await call("GET", "/settings", "a")).body, {});
@@ -378,3 +377,69 @@ assert.equal((await call("GET", `/day?date=${D}`, "")).status, 401);
 assert.equal((await call("PUT", "/day", "a", {})).status, 403);
 assert.equal((await call("GET", `/day?date=2030-01-01`, "a")).status, 200); // outside plan
 assert.equal((await call("GET", "/today", "a")).body.water, 3); // /today untouched
+
+// Phase 49: POST /plan/draft, POST /plan/apply, planDraft
+{
+  kv.clear();
+  const dinners = ["m1", "m2", "m3", "m4", "m5"].map((id) => ({ id, name: id.toUpperCase(), mealTypes: ["dinner"], ingredients: [{ key: "rice", label: "Rice" }] }));
+  const lib49 = [...dinners, { id: "b1", name: "Toast", mealTypes: ["breakfast"], ingredients: [{ key: "bread", label: "Bread" }] }];
+  const empty = () => Array.from({ length: 14 }, (_, i) => ({ day: i + 1, slots: {} }));
+  assert.equal((await call("POST", "/plan/draft", "a", {})).status, 409); // library not synced
+  kv.set("library", JSON.stringify({ updatedAt: "2026-10-22T00:00:00.000Z", meals: lib49 }));
+  let d = await call("POST", "/plan/draft", "a", {});
+  assert.equal(d.status, 200);
+  assert.ok(d.body.draft.changes.length > 0 && d.body.draft.id && d.body.plan.days.length === 14);
+  const d2 = await call("POST", "/plan/draft", "a", {});
+  assert.deepEqual([d2.body.draft.id, d2.body.draft.changes], [d.body.draft.id, d.body.draft.changes]); // idempotent
+  // app == route: same inputs straight into Generator.generatePlan
+  const G = globalThis.MP.Generator;
+  const direct = G.generatePlan(lib49, (await import("../ingredient-nutrient-tags.json", { with: { type: "json" } })).default, globalThis.MP.Nutrition.withProfile((await import("../nutrition-targets.json", { with: { type: "json" } })).default, null), (await import("../shelf-life.json", { with: { type: "json" } })).default, d.body.draft.startDate, null, {}, { vocab: (await import("../plan-preferences.json", { with: { type: "json" } })).default, busyDays: [], chips: [], profile: globalThis.MP.Nutrition.profileOf(null) }, {});
+  assert.deepEqual(d.body.plan.days.map((x) => x.slots), direct.days.map((x) => x.slots));
+  // avoid
+  d = await call("POST", "/plan/draft", "a", { avoid: ["m1", "m2"] });
+  assert.ok(d.body.draft.changes.every((c) => !["m1", "m2"].includes(c.after.mealId)));
+  // days:[3] only touches day 3
+  d = await call("POST", "/plan/draft", "a", { days: [3] });
+  assert.ok(d.body.draft.changes.length > 0 && d.body.draft.changes.every((c) => c.day === 3));
+  // keep and eaten slots absent from changes, copied from the mirror
+  const mirror = empty();
+  mirror[0].slots.dinner = { mealId: "m5" };
+  mirror[1].slots.dinner = { mealId: "m4", eatenAt: "2026-10-23T18:00:00.000Z" };
+  mirror[2].slots.breakfast = { mealId: "m1" }; // wrong type but not kept: replaced
+  kv.set("plan", JSON.stringify({ startDate: "2026-10-22", days: mirror }));
+  d = await call("POST", "/plan/draft", "a", { keep: [{ day: 1, slot: "dinner" }] });
+  assert.ok(!d.body.draft.changes.some((c) => (c.day === 1 || c.day === 2) && c.slot === "dinner"));
+  assert.deepEqual([d.body.plan.days[0].slots.dinner, d.body.plan.days[1].slots.dinner.mealId], [{ mealId: "m5" }, "m4"]);
+  assert.equal(d.body.draft.startDate, "2026-10-22");
+  const c3 = d.body.draft.changes.find((c) => c.day === 3 && c.slot === "breakfast");
+  assert.deepEqual(c3 && c3.before, { mealId: "m1" });
+  // bad bodies
+  for (const bad of [{ days: [0] }, { days: [15] }, { days: "1" }, { keep: [{ day: 1, slot: "brunch" }] }, { keep: {} }, { avoid: [1] }, { budget: 0 }, { budget: -3 }, { budget: "5" }, []])
+    assert.equal((await call("POST", "/plan/draft", "a", bad)).status, 400, JSON.stringify(bad));
+  // apply
+  d = await call("POST", "/plan/draft", "a", { days: [4] });
+  const n0 = acts().length;
+  r = await call("POST", "/plan/apply", "a", { draft: d.body.draft });
+  assert.deepEqual([r.status, r.body], [200, { id: d.body.draft.id, status: "pending" }]);
+  let stored = JSON.parse(kv.get("planDraft"));
+  assert.deepEqual([stored.pending, stored.id, stored.changes.length], [true, d.body.draft.id, d.body.draft.changes.length]);
+  assert.equal(acts().length, n0 + 1);
+  assert.equal(JSON.stringify(JSON.parse(kv.get("plan")).days), JSON.stringify(mirror)); // Worker never writes the plan mirror
+  r = await call("POST", "/plan/apply", "a", { draft: d.body.draft });
+  assert.deepEqual([r.status, r.body.status], [200, "already pending"]);
+  assert.equal(acts().length, n0 + 1);
+  assert.equal((await call("PUT", "/planDraft", "a", { ...stored, pending: false, ackedId: stored.id })).status, 403);
+  assert.equal((await call("GET", "/planDraft", "a")).body.id, stored.id);
+  assert.equal((await call("PUT", "/planDraft", "h", { ...stored, pending: false, ackedId: stored.id })).status, 204);
+  r = await call("POST", "/plan/apply", "a", { draft: d.body.draft });
+  assert.deepEqual([r.status, r.body.status], [200, "already applied"]);
+  // bad applies
+  const ch = d.body.draft.changes[0];
+  const bogus = { ...d.body.draft, changes: [{ ...ch, after: { mealId: "nope" } }] };
+  assert.equal((await call("POST", "/plan/apply", "a", { draft: bogus })).status, 400);
+  assert.equal((await call("POST", "/plan/apply", "a", { draft: { ...d.body.draft, changes: [] } })).status, 400);
+  assert.equal((await call("POST", "/plan/apply", "a", {})).status, 400);
+  assert.equal((await call("POST", "/plan/apply", "a", { draft: { ...d.body.draft, changes: [{ ...ch, slot: "x" }] } })).status, 400);
+  assert.equal((await call("POST", "/plan/draft", "bad", {})).status, 401);
+}
+console.log("worker_test: ok");

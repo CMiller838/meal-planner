@@ -596,6 +596,11 @@ Spec: `.claude/specs/phase40.md` (tasks live there).
 
 ## Phase 49: Week-plan draft and apply routes
 - Spec: `.claude/specs/phase49.md`
+- [x] `draftId`, `draftPlan`, `applyDraft`, `planDraft` key/validator, routes, `ASSISTANT_ALLOWED`, activity logging; asserts in `tools/worker_test.mjs`
+- [x] `hermes-sync.js` `fetchPlanDraft`/`ackPlanDraft`; `docs/ARCHITECTURE.md` rows
+- [x] Banner in `plan.js`/`plan.html` (reuses `.hermes-banner`), `sw.js` CACHE v44
+- [x] Checked PC 1200 dark + 390 light with Playwright (intercepted `GET /planDraft`): banner lists changes, Apply updates plan and acks, eaten slot reported "already eaten" and kept, Dismiss leaves plan alone
+- [ ] Live: with the real Worker, ask the assistant to draft a week, open the installed PWA, tap Apply, see the week change
 
 ## Phase 50: Draft meals and recipe import
 - Spec: `.claude/specs/phase50.md`

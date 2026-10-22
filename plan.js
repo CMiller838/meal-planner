@@ -1046,6 +1046,36 @@
     });
   }
 
+  // ---- Assistant week draft (Phase 49): a pending KV planDraft the user applies or dismisses ----
+
+  function renderPlanDraftBanner(draft) {
+    const el = document.getElementById("plan-draft-banner");
+    if (!el) return;
+    const rows = draft.changes.map((c) => {
+      const m = mealsById[c.after.mealId];
+      return `<li>Day ${c.day} ${esc(c.slot)} — ${esc(m ? m.name : c.after.mealId)}</li>`;
+    }).join("");
+    el.innerHTML = `<p>The assistant drafted ${draft.changes.length} change${draft.changes.length === 1 ? "" : "s"} to your plan:</p><ul>${rows}</ul>
+      <button class="btn" data-act="apply">Apply</button> <button class="btn" data-act="dismiss">Dismiss</button>`;
+    el.hidden = false;
+    el.onclick = async (e) => {
+      const act = e.target.dataset && e.target.dataset.act;
+      if (!act) return;
+      el.hidden = true;
+      if (act === "apply") {
+        const placements = draft.changes.map((c) => ({ day: c.day, slot: c.slot, mealId: c.after.mealId, variantId: c.after.variantId }));
+        const res = MP.Plan.applyPlacements(plan, placements, library);
+        plan = res.plan;
+        savePlan();
+        renderPlan();
+        renderPlacementBanner({ applied: res.applied, rejected: res.rejected });
+      }
+      await MP.Sync.ackPlanDraft(draft);
+    };
+  }
+
+  window.addEventListener("mp:plandraft", (e) => { if (plan) renderPlanDraftBanner(e.detail); });
+
   // ---- Assistant "I ate X" requests (eat-requests queue) ----
 
   /** Plan day (1-based) whose local date holds `iso`, or null outside the plan. */
@@ -1221,6 +1251,7 @@
       renderPlan();
     }
     initHermesBanner();
+    MP.Sync.fetchPlanDraft();
     countersData = await fetch("counters.json").then((r) => r.json()).catch(() => countersData);
     renderTodayCard();
     const pullToday = () => MP.Today.pull().then((changed) => { if (changed) { renderTodayCard(); renderGapStrip(); } });

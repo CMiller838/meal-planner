@@ -76,6 +76,7 @@ Nine keys, all plain JSON values, no versioning scheme beyond `updatedAt`:
   when `requestedAt > ackedAt` it runs the existing local generator and
   PUTs back `ackedAt = requestedAt`.
 - `activity` → `{ entries: Entry[] }`, newest first, capped at 200 (Phase 48). Entry `{ id, at, who: "assistant"|"app", key, why, summary, changes: [{id, before, after}], undoes? }`; written only by the Worker for `ASSISTANT_TOKEN` writes and undos, append-only.
+- `planDraft` → `{ id, at, pending, ackedId?, startDate, changes: [{day, slot, before, after}] }` (Phase 49). Written by `POST /plan/apply` (pending) and acked by the app's `PUT /planDraft {pending:false, ackedId}` (Hermes token only); the Worker never writes the `plan` mirror. `id` is a hash of `changes`, so re-applying is a no-op.
 - `pantry` → `{ updatedAt: <ISO8601>, items: [{name, qty?}] }` — what food is
   on hand, read by the shopping list (Phase 11) and deducted from by the eat
   flow (Phase 12). `qty` (Phase 30) is a free-text string **or** a structured
@@ -161,6 +162,7 @@ also *pulled* (Hermes may write it), on open of the Plan-with-me screen only.
 - `GET /settings`, `PUT /settings` (Phase 52; KV `settings` = `{ updatedAt, targets, budgetTarget, allergies, dislikes, likes, never }`, written only by the PUT through `normalizeSettings`, both tokens; GET answers `{}` when absent)
 - `GET /products`, `PUT /products` (Phase 33a; whole-key product reference records, shape-checked by `productsError`)
 - `GET /activity`, `POST /activity/undo` (Phase 48; body `{id, force?}`, 409 `already undone` / `changed since` / validator reason; `?dryRun=1` on any logged PUT previews the diff; optional `X-Reason` header)
+- `POST /plan/draft` (body `{days?, keep?, avoid?, budget?}` -> `{draft, plan}`, stores nothing; runs `Generator.generatePlan` unchanged, then merges over the plan mirror: eaten/kept/out-of-`days` slots are copied), `POST /plan/apply` (body `{draft}` -> `{id, status: pending|already pending|already applied}`, logged in `activity`), `GET /planDraft` (assistant), `PUT /planDraft` (app/Hermes only) (Phase 49)
 - `GET /ranking` (v4, read-only — no PUT, deliberately)
 - All requests require `X-Auth-Token: <secret>`, checked against a Wrangler
   secret binding (`wrangler secret put AUTH_TOKEN`) — never committed to

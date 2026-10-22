@@ -35,6 +35,7 @@ const KEYS = {
   "/plan": "plan", "/placements": "placements", "/prefs": "prefs",
   "/eaten-log": "eatenLog", "/planPrefs": "planPrefs", "/eat-requests": "eatRequests",
   "/dayHints": "dayHints", "/today": "today", "/products": "products", "/settings": "settings", "/cooks": "cooks",
+  "/planDraft": "planDraft",
 };
 // The personal assistant's own token (ASSISTANT_TOKEN, never Hermes's
 // AUTH_TOKEN) reaches only these method+path pairs: read the plan side, queue
@@ -47,6 +48,7 @@ const ASSISTANT_ALLOWED = new Set([
   "GET /dayHints", "PUT /dayHints", "PUT /meal-method", "GET /today", "PUT /today", "GET /products", "PUT /products",
   "GET /expiring", "GET /day", "GET /product-ranking", "GET /ratings", "GET /why", "GET /scale", "GET /cookable", "GET /substitutions", "GET /leftovers", "GET /quick",
   "GET /drafts", "POST /drafts", "GET /settings", "PUT /settings", "GET /activity", "POST /activity/undo",
+  "POST /plan/draft", "POST /plan/apply", "GET /planDraft",
 ]);
 const METHOD_PATH = /^\/meal\/([^/]+)\/method$/;
 const DRAFT_PATH = /^\/drafts\/([^/]+)$/;
@@ -215,6 +217,96 @@ async function slotContext(day, slot, env) {
   const shortOn = [...gap.missing, ...gap.partial];
   const { prefer, avoid } = Generator.activeChips(prefs);
   return { library, slotVal, byId, prefs, ratings, ranked, shortOn, chips: prefer.concat(avoid), preferChips: prefer, hint };
+}
+
+/** Stable id for a draft: FNV-1a over the canonical JSON of its changes (built in a fixed order). */
+function draftId(changes) {
+  let h = 0x811c9dc5;
+  for (const ch of JSON.stringify(changes)) h = Math.imul(h ^ ch.charCodeAt(0), 0x01000193) >>> 0;
+  return h.toString(16).padStart(8, "0");
+}
+
+const readJSON = async (env, k) => parseKV(await env.MP_KV.get(k));
+const libraryOf = (v) => (Array.isArray(v) ? v : v && Array.isArray(v.meals) ? v.meals : []);
+const slotRef = (v) => (v && v.mealId ? { mealId: v.mealId, ...(v.variantId ? { variantId: v.variantId } : {}) } : null);
+
+/** POST /plan/draft: Generator.generatePlan around the synced inputs, merged over the plan mirror. Stores nothing. */
+async function draftPlan(body, env) {
+  if (typeof body !== "object" || body === null || Array.isArray(body)) return json(400, "expected an object");
+  const { days = null, keep = [], avoid = [], budget = null } = body;
+  if (days !== null && (!Array.isArray(days) || !days.every((d) => Number.isInteger(d) && d >= 1 && d <= 14))) return json(400, "days must be integers 1-14");
+  if (!Array.isArray(keep) || !keep.every((k) => k && Number.isInteger(k.day) && k.day >= 1 && k.day <= 14 && SLOT_TYPES.includes(k.slot))) return json(400, "keep must be [{ day 1-14, slot }]");
+  if (!Array.isArray(avoid) || !avoid.every((a) => typeof a === "string")) return json(400, "avoid must be meal id strings");
+  if (budget !== null && !(typeof budget === "number" && isFinite(budget) && budget > 0)) return json(400, "budget must be a number > 0");
+
+  const [libRaw, mirror, planPrefs, hints, ratingsRaw, pantry, settings] = await Promise.all(
+    ["library", "plan", "planPrefs", "dayHints", "ratings", "pantry"].map((k) => readJSON(env, k)).concat(readSettings(env)));
+  const library = libraryOf(libRaw);
+  if (!library.length) return json(409, "library must be synced first");
+  const hasMirror = !!(mirror && Array.isArray(mirror.days));
+  const startDate = (hasMirror && mirror.startDate) || Generator.isoToday();
+  const want = new Set(days || Array.from({ length: 14 }, (_, i) => i + 1));
+  const kept = new Set(keep.map((k) => `${k.day}:${k.slot}`));
+  const avoidSet = new Set(avoid);
+
+  const pp = planPrefs || {};
+  const resolved = DayHints.resolve(hints, startDate, Generator.isoToday(), {});
+  const prefs = DayHints.merge({ vocab: PLAN_VOCAB, busyDays: pp.busyDays || [], chips: pp.chips || [] }, resolved);
+  const target = budget ?? (settings && settings.budgetTarget > 0 ? settings.budgetTarget : pp.budgetTarget);
+  if (target > 0) prefs.budgetTarget = target;
+  prefs.profile = Nutrition.profileOf(settings);
+  const pool = library.filter((m) => !avoidSet.has(m.id));
+  const budgetObj = { costIndex: ShoppingList.costIndex(pool, PACK_DATA), groups: ShoppingList.groupIndex(SUB_GROUPS), ...PACK_DATA.planning };
+  const gen = Generator.generatePlan(pool, TAGS, Nutrition.withProfile(TARGETS, settings), SHELF_DATA, startDate, budgetObj,
+    ShoppingList.pantryIndex(pantry || { items: [] }), prefs, (ratingsRaw && ratingsRaw.meals) || {});
+  // ponytail: a merge can split a batch/leftover chain at a kept/eaten boundary; the user sees the draft before applying.
+
+  const merged = [];
+  const changes = [];
+  for (let day = 1; day <= 14; day++) {
+    const old = (hasMirror && mirror.days[day - 1] && mirror.days[day - 1].slots) || {};
+    const slots = {};
+    for (const slot of SLOT_TYPES) {
+      const cur = old[slot];
+      if (!want.has(day) || kept.has(`${day}:${slot}`) || (cur && cur.eatenAt)) {
+        if (cur) slots[slot] = cur;
+        continue;
+      }
+      const g = gen.days[day - 1].slots[slot];
+      if (!g) continue;
+      slots[slot] = g;
+      const before = slotRef(cur), after = slotRef(g);
+      if (after && JSON.stringify(before) !== JSON.stringify(after)) changes.push({ day, slot, before, after });
+    }
+    merged.push({ day, slots });
+  }
+  const names = Object.fromEntries(library.map((m) => [m.id, m.name]));
+  const summary = changes.length ? `${changes.length} change${changes.length === 1 ? "" : "s"}: ${changes.slice(0, 3).map((c) => `day ${c.day} ${c.slot} ${names[c.after.mealId] || c.after.mealId}`).join(", ")}${changes.length > 3 ? ` +${changes.length - 3} more` : ""}` : "no changes";
+  return json(200, { draft: { id: draftId(changes), startDate, changes, summary }, plan: { startDate, days: merged } });
+}
+
+/** POST /plan/apply: park a draft in KV planDraft for the app to adopt; never touches the plan mirror. */
+async function applyDraft(body, env, who) {
+  const d = body && body.draft;
+  if (typeof d !== "object" || d === null || typeof d.id !== "string" || !d.id || typeof d.startDate !== "string" || !Array.isArray(d.changes)) return json(400, "draft required");
+  if (!d.changes.length) return json(400, "nothing to apply");
+  const libRaw = await readJSON(env, "library");
+  const ids = new Set(libraryOf(libRaw).map((m) => m.id));
+  if (!ids.size) return json(409, "library must be synced first");
+  const refOk = (r) => r && typeof r.mealId === "string" && ids.has(r.mealId);
+  for (const c of d.changes) {
+    if (!c || !Number.isInteger(c.day) || c.day < 1 || c.day > 14 || !SLOT_TYPES.includes(c.slot)) return json(400, "each change needs day 1-14 and a valid slot");
+    if (!refOk(c.after)) return json(400, "change references a meal not in the library");
+  }
+  const cur = await readJSON(env, "planDraft");
+  if (cur && cur.id === d.id) {
+    if (cur.pending) return json(200, { id: d.id, status: "already pending" });
+    if (cur.ackedId === d.id) return json(200, { id: d.id, status: "already applied" });
+  }
+  const next = { id: d.id, at: new Date().toISOString(), pending: true, startDate: d.startDate, changes: d.changes.map(({ day, slot, before, after }) => ({ day, slot, before: slotRef(before), after: slotRef(after) })) };
+  await env.MP_KV.put("planDraft", JSON.stringify(next));
+  await logWrite(env, { who, key: "planDraft", why: "", changes: diffItems("planDraft", cur, next) });
+  return json(200, { id: d.id, status: "pending" });
 }
 
 /** The real ranking terms behind a meal's place, as codes. Only inputs rankSlot reads: gap, prefer chip, busy-day effort, rating. */
@@ -877,6 +969,14 @@ function productsError(parsed) {
   return null;
 }
 
+/** @param {any} parsed  @returns {string|null} */
+function planDraftError(parsed) {
+  if (typeof parsed.id !== "string" || !parsed.id) return "id must be a non-empty string";
+  if (typeof parsed.pending !== "boolean") return "pending must be a boolean";
+  if (parsed.changes !== undefined && !Array.isArray(parsed.changes)) return "changes must be an array";
+  return null;
+}
+
 const VALIDATE = {
   products: productsError,
   library: mealsError,
@@ -892,6 +992,7 @@ const VALIDATE = {
   eatRequests: eatRequestsError,
   dayHints: dayHintsError,
   today: todayError,
+  planDraft: planDraftError,
 };
 
 
@@ -905,7 +1006,7 @@ const ITEMS = {
   eatRequests: ["requests", (r) => r.id],
   placements: ["placements", (p) => `${p.day}:${p.slot}:${p.mealId}`],
   dayHints: ["days", null], // object map: item id = date key
-  today: [null], planFlag: [null], // whole value is one item, id = key name
+  today: [null], planFlag: [null], planDraft: [null], // whole value is one item, id = key name
 };
 const ACTIVITY_CAP = 200;
 
@@ -1065,6 +1166,13 @@ export default {
       try { b = JSON.parse(await request.text()); } catch (e) { return json(400, "invalid JSON"); }
       if (typeof b !== "object" || b === null || typeof b.id !== "string" || !b.id) return json(400, "id required");
       return undoActivity(env, who, { id: b.id, force: b.force === true && !isAssistant }); // force ("Undo anyway") is the app's call, never the assistant token's
+    }
+
+    if (url.pathname === "/plan/draft" || url.pathname === "/plan/apply") {
+      if (request.method !== "POST") return json(405, "method not allowed");
+      let b;
+      try { b = JSON.parse(await request.text()); } catch (e) { return json(400, "invalid JSON"); }
+      return url.pathname === "/plan/draft" ? draftPlan(b, env) : applyDraft(b, env, who);
     }
 
     if (url.pathname === "/discover") {

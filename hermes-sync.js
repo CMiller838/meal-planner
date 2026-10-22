@@ -393,6 +393,29 @@ window.MP = window.MP || {};
     }
   }
 
+  /** GET /planDraft (Phase 49): a pending assistant-proposed week. Fires mp:plandraft; null when none/malformed/off. */
+  async function fetchPlanDraft() {
+    if (!config().enabled) return null;
+    try {
+      const d = await req("GET", "/planDraft");
+      if (!d || !d.pending || typeof d.id !== "string" || !Array.isArray(d.changes) || !d.changes.length) return null;
+      window.dispatchEvent(new CustomEvent("mp:plandraft", { detail: d }));
+      return d;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  /** Apply and Dismiss both ack, so the draft stops showing; the Worker keeps the record. */
+  async function ackPlanDraft(draft) {
+    try {
+      await req("PUT", "/planDraft", { ...draft, pending: false, ackedId: draft.id });
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
   /** Best-effort PUT of the local mp_planPrefs. Never throws. */
   async function pushPlanPrefs() {
     if (!config().enabled) return "off";
@@ -599,11 +622,11 @@ window.MP = window.MP || {};
       syncLibrary();
       // Sequenced: syncPlacements rewrites mp_plan from localStorage, so an
       // eat applied in parallel could be overwritten.
-      syncPlacements().then(syncEatRequests);
+      syncPlacements().then(syncEatRequests).then(fetchPlanDraft);
       pushPrefs();
     });
     syncLibrary();
-    syncPlacements().then(syncEatRequests);
+    syncPlacements().then(syncEatRequests).then(fetchPlanDraft);
     pushPrefs();
     pushCooks(MP.Cooks ? MP.Cooks.all() : []);
     flushOps();
@@ -686,7 +709,7 @@ window.MP = window.MP || {};
   MP.Sync = {
     decide, needsPlan, config, saveConfig, syncLibrary, syncPlanFlag, ackPlanFlag,
     fetchItems, fetchPantry, localItems, writeLocalItems, queueOp, applyOps, flushOps,
-    planMirror, pushPlan, pushPrefs, fetchPlanPrefs, fetchDayHints, fetchRatings, fetchSettings, settings, hardTerms, fetchDrafts, deleteDraft, pushRating, pushPlanPrefs, newPlacements, newSince, syncPlacements, ackPlacements, syncEatRequests,
+    planMirror, pushPlan, pushPrefs, fetchPlanPrefs, fetchDayHints, fetchPlanDraft, ackPlanDraft, fetchRatings, fetchSettings, settings, hardTerms, fetchDrafts, deleteDraft, pushRating, pushPlanPrefs, newPlacements, newSince, syncPlacements, ackPlacements, syncEatRequests,
     localEatenLog, logEaten, unlogEaten, pushEatenLog, pushCooks, start,
     syncProducts, localProducts, saveProduct, fetchActivity, undoActivity, resyncKey,
   };
