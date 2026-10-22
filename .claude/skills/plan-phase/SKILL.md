@@ -30,6 +30,12 @@ wrong, say so in one line and update the heading.
 
 1. **Read narrowly.** First, right after the roadmap section, grep the code for every named UI surface
    (a "Today view", strip, sheet) so a missing one is found before any other reading (step 2's check, run early).
+   Also, for any phase that writes state (a route, a KV key), grep where that state lives: the app's `localStorage` is
+   the authority and the Worker's KV copy is a derived mirror (e.g. `plan`), so a "write the plan" roadmap line may need
+   a pending-queue + app-apply path, which is a gate.
+   If the phase touches nutrition, nutrient tags or targets, read `SPEC.md`'s "Nutrition targets" section (Grep
+   `^## Nutrition targets`, read to the next `^## `) before any gate: it fixes the accuracy model (a low/med/high
+   coverage checklist, not gram-precise), and the user wants accurate health tracking, so frame gates against both.
    Roadmap section for this phase only (Grep `^## Phase N`), the
    `CLAUDE.md` invariants, `docs/PROJECT_OUTLINE.md` bullets cited in brackets. For
    ARCHITECTURE.md, Grep for the relevant headings (or read `docs/ADR_INDEX.md` if the
@@ -77,7 +83,8 @@ wrong, say so in one line and update the heading.
    Under the first line add `Plain: <one everyday sentence on what this gives the user>`: the building-now pane shows it.
    **Devil's advocate before you finish:** ask "what would stop this running unattended?" (a human step, a credential, a
    path outside the repo such as the Windows Edge walk, a dependency on a phase not yet built) and fix the spec or add a
-   `Requires Phase N` line / `- [ ] Live:` task. `spec_lint.py` prints `SPEC RISK` for the common ones.
+   `Requires Phase N` line / `- [ ] Live:` task. `spec_lint.py` prints `SPEC RISK` for the common ones (if the only tokens are test fakes, say "No real credential
+   needed" in Verification and the credential warning clears).
    Anything only the user can verify goes in `tasks.md` as a `- [ ] Live: ...` line, not in Verification.
    Then under `## Phase N` in `tasks.md` (Edit that heading only) put one pointer line to the
    spec. Do not duplicate the task list there. If `tasks.md` has no `## Phase N` heading yet (later phases often
@@ -85,7 +92,12 @@ wrong, say so in one line and update the heading.
 5. Finish with a 3-line summary and the spec path, then build or `/clear`. Add one
    **Self-improvement** line: one concrete change to this skill (or the builder/tester)
    that would have made this plan cheaper (efficiency) or caught a miss (effectiveness),
-   or "none". Suggest it only; edit skill files only when the user approves.
+   or "none". Then **evaluate it in one or two lines and give a verdict: Recommend or Don't recommend**, with the reason
+   (how often the miss would recur, token cost of the added step, whether an existing step already covers it). On
+   **Recommend**, ask one `AskUserQuestion` (Apply / Skip); on Apply, make the smallest `Edit` yourself in the same
+   turn (no agent: a fresh one re-derives context). Auto-apply only under `.claude/skills|agents|rules`, `CLAUDE.md`,
+   `WORKFLOW.md`; anything under `tools/` or touching hooks, permissions or checks stays a proposal for the user. On
+   **Don't recommend** or "none", ask nothing and edit nothing.
 
 ## Roadmap mode
 
