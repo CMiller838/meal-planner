@@ -33,6 +33,8 @@ wrong, say so in one line and update the heading.
    Also, for any phase that writes state (a route, a KV key), grep where that state lives: the app's `localStorage` is
    the authority and the Worker's KV copy is a derived mirror (e.g. `plan`), so a "write the plan" roadmap line may need
    a pending-queue + app-apply path, which is a gate.
+   For every existing function/module the spec names, grep its defining file and write that path in the spec; if the
+   Worker imports or will import that file, say whether it needs the `window` → `root` shim.
    For a phase that adds a Worker route, also grep `worker/worker.js` for that route name: an existing route with the
    same path is a naming gate (new path vs replace), found before any spec text.
    If the phase touches nutrition, nutrient tags or targets, read `SPEC.md`'s "Nutrition targets" section (Grep
