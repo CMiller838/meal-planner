@@ -592,7 +592,7 @@ the fields alongside it, and how a line removed on one side is treated (tombston
 bring it back). **Verify:** two devices ticking different lines both survive; a tick and an un-tick race resolves to the later
 one; no line is duplicated by a sync loop. Requires Phase 32. Assistant side: `notion_assistant` Phase 86.
 
-## Phase 56: Hermes contract rewrite and tool parity [M] — not started
+## Phase 56: Hermes contract rewrite and tool parity [M] — built 2026-10-22, live checks pending
 
 **Added 2026-10-19.** `docs/HERMES.md` is rewritten as the single contract for every route that now exists (v6 adds more than
 twenty), with request and response shapes, which are read-only, which write (and so need the preview-confirm-undo path), and the

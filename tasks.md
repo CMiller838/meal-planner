@@ -639,6 +639,8 @@ Requires Phase 43 (storage/`frozenMonths` helpers) built first. Decided: scale a
 
 ## Phase 56: Hermes contract rewrite and tool parity
 - Spec: `.claude/specs/phase56.md`
+- [x] Logic: actor cases, `ROUTES` + `routes_build.mjs`, drift probe and reverse scan in `worker_test.mjs`
+- [x] Docs: `docs/HERMES.md` rewrite, ARCHITECTURE line
 - [ ] Live: have Hermes add an item to the shopping list sending `X-Actor: hermes`; it shows in the app's Assistant activity with Undo
 
 ## Phase 57: Measured nutrient levels for new ingredients (CoFID)

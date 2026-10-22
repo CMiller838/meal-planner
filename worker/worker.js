@@ -60,7 +60,7 @@ const DISCOVER_LIMIT = 8;
 const CORS = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET, PUT, POST, DELETE, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, X-Auth-Token, X-Reason",
+  "Access-Control-Allow-Headers": "Content-Type, X-Auth-Token, X-Reason, X-Actor",
   "Access-Control-Max-Age": "86400",
 };
 
@@ -612,7 +612,7 @@ async function mergeShopping(env, incoming, { who, why, dryRun }) {
   const changes = diffItems("shopping", { lines: cur.lines }, { lines });
   if (dryRun) return { dry: { changes, summary: summarize("shopping", changes) } };
   await env.MP_KV.put("shopping", JSON.stringify({ updatedAt: nowIso, lines }));
-  if (who === "assistant") await logWrite(env, { who, key: "shopping", why, changes });
+  if (who !== "app") await logWrite(env, { who, key: "shopping", why, changes });
   return { updatedAt: nowIso, lines, changed: changed.length };
 }
 
@@ -1103,6 +1103,35 @@ const ITEMS = {
 };
 const ACTIVITY_CAP = 200;
 
+// Phase 56: the one list of Worker routes. worker/routes.json is generated from it (tools/routes_build.mjs) and
+// tools/worker_test.mjs probes the real dispatcher against it, so docs/HERMES.md can't drift from the code.
+// { method, path, assistant, kind: read|write|queue, dryRun?, log?: logged|unlogged, why?, appSide?, note? }
+const APP_SIDE = new Set(["/library", "/pantry", "/plan", "/planFlag", "/placements", "/prefs", "/eaten-log", "/planPrefs", "/cooks"]);
+const UNLOGGED = {
+  "/plan": "app-owned mirror", "/prefs": "app-owned mirror", "/eaten-log": "app-owned mirror", "/planPrefs": "app-owned mirror",
+  "/cooks": "app-owned mirror", "/settings": "profile data, not an everyday edit",
+};
+const row = (method, path, kind, o = {}) => ({ method, path, assistant: ASSISTANT_ALLOWED.has(`${method} ${path}`), kind, ...o, ...(APP_SIDE.has(path) ? { appSide: true } : {}) });
+const quiet = (why) => ({ log: "unlogged", why });
+export const ROUTES = [
+  ...["/discover", "/ranking", "/nutrition", "/day", "/expiring", "/cookable", "/leftovers", "/quick", "/substitutions", "/product-ranking", "/ratings", "/why", "/scale", "/shopping", "/shopping/lines", "/adhoc", "/drafts", "/activity"]
+    .map((path) => row("GET", path, "read")),
+  row("GET", "/meal/:id/method", "read", { assistant: true }),
+  ...Object.entries(KEYS).flatMap(([path, key]) => {
+    const kind = key === "eatRequests" ? "queue" : "read";
+    return [row("GET", path, kind), row("PUT", path, kind === "queue" ? kind : "write", ITEMS[key] ? { dryRun: true, log: "logged" } : quiet(UNLOGGED[path] || "inert"))];
+  }),
+  row("PUT", "/adhoc", "write", { dryRun: true, log: "logged" }),
+  row("POST", "/shopping/lines", "write", { log: "logged" }),
+  row("PUT", "/meal-method", "write", { dryRun: true, log: "logged" }),
+  row("PUT", "/meal/:id/rating", "write", { assistant: true, ...quiet("informational nudge, not planning data") }),
+  row("POST", "/drafts", "write", quiet("inert until the app accepts")),
+  row("DELETE", "/drafts/:id", "write", { assistant: true, ...quiet("inert until the app accepts") }),
+  row("POST", "/plan/draft", "read", { note: "computes a draft, stores nothing" }),
+  row("POST", "/plan/apply", "write", { log: "logged", note: "parks the draft in planDraft" }),
+  row("POST", "/activity/undo", "write", { log: "logged" }),
+];
+
 function parseKV(raw) { try { return JSON.parse(raw); } catch (e) { return null; } }
 
 /** Map of item id -> item for a stored value (a legacy bare-array library is the list itself). */
@@ -1210,6 +1239,8 @@ export default {
     const isHermes = !!env.AUTH_TOKEN && token === env.AUTH_TOKEN;
     const isAssistant = !!env.ASSISTANT_TOKEN && token === env.ASSISTANT_TOKEN;
     if (!isHermes && !isAssistant) return json(401, "unauthorized");
+    // Who is writing, for the activity log: the assistant token always; Hermes's shared token only when it sends X-Actor: hermes.
+    const actor = isAssistant && !isHermes ? "assistant" : isHermes && request.headers.get("X-Actor") === "hermes" ? "hermes" : null;
     const methodMatch = METHOD_PATH.exec(url.pathname);
     if (!isHermes && !(request.method === "GET" && methodMatch) && !(request.method === "PUT" && RATING_PATH.test(url.pathname)) && !(request.method === "DELETE" && DRAFT_PATH.test(url.pathname)) && !ASSISTANT_ALLOWED.has(`${request.method} ${url.pathname}`)) return json(403, "forbidden");
 
@@ -1252,10 +1283,10 @@ export default {
     }
     if (url.pathname === "/meal-method") {
       if (request.method !== "PUT") return json(405, "method not allowed");
-      return putMealMethod(request, env, isAssistant && !isHermes ? "assistant" : null, url.searchParams.get("dryRun") === "1");
+      return putMealMethod(request, env, actor, url.searchParams.get("dryRun") === "1");
     }
 
-    const who = isAssistant ? "assistant" : "app";
+    const who = actor || "app";
     if (url.pathname === "/activity") {
       if (request.method !== "GET") return json(405, "method not allowed");
       return json(200, { entries: await readActivity(env) });
@@ -1265,7 +1296,7 @@ export default {
       let b;
       try { b = JSON.parse(await request.text()); } catch (e) { return json(400, "invalid JSON"); }
       if (typeof b !== "object" || b === null || typeof b.id !== "string" || !b.id) return json(400, "id required");
-      return undoActivity(env, who, { id: b.id, force: b.force === true && !isAssistant }); // force ("Undo anyway") is the app's call, never the assistant token's
+      return undoActivity(env, who, { id: b.id, force: b.force === true && !actor }); // force ("Undo anyway") is the app's call, never an identified actor's
     }
 
     if (url.pathname === "/plan/draft" || url.pathname === "/plan/apply") {
@@ -1369,14 +1400,14 @@ export default {
       }
       const dryRun = url.searchParams.get("dryRun") === "1";
       if (dryRun && !ITEMS[kvKey]) return json(400, "dryRun not supported for this key");
-      const logIt = ITEMS[kvKey] && isAssistant && !isHermes;
+      const logIt = ITEMS[kvKey] && actor;
       let changes = [];
       if (dryRun || logIt) {
         changes = diffItems(kvKey, parseKV(await env.MP_KV.get(kvKey)), parsed);
         if (dryRun) return json(200, { changes, summary: summarize(kvKey, changes) });
       }
       await env.MP_KV.put(kvKey, body);
-      if (logIt) await logWrite(env, { who: "assistant", key: kvKey, why: reasonOf(request), changes });
+      if (logIt) await logWrite(env, { who: actor, key: kvKey, why: reasonOf(request), changes });
       return new Response(null, { status: 204, headers: CORS });
     }
 

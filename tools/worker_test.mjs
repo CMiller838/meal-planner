@@ -519,4 +519,66 @@ assert.equal((await call("GET", "/today", "a")).body.water, 3); // /today untouc
   assert.ok(oats.state === "deleted" && Date.parse(oats.updatedAt) > Date.now() - 5000);
   assert.equal((await call("GET", "/shopping/lines", "a")).status, 200);
 }
+// Phase 56: X-Actor: hermes opts a Hermes-token write into the activity log
+{
+  const pan = (...items) => ({ updatedAt: "2026-10-22T00:00:00.000Z", items });
+  kv.delete("activity");
+  assert.equal((await call("PUT", "/pantry", "h", pan({ name: "Rice" }))).status, 204);
+  assert.equal(acts().length, 0); // the app (no header) logs nothing
+  assert.equal((await call("PUT", "/pantry", "h", pan({ name: "Rice" }, { name: "Oats" }), { "X-Actor": "hermes", "X-Reason": "restock" })).status, 204);
+  let e = acts()[0];
+  assert.deepEqual([acts().length, e.who, e.key, e.why], [1, "hermes", "pantry", "restock"]);
+  assert.equal((await call("PUT", "/pantry", "h", pan({ name: "Rice" }, { name: "Oats" }, { name: "Salt" }), { "X-Actor": "hermes?" })).status, 204);
+  assert.equal(acts().length, 1); // any other X-Actor value is ignored
+  assert.equal((await call("PUT", "/pantry?dryRun=1", "h", pan({ name: "Rice" }), { "X-Actor": "hermes" })).status, 200);
+  assert.equal(acts().length, 1); // dry run logs nothing
+  kv.set("pantry", JSON.stringify(pan({ name: "Rice" }, { name: "Oats" })));
+  assert.equal((await call("POST", "/activity/undo", "h", { id: e.id }, { "X-Actor": "hermes" })).status, 200);
+  assert.deepEqual(JSON.parse(kv.get("pantry")).items.map((i) => i.name), ["Rice"]);
+  assert.equal(acts()[0].who, "hermes");
+  await call("PUT", "/pantry", "h", pan({ name: "Rice" }, { name: "Tea" }), { "X-Actor": "hermes" });
+  await call("PUT", "/pantry", "h", pan({ name: "Rice" }, { name: "Tea", qty: "9" }));
+  r = await call("POST", "/activity/undo", "h", { id: acts()[0].id, force: true }, { "X-Actor": "hermes" });
+  assert.equal(r.status, 409); // an identified actor can't force
+  await call("PUT", "/pantry", "a", pan({ name: "Rice" }), { "X-Actor": "hermes" });
+  assert.equal(acts()[0].who, "assistant"); // the header means nothing on the assistant token
+  const pre = await worker.fetch(new Request("https://x/pantry", { method: "OPTIONS" }), env);
+  assert.match(pre.headers.get("Access-Control-Allow-Headers"), /X-Actor/);
+}
+// Phase 56: ROUTES vs the real dispatcher
+{
+  const { ROUTES } = await import(new URL("../worker/worker.js", import.meta.url));
+  const { readFileSync } = await import("node:fs");
+  const src = readFileSync(new URL("../worker/worker.js", import.meta.url), "utf8");
+  const sub = (p) => p.replace(/:id/g, "x");
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = async () => { throw new Error("offline"); }; // /discover must not hit TheMealDB
+  const dispatcher404 = (res) => (res.status === 404 && res.body === "not found") || res.status === 405;
+  for (const row of ROUTES) {
+    const tag = `${row.method} ${row.path}`;
+    const res = await call(row.method, sub(row.path), "h");
+    assert.ok(!dispatcher404(res), `${tag} missing from the dispatcher`);
+    if (row.assistant !== true) assert.equal((await call(row.method, sub(row.path), "a")).status, 403, `${tag} reachable by the assistant`);
+    if (row.method !== "GET") assert.ok(row.log === "logged" || (row.log === "unlogged" && row.why) || row.kind === "read", `${tag} needs log or why`);
+  }
+  for (const path of new Set(ROUTES.map((x) => x.path)))
+    for (const m of ["GET", "PUT", "POST", "DELETE"])
+      if (!ROUTES.some((x) => x.path === path && x.method === m)) {
+        const st = (await call(m, sub(path), "h")).status;
+        assert.ok([404, 405, 403].includes(st), `${m} ${path} works but is unlisted (${st})`);
+      }
+  globalThis.fetch = realFetch;
+  // reverse: every literal path the source routes on has a row
+  const paths = (text) => [...text.matchAll(/"(?:[A-Z]+ )?(\/[^"\s]*)"/g)].map((m) => m[1]);
+  const unlisted = (source) => {
+    const known = new Set(ROUTES.map((x) => x.path));
+    const block = (name) => source.match(new RegExp(`const ${name} = [\\s\\S]*?\\n(?:\\}|\\]\\));`))?.[0] || "";
+    const lits = [...paths(block("KEYS")), ...paths(block("ASSISTANT_ALLOWED")), ...[...source.matchAll(/url\.pathname === "(\/[^"]*)"/g)].map((m) => m[1])];
+    return lits.filter((p) => !known.has(p));
+  };
+  assert.deepEqual(unlisted(src), []);
+  assert.deepEqual(unlisted(src + '\nif (url.pathname === "/stub") {}'), ["/stub"]);
+  const gen = readFileSync(new URL("../worker/routes.json", import.meta.url), "utf8");
+  assert.equal(gen, JSON.stringify(ROUTES, null, 2) + "\n", "routes.json is stale: node tools/routes_build.mjs");
+}
 console.log("worker_test: ok");

@@ -148,6 +148,8 @@ also *pulled* (Hermes may write it), on open of the Plan-with-me screen only.
 
 ## Worker endpoints
 
+The authoritative route list is `export const ROUTES` in `worker/worker.js` (generated to `worker/routes.json`, probed by `tools/worker_test.mjs`; contract in `docs/HERMES.md`). The list below is older prose.
+
 - `GET /library`, `PUT /library`
 - `GET /planFlag`, `PUT /planFlag`
 - `GET /pantry`, `PUT /pantry`

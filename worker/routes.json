@@ -1,0 +1,413 @@
+[
+  {
+    "method": "GET",
+    "path": "/discover",
+    "assistant": true,
+    "kind": "read"
+  },
+  {
+    "method": "GET",
+    "path": "/ranking",
+    "assistant": false,
+    "kind": "read"
+  },
+  {
+    "method": "GET",
+    "path": "/nutrition",
+    "assistant": true,
+    "kind": "read"
+  },
+  {
+    "method": "GET",
+    "path": "/day",
+    "assistant": true,
+    "kind": "read"
+  },
+  {
+    "method": "GET",
+    "path": "/expiring",
+    "assistant": true,
+    "kind": "read"
+  },
+  {
+    "method": "GET",
+    "path": "/cookable",
+    "assistant": true,
+    "kind": "read"
+  },
+  {
+    "method": "GET",
+    "path": "/leftovers",
+    "assistant": true,
+    "kind": "read"
+  },
+  {
+    "method": "GET",
+    "path": "/quick",
+    "assistant": true,
+    "kind": "read"
+  },
+  {
+    "method": "GET",
+    "path": "/substitutions",
+    "assistant": true,
+    "kind": "read"
+  },
+  {
+    "method": "GET",
+    "path": "/product-ranking",
+    "assistant": true,
+    "kind": "read"
+  },
+  {
+    "method": "GET",
+    "path": "/ratings",
+    "assistant": true,
+    "kind": "read"
+  },
+  {
+    "method": "GET",
+    "path": "/why",
+    "assistant": true,
+    "kind": "read"
+  },
+  {
+    "method": "GET",
+    "path": "/scale",
+    "assistant": true,
+    "kind": "read"
+  },
+  {
+    "method": "GET",
+    "path": "/shopping",
+    "assistant": true,
+    "kind": "read"
+  },
+  {
+    "method": "GET",
+    "path": "/shopping/lines",
+    "assistant": true,
+    "kind": "read"
+  },
+  {
+    "method": "GET",
+    "path": "/adhoc",
+    "assistant": true,
+    "kind": "read"
+  },
+  {
+    "method": "GET",
+    "path": "/drafts",
+    "assistant": true,
+    "kind": "read"
+  },
+  {
+    "method": "GET",
+    "path": "/activity",
+    "assistant": true,
+    "kind": "read"
+  },
+  {
+    "method": "GET",
+    "path": "/meal/:id/method",
+    "assistant": true,
+    "kind": "read"
+  },
+  {
+    "method": "GET",
+    "path": "/library",
+    "assistant": true,
+    "kind": "read",
+    "appSide": true
+  },
+  {
+    "method": "PUT",
+    "path": "/library",
+    "assistant": true,
+    "kind": "write",
+    "dryRun": true,
+    "log": "logged",
+    "appSide": true
+  },
+  {
+    "method": "GET",
+    "path": "/planFlag",
+    "assistant": false,
+    "kind": "read",
+    "appSide": true
+  },
+  {
+    "method": "PUT",
+    "path": "/planFlag",
+    "assistant": true,
+    "kind": "write",
+    "dryRun": true,
+    "log": "logged",
+    "appSide": true
+  },
+  {
+    "method": "GET",
+    "path": "/pantry",
+    "assistant": true,
+    "kind": "read",
+    "appSide": true
+  },
+  {
+    "method": "PUT",
+    "path": "/pantry",
+    "assistant": true,
+    "kind": "write",
+    "dryRun": true,
+    "log": "logged",
+    "appSide": true
+  },
+  {
+    "method": "GET",
+    "path": "/plan",
+    "assistant": true,
+    "kind": "read",
+    "appSide": true
+  },
+  {
+    "method": "PUT",
+    "path": "/plan",
+    "assistant": false,
+    "kind": "write",
+    "log": "unlogged",
+    "why": "app-owned mirror",
+    "appSide": true
+  },
+  {
+    "method": "GET",
+    "path": "/placements",
+    "assistant": true,
+    "kind": "read",
+    "appSide": true
+  },
+  {
+    "method": "PUT",
+    "path": "/placements",
+    "assistant": true,
+    "kind": "write",
+    "dryRun": true,
+    "log": "logged",
+    "appSide": true
+  },
+  {
+    "method": "GET",
+    "path": "/prefs",
+    "assistant": true,
+    "kind": "read",
+    "appSide": true
+  },
+  {
+    "method": "PUT",
+    "path": "/prefs",
+    "assistant": false,
+    "kind": "write",
+    "log": "unlogged",
+    "why": "app-owned mirror",
+    "appSide": true
+  },
+  {
+    "method": "GET",
+    "path": "/eaten-log",
+    "assistant": true,
+    "kind": "read",
+    "appSide": true
+  },
+  {
+    "method": "PUT",
+    "path": "/eaten-log",
+    "assistant": false,
+    "kind": "write",
+    "log": "unlogged",
+    "why": "app-owned mirror",
+    "appSide": true
+  },
+  {
+    "method": "GET",
+    "path": "/planPrefs",
+    "assistant": false,
+    "kind": "read",
+    "appSide": true
+  },
+  {
+    "method": "PUT",
+    "path": "/planPrefs",
+    "assistant": false,
+    "kind": "write",
+    "log": "unlogged",
+    "why": "app-owned mirror",
+    "appSide": true
+  },
+  {
+    "method": "GET",
+    "path": "/eat-requests",
+    "assistant": true,
+    "kind": "queue"
+  },
+  {
+    "method": "PUT",
+    "path": "/eat-requests",
+    "assistant": true,
+    "kind": "queue",
+    "dryRun": true,
+    "log": "logged"
+  },
+  {
+    "method": "GET",
+    "path": "/dayHints",
+    "assistant": true,
+    "kind": "read"
+  },
+  {
+    "method": "PUT",
+    "path": "/dayHints",
+    "assistant": true,
+    "kind": "write",
+    "dryRun": true,
+    "log": "logged"
+  },
+  {
+    "method": "GET",
+    "path": "/today",
+    "assistant": true,
+    "kind": "read"
+  },
+  {
+    "method": "PUT",
+    "path": "/today",
+    "assistant": true,
+    "kind": "write",
+    "dryRun": true,
+    "log": "logged"
+  },
+  {
+    "method": "GET",
+    "path": "/products",
+    "assistant": true,
+    "kind": "read"
+  },
+  {
+    "method": "PUT",
+    "path": "/products",
+    "assistant": true,
+    "kind": "write",
+    "dryRun": true,
+    "log": "logged"
+  },
+  {
+    "method": "GET",
+    "path": "/settings",
+    "assistant": true,
+    "kind": "read"
+  },
+  {
+    "method": "PUT",
+    "path": "/settings",
+    "assistant": true,
+    "kind": "write",
+    "log": "unlogged",
+    "why": "profile data, not an everyday edit"
+  },
+  {
+    "method": "GET",
+    "path": "/cooks",
+    "assistant": false,
+    "kind": "read",
+    "appSide": true
+  },
+  {
+    "method": "PUT",
+    "path": "/cooks",
+    "assistant": false,
+    "kind": "write",
+    "log": "unlogged",
+    "why": "app-owned mirror",
+    "appSide": true
+  },
+  {
+    "method": "GET",
+    "path": "/planDraft",
+    "assistant": true,
+    "kind": "read"
+  },
+  {
+    "method": "PUT",
+    "path": "/planDraft",
+    "assistant": false,
+    "kind": "write",
+    "dryRun": true,
+    "log": "logged"
+  },
+  {
+    "method": "PUT",
+    "path": "/adhoc",
+    "assistant": true,
+    "kind": "write",
+    "dryRun": true,
+    "log": "logged"
+  },
+  {
+    "method": "POST",
+    "path": "/shopping/lines",
+    "assistant": true,
+    "kind": "write",
+    "log": "logged"
+  },
+  {
+    "method": "PUT",
+    "path": "/meal-method",
+    "assistant": true,
+    "kind": "write",
+    "dryRun": true,
+    "log": "logged"
+  },
+  {
+    "method": "PUT",
+    "path": "/meal/:id/rating",
+    "assistant": true,
+    "kind": "write",
+    "log": "unlogged",
+    "why": "informational nudge, not planning data"
+  },
+  {
+    "method": "POST",
+    "path": "/drafts",
+    "assistant": true,
+    "kind": "write",
+    "log": "unlogged",
+    "why": "inert until the app accepts"
+  },
+  {
+    "method": "DELETE",
+    "path": "/drafts/:id",
+    "assistant": true,
+    "kind": "write",
+    "log": "unlogged",
+    "why": "inert until the app accepts"
+  },
+  {
+    "method": "POST",
+    "path": "/plan/draft",
+    "assistant": true,
+    "kind": "read",
+    "note": "computes a draft, stores nothing"
+  },
+  {
+    "method": "POST",
+    "path": "/plan/apply",
+    "assistant": true,
+    "kind": "write",
+    "log": "logged",
+    "note": "parks the draft in planDraft"
+  },
+  {
+    "method": "POST",
+    "path": "/activity/undo",
+    "assistant": true,
+    "kind": "write",
+    "log": "logged"
+  }
+]
