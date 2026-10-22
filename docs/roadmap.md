@@ -371,7 +371,7 @@ the user toggle gym day by hand when the assistant is not connected.
 **Verify:** without `gym=1` the output is byte-for-byte what it is today; the uplift never changes `rankByGap`'s tag inputs, only
 the coverage numbers. Requires Phase 32a/33a (the existing route). Assistant side: `notion_assistant` Phase 66.
 
-## Phase 36: Cost per 25 g protein and product ranking [S] — not started
+## Phase 36: Cost per 25 g protein and product ranking [S] — built 2026-10-22, live checks pending
 
 **Goal:** Using Phase 33 product records and `pack-sizes.json` prices, show cost per 25 g protein per product and rank the
 user's items by protein value for money, on the pantry/product sheet and as an assistant answer. Informational only, like the
@@ -380,6 +380,7 @@ cost badges (Phase 18): it never sorts or filters meals.
 **Decisions to settle in the spec:** where the price comes from when a product has no price (fall back to `pack-sizes.json`,
 mark as estimate), how to treat products whose protein is a label value versus an estimate (rank them, show the marker), and
 whether to add it to the shopping list rows. Requires Phase 33.
+**Verified 2026-10-22:** `check.py` 8/8 (test.html proteinValue/rank cases, `tools/worker_test.mjs` `/product-ranking` 200/401/405), product sheet and Pantry "Best protein value" list at PC and 390 px, both themes, bad/empty input and `esc()`. Live checks left in `tasks.md`.
 
 ## Phase 37: Per-day effort hints from the assistant [M] — built 2026-10-21, live checks pending
 

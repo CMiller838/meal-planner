@@ -1,9 +1,8 @@
 // Product reference records (Phase 33a): per-pack label nutrition, informational only.
 // The generator never reads these; rankByGap's low/med/high tags stay its only nutrition input.
-window.MP = window.MP || {};
-
-MP.Products = (function () {
+(function (root) {
   "use strict";
+  const MP = (root.MP = root.MP || {});
 
   const LABEL_KEYS = ["energy_kcal", "protein_g", "carbohydrate_g", "fat_g", "saturates_g", "sugars_g", "fibre_g", "salt_g"];
   const BASES = ["label", "off", "cofid", "usda", "estimate"]; // precedence order, highest first
@@ -99,5 +98,33 @@ MP.Products = (function () {
     return [...byId.values()];
   }
 
-  return { LABEL_KEYS, BASES, ESTIMATE_BASES, validBarcode, fromOff, setNutrients, fillFromCofid, isEstimate, perServing, forIngredient, merge };
-})();
+  /** Cost per 25 g protein, {per25g, estimated} or null (no protein / pack / price, non-g pack, ml product). Informational only. */
+  function proteinValue(product, packData) {
+    const prot = product.nutrients && product.nutrients.protein_g;
+    const pack = product.pack;
+    if (!prot || !(prot.value > 0) || product.per === "100ml" || !pack || !(pack.value > 0)) return null;
+    const grams = pack.unit === "g" ? pack.value : pack.unit === "kg" ? pack.value * 1000 : 0;
+    if (!grams) return null;
+    let price = product.price, estPrice = false;
+    if (!(price > 0)) {
+      const r = product.ingredient && packData && MP.ShoppingList.priceFor(product.ingredient, packData);
+      if (!r || r.unit !== "g" || !(r.packSize > 0)) return null;
+      price = (r.price / r.packSize) * grams;
+      estPrice = true;
+    }
+    return { per25g: (price / ((prot.value * grams) / 100)) * 25, estimated: estPrice || isEstimate(prot) };
+  }
+
+  /** [{product, per25g, estimated}] cheapest protein first; products without a value are left out. */
+  function rank(products, packData) {
+    const out = [];
+    for (const product of products || []) {
+      const v = proteinValue(product, packData);
+      if (v) out.push({ product, ...v });
+    }
+    return out.sort((a, b) => a.per25g - b.per25g);
+  }
+
+  const api = { LABEL_KEYS, BASES, ESTIMATE_BASES, validBarcode, fromOff, setNutrients, fillFromCofid, isEstimate, perServing, forIngredient, merge, proteinValue, rank };
+  MP.Products = api;
+})(typeof globalThis !== "undefined" ? globalThis : this);

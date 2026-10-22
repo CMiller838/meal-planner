@@ -725,6 +725,7 @@ button.ghost.danger { color: var(--danger); border-color: var(--danger); }
 .prod-table { width: 100%; border-collapse: collapse; margin-top: .6rem; font-size: .9rem; }
 .prod-table th, .prod-table td { text-align: left; padding: .3rem .4rem; border-bottom: 1px solid var(--border); }
 .prod-table thead th { color: var(--text-dim); font-weight: 700; font-size: .8rem; }
+.prot-value { color: var(--text-dim); font-size: .85rem; margin: .2rem 0; }
 .est { color: var(--butter); font-size: .75em; font-weight: 700; }
 .prod-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr)); gap: .6rem; }
 .prod-form label { display: flex; flex-direction: column; gap: .2rem; font-size: .85rem; color: var(--text-dim); }

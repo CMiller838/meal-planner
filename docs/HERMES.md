@@ -82,6 +82,8 @@ otherwise use `id: "p-<anything unique>"`. `ingredient` is a planner ingredient 
 pantry item of that name. Fetch-then-write and merge per record by `updatedAt`: PUT replaces the whole list. Reference only:
 the planner never reads it for ranking. 400 on a bad check digit, duplicate id, non-numeric value or unknown basis.
 
+`GET /product-ranking` (both tokens, read-only; 405 otherwise) returns `{ ranked: [{ id, name, brand, per25g, estimated }] }`: products by £ per 25 g protein, cheapest first. Needs a g/kg pack and protein; price falls back to `pack-sizes.json` (`estimated: true`); ml products are left out. Informational only.
+
 ## `GET /adhoc` / `PUT /adhoc`
 
 Identical body shape and validation to `/pantry` (including the string-or-

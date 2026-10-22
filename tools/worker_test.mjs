@@ -64,6 +64,13 @@ for (const bad of [
   prods({ ...prod, nutrients: { protein_g: { value: -1, basis: "off" } } }), prods({ ...prod, per: "100oz" }), prods({ ...prod, name: " " }),
   prods({ ...prod, updatedAt: "yesterday" }), { products: "x" }, [],
 ]) assert.equal((await call("PUT", "/products", "a", bad)).status, 400, JSON.stringify(bad).slice(0, 80));
+// Phase 36: /product-ranking
+const rp = (id, price, prot) => ({ ...prod, id: "p-" + id, barcode: null, name: id, price, pack: { value: 500, unit: "g" }, nutrients: { protein_g: { value: prot, basis: "label" } } });
+assert.equal((await call("PUT", "/products", "a", prods(rp("dear", 10, 20), rp("cheap", 2, 20), rp("nopack", 1, 20), { ...prod, id: "p-x", barcode: null }))).status, 204);
+r = await call("GET", "/product-ranking", "a");
+assert.deepEqual([r.status, r.body.ranked.map((x) => [x.id, x.per25g, x.estimated])], [200, [["p-cheap", 0.5, false], ["p-dear", 2.5, false], ["p-nopack", 0.25, false]].sort((x, y) => x[1] - y[1])]);
+assert.equal((await call("GET", "/product-ranking", "")).status, 401);
+assert.equal((await call("POST", "/product-ranking", "h", {})).status, 405);
 // Phase 34: useBy on /pantry, GET /expiring
 kv.set("plan", JSON.stringify({ startDate: "2026-10-19", days: [] }));
 const pan = (...items) => ({ updatedAt: "2026-10-22T00:00:00.000Z", items });

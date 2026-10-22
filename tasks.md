@@ -545,12 +545,14 @@ task starts editing one, stop and re-read the spec.
 Requires 33a (`MP.Products`, `/products`). Decisions (own calls): price = product `price`+`pack`; if absent, fall back to
 `MP.ShoppingList.priceFor(ingredient)` and mark "est."; a product with an estimate/`off`-less protein basis still ranks
 but shows the "est." marker; no shopping-list rows (YAGNI). Informational only, never sorts or filters meals.
-- [ ] Logic (TDD): `MP.Products.proteinValue(product, packData)` → `{ per25g, estimated } | null` (null when no protein, no pack size, or a non-g pack; ml products excluded); `rank(products, packData)` ascending by `per25g`
-- [ ] `products.js` is under the `window`→`root` shim; check it stays Worker-importable (`data_check.py`)
-- [ ] Worker: read-only `GET /product-ranking` (calls `rank` on KV `products` + `pack-sizes.json`), added to `ASSISTANT_ALLOWED`; 405 on non-GET
-- [ ] UI: "£x.xx / 25 g protein" line on the product sheet (view mode) and a "Best protein value" list under All products on the Pantry tab, "est." marker where price or protein is an estimate
-- [ ] Bump `CACHE` in `sw.js`; both themes, PC + 390 px; `docs/HERMES.md` one line for the route; mark roadmap `— done`
+- [x] Logic (TDD): `MP.Products.proteinValue(product, packData)` → `{ per25g, estimated } | null` (null when no protein, no pack size, or a non-g pack; ml products excluded); `rank(products, packData)` ascending by `per25g`
+- [x] `products.js` is under the `window`→`root` shim; check it stays Worker-importable (`data_check.py`)
+- [x] Worker: read-only `GET /product-ranking` (calls `rank` on KV `products` + `pack-sizes.json`), added to `ASSISTANT_ALLOWED`; 405 on non-GET
+- [x] UI: "£x.xx / 25 g protein" line on the product sheet (view mode) and a "Best protein value" list under All products on the Pantry tab, "est." marker where price or protein is an estimate
+- [x] Bump `CACHE` in `sw.js`; both themes, PC + 390 px; `docs/HERMES.md` one line for the route; mark roadmap `— done`
 
+- [ ] Live: with the real KV products, `GET /product-ranking` with the ASSISTANT_TOKEN returns a `ranked` list, cheapest first
+- [ ] Live: on the phone PWA, Shopping > Pantry: a product with pack and price shows "£x.xx / 25 g protein" and the Best protein value list is in order
 
 ## Phase 37: Per-day effort hints from the assistant
 

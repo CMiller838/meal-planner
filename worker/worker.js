@@ -9,6 +9,7 @@ import "../mealdb.js";
 import "../nutrition.js";
 import "../generator.js";
 import "../day-hints.js";
+import "../products.js";
 import SHELF_DATA from "../shelf-life.json";
 import SUBS from "../substitutions.json";
 import TAGS from "../ingredient-nutrient-tags.json";
@@ -23,6 +24,7 @@ const Generator = globalThis.MP.Generator;
 const DayHints = globalThis.MP.DayHints;
 const ShoppingList = globalThis.MP.ShoppingList;
 const ShelfLife = globalThis.MP.ShelfLife;
+const Products = globalThis.MP.Products;
 
 const KEYS = {
   "/library": "library", "/planFlag": "planFlag", "/pantry": "pantry", "/adhoc": "adhoc",
@@ -39,7 +41,7 @@ const ASSISTANT_ALLOWED = new Set([
   "GET /discover", "GET /pantry", "PUT /pantry", "GET /adhoc", "PUT /adhoc", "PUT /planFlag",
   "GET /placements", "PUT /placements", "GET /prefs", "PUT /library", "GET /nutrition",
   "GET /dayHints", "PUT /dayHints", "PUT /meal-method", "GET /today", "PUT /today", "GET /products", "PUT /products",
-  "GET /expiring",
+  "GET /expiring", "GET /product-ranking",
 ]);
 const METHOD_PATH = /^\/meal\/([^/]+)\/method$/;
 const SLOT_TYPES = ["breakfast", "lunch", "dinner", "snack"];
@@ -241,6 +243,17 @@ async function expiring(params, env) {
   const [pantry, plan] = await Promise.all([read("pantry"), read("plan")]);
   const items = pantry && Array.isArray(pantry.items) ? pantry.items : [];
   return json(200, { days, today, items: ShelfLife.expiringItems(items, plan, today, days, SHELF_DATA) });
+}
+
+/** GET /product-ranking: products by cost per 25 g protein, cheapest first (read-only; uses KV products + pack-sizes.json). */
+async function productRanking(env) {
+  let parsed = null;
+  try { parsed = JSON.parse(await env.MP_KV.get("products")); } catch (e) { /* none yet */ }
+  const products = parsed && Array.isArray(parsed.products) ? parsed.products : [];
+  const ranked = Products.rank(products, PACK_DATA).map((r) => ({
+    id: r.product.id, name: r.product.name, brand: r.product.brand || null, per25g: Math.round(r.per25g * 100) / 100, estimated: r.estimated,
+  }));
+  return json(200, { ranked });
 }
 
 async function shopping(env) {
@@ -597,6 +610,11 @@ export default {
     if (url.pathname === "/expiring") {
       if (request.method !== "GET") return json(405, "method not allowed");
       return expiring(url.searchParams, env);
+    }
+
+    if (url.pathname === "/product-ranking") {
+      if (request.method !== "GET") return json(405, "method not allowed");
+      return productRanking(env);
     }
 
     if (url.pathname === "/shopping") {

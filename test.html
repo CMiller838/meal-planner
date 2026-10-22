@@ -2457,6 +2457,18 @@
   // Phase 33a: product records
   {
     const P = MP.Products;
+    {
+      const pk = { items: { chicken_breast: { packSize: 500, unit: "g", price: 4 } }, categories: { default: { packSize: 1, unit: "each", price: 1 } }, keywords: {} };
+      const mk = (o) => ({ id: "x", per: "100g", ingredient: null, price: null, pack: { value: 500, unit: "g" }, nutrients: { protein_g: { value: 20, basis: "label" } }, ...o });
+      const a = P.proteinValue(mk({ price: 5 }), pk);
+      check("proteinValue: £5 / 100 g protein -> £1.25 per 25 g, not estimated", Math.abs(a.per25g - 1.25) < 1e-9 && !a.estimated);
+      const b = P.proteinValue(mk({ ingredient: "chicken_breast" }), pk);
+      check("proteinValue: no price falls back to pack-sizes, marked est.", Math.abs(b.per25g - 1) < 1e-9 && b.estimated);
+      check("proteinValue: estimate protein basis marked est.", P.proteinValue(mk({ price: 5, nutrients: { protein_g: { value: 20, basis: "cofid" } } }), pk).estimated);
+      check("proteinValue: null for no protein / no pack / ml / non-g / no price", [mk({ price: 1, nutrients: {} }), mk({ price: 1, pack: null }), mk({ price: 1, per: "100ml" }), mk({ price: 1, pack: { value: 6, unit: "each" } }), mk({}), mk({ price: 1, nutrients: { protein_g: { value: 0, basis: "label" } } })].every((p) => P.proteinValue(p, pk) === null));
+      const r = P.rank([mk({ id: "dear", price: 10 }), mk({ id: "cheap", price: 2 }), mk({ id: "none", pack: null })], pk);
+      check("rank: ascending, drops unrankable", r.length === 2 && r[0].product.id === "cheap" && r[1].product.id === "dear");
+    }
     check("validBarcode: EAN-13", P.validBarcode("4006381333931"));
     check("validBarcode: EAN-8", P.validBarcode("96385074"));
     check("validBarcode: UPC-A", P.validBarcode("036000291452"));

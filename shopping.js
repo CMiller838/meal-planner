@@ -149,6 +149,9 @@
   let cofid = null; // cofid.json, loaded once; null while offline = sync skips the fill
   const loadCofid = () => fetch("cofid.json").then((r) => r.json()).then((j) => { cofid = j; }, () => {});
 
+  let packData = null; // pack-sizes.json for the protein-value fallback price; null = only priced products rank
+  const proteinText = (v) => `£${v.per25g.toFixed(2)} / 25 g protein${v.estimated ? ' <span class="est" title="Price or protein is an estimate">est.</span>' : ""}`;
+
   function closeSheet() {
     stopCamera();
     stopCamera = () => {};
@@ -204,6 +207,7 @@
       ${note ? `<p class="muted">${esc(note)}</p>` : ""}
       <p class="muted">${[p.brand, p.barcode && "Barcode " + p.barcode, p.ingredient && "Ingredient " + p.ingredient].filter(Boolean).map(esc).join(" · ") || "No brand or barcode"}</p>
       <p class="muted">Pack ${pack} · Price ${p.price == null ? "—" : "£" + esc(p.price.toFixed(2))} · State ${esc(p.state || "—")}</p>
+      ${(() => { const v = MP.Products.proteinValue(p, packData); return v ? `<p class="prot-value">${proteinText(v)}</p>` : ""; })()}
       ${nutrientTable(p)}
       ${cofid && Object.values(p.nutrients).some((e) => e.basis === "cofid") ? `<p class="muted fine">${esc(cofid._attribution)}</p>` : ""}
       <div class="modal-actions"><button id="prod-edit" class="btn">Edit</button></div>`);
@@ -363,6 +367,7 @@
         ${useByHtml(item, today, plan)}
         ${p ? chipHtml(p) : `<button class="prod-chip muted" data-link="${esc(key)}">Link product</button>`}</li>`;
     });
+    const best = MP.Products.rank(products, packData);
     const all = [...products].sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt));
     const strip = expiring.length ? `<div class="useup-strip" role="region" aria-label="Use these up">
         <h3>Use these up</h3>
@@ -375,6 +380,7 @@
       <h3>In your pantry</h3>
       ${rows.length ? `<ul class="shop-list">${rows.join("")}</ul>` : `<p class="empty">Nothing in your pantry.</p>`}
       <h3>All products</h3>
+      ${best.length ? `<h3>Best protein value</h3><ol class="shop-list best-protein">${best.map((r) => `<li class="shop-line prod-row">${chipHtml(r.product)} <span class="prot-value">${proteinText(r)}</span></li>`).join("")}</ol>` : ""}
       ${all.length ? `<ul class="shop-list">${all.map((p) => `<li class="shop-line prod-row">${chipHtml(p)}</li>`).join("")}</ul>` : `<p class="empty">No products yet. Scan one to start.</p>`}
     </section>`;
   }
@@ -435,7 +441,7 @@
   function initPantry() {
     MP.ShelfLife.load().then((d) => { shelfData = d; renderPantry(); }, () => {});
     renderPantry();
-    loadCofid().then(() => Promise.all([MP.Sync.fetchPantry(), MP.Sync.syncProducts(cofid)])).then(renderPantry);
+    loadCofid().then(() => MP.ShoppingList.load().then((d) => { packData = d; }, () => {})).then(() => Promise.all([MP.Sync.fetchPantry(), MP.Sync.syncProducts(cofid)])).then(renderPantry);
     const overlay = document.getElementById("modal-overlay");
     overlay.addEventListener("click", (e) => { if (e.target === overlay) closeSheet(); });
     document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeSheet(); });
