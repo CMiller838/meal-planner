@@ -74,6 +74,10 @@ wrong, say so in one line and update the heading.
    bodies) · Edge cases · Verification · Tasks as `- [ ]` split Logic (TDD) / UI.
    Before moving on run `python3 tools/spec_lint.py phaseN`: it fails a spec with no tier tag, no `## Files touched`,
    or a `## Verification` without a runnable command in backticks (`/overnight` refuses to start on the same check).
+   Under the first line add `Plain: <one everyday sentence on what this gives the user>`: the building-now pane shows it.
+   **Devil's advocate before you finish:** ask "what would stop this running unattended?" (a human step, a credential, a
+   path outside the repo such as the Windows Edge walk, a dependency on a phase not yet built) and fix the spec or add a
+   `Requires Phase N` line / `- [ ] Live:` task. `spec_lint.py` prints `SPEC RISK` for the common ones.
    Anything only the user can verify goes in `tasks.md` as a `- [ ] Live: ...` line, not in Verification.
    Then under `## Phase N` in `tasks.md` (Edit that heading only) put one pointer line to the
    spec. Do not duplicate the task list there. If `tasks.md` has no `## Phase N` heading yet (later phases often

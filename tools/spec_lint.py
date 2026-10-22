@@ -2,7 +2,7 @@
 """Pre-flight for unattended builds: fail a spec the pipeline could not verify, warn about specs it would skip.
 
 `tools/spec_lint.py [specs...]` (no args: the queue). Exit 1 if a queued spec has no tier tag, no `## Files touched`,
-or no `## Verification` with a runnable command in backticks. Specs on disk that the queue skips are printed as
+or no `## Verification` with a runnable command in backticks. `SPEC RISK` lines (Windows/Edge, credentials, real device) are advisory. Specs on disk that the queue skips are printed as
 warnings only. `--selftest` checks the parsing. Stdlib only.
 """
 import re
@@ -35,6 +35,17 @@ def lint(text):
     return out
 
 
+RISKS = [(r"/mnt/[a-z]/|\b[A-Z]:\\|\bEdge\b|powershell", "touches Windows paths or Edge: needs the path allowed in .claude/settings.local.json"),
+         (r"\b(API key|token|credential|secret)\b(?! scan)", "mentions a credential: an unattended builder cannot supply one"),
+         (r"\b(real|actual) (phone|device|pack|barcode)\b|\bPixel\b", "needs a real device: must be a `- [ ] Live:` line, not a Verification step")]
+
+
+def risks(text):
+    """Warnings for what could stop an unattended run (a human step, a credential, a path outside the repo). Advisory only."""
+    ver = (section(text, "Verification") or "") + (section(text, "Tasks") or "")
+    return [why for pat, why in RISKS if re.search(pat, ver, re.I)]
+
+
 def main(args):
     roadmap = (ROOT / "docs" / "roadmap.md").read_text(encoding="utf-8")
     on_disk = sorted(p.name for p in SPECS.glob("phase*.md"))
@@ -44,6 +55,8 @@ def main(args):
         for p in lint((SPECS / f"{name}.md").read_text(encoding="utf-8")):
             print(f"SPEC LINT {name}: {p}")
             bad = 1
+        for w in risks((SPECS / f"{name}.md").read_text(encoding="utf-8")):
+            print(f"SPEC RISK {name}: {w}")
     for s in on_disk:
         n = re.match(r"phase(\w+?)[a-z]?\.md", s).group(1)
         head = re.search(rf"^## Phase {n}: .*$", roadmap, re.M)
@@ -59,6 +72,7 @@ def _selftest():
     assert lint(good) == []
     assert len(lint("# Phase 1: X\n\n## Tasks\n")) == 3
     assert lint(good.replace("`python3 check.py`", "it works")) == ["no `## Verification` section with a runnable command in backticks"]
+    assert risks("## Verification\nrun the Edge walk in `x`\n") and not risks("## Verification\n`python3 check.py`\n")
     print("selftest ok")
 
 

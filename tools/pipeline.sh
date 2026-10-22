@@ -175,6 +175,10 @@ for arg in "$@"; do
         [ "$n" -gt 1 ] && notify "pipeline: $spec stage $((i + 1))/$n ${label:-whole}"
         run_stage "$spec" "$((i + 1))" "$kind" "$label" "$final"
         verdict=$(awk '{print $2}' <<<"$line")
+        # a PASS needs proof the tester ran checks (the builder may already have committed: it is then marked blocked, not tagged)
+        if [ "$final" = 1 ] && [ "$verdict" = PASS ] && ! python3 tools/tester_evidence.py "${sid:-none}"; then
+            line="PIPELINE: INCOMPLETE committed, but no sign the tester ran any check (session $sid): re-run the tester"; verdict=INCOMPLETE
+        fi
         if [ "$verdict" = PASS ] || { [ "$final" = 0 ] && [ "$verdict" = STAGE ]; }; then
             [ "$final" = 0 ] && notify "pipeline: $spec stage $((i + 1))/$n ${label:-whole}: $line"
             continue
