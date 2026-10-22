@@ -394,7 +394,7 @@ plan already syncs), how stale hints expire, and whether the user can see why a 
 Requires Phase 32 (assistant token). Assistant side: `notion_assistant` Phase 52.
 **Verified 2026-10-21:** `test.html` (resolve/merge/dismiss, freeDays reorder keeps in-group order), Worker harness (assistant GET/PUT `/dayHints` 204/200, bad effort/>28 dates/long `why` 400, other writes 403, `/ranking` marks the day busy + returns `hint`), plan chip at PC and 390 px with `<b>` shown as text and tap-dismiss persisting, `check.py`. Live check left in `tasks.md`.
 
-## Phase 39: "Ran out" items steer the plan [S] — not started
+## Phase 39: "Ran out" items steer the plan [S] — blocked 2026-10-22: PIPELINE: FAIL tester verdict INCOMPLETE (Edge run denied by permission classifier; no defects found), not committed
 
 **Added 2026-10-19.** When an item is ticked as run out (from the Google Tasks pantry list or the app), the planner records it
 as out-of-stock on the pantry and the next plan generation treats meals that need it as needing a shop (they are not removed,
