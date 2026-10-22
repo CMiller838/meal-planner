@@ -68,6 +68,31 @@ for (const [vp, size] of Object.entries({ pc: { width: 1440, height: 900 }, phon
     await page.waitForSelector('#shopping-root .shop-line', { timeout: 10000 });
     await shot('shopping');
   });
+  await step('pantry: tab, scan sheet check-digit error, manual product saves and lists with est.', async () => {
+    await page.goto(`${base}/shopping.html#pantry`);
+    await page.waitForSelector('#panel-pantry:not(.hidden) #scan-btn');
+    await page.click('#scan-btn');
+    await page.fill('#scan-digits', '1234567890123');
+    await page.click('#scan-go');
+    await page.waitForFunction(() => /check digit/.test(document.getElementById('scan-msg').textContent));
+    await page.keyboard.press('Escape');
+    await page.click('#add-product-btn');
+    await page.fill('#pf-name', 'Walk <b>rice</b>');
+    await page.fill('[data-nutrient="protein_g"]', '7.5');
+    await page.click('#pf-save');
+    await page.waitForSelector('#pantry-root .prod-chip[data-open]');
+    await page.evaluate(() => {
+      const m = JSON.parse(localStorage.getItem('mp_products'));
+      m.products[0].nutrients.fat_g = { value: 1, basis: 'estimate' };
+      localStorage.setItem('mp_products', JSON.stringify(m));
+    });
+    await page.reload();
+    await page.click('#pantry-root .prod-chip[data-open]');
+    await page.waitForSelector('.prod-table .est');
+    if (await page.locator('.modal-sheet b').count()) throw new Error('product name rendered as HTML');
+    await shot('pantry');
+    await page.keyboard.press('Escape');
+  });
   await step('no uncaught page errors during the walk', async () => { if (errs.length) throw new Error(errs[0]); });
   await ctx.close();
 }

@@ -143,6 +143,10 @@ Installable as a PWA on Android Chrome via `manifest.json` + `sw.js`.
 - **`dayHints` (Phase 37) is assistant-written and read-only in the app**: a KV key keyed by ISO date, never a field of
   `plan` or `mp_planPrefs`. `MP.DayHints.merge` adds busy hints to the user's `busyDays` (user busy beats `free`); hints
   only reorder (`rankSlot`'s `freeDays`/busy layer). Dismissals are local (`mp_dayHintOff`), never pushed.
+- **Products (Phase 33a) are reference data, never planning input**: the generator, `rankByGap` and `buildLists` never read
+  `products`. A nutrient's `basis` precedence is `label > off > cofid > usda > estimate` (a lower basis never overwrites a
+  higher one), an absent nutrient key means unknown (never 0, an empty input never becomes 0), and `MP.Products` is the
+  only place that shapes a record. The Pantry tab never writes the pantry.
 - **Hard content exclusions are enforced in code, not just docs**: no
   mushrooms (including from TheMealDB results), no standalone egg meals
   (egg-within-a-dish is fine), no vegetables in toasties. These came from

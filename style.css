@@ -714,3 +714,19 @@ button.ghost.danger { color: var(--danger); border-color: var(--danger); }
   .step-row { flex-wrap: wrap; }
   .step-row .step-text { flex-basis: calc(100% - 2rem); }
 }
+
+/* ---- Pantry tab / product sheet (Phase 33a) ---- */
+.prod-row { display: flex; align-items: center; gap: .6rem; flex-wrap: wrap; animation: mp-slot-in 220ms ease-out both; }
+.prod-chip { background: var(--surface-alt); color: var(--text); border: 1px solid var(--border); border-radius: 999px; padding: .3rem .8rem; font-size: .85rem; cursor: pointer; transition: transform .15s ease; }
+.prod-chip:hover { transform: translateY(-1px); }
+.prod-chip:active { transform: scale(.95); }
+.prod-chip.muted { color: var(--text-dim); }
+.prod-table { width: 100%; border-collapse: collapse; margin-top: .6rem; font-size: .9rem; }
+.prod-table th, .prod-table td { text-align: left; padding: .3rem .4rem; border-bottom: 1px solid var(--border); }
+.prod-table thead th { color: var(--text-dim); font-weight: 700; font-size: .8rem; }
+.est { color: var(--butter); font-size: .75em; font-weight: 700; }
+.prod-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr)); gap: .6rem; }
+.prod-form label { display: flex; flex-direction: column; gap: .2rem; font-size: .85rem; color: var(--text-dim); }
+.scan-video { width: 100%; max-height: 40vh; border-radius: .8rem; background: #000; margin-bottom: .6rem; }
+.scan-video.hidden { display: none; }
+@media (prefers-reduced-motion: reduce) { .prod-row { animation: none; } .prod-chip { transition: none; } }

@@ -136,9 +136,242 @@
     });
   }
 
-  // ponytail: no arrow-key roving tabindex; two tabs don't earn one, add it if a tab row ever grows
+  // ---- Pantry tab: read-only pantry, product records, barcode scan (Phase 33a) ----
+  const NUTRIENT_ROWS = [
+    ["energy_kcal", "Energy", "kcal"], ["protein_g", "Protein", "g"], ["carbohydrate_g", "Carbohydrate", "g"], ["fat_g", "Fat", "g"],
+    ["saturates_g", "Saturates", "g"], ["sugars_g", "Sugars", "g"], ["fibre_g", "Fibre", "g"], ["salt_g", "Salt", "g"],
+  ];
+  const OFF_URL = "https://world.openfoodfacts.org/api/v2/product/";
+  const OFF_FIELDS = "?fields=product_name,product_name_en,brands,product_quantity,product_quantity_unit,serving_quantity,nutriments";
+  const sheetEl = () => document.getElementById("modal-sheet");
+  let stopCamera = () => {};
+  let ingredientKeys = null;
+
+  function closeSheet() {
+    stopCamera();
+    stopCamera = () => {};
+    document.getElementById("modal-overlay").classList.add("hidden");
+  }
+
+  function openSheet(html) {
+    stopCamera();
+    stopCamera = () => {};
+    sheetEl().innerHTML = `<button class="close-btn" aria-label="Close">✕</button>${html}`;
+    sheetEl().querySelector(".close-btn").addEventListener("click", closeSheet);
+    document.getElementById("modal-overlay").classList.remove("hidden");
+    return sheetEl();
+  }
+
+  const fmtNum = (v) => String(Math.round(v * 10) / 10);
+  const unitOf = (p) => (p.per === "100ml" ? "ml" : "g");
+
+  function nutrientCell(p, key, unit) {
+    const e = p.nutrients[key];
+    if (!e) return `<td>—</td><td>—</td>`;
+    const est = MP.Products.isEstimate(e) ? ` <span class="est" title="Estimated, not from the label">est.</span>` : "";
+    const serv = MP.Products.perServing(p, key);
+    return `<td>${fmtNum(e.value)} ${unit}${est}</td><td>${serv === null ? "—" : fmtNum(serv) + " " + unit}</td>`;
+  }
+
+  function nutrientTable(p) {
+    const rows = NUTRIENT_ROWS.map(([key, label, unit]) => `<tr><th>${label}</th>${nutrientCell(p, key, unit)}</tr>`);
+    const extra = Object.keys(p.nutrients).filter((k) => !NUTRIENT_ROWS.some((r) => r[0] === k))
+      .map((k) => `<tr><th>${esc(k)}</th>${nutrientCell(p, k, "")}</tr>`);
+    return `<table class="prod-table"><thead><tr><th></th><th>Per 100 ${unitOf(p)}</th><th>${p.servingSize ? "Per serving (" + esc(fmtNum(p.servingSize)) + " " + unitOf(p) + ")" : "Per serving"}</th></tr></thead>
+      <tbody>${rows.concat(extra).join("")}</tbody></table>`;
+  }
+
+  async function loadIngredientKeys() {
+    if (ingredientKeys) return ingredientKeys;
+    const keys = new Set();
+    try {
+      const tags = await fetch("ingredient-nutrient-tags.json").then((r) => r.json());
+      Object.keys(tags).filter((k) => !k.startsWith("_")).forEach((k) => keys.add(k));
+    } catch (e) { /* datalist is a convenience only */ }
+    try {
+      (await MP.getLibrary()).forEach((m) => (m.ingredients || []).forEach((i) => i.key && keys.add(MP.ShoppingList.normalizeKey(i.key))));
+    } catch (e) { /* same */ }
+    ingredientKeys = [...keys].sort();
+    return ingredientKeys;
+  }
+
+  function viewProduct(p, note) {
+    const pack = p.pack ? `${esc(fmtNum(p.pack.value))} ${esc(p.pack.unit)}` : "—";
+    const sheet = openSheet(`
+      <h2>${esc(p.name)}</h2>
+      ${note ? `<p class="muted">${esc(note)}</p>` : ""}
+      <p class="muted">${[p.brand, p.barcode && "Barcode " + p.barcode, p.ingredient && "Ingredient " + p.ingredient].filter(Boolean).map(esc).join(" · ") || "No brand or barcode"}</p>
+      <p class="muted">Pack ${pack} · Price ${p.price == null ? "—" : "£" + esc(p.price.toFixed(2))} · State ${esc(p.state || "—")}</p>
+      ${nutrientTable(p)}
+      <div class="modal-actions"><button id="prod-edit" class="btn">Edit</button></div>`);
+    sheet.querySelector("#prod-edit").addEventListener("click", () => editProduct(p));
+  }
+
+  async function editProduct(p, note) {
+    const keys = await loadIngredientKeys();
+    const val = (v) => (v == null ? "" : esc(v));
+    const nrows = NUTRIENT_ROWS.map(([key, label, unit]) => `<label>${label} (${unit})
+      <input type="number" step="any" min="0" inputmode="decimal" data-nutrient="${key}" value="${p.nutrients[key] ? val(p.nutrients[key].value) : ""}"></label>`).join("");
+    const sheet = openSheet(`
+      <h2>${p.updatedAt && MP.Sync.localProducts().some((x) => x.id === p.id) ? "Edit product" : "New product"}</h2>
+      ${note ? `<p class="muted">${esc(note)}</p>` : ""}
+      ${p.barcode ? `<p class="muted">Barcode ${esc(p.barcode)}</p>` : ""}
+      <div class="prod-form">
+        <label>Name <input type="text" id="pf-name" value="${val(p.name)}"></label>
+        <label>Brand <input type="text" id="pf-brand" value="${val(p.brand)}"></label>
+        <label>Ingredient <input type="text" id="pf-ingredient" list="pf-ingredients" value="${val(p.ingredient)}" placeholder="e.g. chicken_breast">
+          <datalist id="pf-ingredients">${keys.map((k) => `<option value="${esc(k)}">`).join("")}</datalist></label>
+        <label>Values are per <select id="pf-per"><option value="100g"${p.per === "100g" ? " selected" : ""}>100 g</option><option value="100ml"${p.per === "100ml" ? " selected" : ""}>100 ml</option></select></label>
+        <label>Serving size (${unitOf(p)}) <input type="number" step="any" min="0" inputmode="decimal" id="pf-serving" value="${val(p.servingSize)}"></label>
+        <label>Pack size <input type="number" step="any" min="0" inputmode="decimal" id="pf-pack" value="${p.pack ? val(p.pack.value) : ""}"></label>
+        <label>Pack unit <input type="text" id="pf-packunit" value="${p.pack ? val(p.pack.unit) : ""}" placeholder="g, ml"></label>
+        <label>Price (£) <input type="number" step="0.01" min="0" inputmode="decimal" id="pf-price" value="${val(p.price)}"></label>
+        <label>State <select id="pf-state">${["", "raw", "cooked", "dry"].map((s) => `<option value="${s}"${(p.state || "") === s ? " selected" : ""}>${s || "—"}</option>`).join("")}</select></label>
+        ${nrows}
+      </div>
+      <p id="pf-msg" class="muted"></p>
+      <div class="modal-actions"><button id="pf-save" class="btn">Save</button><button id="pf-cancel" class="ghost">Cancel</button></div>`);
+    sheet.querySelector("#pf-cancel").addEventListener("click", closeSheet);
+    sheet.querySelector("#pf-save").addEventListener("click", async () => {
+      const $ = (id) => sheet.querySelector(id);
+      const name = $("#pf-name").value.trim();
+      if (!name) { $("#pf-msg").textContent = "Name is required."; return; }
+      const n = (id) => (sheet.querySelector(id).value === "" ? null : Number(sheet.querySelector(id).value));
+      const packValue = n("#pf-pack"), packUnit = $("#pf-packunit").value.trim();
+      let next = {
+        ...p, name,
+        brand: $("#pf-brand").value.trim() || null,
+        ingredient: $("#pf-ingredient").value.trim() ? MP.ShoppingList.normalizeKey($("#pf-ingredient").value) : null,
+        per: $("#pf-per").value,
+        servingSize: n("#pf-serving") > 0 ? n("#pf-serving") : null,
+        pack: packValue > 0 && packUnit ? { value: packValue, unit: packUnit } : null,
+        price: n("#pf-price") >= 0 ? n("#pf-price") : null,
+        state: $("#pf-state").value || null,
+      };
+      // Only typed changes become `label`; untouched scanned values keep their basis.
+      const typed = {};
+      sheet.querySelectorAll("[data-nutrient]").forEach((i) => {
+        const cur = next.nutrients[i.dataset.nutrient];
+        if (i.value !== "" && (!cur || cur.value !== Number(i.value))) typed[i.dataset.nutrient] = i.value;
+      });
+      next = MP.Products.setNutrients(next, typed, "label");
+      await MP.Sync.saveProduct(next);
+      closeSheet();
+      renderPantry();
+    });
+  }
+
+  function blankProduct(over) {
+    return { id: "p-" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), barcode: null, name: "", brand: null, ingredient: null,
+      per: "100g", servingSize: null, pack: null, price: null, state: null, nutrients: {}, source: "manual", updatedAt: new Date().toISOString(), ...over };
+  }
+
+  async function lookup(code, ingredient, msgEl) {
+    if (!MP.Products.validBarcode(code)) { msgEl.textContent = "That isn't a valid barcode (check digit fails)."; return; }
+    const known = MP.Sync.localProducts().find((p) => p.id === code);
+    if (known) { viewProduct(known); return; }
+    msgEl.textContent = "Looking up…";
+    let found = null, note = "";
+    try {
+      const res = await fetch(`${OFF_URL}${code}.json${OFF_FIELDS}`);
+      found = MP.Products.fromOff(code, await res.json());
+      if (!found) note = "Not on Open Food Facts, type the label";
+    } catch (e) {
+      note = "Couldn't reach Open Food Facts";
+    }
+    const p = found || blankProduct({ id: code, barcode: code, source: "scan" });
+    if (ingredient) p.ingredient = ingredient;
+    editProduct(p, note);
+  }
+
+  function scanSheet(ingredient) {
+    const sheet = openSheet(`
+      <h2>Scan a product</h2>
+      ${ingredient ? `<p class="muted">Linking to ${esc(ingredient)}</p>` : ""}
+      <video id="scan-video" class="scan-video hidden" playsinline muted></video>
+      <div class="adhoc-add">
+        <input type="text" id="scan-digits" inputmode="numeric" pattern="[0-9]*" placeholder="Barcode digits" aria-label="Barcode digits">
+        <button id="scan-go" class="btn">Look up</button>
+      </div>
+      <p id="scan-msg" class="muted"></p>`);
+    const msg = sheet.querySelector("#scan-msg"), digits = sheet.querySelector("#scan-digits");
+    const go = () => lookup(digits.value.trim(), ingredient, msg);
+    sheet.querySelector("#scan-go").addEventListener("click", go);
+    digits.addEventListener("keydown", (e) => { if (e.key === "Enter") go(); });
+    startScanner(sheet.querySelector("#scan-video"), (code) => { digits.value = code; go(); });
+  }
+
+  // BarcodeDetector over a rear-camera stream; any failure leaves just the digits input.
+  async function startScanner(video, onCode) {
+    if (!("BarcodeDetector" in window) || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) return;
+    let stream, timer, stopped = false;
+    stopCamera = () => { stopped = true; clearInterval(timer); if (stream) stream.getTracks().forEach((t) => t.stop()); };
+    try {
+      const detector = new BarcodeDetector({ formats: ["ean_13", "ean_8", "upc_a"] });
+      stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+      if (stopped) { stream.getTracks().forEach((t) => t.stop()); return; }
+      video.srcObject = stream;
+      video.classList.remove("hidden");
+      await video.play();
+      timer = setInterval(async () => {
+        try {
+          const [hit] = await detector.detect(video);
+          if (hit && !stopped) { stopCamera(); onCode(hit.rawValue); }
+        } catch (e) { /* frame not ready */ }
+      }, 400);
+    } catch (e) {
+      stopCamera();
+    }
+  }
+
+  function chipHtml(p, key) {
+    const prot = p.nutrients.protein_g;
+    const protText = prot ? ` · ${esc(fmtNum(prot.value))} g protein/100 ${unitOf(p)}${MP.Products.isEstimate(prot) ? ' <span class="est">est.</span>' : ""}` : "";
+    return `<button class="prod-chip" data-open="${esc(p.id)}">${[p.brand, p.name].filter(Boolean).map(esc).join(" · ")}${protText}</button>`;
+  }
+
+  function pantryHtml(items, products) {
+    const rows = items.map((item) => {
+      const key = MP.ShoppingList.normalizeKey(item.name);
+      const p = MP.Products.forIngredient(products, key);
+      return `<li class="shop-line prod-row"><span class="shop-qty">${esc(MP.qtyText(item.qty))}</span>
+        <span class="shop-name">${esc(item.name)}</span>
+        ${p ? chipHtml(p) : `<button class="prod-chip muted" data-link="${esc(key)}">Link product</button>`}</li>`;
+    });
+    const all = [...products].sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt));
+    return `<section class="shop-block">
+      <div class="top-actions"><button id="scan-btn" class="btn">Scan a product</button><button id="add-product-btn" class="ghost">Add without barcode</button></div>
+      <h3>In your pantry</h3>
+      ${rows.length ? `<ul class="shop-list">${rows.join("")}</ul>` : `<p class="empty">Nothing in your pantry.</p>`}
+      <h3>All products</h3>
+      ${all.length ? `<ul class="shop-list">${all.map((p) => `<li class="shop-line prod-row">${chipHtml(p)}</li>`).join("")}</ul>` : `<p class="empty">No products yet. Scan one to start.</p>`}
+    </section>`;
+  }
+
+  function renderPantry() {
+    const root = document.getElementById("pantry-root");
+    const products = MP.Sync.localProducts();
+    root.innerHTML = pantryHtml(MP.Sync.localItems("pantry"), products);
+    root.querySelector("#scan-btn").addEventListener("click", () => scanSheet(null));
+    root.querySelector("#add-product-btn").addEventListener("click", () => editProduct(blankProduct({})));
+    root.querySelectorAll("[data-open]").forEach((b) => b.addEventListener("click", () => viewProduct(products.find((p) => p.id === b.dataset.open))));
+    root.querySelectorAll("[data-link]").forEach((b) => b.addEventListener("click", () => scanSheet(b.dataset.link)));
+  }
+
+  function initPantry() {
+    renderPantry();
+    Promise.all([MP.Sync.fetchPantry(), MP.Sync.syncProducts()]).then(renderPantry);
+    const overlay = document.getElementById("modal-overlay");
+    overlay.addEventListener("click", (e) => { if (e.target === overlay) closeSheet(); });
+    document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeSheet(); });
+  }
+
+  const TABS = ["planned", "adhoc", "pantry"];
+  const tabFromHash = () => { const h = location.hash.slice(1); return TABS.includes(h) ? h : "planned"; };
+
+  // ponytail: no arrow-key roving tabindex; three tabs don't earn one, add it if a tab row ever grows
   function showTab(name) {
-    for (const pairName of ["planned", "adhoc"]) {
+    for (const pairName of TABS) {
       const active = pairName === name;
       document.getElementById(`panel-${pairName}`).classList.toggle("hidden", !active);
       const btn = document.getElementById(`tab-${pairName}`);
@@ -148,21 +381,20 @@
   }
 
   function initTabs() {
-    showTab(location.hash === "#adhoc" ? "adhoc" : "planned");
-    for (const name of ["planned", "adhoc"]) {
+    showTab(tabFromHash());
+    for (const name of TABS) {
       document.getElementById(`tab-${name}`).addEventListener("click", () => {
         location.hash = `#${name}`;
         showTab(name);
       });
     }
-    window.addEventListener("hashchange", () => {
-      showTab(location.hash === "#adhoc" ? "adhoc" : "planned");
-    });
+    window.addEventListener("hashchange", () => showTab(tabFromHash()));
   }
 
   async function init() {
     MP.initTheme();
     initTabs();
+    initPantry();
     renderAdhoc();
     MP.Sync.fetchItems("adhoc").then(() => renderAdhoc());
 

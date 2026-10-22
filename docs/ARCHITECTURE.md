@@ -139,6 +139,9 @@ fully usable with the bridge unreachable — sync is never on the critical
 path. `planPrefs` (v4) follows the `prefs` pattern with one difference: it is
 also *pulled* (Hermes may write it), on open of the Plan-with-me screen only.
 
+- `products` (Phase 33a) -> `{ updatedAt, products: Product[] }`, mirrored in localStorage `mp_products`, merged per record
+  (`MP.Products.merge`, newer `updatedAt` wins). Reference data, see "v6 - product records" below.
+
 ## Worker endpoints
 
 - `GET /library`, `PUT /library`
@@ -152,6 +155,7 @@ also *pulled* (Hermes may write it), on open of the Plan-with-me screen only.
 - `GET /planPrefs`, `PUT /planPrefs` (v4)
 - `GET /dayHints`, `PUT /dayHints` (Phase 37; assistant-written `{ updatedAt, days: { ISO date: { effort, why } } }`, read-only in the app)
 - `GET /meal/:id/method`, `PUT /meal-method` (Phase 40; meal `method: [{text, minutes?}]` + `methodStatus`; the assistant's PUT forces `drafted`, 409 on an accepted meal; confirm-cook is the existing `PUT /eat-requests`, no new route)
+- `GET /products`, `PUT /products` (Phase 33a; whole-key product reference records, shape-checked by `productsError`)
 - `GET /ranking` (v4, read-only — no PUT, deliberately)
 - All requests require `X-Auth-Token: <secret>`, checked against a Wrangler
   secret binding (`wrangler secret put AUTH_TOKEN`) — never committed to
@@ -467,3 +471,13 @@ and can't answer an arbitrary slot query); free-text preference input
 (rejected in the outline — structured chips only); a new Hermes write route
 for guided plans (rejected in the outline — `/placements` stays the only
 write path).
+
+## v6 - product records (Phase 33a)
+
+A product is a **separate reference record** (brand, pack, price, per-100 g/ml nutrition with provenance per nutrient),
+not a field of the pantry or the library. It is informational only: `rankByGap`'s approximate low/med/high tags stay the
+generator's only nutrition input, and nothing in planning reads `products`. There are two nutrition sources on purpose:
+coarse tags decide what to cook, label data answers "what is in this pack". Records come from a barcode scan
+(Open Food Facts, fetched from the browser), typing the label, or the assistant writing one after reading a photo.
+Storage is one KV key on the existing relay, no new route type. A pantry item shows the newest product whose
+`ingredient` equals its normalised name, so the pantry shape and `commitCook`'s sole-writer role are untouched.

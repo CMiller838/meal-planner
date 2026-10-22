@@ -52,6 +52,18 @@ assert.equal((await call("PUT", "/today", "a", today)).status, 204);
 assert.deepEqual((await call("GET", "/today", "a")).body, today);
 for (const bad of [{ ...today, water: 100 }, { ...today, water: -1 }, { ...today, caffeine: 1.5 }, { ...today, date: "22/10" }, { ...today, gym: "yes" }, { ...today, routineDone: [1] }, []])
   assert.equal((await call("PUT", "/today", "a", bad)).status, 400, JSON.stringify(bad));
+// Phase 33a: /products
+assert.equal((await call("GET", "/products", "")).status, 401);
+const prod = { id: "4006381333931", barcode: "4006381333931", name: "Pen", per: "100g", nutrients: { protein_g: { value: 0, basis: "off" }, iron_mg: { value: 2, basis: "estimate" } }, updatedAt: "2026-10-22T00:00:00.000Z" };
+const prods = (...p) => ({ updatedAt: "2026-10-22T00:00:00.000Z", products: p });
+assert.equal((await call("PUT", "/products", "a", prods(prod, { ...prod, id: "p-1", barcode: null, ingredient: null }))).status, 204);
+assert.equal((await call("GET", "/products", "a")).body.products.length, 2);
+for (const bad of [
+  prods({ ...prod, id: "1234567890123", barcode: "1234567890123" }), prods(prod, prod), prods({ ...prod, id: "other" }),
+  prods({ ...prod, nutrients: { protein_g: { value: "5", basis: "off" } } }), prods({ ...prod, nutrients: { protein_g: { value: 5, basis: "guess" } } }),
+  prods({ ...prod, nutrients: { protein_g: { value: -1, basis: "off" } } }), prods({ ...prod, per: "100oz" }), prods({ ...prod, name: " " }),
+  prods({ ...prod, updatedAt: "yesterday" }), { products: "x" }, [],
+]) assert.equal((await call("PUT", "/products", "a", bad)).status, 400, JSON.stringify(bad).slice(0, 80));
 // the assistant token still can't reach other writes
 assert.equal((await call("PUT", "/plan", "a", { days: [] })).status, 403);
 assert.equal((await call("PUT", "/planPrefs", "a", {})).status, 403);

@@ -32,6 +32,8 @@
             aria-controls="panel-planned" aria-selected="true">Shopping list</button>
     <button class="tab-btn" role="tab" id="tab-adhoc"
             aria-controls="panel-adhoc" aria-selected="false">Ad-hoc list</button>
+    <button class="tab-btn" role="tab" id="tab-pantry"
+            aria-controls="panel-pantry" aria-selected="false">Pantry</button>
   </div>
 
   <section id="panel-planned" class="tab-panel" role="tabpanel" aria-labelledby="tab-planned">
@@ -42,12 +44,21 @@
   <section id="panel-adhoc" class="tab-panel hidden" role="tabpanel" aria-labelledby="tab-adhoc">
     <div id="adhoc-root"></div>
   </section>
+
+  <section id="panel-pantry" class="tab-panel hidden" role="tabpanel" aria-labelledby="tab-pantry">
+    <div id="pantry-root"></div>
+  </section>
 </main>
+
+<div id="modal-overlay" class="modal-overlay hidden">
+  <div id="modal-sheet" class="modal-sheet" role="dialog" aria-modal="true"></div>
+</div>
 
 <script src="data.js"></script>
 <script src="prefs.js"></script>
 <script src="shelf-life.js"></script>
 <script src="shopping-list.js"></script>
+<script src="products.js"></script>
 <script src="hermes-sync.js"></script>
 <script src="shopping.js"></script>
 <script>if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js");</script>

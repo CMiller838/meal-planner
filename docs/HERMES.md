@@ -70,6 +70,18 @@ lands on `/adhoc` as a structured `qty` too. So a `qty` Hermes reads back
 isn't necessarily free text just because no person typed it; treat both
 forms as equally possible on every read, regardless of who wrote them.
 
+## `GET /products` / `PUT /products`
+
+Product reference records (Phase 33a), whole-key like `/pantry`, both tokens. Body: `{ updatedAt, products: Product[] }`
+(max 2000). `Product` = `{ id, barcode|null, name, brand?, ingredient?, per: "100g"|"100ml", servingSize?, pack?: {value, unit},
+price? (GBP per pack), state?: raw|cooked|dry, nutrients: { <key>: { value >= 0, basis } }, source: scan|photo|manual, updatedAt }`.
+`basis` is `label|off|cofid|usda|estimate` (precedence in that order; never overwrite a higher basis with a lower one).
+Nutrient keys are `/^[a-z0-9_]+$/`: `energy_kcal`, `protein_g`, `carbohydrate_g`, `fat_g`, `saturates_g`, `sugars_g`, `fibre_g`,
+`salt_g` plus micros. An absent key means unknown, never 0. `barcode` needs a valid GS1 check digit and `id === barcode`;
+otherwise use `id: "p-<anything unique>"`. `ingredient` is a planner ingredient key (snake_case) and links the record to the
+pantry item of that name. Fetch-then-write and merge per record by `updatedAt`: PUT replaces the whole list. Reference only:
+the planner never reads it for ranking. 400 on a bad check digit, duplicate id, non-numeric value or unknown basis.
+
 ## `GET /adhoc` / `PUT /adhoc`
 
 Identical body shape and validation to `/pantry` (including the string-or-
@@ -173,7 +185,7 @@ cook) keeping `eatenAt`.
 Two tokens, one per consumer: Hermes's `AUTH_TOKEN` (everything above), and
 the personal assistant's `ASSISTANT_TOKEN`, which reaches only `GET /library`,
 `GET /plan`, `GET /eaten-log`, `GET /shopping`, `GET /nutrition?date=` (approx. protein and gaps for one day), `GET /discover`, `GET /prefs`,
-`GET`/`PUT` on `/eat-requests`, `/pantry`, `/adhoc` and `/placements`,
+`GET`/`PUT` on `/eat-requests`, `/pantry`, `/adhoc`, `/placements` and `/products`,
 `PUT /planFlag`, and `PUT /library` **append only** (a body that changes an
 existing meal, or drops one the assistant didn't add itself, is `403`). `403` elsewhere (e.g. `PUT /prefs`,
 `PUT /plan`).

@@ -523,7 +523,9 @@ task starts editing one, stop and re-read the spec.
 
 ## Phase 33: Product nutrition reference (scan a barcode, read a photo)
 
-- [ ] 33a: records, `/products`, barcode scan, Pantry tab: `.claude/specs/phase33a.md`
+- [x] 33a: records, `/products`, barcode scan, Pantry tab: `.claude/specs/phase33a.md` (built; `MP.Products` in test.html, `/products` in tools/worker_test.mjs, Pantry step in walk.mjs)
+- [ ] Live: scan a real pack on the Pixel PWA, record saved and visible after reload
+- [ ] Live: assistant writes one product from a label photo via PUT /products and it shows on the Pantry tab
 - [ ] 33b: CoFID vitamin/mineral fill-in: `.claude/specs/phase33b.md`
 
 ## Phase 34: Use-by dates, expiring-soon route and "use it up"

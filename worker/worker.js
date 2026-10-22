@@ -26,7 +26,7 @@ const KEYS = {
   "/library": "library", "/planFlag": "planFlag", "/pantry": "pantry", "/adhoc": "adhoc",
   "/plan": "plan", "/placements": "placements", "/prefs": "prefs",
   "/eaten-log": "eatenLog", "/planPrefs": "planPrefs", "/eat-requests": "eatRequests",
-  "/dayHints": "dayHints", "/today": "today",
+  "/dayHints": "dayHints", "/today": "today", "/products": "products",
 };
 // The personal assistant's own token (ASSISTANT_TOKEN, never Hermes's
 // AUTH_TOKEN) reaches only these method+path pairs: read the plan side, queue
@@ -36,7 +36,7 @@ const ASSISTANT_ALLOWED = new Set([
   "GET /library", "GET /plan", "GET /eaten-log", "GET /shopping", "GET /eat-requests", "PUT /eat-requests",
   "GET /discover", "GET /pantry", "PUT /pantry", "GET /adhoc", "PUT /adhoc", "PUT /planFlag",
   "GET /placements", "PUT /placements", "GET /prefs", "PUT /library", "GET /nutrition",
-  "GET /dayHints", "PUT /dayHints", "PUT /meal-method", "GET /today", "PUT /today",
+  "GET /dayHints", "PUT /dayHints", "PUT /meal-method", "GET /today", "PUT /today", "GET /products", "PUT /products",
 ]);
 const METHOD_PATH = /^\/meal\/([^/]+)\/method$/;
 const SLOT_TYPES = ["breakfast", "lunch", "dinner", "snack"];
@@ -483,7 +483,46 @@ function eatenLogError(parsed) {
   return null;
 }
 
+const PRODUCT_PER = ["100g", "100ml"];
+const PRODUCT_BASES = ["label", "off", "cofid", "usda", "estimate"];
+
+/** GS1 mod-10. Duplicated from products.js (the Worker can't import it without the shim). */
+function validBarcode(d) {
+  if (!/^\d+$/.test(d) || ![8, 12, 13, 14].includes(d.length)) return false;
+  let sum = 0;
+  for (let i = 0; i < d.length - 1; i++) sum += Number(d[d.length - 2 - i]) * (i % 2 === 0 ? 3 : 1);
+  return (10 - (sum % 10)) % 10 === Number(d[d.length - 1]);
+}
+
+/** Shape only. @param {any} parsed @returns {string|null} */
+function productsError(parsed) {
+  if (!Array.isArray(parsed.products)) return "products must be an array";
+  if (parsed.products.length > 2000) return "too many products";
+  const ids = new Set();
+  for (const p of parsed.products) {
+    if (typeof p !== "object" || p === null || Array.isArray(p)) return "each product must be an object";
+    if (typeof p.id !== "string" || !p.id) return "each product needs a non-empty id";
+    if (ids.has(p.id)) return "duplicate product id: " + p.id;
+    ids.add(p.id);
+    if (typeof p.name !== "string" || !p.name.trim()) return "each product needs a non-empty name";
+    if (!PRODUCT_PER.includes(p.per)) return "per must be 100g or 100ml";
+    if (p.barcode != null && (typeof p.barcode !== "string" || !validBarcode(p.barcode))) return "invalid barcode: " + p.barcode;
+    if (p.barcode != null && p.id !== p.barcode) return "id must equal barcode";
+    if (typeof p.updatedAt !== "string" || !Number.isFinite(Date.parse(p.updatedAt))) return "updatedAt must be an ISO string";
+    const n = p.nutrients == null ? {} : p.nutrients;
+    if (typeof n !== "object" || Array.isArray(n)) return "nutrients must be an object";
+    for (const [key, e] of Object.entries(n)) {
+      if (!/^[a-z0-9_]+$/.test(key)) return "bad nutrient key: " + key;
+      if (typeof e !== "object" || e === null) return "nutrient entry must be an object: " + key;
+      if (typeof e.value !== "number" || !Number.isFinite(e.value) || e.value < 0) return "nutrient value must be a finite number >= 0: " + key;
+      if (!PRODUCT_BASES.includes(e.basis)) return "unknown basis for " + key;
+    }
+  }
+  return null;
+}
+
 const VALIDATE = {
+  products: productsError,
   library: mealsError,
   pantry: itemsError,
   adhoc: itemsError,

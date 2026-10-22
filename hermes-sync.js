@@ -511,10 +511,48 @@ window.MP = window.MP || {};
     flushOps();
   }
 
+  // ---- Product records (Phase 33a): whole-key GET/PUT, merged per record by MP.Products.merge ----
+  function localProducts() {
+    try {
+      const m = JSON.parse(localStorage.getItem("mp_products") || "null");
+      return m && Array.isArray(m.products) ? m.products : [];
+    } catch (e) {
+      return [];
+    }
+  }
+
+  function writeLocalProducts(products) {
+    localStorage.setItem("mp_products", JSON.stringify({ updatedAt: new Date().toISOString(), products }));
+  }
+
+  async function syncProducts() {
+    if (!config().enabled) return "off";
+    try {
+      const remote = await req("GET", "/products");
+      const remoteList = remote && Array.isArray(remote.products) ? remote.products : [];
+      const merged = MP.Products.merge(localProducts(), remoteList);
+      writeLocalProducts(merged);
+      if (JSON.stringify(merged) !== JSON.stringify(remoteList)) {
+        await req("PUT", "/products", { updatedAt: new Date().toISOString(), products: merged });
+      }
+      return "ok";
+    } catch (e) {
+      return "error";
+    }
+  }
+
+  /** Stamps updatedAt, upserts into the mirror (works offline), then syncs. */
+  function saveProduct(p) {
+    const saved = { ...p, updatedAt: new Date().toISOString() };
+    writeLocalProducts([...localProducts().filter((x) => x.id !== saved.id), saved]);
+    return syncProducts();
+  }
+
   MP.Sync = {
     decide, needsPlan, config, saveConfig, syncLibrary, syncPlanFlag, ackPlanFlag,
     fetchItems, fetchPantry, localItems, writeLocalItems, queueOp, applyOps, flushOps,
     planMirror, pushPlan, pushPrefs, fetchPlanPrefs, fetchDayHints, pushPlanPrefs, newPlacements, newSince, syncPlacements, ackPlacements, syncEatRequests,
     localEatenLog, logEaten, unlogEaten, pushEatenLog, start,
+    syncProducts, localProducts, saveProduct,
   };
 })();

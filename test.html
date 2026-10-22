@@ -14,6 +14,7 @@
 <script src="generator.js"></script>
 <script src="shopping-list.js"></script>
 <script src="hermes-sync.js"></script>
+<script src="products.js"></script>
 <script src="exclusions.js"></script>
 <script src="mealdb.js"></script>
 <script src="plan-with-me.js"></script>
@@ -2451,6 +2452,41 @@
       check("generator output identical with and without routine meals", deepEqual(withR.days, withoutR.days));
       check("rankSlot never returns a routine meal", MP.Generator.rankSlot(lib41, 1, [], { tags, targets }).every((m) => !m.routine));
     }
+
+
+  // Phase 33a: product records
+  {
+    const P = MP.Products;
+    check("validBarcode: EAN-13", P.validBarcode("4006381333931"));
+    check("validBarcode: EAN-8", P.validBarcode("96385074"));
+    check("validBarcode: UPC-A", P.validBarcode("036000291452"));
+    check("validBarcode: bad check digit", !P.validBarcode("1234567890123"));
+    check("validBarcode: wrong length / non-digits", !P.validBarcode("12345") && !P.validBarcode("40063813339x1") && !P.validBarcode(null));
+    // trimmed copy of a real Open Food Facts v2 response (field names confirmed 2026-10-22)
+    const off = { status: 1, product: { product_name: "Nutella <script>", brands: "Ferrero,Other", product_quantity: "400", product_quantity_unit: "g", serving_quantity: 15,
+      nutriments: { "energy-kcal_100g": 539, proteins_100g: 6.3, carbohydrates_100g: 57.5, fat_100g: 30.9, "saturated-fat_100g": 10.6, sugars_100g: 56.3, fiber_100g: 0, salt_100g: 0.107 } } };
+    const hit = P.fromOff("3017620422003", off);
+    check("fromOff: hit maps name/brand/pack/serving", hit.name.startsWith("Nutella") && hit.brand === "Ferrero" && hit.pack.value === 400 && hit.servingSize === 15 && hit.id === "3017620422003");
+    check("fromOff: 8 label nutrients basis off, fibre 0 kept", P.LABEL_KEYS.every((k) => hit.nutrients[k] && hit.nutrients[k].basis === "off") && hit.nutrients.fibre_g.value === 0);
+    check("fromOff: status 0 -> null", P.fromOff("1", { status: 0 }) === null);
+    const noKcal = P.fromOff("1", { status: 1, product: { product_name: "x", nutriments: { energy_100g: 2000, proteins_100g: "n/a" } } });
+    check("fromOff: kJ only leaves kcal missing, bad protein omitted", !("energy_kcal" in noKcal.nutrients) && !("protein_g" in noKcal.nutrients));
+    check("fromOff: ml product -> per 100ml", P.fromOff("1", { status: 1, product: { product_name: "Milk", product_quantity: 1, product_quantity_unit: "l" } }).per === "100ml");
+    let p = { ...hit, nutrients: { protein_g: { value: 9, basis: "label" }, fat_g: { value: 1, basis: "estimate" } } };
+    p = P.setNutrients(p, { protein_g: 6, fat_g: 2, fibre_g: 0, salt_g: null, sugars_g: "", energy_kcal: NaN }, "off");
+    check("setNutrients: lower basis never overwrites higher", p.nutrients.protein_g.value === 9 && p.nutrients.fat_g.basis === "off");
+    check("setNutrients: 0 kept, null/''/NaN untouched", p.nutrients.fibre_g.value === 0 && !("salt_g" in p.nutrients) && !("sugars_g" in p.nutrients) && !("energy_kcal" in p.nutrients));
+    check("setNutrients: typed label replaces anything", P.setNutrients(p, { fat_g: 5 }, "label").nutrients.fat_g.basis === "label");
+    check("isEstimate", P.isEstimate({ basis: "cofid" }) && !P.isEstimate({ basis: "off" }) && !P.isEstimate(undefined));
+    check("perServing: value x serving / 100, null when missing", P.perServing(hit, "fat_g") === 30.9 * 15 / 100 && P.perServing(hit, "iron_mg") === null && P.perServing({ ...hit, servingSize: null }, "fat_g") === null);
+    const a = { id: "a", ingredient: "rice", updatedAt: "2026-01-01T00:00:00Z" }, b = { id: "b", ingredient: "rice", updatedAt: "2026-02-01T00:00:00Z" };
+    check("forIngredient: newest wins, none -> null", P.forIngredient([a, b], "rice").id === "b" && P.forIngredient([a], "milk") === null);
+    const m = P.merge([{ id: "a", v: "L", updatedAt: "2026-03-01T00:00:00Z" }, { id: "c", v: "L", updatedAt: "2026-01-01T00:00:00Z" }, { id: "t", v: "L", updatedAt: "2026-01-01T00:00:00Z" }],
+      [{ id: "a", v: "R", updatedAt: "2026-02-01T00:00:00Z" }, { id: "t", v: "R", updatedAt: "2026-01-01T00:00:00Z" }, { id: "r", v: "R", updatedAt: "2026-01-01T00:00:00Z" }]);
+    const mv = Object.fromEntries(m.map((x) => [x.id, x.v]));
+    check("merge: union, newer wins, ties to remote", m.length === 4 && mv.a === "L" && mv.t === "R" && mv.c === "L" && mv.r === "R");
+    check("merge: null sides treated as []", P.merge(null, undefined).length === 0);
+  }
 
   lines.push("", `${pass} passed, ${fail} failed`);
   document.getElementById("out").textContent = lines.join("\n");
