@@ -497,6 +497,8 @@ Storage is one KV key on the existing relay, no new route type. A pantry item sh
 via the hand-reviewed `tools/cofid-map.json` (ingredient key -> food code). Values are estimates (`basis: "cofid"`, shown "est.").
 Contains public sector information licensed under the Open Government Licence v3.0. Source: McCance and Widdowson's The
 Composition of Foods Integrated Dataset 2021.
+**Derived tags (Phase 57).** `tools/cofid_derive.py apply` adds tags for mapped keys missing from `ingredient-nutrient-tags.json` (share of daily target per 100 g, thresholds in `tools/cofid-levels.json`); existing tags are never overwritten, `diff` lists disagreements.
+A human picks the food code (`find`), the rule picks the levels; absent nutrient = untagged.
 
 ## v7 - activity log and undo (Phase 48)
 

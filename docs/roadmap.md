@@ -602,7 +602,7 @@ endpoints (`/planFlag`, `/library`, `/pantry` raw PUTs) are kept for the app but
 routes from Phase 48 for writes. **Verify:** the list matches the Worker; every write route in the list is covered by Phase 48.
 Assistant side: `notion_assistant` Phase 89.
 
-## Phase 57: Measured nutrient levels for new ingredients (CoFID) [M] — not started
+## Phase 57: Measured nutrient levels for new ingredients (CoFID) [M] — built 2026-10-22, live checks pending
 
 **Added 2026-10-22** (from Phase 50 planning: the user wants accurate health tracking, not assistant-guessed tags). An
 ingredient that isn't in `ingredient-nutrient-tags.json` (one added from a draft or a TheMealDB import, shown as "not tracked
@@ -611,3 +611,5 @@ example a share of the daily target per 100 g), never typed in by hand or inferr
 `tools/cofid-map.json` + `tools/cofid_build.py`, and the tags file stays the single source. Needs the CoFID 2021 xlsx (a user
 step). **Verify:** re-deriving the existing 33 ingredients reproduces their current levels or lists every difference for the
 user to approve; a newly mapped ingredient stops showing "not tracked yet". Requires Phase 50.
+
+**Built 2026-10-22:** `tools/cofid_derive.py` + `tools/cofid-levels.json` + `tools/test_cofid_derive.py` (in `check.py`). Verified: self-check passes; `diff` on the 29 shared keys (28 disagree somewhere, expected: tags are serving-sized judgments) lists 160 differences: 120 nutrients derived but untagged, 8 tagged but not derived (e.g. protein for beans), 32 level mismatches. Run `python3 tools/cofid_derive.py diff` for the list; no existing tag was changed. Live: map one new ingredient with the xlsx.
