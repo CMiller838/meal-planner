@@ -481,7 +481,7 @@ frozen items' use-by (months, per the existing `frozenMonths`, not days).
 **Verify:** an item with no `storage` still works and shows its category default marked as an estimate; the route works with an
 empty freezer. Requires Phase 34. Assistant side: `notion_assistant` Phase 67.
 
-## Phase 48: Activity log and undo for every assistant write [L] — not started
+## Phase 48: Activity log and undo for every assistant write [L] — blocked 2026-10-22: PIPELINE: BLOCKED Tester verdict INCOMPLETE: the Windows Edge walk was denied by the permission classifier, so it needs the user to run it or to decide whether 
 
 **Added 2026-10-19.** Every change the assistant makes through the token (pantry, plan, ratings, routine/tap logs, drafts) is
 recorded in an `activity` list: time, who (assistant or app), what changed (before and after), and the reason in a short line.
