@@ -55,6 +55,8 @@ CSS, no framework, no backend, no sign-up. Deployed to GitHub Pages. All state
 suggestions come live from TheMealDB's free public API (no key required).
 Installable as a PWA on Android Chrome via `manifest.json` + `sw.js`.
 
+- **A new cross-file dependency between plain `<script>` modules (file A now uses `MP.X` from B) means every HTML page
+  loading A must also load B, before it.** Grep `*.html` for pages with A but not B before finishing.
 - **Never add a new dependency (npm package, CDN script, build tool) without
   confirming with the user first.** The zero-build-step, zero-dependency shape
   is intentional (GitHub Pages, must "just open and work").
