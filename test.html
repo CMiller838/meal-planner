@@ -19,6 +19,7 @@
 <script src="mealdb.js"></script>
 <script src="plan-with-me.js"></script>
 <script src="day-hints.js"></script>
+<script src="ratings.js"></script>
 <script src="plan.js"></script>
 <script>
 (async function () {
@@ -2028,6 +2029,40 @@
       check("per-half reset: day 8's pressure formula ignores a blown week 1",
         pressureFormula(blownWeek1, "second", 50, 1) === pressureFormula(cheapWeek1, "second", 50, 1)
         && pressureFormula(blownWeek1, "second", 50, 1) === 0);
+    }
+
+    // Phase 51: MP.Ratings + rankSlot rating layer / never filter.
+    {
+      const R = MP.Ratings;
+      localStorage.removeItem("mp_ratings");
+      const rp = [1, 2, 3, 4].map((i) => ({ id: "r" + i, name: "r" + i, prepEffort: "quick", mealTypes: ["dinner"], ingredients: [] }));
+      const rc = { tags, targets };
+      const ids = (rat) => MP.Generator.rankSlot(rp, 1, [], { ...rc, ratings: rat }).map((m) => m.id);
+      const base = ids(undefined);
+      check("ratings: empty map = today's order", deepEqual(ids({}), base) && deepEqual(ids({ r1: { rating: null, never: false } }), base));
+      const ord = ids({ [base[0]]: { rating: "down" }, [base[3]]: { rating: "up" } });
+      check("ratings: up before neutral before down, pure reorder",
+        ord[0] === base[3] && ord[3] === base[0] && deepEqual(ord.slice(1, 3), base.slice(1, 3)) && ord.length === 4);
+      check("ratings: never drops the meal, even from a pool of one",
+        !ids({ r2: { never: true } }).includes("r2") && deepEqual(MP.Generator.rankSlot([rp[0]], 1, [], { ...rc, ratings: { r1: { never: true } } }), []));
+      const lib = library.map((m) => ({ ...m }));
+      const dinners = lib.filter((m) => (m.mealTypes || []).includes("dinner"));
+      const victim = dinners[0].id;
+      let seen = false;
+      for (let i = 0; i < 5; i++) {
+        const pl = MP.Generator.generatePlan(lib, tags, targets, shelfData, undefined, null, {}, {}, { [victim]: { never: true } });
+        if (pl.days.some((d) => Object.values(d.slots).some((sl) => sl.mealId === victim))) seen = true;
+      }
+      check("ratings: a never meal never appears in generatePlan", !seen);
+      R.set("r1", { rating: "up", note: " hi " });
+      check("Ratings.set: record shaped, note trimmed, neverIds", R.get().r1.rating === "up" && R.get().r1.note === "hi" && R.get().r1.never === false && R.neverIds().size === 0);
+      R.set("r1", { never: true, note: "x".repeat(200) });
+      check("Ratings.set: merge keeps rating, caps note, never flagged", R.get().r1.rating === "up" && R.get().r1.note.length === 120 && R.neverIds().has("r1"));
+      R.merge({ r1: { rating: "down", note: "old", never: false, at: "2000-01-01T00:00:00.000Z" }, r9: { rating: "up", note: "", never: false, at: "2000-01-01T00:00:00.000Z" } });
+      check("Ratings.merge: newest at wins per meal", R.get().r1.rating === "up" && R.get().r9.rating === "up");
+      R.merge({ r1: { rating: "down", note: "new", never: false, at: "2999-01-01T00:00:00.000Z" } });
+      check("Ratings.merge: newer remote replaces", R.get().r1.rating === "down" && R.get().r1.note === "new");
+      localStorage.removeItem("mp_ratings");
     }
 
     // Phase 37: MP.DayHints resolve/merge/dismiss + generator freeDays reorder.

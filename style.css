@@ -745,3 +745,15 @@ button.ghost.danger { color: var(--danger); border-color: var(--danger); }
 .useup-strip li span { color: var(--butter); font-weight: 700; }
 .useup-strip li.over span { color: var(--danger); }
 @media (prefers-reduced-motion: reduce) { .useup-strip { animation: none; } }
+
+/* Phase 51: meal ratings */
+.rating-row { display: grid; gap: .5rem; margin-top: .8rem; animation: rating-in .2s ease-out; }
+.rating-btns { display: flex; flex-wrap: wrap; gap: .5rem; }
+.rating-btn[aria-pressed="true"], .rating-never[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); }
+.rating-never[aria-pressed="true"] { border-color: var(--danger); color: var(--danger); }
+.rating-note { width: 100%; box-sizing: border-box; }
+.tag.never-badge { color: var(--danger); border-color: var(--danger); background: transparent; }
+.rating-hint { font-size: .75rem; color: var(--accent-2); margin-top: .25rem; }
+.rating-hint.never { color: var(--danger); }
+@keyframes rating-in { from { opacity: 0; transform: translateY(4px); } }
+@media (prefers-reduced-motion: reduce) { .rating-row { animation: none; } }

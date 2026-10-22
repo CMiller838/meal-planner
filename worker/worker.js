@@ -10,6 +10,7 @@ import "../nutrition.js";
 import "../generator.js";
 import "../day-hints.js";
 import "../products.js";
+import "../ratings.js";
 import SHELF_DATA from "../shelf-life.json";
 import SUBS from "../substitutions.json";
 import TAGS from "../ingredient-nutrient-tags.json";
@@ -25,6 +26,7 @@ const DayHints = globalThis.MP.DayHints;
 const ShoppingList = globalThis.MP.ShoppingList;
 const ShelfLife = globalThis.MP.ShelfLife;
 const Products = globalThis.MP.Products;
+const Ratings = globalThis.MP.Ratings;
 
 const KEYS = {
   "/library": "library", "/planFlag": "planFlag", "/pantry": "pantry", "/adhoc": "adhoc",
@@ -41,9 +43,10 @@ const ASSISTANT_ALLOWED = new Set([
   "GET /discover", "GET /pantry", "PUT /pantry", "GET /adhoc", "PUT /adhoc", "PUT /planFlag",
   "GET /placements", "PUT /placements", "GET /prefs", "PUT /library", "GET /nutrition",
   "GET /dayHints", "PUT /dayHints", "PUT /meal-method", "GET /today", "PUT /today", "GET /products", "PUT /products",
-  "GET /expiring", "GET /product-ranking",
+  "GET /expiring", "GET /product-ranking", "GET /ratings", "GET /why",
 ]);
 const METHOD_PATH = /^\/meal\/([^/]+)\/method$/;
+const RATING_PATH = /^\/meal\/([^/]+)\/rating$/;
 const SLOT_TYPES = ["breakfast", "lunch", "dinner", "snack"];
 const MEALDB_BASE = "https://www.themealdb.com/api/json/v1/1/";
 const DISCOVER_LIMIT = 8;
@@ -94,23 +97,11 @@ async function discover(q) {
 
 /** Read-only ranking for one slot. Advisory only: the plan mirror is stale by
  *  construction and the cost/pantry layers don't exist server-side. */
-async function ranking(params, env) {
-  const dayRaw = params.get("day");
-  const day = Number(dayRaw);
-  if (dayRaw === null || dayRaw === "" || !Number.isInteger(day) || day < 1 || day > 14) {
-    return json(400, "day must be 1-14");
-  }
-
-  const slot = params.get("slot") || "dinner";
-  if (!SLOT_TYPES.includes(slot)) return json(400, "slot must be breakfast, lunch, dinner or snack");
-
-  const nRaw = params.get("n");
-  const n = nRaw === null ? 3 : Number(nRaw);
-  if (!Number.isInteger(n) || n < 1 || n > 10) return json(400, "n must be 1-10");
-
-  const [libraryRaw, planRaw, prefsRaw, hintsRaw] = await Promise.all([
+/** Shared by /ranking and /why: validated day+slot -> the synced inputs and rankSlot's order. `{ err }` is a ready Response. */
+async function slotContext(day, slot, env) {
+  const [libraryRaw, planRaw, prefsRaw, hintsRaw, ratingsRaw] = await Promise.all([
     env.MP_KV.get("library"), env.MP_KV.get("plan"), env.MP_KV.get("planPrefs"),
-    env.MP_KV.get("dayHints"),
+    env.MP_KV.get("dayHints"), env.MP_KV.get("ratings"),
   ]);
 
   let library, plan;
@@ -118,10 +109,10 @@ async function ranking(params, env) {
     library = JSON.parse(libraryRaw);
     plan = JSON.parse(planRaw);
   } catch (e) {
-    return json(409, "library and plan must be synced first");
+    return { err: json(409, "library and plan must be synced first") };
   }
   if (!Array.isArray(library) || library.length === 0 || !plan || !Array.isArray(plan.days)) {
-    return json(409, "library and plan must be synced first");
+    return { err: json(409, "library and plan must be synced first") };
   }
 
   let planPrefs;
@@ -130,6 +121,8 @@ async function ranking(params, env) {
   } catch (e) {
     planPrefs = {};
   }
+  let ratings = {};
+  try { ratings = JSON.parse(ratingsRaw).meals || {}; } catch (e) {}
 
   const dayObj = plan.days[day - 1] || { slots: {} };
   const slotVal = dayObj.slots[slot] || null;
@@ -145,12 +138,44 @@ async function ranking(params, env) {
   const prefs = DayHints.merge({ vocab: PLAN_VOCAB, busyDays: planPrefs.busyDays || [], chips: planPrefs.chips || [] }, resolved);
   const hint = resolved.byDay[day] ? { effort: resolved.byDay[day].effort, why: resolved.byDay[day].why } : null;
   const pool = library.filter((m) => (m.mealTypes || []).includes(slot));
-  const ranked = Generator.rankSlot(pool, day, others, { tags: TAGS, targets: TARGETS, prefs });
+  const ranked = Generator.rankSlot(pool, day, others, { tags: TAGS, targets: TARGETS, prefs, ratings });
 
   const gap = Nutrition.dayCoverage(others, TAGS, TARGETS);
   const shortOn = [...gap.missing, ...gap.partial];
   const { prefer, avoid } = Generator.activeChips(prefs);
-  const chips = prefer.concat(avoid);
+  return { library, slotVal, byId, prefs, ratings, ranked, shortOn, chips: prefer.concat(avoid), preferChips: prefer, hint };
+}
+
+/** The real ranking terms behind a meal's place, as codes. Only inputs rankSlot reads: gap, prefer chip, busy-day effort, rating. */
+function rankingReasons(m, day, c) {
+  const out = [];
+  if (Nutrition.tagsForMeal(m, TAGS).some((t) => c.shortOn.includes(t))) out.push({ code: "fills_gap", text: "covers a nutrient today is short on" });
+  if (c.preferChips.some((ch) => Generator.chipHits(m, ch, TAGS))) out.push({ code: "chip", text: "matches a preference you set" });
+  const busy = c.prefs.vocab && c.prefs.vocab.busy;
+  if (busy && c.prefs.busyDays.includes(day) && Generator.effortOf(m) === busy.preferEffort) out.push({ code: "quick", text: "quick to make on a busy day" });
+  const r = c.ratings[m.id] && c.ratings[m.id].rating;
+  if (r === "up") out.push({ code: "liked", text: "ranked up: you liked this" });
+  if (r === "down") out.push({ code: "disliked", text: "ranked down: you disliked this" });
+  return out;
+}
+
+async function ranking(params, env) {
+  const dayRaw = params.get("day");
+  const day = Number(dayRaw);
+  if (dayRaw === null || dayRaw === "" || !Number.isInteger(day) || day < 1 || day > 14) {
+    return json(400, "day must be 1-14");
+  }
+
+  const slot = params.get("slot") || "dinner";
+  if (!SLOT_TYPES.includes(slot)) return json(400, "slot must be breakfast, lunch, dinner or snack");
+
+  const nRaw = params.get("n");
+  const n = nRaw === null ? 3 : Number(nRaw);
+  if (!Number.isInteger(n) || n < 1 || n > 10) return json(400, "n must be 1-10");
+
+  const c = await slotContext(day, slot, env);
+  if (c.err) return c.err;
+  const { ranked, shortOn, chips, prefs, hint, slotVal } = c;
 
   const candidates = ranked.slice(0, n).map((m, i) => ({
     mealId: m.id,
@@ -320,6 +345,45 @@ function methodError(method) {
 /** The library KV value (object or bare array), or null. */
 async function readLibrary(env) {
   try { return JSON.parse(await env.MP_KV.get("library")); } catch (e) { return null; }
+}
+
+/** GET /why?meal=&day=&slot= — why a meal sits where it does for a slot, from the same inputs as /ranking. */
+async function why(params, env) {
+  const day = Number(params.get("day"));
+  if (!Number.isInteger(day) || day < 1 || day > 14) return json(400, "day must be 1-14");
+  const slot = params.get("slot") || "dinner";
+  if (!SLOT_TYPES.includes(slot)) return json(400, "slot must be breakfast, lunch, dinner or snack");
+  const c = await slotContext(day, slot, env);
+  if (c.err) return c.err;
+  const mealId = params.get("meal") || "";
+  const m = c.byId[mealId];
+  if (!m) return json(404, "unknown meal");
+  const i = c.ranked.findIndex((x) => x.id === mealId);
+  return json(200, { mealId, rank: i < 0 ? null : i + 1, reasons: rankingReasons(m, day, c), approximate: true });
+}
+
+/** GET /ratings */
+async function getRatings(env) {
+  let r = null;
+  try { r = JSON.parse(await env.MP_KV.get("ratings")); } catch (e) {}
+  return json(200, { meals: (r && r.meals) || {} });
+}
+
+/** PUT /meal/:id/rating — merges any of {rating, note, never} into that meal's record, server stamps `at`. */
+async function putMealRating(request, env, mealId) {
+  let body;
+  try { body = JSON.parse(await request.text()); } catch (e) { return json(400, "invalid JSON"); }
+  const bad = Ratings.patchError(body);
+  if (bad) return json(400, bad);
+  const lib = await readLibrary(env);
+  const meals = Array.isArray(lib) ? lib : lib && Array.isArray(lib.meals) ? lib.meals : null;
+  if (!meals || !meals.some((m) => m.id === mealId)) return json(404, "unknown meal");
+  let r = null;
+  try { r = JSON.parse(await env.MP_KV.get("ratings")); } catch (e) {}
+  const all = (r && r.meals) || {};
+  all[mealId] = Ratings.applyPatch(all[mealId], body, new Date().toISOString());
+  await env.MP_KV.put("ratings", JSON.stringify({ meals: all }));
+  return json(200, all[mealId]);
 }
 
 /** GET /meal/:id/method — steps for cooking mode; ingredients always, so a meal with no method falls back to them. */
@@ -582,7 +646,21 @@ export default {
     const isAssistant = !!env.ASSISTANT_TOKEN && token === env.ASSISTANT_TOKEN;
     if (!isHermes && !isAssistant) return json(401, "unauthorized");
     const methodMatch = METHOD_PATH.exec(url.pathname);
-    if (!isHermes && !(request.method === "GET" && methodMatch) && !ASSISTANT_ALLOWED.has(`${request.method} ${url.pathname}`)) return json(403, "forbidden");
+    if (!isHermes && !(request.method === "GET" && methodMatch) && !(request.method === "PUT" && RATING_PATH.test(url.pathname)) && !ASSISTANT_ALLOWED.has(`${request.method} ${url.pathname}`)) return json(403, "forbidden");
+
+    const ratingMatch = RATING_PATH.exec(url.pathname);
+    if (ratingMatch) {
+      if (request.method !== "PUT") return json(405, "method not allowed");
+      return putMealRating(request, env, decodeURIComponent(ratingMatch[1]));
+    }
+    if (url.pathname === "/ratings") {
+      if (request.method !== "GET") return json(405, "method not allowed");
+      return getRatings(env);
+    }
+    if (url.pathname === "/why") {
+      if (request.method !== "GET") return json(405, "method not allowed");
+      return why(url.searchParams, env);
+    }
 
     if (methodMatch) {
       if (request.method !== "GET") return json(405, "method not allowed");

@@ -307,6 +307,28 @@ window.MP = window.MP || {};
     return MP.PlanPrefs.get();
   }
 
+  /** GET /ratings and merge per meal by newest `at` (Phase 51). Failure-silent: the local map either way. */
+  async function fetchRatings() {
+    if (!config().enabled) return MP.Ratings.get();
+    try {
+      const remote = await req("GET", "/ratings");
+      if (remote && remote.meals) MP.Ratings.merge(remote.meals);
+    } catch (e) {}
+    return MP.Ratings.get();
+  }
+
+  /** Best-effort PUT /meal/:id/rating; the server's stamped record is merged back. Never throws. */
+  async function pushRating(id, patch) {
+    if (!config().enabled) return "off";
+    try {
+      const rec = await req("PUT", "/meal/" + encodeURIComponent(id) + "/rating", patch);
+      MP.Ratings.merge({ [id]: rec });
+      return "ok";
+    } catch (e) {
+      return "error";
+    }
+  }
+
   /** GET /dayHints (assistant-written, read-only here). Failure-silent: null. */
   async function fetchDayHints() {
     if (!config().enabled) return null;
@@ -569,7 +591,7 @@ window.MP = window.MP || {};
   MP.Sync = {
     decide, needsPlan, config, saveConfig, syncLibrary, syncPlanFlag, ackPlanFlag,
     fetchItems, fetchPantry, localItems, writeLocalItems, queueOp, applyOps, flushOps,
-    planMirror, pushPlan, pushPrefs, fetchPlanPrefs, fetchDayHints, pushPlanPrefs, newPlacements, newSince, syncPlacements, ackPlacements, syncEatRequests,
+    planMirror, pushPlan, pushPrefs, fetchPlanPrefs, fetchDayHints, fetchRatings, pushRating, pushPlanPrefs, newPlacements, newSince, syncPlacements, ackPlacements, syncEatRequests,
     localEatenLog, logEaten, unlogEaten, pushEatenLog, start,
     syncProducts, localProducts, saveProduct,
   };

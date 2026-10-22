@@ -515,7 +515,9 @@ that could not be read. Ingredient names are matched to the existing ingredient 
 map or add. **Verify:** a draft never appears in generated plans; accepting it makes it appear; rejecting it deletes the draft
 only. Requires Phase 48. Assistant side: `notion_assistant` Phases 71 and 72.
 
-## Phase 51: Meal ratings, flags and reasons ("never again") [M] — not started
+## Phase 51: Meal ratings, flags and reasons ("never again") [M] — built 2026-10-22, live checks pending
+
+_Verified 2026-10-22: worker_test, test.html asserts, check.py 8/8, tester PASS (driven UI PC/390, dark/light). Phase 48 absent, so no `ITEMS.ratings` entry._
 
 Merged from old Phases 42, 51. Build as one phase; each part keeps its own decisions and verify.
 

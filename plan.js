@@ -99,7 +99,7 @@
       ? { costIndex: MP.ShoppingList.costIndex(library, packData), groups: MP.ShoppingList.groupIndex(groupsData), ...packData.planning }
       : null;
     const have = MP.ShoppingList.pantryIndex({ items: MP.Sync.localItems("pantry") });
-    return MP.Generator.generatePlan(library, tagsData.tags, tagsData.targets, shelfData, undefined, budget, have, prefs);
+    return MP.Generator.generatePlan(library, tagsData.tags, tagsData.targets, shelfData, undefined, budget, have, prefs, MP.Ratings.get());
   }
 
   function loadPlan() {
@@ -333,6 +333,7 @@
               return `<div class="slot-card ${meal ? "" : "empty"}" data-day="${d.day}" data-slot="${slotType}">
                 <div class="slot-type">${slotType}</div>
                 <div class="slot-meal">${meal ? esc(meal.name) : "tap to add"}</div>
+                ${ratingHintHtml(meal)}
                 ${warningHtml(d.day, slotType, warn)}
               </div>`;
             }).join("")}
@@ -416,6 +417,7 @@
       prefs,
       lastUsedDay,
       excludeIds,
+      ratings: MP.Ratings.get(),
     });
   }
 
@@ -592,6 +594,14 @@
       }
       deck.appendChild(card);
     });
+  }
+
+  /** Phase 51: a liked meal was nudged up by rankSlot; a flagged-never meal already in the plan stays but says so. */
+  function ratingHintHtml(meal) {
+    const r = meal && MP.Ratings.get()[meal.id];
+    if (!r) return "";
+    return (r.never ? `<div class="rating-hint never">Flagged never</div>` : "")
+      + (r.rating === "up" ? `<div class="rating-hint">ranked up: you liked this</div>` : "");
   }
 
   function openDetail(meal, variantId, subs) {
@@ -1132,6 +1142,7 @@
     ]);
     basePrefs = Object.assign({ vocab }, MP.PlanPrefs.get());
     dayHints = await MP.Sync.fetchDayHints();
+    await MP.Sync.fetchRatings();
     applyHints((JSON.parse(localStorage.getItem(LS_PLAN) || "null") || {}).startDate);
     const guidedParam = new URLSearchParams(location.search).get("guided") === "1";
     if (guidedParam) {

@@ -114,9 +114,16 @@
     return `<div class="card-img placeholder">🍽</div>`;
   }
 
+  function ratingBadgeHtml(meal) {
+    const r = MP.Ratings.get()[meal.id];
+    if (!r) return "";
+    return (r.never ? `<span class="tag never-badge">Never again</span>` : "")
+      + (r.rating === "up" ? `<span class="tag" title="Liked">👍</span>` : r.rating === "down" ? `<span class="tag" title="Disliked">👎</span>` : "");
+  }
+
   function tagRowHtml(meal) {
     const tags = collectMealTags(meal);
-    const costBadge = MP.ShoppingList.costBadgeHtml(meal, packData);
+    const costBadge = MP.ShoppingList.costBadgeHtml(meal, packData) + ratingBadgeHtml(meal);
     if (!tags.length && !costBadge) return "";
     return `<div class="tag-row">${costBadge}${tags
       .map((t) => `<span class="tag ${t.level}">${esc(labelize(t.nutrient))} ${esc(t.level)}</span>`)
@@ -185,6 +192,7 @@
       </div>
     `;
     sheet.querySelector(".close-btn").addEventListener("click", closeDetail);
+    sheet.querySelector(".modal-actions").before(MP.Ratings.rowEl(meal.id, renderLibrary, toast));
     sheet.querySelector("#detail-edit").addEventListener("click", () => openForm(meal));
     const accept = sheet.querySelector("#detail-accept");
     if (accept) accept.addEventListener("click", () => {
@@ -646,6 +654,7 @@
     renderLibrary();
     initSyncSettings();
     MP.Sync.start();
+    MP.Sync.fetchRatings().then(renderLibrary);
   }
 
   init();

@@ -88,6 +88,56 @@ assert.deepEqual([r.status, r.body.days, r.body.today, r.body.items.map((i) => [
 assert.equal((await call("GET", "/expiring?days=30&today=2026-10-20", "h")).status, 200);
 assert.equal((await call("GET", "/expiring", "")).status, 401);
 for (const q of ["?days=99", "?days=-1", "?days=x", "?today=nope"]) assert.equal((await call("GET", "/expiring" + q, "a")).status, 400, q);
+// Phase 51: ratings, per-meal route, /why
+r = await call("PUT", "/meal/a/rating", "a", { rating: "up", note: "  tasty  " });
+assert.deepEqual([r.status, r.body.rating, r.body.note, r.body.never, typeof r.body.at], [200, "up", "tasty", false, "string"]);
+r = await call("PUT", "/meal/a/rating", "h", { never: true }); // other token merges into the same record
+assert.deepEqual([r.status, r.body.rating, r.body.note, r.body.never], [200, "up", "tasty", true]);
+r = await call("PUT", "/meal/a/rating", "a", { rating: null, note: "x".repeat(300) });
+assert.deepEqual([r.body.rating, r.body.note.length, r.body.never], [null, 120, true]);
+assert.deepEqual(Object.keys((await call("GET", "/ratings", "a")).body.meals), ["a"]);
+assert.equal((await call("PUT", "/meal/zzz/rating", "a", { rating: "up" })).status, 404);
+for (const bad of [{ rating: "meh" }, { note: 1 }, { never: "yes" }, { other: 1 }, []]) assert.equal((await call("PUT", "/meal/a/rating", "a", bad)).status, 400, JSON.stringify(bad));
+assert.equal((await call("PUT", "/ratings", "a", { meals: {} })).status, 403);
+assert.equal((await call("GET", "/meal/a/rating", "h")).status, 405);
+assert.equal((await call("GET", "/ratings", "")).status, 401);
+// /why: each code flips off when its input goes
+const { readFileSync } = await import("node:fs");
+const tags = JSON.parse(readFileSync(new URL("../ingredient-nutrient-tags.json", import.meta.url), "utf8"));
+const TRACKED = ["fibre", "vitA", "vitC", "vitD", "vitB12", "folate", "calcium", "iron", "zinc", "magnesium", "potassium"];
+const hi = Object.keys(tags).find((k) => typeof tags[k] === "object" && TRACKED.some((n) => tags[k][n]));
+const wlib = [
+  { id: "m1", name: "Dish", mealTypes: ["dinner"], prepEffort: "quick", ingredients: [{ key: hi, label: hi, qty: "1" }] },
+  { id: "m2", name: "Other", mealTypes: ["dinner"], prepEffort: "batch", ingredients: [] },
+];
+kv.set("library", JSON.stringify(wlib));
+kv.set("plan", JSON.stringify({ startDate: "2026-10-19", days: Array.from({ length: 14 }, () => ({ slots: {} })) }));
+const codes = async (day = 1) => (await call("GET", `/why?meal=m1&day=${day}&slot=dinner`, "a")).body.reasons.map((x) => x.code);
+kv.set("planPrefs", JSON.stringify({ busyDays: [], chips: [] }));
+kv.set("ratings", JSON.stringify({ meals: {} }));
+assert.ok((await codes()).includes("fills_gap"), "fills_gap with empty day");
+assert.ok(!(await codes()).some((c) => ["chip", "quick", "liked", "disliked"].includes(c)), "no other codes by default");
+kv.set("planPrefs", JSON.stringify({ busyDays: [1], chips: [] }));
+assert.ok((await codes()).includes("quick"));
+assert.ok(!(await codes(2)).includes("quick"));
+const whyM2 = async () => (await call("GET", "/why?meal=m2&day=1&slot=dinner", "a")).body.reasons.map((x) => x.code);
+kv.set("planPrefs", JSON.stringify({ busyDays: [], chips: ["comfort"] })); // prepEffort batch
+assert.ok((await whyM2()).includes("chip"));
+kv.set("planPrefs", JSON.stringify({ busyDays: [], chips: [] }));
+assert.ok(!(await whyM2()).includes("chip"));
+await call("PUT", "/meal/m1/rating", "a", { rating: "up" });
+assert.ok((await codes()).includes("liked"));
+await call("PUT", "/meal/m1/rating", "a", { rating: "down" });
+assert.ok((await codes()).includes("disliked") && !(await codes()).includes("liked"));
+await call("PUT", "/meal/m1/rating", "a", { rating: null });
+assert.ok(!(await codes()).some((c) => c === "liked" || c === "disliked"));
+r = await call("GET", "/why?meal=m1&day=1&slot=dinner", "a");
+assert.deepEqual([r.status, r.body.rank, r.body.approximate], [200, 1, true]);
+await call("PUT", "/meal/m1/rating", "a", { never: true });
+assert.equal((await call("GET", "/why?meal=m1&day=1&slot=dinner", "a")).body.rank, null);
+assert.equal((await call("GET", "/why?meal=zz&day=1&slot=dinner", "a")).status, 404);
+assert.equal((await call("GET", "/why?meal=m1&day=0", "a")).status, 400);
+
 // the assistant token still can't reach other writes
 assert.equal((await call("PUT", "/plan", "a", { days: [] })).status, 403);
 assert.equal((await call("PUT", "/planPrefs", "a", {})).status, 403);

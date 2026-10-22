@@ -118,7 +118,7 @@
   /**
    * Ordered candidates for one slot, best first. Layers, in order:
    *   1 nutrition (rankByGap)  2 chips  3 effort/busy
-   *   4 budget shortlist (cost, pack reuse + group substitutions; width scales with budget pressure)  5 recency
+   *   3b ratings (Phase 51: up/neutral/down; `never` filtered above)  4 budget shortlist (cost, pack reuse + group substitutions; width scales with budget pressure)  5 recency
    * Layers 2-5 are stable reorders of layer 1 - none of them re-score nutrition.
    * Returns every meal in `pool` (minus exclusions); chips never filter.
    */
@@ -127,8 +127,11 @@
     const { tags, targets, prefs, budget, halfKeys, pressure } = opts;
     const lastUsedDay = opts.lastUsedDay || {};
     const excludeIds = opts.excludeIds || new Set();
-    let ranked = pool.filter((m) => !m.routine && !excludeIds.has(m.id)); // routine items are logged, never scheduled (Phase 41)
-    if (!ranked.length) ranked = pool.slice(); // too small a pool to honour the exclusion; repeat is unavoidable
+    const ratings = opts.ratings || {};
+    // `never` (Phase 51) is the one hard filter: no too-small-pool fallback, so an all-never pool yields []
+    const allowed = pool.filter((m) => !(ratings[m.id] && ratings[m.id].never));
+    let ranked = allowed.filter((m) => !m.routine && !excludeIds.has(m.id)); // routine items are logged, never scheduled (Phase 41)
+    if (!ranked.length) ranked = allowed.slice(); // too small a pool to honour the exclusion; repeat is unavoidable
     if (!ranked.length) return [];
     const gap = MP.Nutrition.dayCoverage(dayMealsSoFar, tags, targets);
     const gapNutrients = [...gap.missing, ...gap.partial];
@@ -162,6 +165,11 @@
     if (prefs && prefs.freeDays && prefs.freeDays.includes(dayNum)) {
       // pool is already slot-filtered; breakfasts/snacks are never batch, so this is a no-op there
       ranked = ranked.filter((m) => effortOf(m) === "batch").concat(ranked.filter((m) => effortOf(m) !== "batch"));
+    }
+
+    if (Object.keys(ratings).length) { // Phase 51: 👍 ahead of neutral ahead of 👎, order inside each group kept
+      const r = (m) => (ratings[m.id] && ratings[m.id].rating) || "";
+      ranked = ranked.filter((m) => r(m) === "up").concat(ranked.filter((m) => r(m) !== "up" && r(m) !== "down"), ranked.filter((m) => r(m) === "down"));
     }
 
     if (budget) {
@@ -213,7 +221,7 @@
     return bestId;
   }
 
-  function generatePlan(library, tags, targets, shelfData, startDate, budget, have, prefs) {
+  function generatePlan(library, tags, targets, shelfData, startDate, budget, have, prefs, ratings) {
     startDate = startDate || isoToday();
     have = have || {};
     prefs = prefs || {};
@@ -268,7 +276,7 @@
 
     const pickMeal = (pool, dayNum, dayMealsSoFar, opts) =>
       rankSlot(pool, dayNum, dayMealsSoFar,
-        { ...opts, tags, targets, prefs, budget, halfKeys, lastUsedDay, pressure: pressureFor(dayNum) })[0] || null;
+        { ...opts, tags, targets, prefs, budget, halfKeys, lastUsedDay, ratings, pressure: pressureFor(dayNum) })[0] || null;
 
     const runs = weekendRuns(startDate).map((run) => {
       if (run.some((d) => !(prefs.busyDays || []).includes(d))) {
@@ -299,7 +307,7 @@
       if (!parent) continue; // no batch meal available at all; days fall through to quick fill below
 
       const coverage = Math.min(run.length, parent.servings || 2, shelfData.cooked_leftovers.fridgeDays);
-      const childId = (parent.leadsTo || []).find((id) => mealsById[id]);
+      const childId = (parent.leadsTo || []).find((id) => mealsById[id] && !(ratings && ratings[id] && ratings[id].never));
       for (let i = 0; i < coverage; i++) {
         const day = run[i];
         const meal = i === 0 ? parent : childId ? mealsById[childId] : parent;
@@ -334,5 +342,5 @@
     return { startDate, days, generatedAt: new Date().toISOString() };
   }
 
-  MP.Generator = { generatePlan, rankSlot, weekendRuns, weekdayOf, isoToday, pickVariant, chipHits, activeChips };
+  MP.Generator = { generatePlan, rankSlot, weekendRuns, weekdayOf, isoToday, pickVariant, chipHits, activeChips, effortOf };
 })(typeof globalThis !== "undefined" ? globalThis : this);
