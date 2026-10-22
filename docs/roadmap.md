@@ -483,7 +483,9 @@ frozen items' use-by (months, per the existing `frozenMonths`, not days).
 **Verify:** an item with no `storage` still works and shows its category default marked as an estimate; the route works with an
 empty freezer. Requires Phase 34. Assistant side: `notion_assistant` Phase 67.
 
-## Phase 48: Activity log and undo for every assistant write [L] — blocked 2026-10-22: PIPELINE: BLOCKED Tester verdict INCOMPLETE: the Windows Edge walk was denied by the permission classifier, so it needs the user to run it or to decide whether 
+## Phase 48: Activity log and undo for every assistant write [L] — built 2026-10-22, live checks pending
+
+_Verified 2026-10-22: worker_test ok, check.py 8/8. Built by the pipeline, tester found no defects but its Edge walk was denied (Edge since dropped from the tester); patch hand-merged onto Phases 43, 50-54 with `git apply --3way` (worker_test blocks reordered so 48 runs on its own fixtures). New UI not re-viewed by eye at PC/390 px. Phases 50-52 shipped without activity logging (`ITEMS.drafts`, `.ratings`, settings): wire them in a follow-up._
 
 **Added 2026-10-19.** Every change the assistant makes through the token (pantry, plan, ratings, routine/tap logs, drafts) is
 recorded in an `activity` list: time, who (assistant or app), what changed (before and after), and the reason in a short line.
@@ -496,7 +498,7 @@ and which writes are exempt (one-tap logs such as "had it" are logged but need n
 **Verify:** undo of a pantry change returns the exact quantities; a stale undo is refused with a clear message; the log is
 append-only. Requires Phase 32. Assistant side: `notion_assistant` Phases 75 and 78.
 
-## Phase 49: Week-plan draft and apply routes [M] — blocked 2026-10-22: PIPELINE: BLOCKED Phase 48 (activity log `logWrite`/`ITEMS`) is not built, only blocked and saved as a patch. It must be completed and committed before Phase 49
+## Phase 49: Week-plan draft and apply routes [M] — not started
 
 **Added 2026-10-19.** For planning a week together in chat. `POST /plan/draft` takes constraints (days to fill, the per-day effort
 hints from Phase 37, meals to keep, meals to avoid, a budget cap) and returns a *proposed* week built by the existing generator

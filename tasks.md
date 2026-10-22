@@ -589,6 +589,9 @@ Spec: `.claude/specs/phase40.md` (tasks live there).
 
 ## Phase 48: Activity log and undo for every assistant write
 - Spec: `.claude/specs/phase48.md`
+- [x] Worker: ITEMS/diffItems/logWrite/undoActivity, routes, dryRun, X-Reason, CORS, allow-list; `tools/worker_test.mjs` asserts
+- [x] `hermes-sync.js` fetchActivity/undoActivity/resyncKey; ARCHITECTURE.md rows
+- [x] Assistant activity section (index.html, app.js, style.css), sw.js CACHE bump
 - [ ] Live: ask the assistant to change a pantry item, see it in Assistant activity on the phone PWA, tap Undo and see the old quantity back
 
 ## Phase 49: Week-plan draft and apply routes

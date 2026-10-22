@@ -11,8 +11,8 @@ const { default: worker } = await import(new URL("../worker/worker.js", import.m
 
 const kv = new Map();
 const env = { AUTH_TOKEN: "h", ASSISTANT_TOKEN: "a", MP_KV: { get: async (k) => kv.get(k) ?? null, put: async (k, v) => void kv.set(k, v) } };
-const call = async (method, path, token, body) => {
-  const res = await worker.fetch(new Request("https://x" + path, { method, headers: { "X-Auth-Token": token }, body: body === undefined ? undefined : JSON.stringify(body) }), env);
+const call = async (method, path, token, body, headers = {}) => {
+  const res = await worker.fetch(new Request("https://x" + path, { method, headers: { "X-Auth-Token": token, ...headers }, body: body === undefined ? undefined : JSON.stringify(body) }), env);
   return { status: res.status, body: await res.json().catch(() => null) };
 };
 const steps = [{ text: "Boil water", minutes: 10 }, { text: "Serve" }];
@@ -183,6 +183,82 @@ assert.equal((await call("GET", "/why?meal=m1&day=0", "a")).status, 400);
   kv.set("cooks", "garbage"); kv.set("pantry", "garbage");
   assert.equal((await call("GET", "/quick?today=2026-10-20", "a")).status, 200); // malformed KV = empty, never 500
 }
+
+// Phase 48: activity log and undo
+const acts = () => JSON.parse(kv.get("activity") || '{"entries":[]}').entries;
+const P = (...items) => ({ updatedAt: "2026-10-22T00:00:00.000Z", items });
+kv.delete("activity");
+assert.equal((await call("PUT", "/pantry", "h", P({ name: "Rice", qty: "500g" }))).status, 204);
+assert.equal(acts().length, 0); // app token logs nothing
+assert.equal((await call("PUT", "/pantry", "a", P({ name: "Rice", qty: "500g" }), { "X-Reason": " restock " })).status, 204);
+assert.equal(acts().length, 0); // no-op
+assert.equal((await call("PUT", "/pantry", "a", { ...P({ name: "Rice", qty: "500g" }), updatedAt: "2027-01-01T00:00:00.000Z" })).status, 204);
+assert.equal(acts().length, 0); // only updatedAt differs
+r = await call("PUT", "/pantry?dryRun=1", "a", P({ name: "Rice", qty: "400g" }, { name: "Milk" }));
+assert.deepEqual([r.status, r.body.changes.length, acts().length, JSON.parse(kv.get("pantry")).items[0].qty], [200, 2, 0, "500g"]);
+assert.equal((await call("PUT", "/pantry?dryRun=1", "a", { items: "x" })).status, 400);
+assert.equal((await call("PUT", "/pantry", "a", P({ name: "Rice", qty: "400g" }, { name: "Milk" }), { "X-Reason": "  used rice, bought milk " + "x".repeat(200) })).status, 204);
+let e0 = acts()[0];
+assert.deepEqual([acts().length, e0.who, e0.key, e0.changes.length, e0.why.length, e0.why.startsWith("used rice")], [1, "assistant", "pantry", 2, 120, true]);
+assert.match(e0.summary, /pantry: changed rice, added milk/i);
+assert.equal((await call("GET", "/activity", "a")).body.entries.length, 1);
+// app edits rice after the assistant write -> stale
+assert.equal((await call("PUT", "/pantry", "h", P({ name: "Rice", qty: "300g" }, { name: "Milk" }))).status, 204);
+r = await call("POST", "/activity/undo", "a", { id: e0.id });
+assert.deepEqual([r.status, r.body.error, r.body.changed.map((c) => c.id)], [409, "changed since", ["rice"]]);
+r = await call("POST", "/activity/undo", "a", { id: e0.id, force: true });
+assert.equal(r.status, 200);
+let pi = JSON.parse(kv.get("pantry")).items;
+assert.deepEqual([pi.length, pi[0].qty], [1, "500g"]);
+assert.equal(acts()[0].undoes, e0.id);
+r = await call("POST", "/activity/undo", "a", { id: e0.id, force: true });
+assert.deepEqual([r.status, r.body.error], [409, "already undone"]);
+for (const bad of [{}, { id: 5 }, "x"]) assert.equal((await call("POST", "/activity/undo", "a", bad)).status, 400);
+assert.equal((await call("POST", "/activity/undo", "a", { id: "nope" })).status, 404);
+// redo: undoing the undo works
+r = await call("POST", "/activity/undo", "h", { id: acts()[0].id });
+assert.equal(r.status, 200);
+assert.equal(JSON.parse(kv.get("pantry")).items.length, 2);
+// clean undo
+kv.delete("activity");
+await call("PUT", "/pantry", "a", P({ name: "Rice", qty: "500g" }, { name: "Eggs" }));
+r = await call("POST", "/activity/undo", "a", { id: acts()[0].id });
+assert.equal(r.status, 200);
+// library: append, method, undo bumps updatedAt, bare-array & whole-value keys
+kv.delete("activity");
+lib = JSON.parse(kv.get("library"));
+assert.equal((await call("PUT", "/library", "a", { ...lib, meals: [...lib.meals, { id: "n", name: "N", ingredients: [], addedBy: "assistant" }] })).status, 204);
+assert.deepEqual([acts().length, acts()[0].changes.map((c) => c.id)], [1, ["n"]]);
+assert.equal((await call("PUT", "/meal-method", "a", { mealId: "a", method: steps })).status, 200);
+assert.deepEqual([acts().length, acts()[0].key, acts()[0].changes.map((c) => c.id)], [2, "library", ["a"]]);
+const before = JSON.parse(kv.get("library")).updatedAt;
+await new Promise((ok) => setTimeout(ok, 5));
+assert.equal((await call("POST", "/activity/undo", "a", { id: acts()[1].id })).status, 200);
+lib = JSON.parse(kv.get("library"));
+assert.deepEqual([lib.meals.some((m) => m.id === "n"), lib.updatedAt > before], [false, true]);
+r = await call("PUT", "/dayHints", "a", { updatedAt: "2026-10-22T00:00:00.000Z", days: { "2026-10-23": { effort: "busy" } } });
+assert.equal(r.status, 204, JSON.stringify(r.body));
+assert.deepEqual(acts()[0].changes.map((c) => c.id), ["2026-10-23"]);
+await call("PUT", "/today", "a", { ...today, water: 4 });
+assert.deepEqual([acts()[0].key, acts()[0].changes.map((c) => c.id)], ["today", ["today"]]);
+assert.equal((await call("POST", "/activity/undo", "a", { id: acts()[0].id })).status, 200);
+assert.equal(JSON.parse(kv.get("today")).water, 3);
+// cap 200, append-only, malformed key
+kv.delete("activity");
+await call("PUT", "/pantry", "a", P({ name: "Salt", qty: "0" }));
+const first = acts()[0];
+for (let i = 1; i < 205; i++) await call("PUT", "/pantry", "a", P({ name: "Salt", qty: String(i) }));
+const all = acts();
+assert.deepEqual([all.length, all.some((x) => x.id === first.id), all[0].changes[0].after.qty], [200, false, "204"]);
+const snap = JSON.stringify(all);
+await call("PUT", "/pantry", "a", P({ name: "Salt", qty: "x" }));
+assert.equal(JSON.stringify(acts().slice(1)), JSON.stringify(JSON.parse(snap).slice(0, 199)));
+kv.set("activity", "garbage{");
+assert.equal((await call("GET", "/activity", "a")).body.entries.length, 0);
+assert.equal((await call("PUT", "/pantry", "a", P({ name: "Salt", qty: "y" }))).status, 204);
+assert.equal(acts().length, 1);
+kv.delete("activity");
+assert.deepEqual((await call("GET", "/activity", "a")).body, { entries: [] });
 // the assistant token still can't reach other writes
 assert.equal((await call("PUT", "/plan", "a", { days: [] })).status, 403);
 assert.equal((await call("PUT", "/planPrefs", "a", {})).status, 403);

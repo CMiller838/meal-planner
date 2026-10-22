@@ -729,6 +729,71 @@
     });
   }
 
+
+  // Phase 48: Assistant activity. All text goes through esc()/textContent: summary/why are external.
+  function initActivity() {
+    const box = document.getElementById("activity");
+    const status = document.getElementById("activity-status");
+    const list = document.getElementById("activity-list");
+    box.classList.toggle("hidden", !MP.Sync.config().enabled);
+
+    async function load() {
+      status.textContent = "Loading…";
+      list.innerHTML = "";
+      let entries;
+      try { entries = await MP.Sync.fetchActivity(); } catch (e) { status.textContent = "Couldn't load activity"; return; }
+      status.textContent = entries.length ? "" : "Nothing yet";
+      const undone = new Set(entries.map((e) => e.undoes).filter(Boolean));
+      list.innerHTML = entries.map((e) => `
+        <li class="variant-row" data-id="${esc(e.id)}" data-key="${esc(e.key)}">
+          <span>
+            <strong>${esc(e.summary)}</strong>${e.undoes ? ` <span class="tag">Undo</span>` : ""}<br>
+            <span class="muted">${esc(new Date(e.at).toLocaleString())} · ${esc(e.who)}${e.why ? " · " + esc(e.why) : ""}</span>
+          </span>
+          ${undone.has(e.id) ? `<span class="muted">Undone</span>` : `<button class="ghost activity-undo">Undo</button>`}
+        </li>`).join("");
+    }
+
+    async function undo(entry, force) {
+      const id = entry.dataset.id;
+      const r = await MP.Sync.undoActivity(id, force).catch(() => ({ ok: false, error: "network error", changed: [] }));
+      if (r.ok) {
+        const key = entry.dataset.key;
+        toast("Undone");
+        await MP.Sync.resyncKey(key);
+        if (key === "library") { library = await MP.getLibrary(); renderLibrary(); }
+        return load();
+      }
+      if (r.status === 409 && r.error === "changed since") return confirmForce(entry, r.changed);
+      toast(r.error === "already undone" ? "Already undone" : `Couldn't undo: ${r.error}`);
+      load();
+    }
+
+    function confirmForce(entry, changed) {
+      const overlay = document.getElementById("modal-overlay");
+      const sheet = document.getElementById("modal-sheet");
+      sheet.innerHTML = `
+        <button class="close-btn" aria-label="Close">✕</button>
+        <h2>Changed since</h2>
+        <p>These were edited after the assistant's change: ${esc(changed.map((c) => c.id).join(", "))}. Undo anyway?</p>
+        <div class="modal-actions">
+          <button id="activity-force" class="btn">Undo anyway</button>
+          <button id="activity-cancel" class="ghost">Cancel</button>
+        </div>`;
+      sheet.querySelector(".close-btn").addEventListener("click", closeDetail);
+      sheet.querySelector("#activity-cancel").addEventListener("click", closeDetail);
+      sheet.querySelector("#activity-force").addEventListener("click", () => { closeDetail(); undo(entry, true); });
+      overlay.classList.remove("hidden");
+    }
+
+    box.addEventListener("toggle", () => { if (box.open) load(); });
+    list.addEventListener("click", (e) => {
+      const btn = e.target.closest(".activity-undo");
+      if (btn) { btn.disabled = true; undo(btn.closest("li"), false); }
+    });
+    document.getElementById("sync-save").addEventListener("click", () => box.classList.toggle("hidden", !MP.Sync.config().enabled));
+  }
+
   async function init() {
     MP.initTheme();
     document.getElementById("modal-overlay").addEventListener("click", (e) => {
@@ -753,6 +818,7 @@
     ]);
     renderLibrary();
     initSyncSettings();
+    initActivity();
     MP.Sync.start();
     MP.Sync.fetchRatings().then(renderLibrary);
     MP.Sync.fetchSettings().then(renderProfileLine);

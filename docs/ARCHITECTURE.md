@@ -75,6 +75,7 @@ Nine keys, all plain JSON values, no versioning scheme beyond `updatedAt`:
   Hermes PUTs a new `requestedAt` to ask for a plan; the app polls, and
   when `requestedAt > ackedAt` it runs the existing local generator and
   PUTs back `ackedAt = requestedAt`.
+- `activity` → `{ entries: Entry[] }`, newest first, capped at 200 (Phase 48). Entry `{ id, at, who: "assistant"|"app", key, why, summary, changes: [{id, before, after}], undoes? }`; written only by the Worker for `ASSISTANT_TOKEN` writes and undos, append-only.
 - `pantry` → `{ updatedAt: <ISO8601>, items: [{name, qty?}] }` — what food is
   on hand, read by the shopping list (Phase 11) and deducted from by the eat
   flow (Phase 12). `qty` (Phase 30) is a free-text string **or** a structured
@@ -159,6 +160,7 @@ also *pulled* (Hermes may write it), on open of the Plan-with-me screen only.
 - `POST /drafts`, `GET /drafts`, `DELETE /drafts/:id` (Phase 50; KV `drafts` = `{ updatedAt, drafts: Draft[] }`, newest first, max 20; both tokens; no PUT. Ingredients matched on POST via `snapKey`; hard exclusions 422. Accept is app-side: `upsertMeal` + `DELETE`, meal carries `fromDraft`)
 - `GET /settings`, `PUT /settings` (Phase 52; KV `settings` = `{ updatedAt, targets, budgetTarget, allergies, dislikes, likes, never }`, written only by the PUT through `normalizeSettings`, both tokens; GET answers `{}` when absent)
 - `GET /products`, `PUT /products` (Phase 33a; whole-key product reference records, shape-checked by `productsError`)
+- `GET /activity`, `POST /activity/undo` (Phase 48; body `{id, force?}`, 409 `already undone` / `changed since` / validator reason; `?dryRun=1` on any logged PUT previews the diff; optional `X-Reason` header)
 - `GET /ranking` (v4, read-only — no PUT, deliberately)
 - All requests require `X-Auth-Token: <secret>`, checked against a Wrangler
   secret binding (`wrangler secret put AUTH_TOKEN`) — never committed to

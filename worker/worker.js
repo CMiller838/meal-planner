@@ -46,7 +46,7 @@ const ASSISTANT_ALLOWED = new Set([
   "GET /placements", "PUT /placements", "GET /prefs", "PUT /library", "GET /nutrition",
   "GET /dayHints", "PUT /dayHints", "PUT /meal-method", "GET /today", "PUT /today", "GET /products", "PUT /products",
   "GET /expiring", "GET /day", "GET /product-ranking", "GET /ratings", "GET /why", "GET /scale", "GET /cookable", "GET /substitutions", "GET /leftovers", "GET /quick",
-  "GET /drafts", "POST /drafts", "GET /settings", "PUT /settings",
+  "GET /drafts", "POST /drafts", "GET /settings", "PUT /settings", "GET /activity", "POST /activity/undo",
 ]);
 const METHOD_PATH = /^\/meal\/([^/]+)\/method$/;
 const DRAFT_PATH = /^\/drafts\/([^/]+)$/;
@@ -58,7 +58,7 @@ const DISCOVER_LIMIT = 8;
 const CORS = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET, PUT, POST, DELETE, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, X-Auth-Token",
+  "Access-Control-Allow-Headers": "Content-Type, X-Auth-Token, X-Reason",
   "Access-Control-Max-Age": "86400",
 };
 
@@ -642,7 +642,7 @@ async function mealMethod(env, mealId) {
 }
 
 /** PUT /meal-method — the assistant's one meal write: sets method + "drafted", never touches another field, never over an accepted one. */
-async function putMealMethod(request, env) {
+async function putMealMethod(request, env, who, dryRun) {
   let body;
   try { body = JSON.parse(await request.text()); } catch (e) { return json(400, "invalid JSON"); }
   if (typeof body !== "object" || body === null || Array.isArray(body)) return json(400, "expected a JSON object");
@@ -655,10 +655,14 @@ async function putMealMethod(request, env) {
   const meal = meals && meals.find((m) => m.id === body.mealId);
   if (!meal) return json(404, "unknown meal");
   if (Array.isArray(meal.method) && meal.method.length && meal.methodStatus !== "drafted") return json(409, "method already accepted");
+  const was = JSON.parse(JSON.stringify(lib));
   meal.method = body.method;
   meal.methodStatus = "drafted";
   if (!Array.isArray(lib)) lib.updatedAt = new Date().toISOString(); // so the app's last-write-wins pull picks it up
+  const changes = diffItems("library", was, lib);
+  if (dryRun) return json(200, { changes, summary: summarize("library", changes) });
   await env.MP_KV.put("library", JSON.stringify(lib));
+  if (who) await logWrite(env, { who, key: "library", why: reasonOf(request), changes });
   return json(200, { mealId: meal.id, status: "drafted" });
 }
 
@@ -890,6 +894,110 @@ const VALIDATE = {
   today: todayError,
 };
 
+
+// Phase 48: activity log. Every assistant write (and every undo) appends one
+// entry of per-item before/after pairs to the `activity` KV key.
+const ITEMS = {
+  pantry: ["items", (i) => ShoppingList.normalizeKey(i.name)],
+  adhoc: ["items", (i) => ShoppingList.normalizeKey(i.name)],
+  library: ["meals", (m) => m.id],
+  products: ["products", (p) => p.id],
+  eatRequests: ["requests", (r) => r.id],
+  placements: ["placements", (p) => `${p.day}:${p.slot}:${p.mealId}`],
+  dayHints: ["days", null], // object map: item id = date key
+  today: [null], planFlag: [null], // whole value is one item, id = key name
+};
+const ACTIVITY_CAP = 200;
+
+function parseKV(raw) { try { return JSON.parse(raw); } catch (e) { return null; } }
+
+/** Map of item id -> item for a stored value (a legacy bare-array library is the list itself). */
+function itemMap(key, v) {
+  const [field, idOf] = ITEMS[key];
+  const m = new Map();
+  if (v === null || v === undefined) return m;
+  if (field === null) return m.set(key, v);
+  const c = Array.isArray(v) ? v : v[field];
+  if (idOf) for (const i of c || []) m.set(idOf(i), i);
+  else for (const k of Object.keys(c || {})) m.set(k, c[k]);
+  return m;
+}
+
+/** @returns {{id: string, before: any, after: any}[]} the items that differ (null = absent). */
+function diffItems(key, beforeValue, afterValue) {
+  const b = itemMap(key, beforeValue), a = itemMap(key, afterValue);
+  const changes = [];
+  for (const id of new Set([...b.keys(), ...a.keys()])) {
+    if (JSON.stringify(b.get(id)) !== JSON.stringify(a.get(id))) changes.push({ id, before: b.get(id) ?? null, after: a.get(id) ?? null });
+  }
+  return changes;
+}
+
+function summarize(key, changes) {
+  const part = (verb, list) => list.length ? `${verb} ${list.slice(0, 4).join(", ")}${list.length > 4 ? ` +${list.length - 4} more` : ""}` : "";
+  const ids = (f) => changes.filter(f).map((c) => c.id);
+  const bits = [part("changed", ids((c) => c.before && c.after)), part("added", ids((c) => !c.before)), part("removed", ids((c) => !c.after))];
+  return `${key}: ${bits.filter(Boolean).join(", ")}`;
+}
+
+async function readActivity(env) {
+  const v = parseKV(await env.MP_KV.get("activity"));
+  return v && Array.isArray(v.entries) ? v.entries : [];
+}
+
+/** Append one entry (newest first, capped); null when nothing changed (undo entries always log). */
+async function logWrite(env, { who, key, why, changes, undoes }) {
+  if (!changes.length && !undoes) return null;
+  const entry = { id: crypto.randomUUID(), at: new Date().toISOString(), who, key, why: why || "", summary: summarize(key, changes), changes };
+  if (undoes) entry.undoes = undoes;
+  // ponytail: read-modify-write, two concurrent writes can lose one log line; Durable Object if it ever bites.
+  const entries = [entry, ...(await readActivity(env))].slice(0, ACTIVITY_CAP);
+  await env.MP_KV.put("activity", JSON.stringify({ entries }));
+  return entry;
+}
+
+const reasonOf = (request) => (request.headers.get("X-Reason") || "").trim().slice(0, 120);
+
+/** The stored value with each change's `before` put back (null = remove the item). */
+function restore(key, current, changes) {
+  const [field, idOf] = ITEMS[key];
+  if (field === null) return changes[0].before;
+  const out = Array.isArray(current) ? [...current] : { ...(current || {}) };
+  if (idOf) {
+    const list = [...(Array.isArray(current) ? current : (current && current[field]) || [])];
+    for (const c of changes) {
+      const i = list.findIndex((x) => idOf(x) === c.id);
+      if (c.before === null) { if (i >= 0) list.splice(i, 1); } else if (i >= 0) list[i] = c.before; else list.push(c.before);
+    }
+    if (Array.isArray(current)) return list;
+    out[field] = list;
+  } else {
+    const map = { ...((current && current[field]) || {}) };
+    for (const c of changes) { if (c.before === null) delete map[c.id]; else map[c.id] = c.before; }
+    out[field] = map;
+  }
+  if (typeof out.updatedAt === "string") out.updatedAt = new Date().toISOString(); // so the app's last-write-wins pulls take it
+  return out;
+}
+
+async function undoActivity(env, who, { id, force }) {
+  const entries = await readActivity(env);
+  const entry = entries.find((e) => e.id === id);
+  if (!entry || !ITEMS[entry.key]) return json(404, "unknown entry");
+  if (entries.some((e) => e.undoes === id)) return json(409, { error: "already undone" });
+  const current = parseKV(await env.MP_KV.get(entry.key));
+  const now = itemMap(entry.key, current);
+  const changed = entry.changes.filter((c) => JSON.stringify(now.get(c.id) ?? null) !== JSON.stringify(c.after)).map((c) => ({ id: c.id, now: now.get(c.id) ?? null }));
+  if (changed.length && !force) return json(409, { error: "changed since", changed });
+  const restored = restore(entry.key, current, entry.changes);
+  const validate = VALIDATE[entry.key];
+  const reason = validate && restored !== null && !Array.isArray(restored) ? validate(restored) : null;
+  if (reason) return json(409, { error: reason });
+  await env.MP_KV.put(entry.key, JSON.stringify(restored));
+  const logged = await logWrite(env, { who, key: entry.key, why: "", changes: diffItems(entry.key, current, restored), undoes: id });
+  return json(200, { undone: id, entry: logged.id });
+}
+
 export default {
   async fetch(request, env) {
     if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: CORS });
@@ -943,7 +1051,20 @@ export default {
     }
     if (url.pathname === "/meal-method") {
       if (request.method !== "PUT") return json(405, "method not allowed");
-      return putMealMethod(request, env);
+      return putMealMethod(request, env, isAssistant && !isHermes ? "assistant" : null, url.searchParams.get("dryRun") === "1");
+    }
+
+    const who = isAssistant ? "assistant" : "app";
+    if (url.pathname === "/activity") {
+      if (request.method !== "GET") return json(405, "method not allowed");
+      return json(200, { entries: await readActivity(env) });
+    }
+    if (url.pathname === "/activity/undo") {
+      if (request.method !== "POST") return json(405, "method not allowed");
+      let b;
+      try { b = JSON.parse(await request.text()); } catch (e) { return json(400, "invalid JSON"); }
+      if (typeof b !== "object" || b === null || typeof b.id !== "string" || !b.id) return json(400, "id required");
+      return undoActivity(env, who, { id: b.id, force: b.force === true });
     }
 
     if (url.pathname === "/discover") {
@@ -1031,7 +1152,16 @@ export default {
         const next = new Map(parsed.meals.map((m) => [m.id, JSON.stringify(m)]));
         if (cur.some((m) => next.get(m.id) !== JSON.stringify(m) && !(next.get(m.id) === undefined && m.addedBy === "assistant"))) return json(403, "assistant library writes are append only");
       }
+      const dryRun = url.searchParams.get("dryRun") === "1";
+      if (dryRun && !ITEMS[kvKey]) return json(400, "dryRun not supported for this key");
+      const logIt = ITEMS[kvKey] && isAssistant && !isHermes;
+      let changes = [];
+      if (dryRun || logIt) {
+        changes = diffItems(kvKey, parseKV(await env.MP_KV.get(kvKey)), parsed);
+        if (dryRun) return json(200, { changes, summary: summarize(kvKey, changes) });
+      }
       await env.MP_KV.put(kvKey, body);
+      if (logIt) await logWrite(env, { who: "assistant", key: kvKey, why: reasonOf(request), changes });
       return new Response(null, { status: 204, headers: CORS });
     }
 

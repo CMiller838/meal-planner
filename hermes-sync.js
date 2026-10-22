@@ -651,11 +651,43 @@ window.MP = window.MP || {};
     return syncProducts(cofid);
   }
 
+  // ---- Assistant activity (Phase 48): the Worker logs assistant writes; this lists and undoes them ----
+  async function fetchActivity() {
+    const r = await req("GET", "/activity");
+    return r && Array.isArray(r.entries) ? r.entries : [];
+  }
+
+  /** Resolves { ok: true } or { ok: false, status, error, changed } — a 409 is an answer, not a failure. */
+  async function undoActivity(id, force) {
+    const { url, token } = config();
+    const res = await fetch(url + "/activity/undo", {
+      method: "POST",
+      headers: { "X-Auth-Token": token, "Content-Type": "application/json" },
+      body: JSON.stringify({ id, force: !!force }),
+    });
+    const body = await res.json().catch(() => null);
+    if (res.ok) return { ok: true };
+    const o = body && typeof body === "object" ? body : { error: String(body) };
+    return { ok: false, status: res.status, error: o.error || "failed", changed: o.changed || [] };
+  }
+
+  /** Pull one KV key back into the local copy after an undo changed it on the Worker. */
+  function resyncKey(key) {
+    if (key === "pantry" || key === "adhoc") return fetchItems(key);
+    if (key === "library") return syncLibrary();
+    if (key === "placements" || key === "eatRequests") return syncPlacements().then(syncEatRequests);
+    if (key === "dayHints") return fetchDayHints();
+    if (key === "products") return syncProducts(null);
+    if (key === "today") return MP.Today.pull();
+    if (key === "planFlag") return syncPlanFlag();
+    return Promise.resolve();
+  }
+
   MP.Sync = {
     decide, needsPlan, config, saveConfig, syncLibrary, syncPlanFlag, ackPlanFlag,
     fetchItems, fetchPantry, localItems, writeLocalItems, queueOp, applyOps, flushOps,
     planMirror, pushPlan, pushPrefs, fetchPlanPrefs, fetchDayHints, fetchRatings, fetchSettings, settings, hardTerms, fetchDrafts, deleteDraft, pushRating, pushPlanPrefs, newPlacements, newSince, syncPlacements, ackPlacements, syncEatRequests,
     localEatenLog, logEaten, unlogEaten, pushEatenLog, pushCooks, start,
-    syncProducts, localProducts, saveProduct,
+    syncProducts, localProducts, saveProduct, fetchActivity, undoActivity, resyncKey,
   };
 })();
