@@ -317,6 +317,30 @@ window.MP = window.MP || {};
     return MP.Ratings.get();
   }
 
+  /** GET /drafts (Phase 50), mirrored to mp_drafts. Never throws; { drafts: [] } when sync is off or fails. */
+  async function fetchDrafts() {
+    if (!config().enabled) return { drafts: [] };
+    try {
+      const remote = await req("GET", "/drafts");
+      const out = { drafts: remote && Array.isArray(remote.drafts) ? remote.drafts : [] };
+      localStorage.setItem("mp_drafts", JSON.stringify(out));
+      return out;
+    } catch (e) {
+      return { drafts: [] };
+    }
+  }
+
+  /** DELETE /drafts/:id. 404 = already gone = success. Never throws; true when the draft is gone. */
+  async function deleteDraft(id) {
+    if (!config().enabled) return false;
+    try {
+      await req("DELETE", "/drafts/" + encodeURIComponent(id));
+      return true;
+    } catch (e) {
+      return /-> 404$/.test(e.message);
+    }
+  }
+
   /** Best-effort PUT /meal/:id/rating; the server's stamped record is merged back. Never throws. */
   async function pushRating(id, patch) {
     if (!config().enabled) return "off";
@@ -591,7 +615,7 @@ window.MP = window.MP || {};
   MP.Sync = {
     decide, needsPlan, config, saveConfig, syncLibrary, syncPlanFlag, ackPlanFlag,
     fetchItems, fetchPantry, localItems, writeLocalItems, queueOp, applyOps, flushOps,
-    planMirror, pushPlan, pushPrefs, fetchPlanPrefs, fetchDayHints, fetchRatings, pushRating, pushPlanPrefs, newPlacements, newSince, syncPlacements, ackPlacements, syncEatRequests,
+    planMirror, pushPlan, pushPrefs, fetchPlanPrefs, fetchDayHints, fetchRatings, fetchDrafts, deleteDraft, pushRating, pushPlanPrefs, newPlacements, newSince, syncPlacements, ackPlacements, syncEatRequests,
     localEatenLog, logEaten, unlogEaten, pushEatenLog, start,
     syncProducts, localProducts, saveProduct,
   };

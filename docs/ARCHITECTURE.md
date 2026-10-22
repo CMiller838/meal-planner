@@ -156,6 +156,7 @@ also *pulled* (Hermes may write it), on open of the Plan-with-me screen only.
 - `GET /dayHints`, `PUT /dayHints` (Phase 37; assistant-written `{ updatedAt, days: { ISO date: { effort, why } } }`, read-only in the app)
 - `GET /meal/:id/method`, `PUT /meal-method` (Phase 40; meal `method: [{text, minutes?}]` + `methodStatus`; the assistant's PUT forces `drafted`, 409 on an accepted meal; confirm-cook is the existing `PUT /eat-requests`, no new route)
 - `GET /ratings`, `PUT /meal/:id/rating`, `GET /why` (Phase 51; KV `ratings` = `{ meals: { id: { rating, note, never, at } } }`, written only through the per-meal route, both tokens; `/why` reasons share `slotContext` with `/ranking`)
+- `POST /drafts`, `GET /drafts`, `DELETE /drafts/:id` (Phase 50; KV `drafts` = `{ updatedAt, drafts: Draft[] }`, newest first, max 20; both tokens; no PUT. Ingredients matched on POST via `snapKey`; hard exclusions 422. Accept is app-side: `upsertMeal` + `DELETE`, meal carries `fromDraft`)
 - `GET /products`, `PUT /products` (Phase 33a; whole-key product reference records, shape-checked by `productsError`)
 - `GET /ranking` (v4, read-only — no PUT, deliberately)
 - All requests require `X-Auth-Token: <secret>`, checked against a Wrangler

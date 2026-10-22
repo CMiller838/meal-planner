@@ -757,3 +757,11 @@ button.ghost.danger { color: var(--danger); border-color: var(--danger); }
 .rating-hint.never { color: var(--danger); }
 @keyframes rating-in { from { opacity: 0; transform: translateY(4px); } }
 @media (prefers-reduced-motion: reduce) { .rating-row { animation: none; } }
+
+/* Phase 50: drafts */
+.draft-card { animation: mp-slot-in 220ms ease-out both; }
+.draft-card h3 .tag { vertical-align: middle; }
+.draft-map { margin-left: .4rem; max-width: 12rem; }
+.tag.untracked { color: var(--text-dim); background: transparent; font-style: italic; text-transform: none; }
+.draft-card .modal-actions button:disabled { opacity: .5; cursor: not-allowed; }
+@media (prefers-reduced-motion: reduce) { .draft-card { animation: none; } }

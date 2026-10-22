@@ -44,8 +44,10 @@ const ASSISTANT_ALLOWED = new Set([
   "GET /placements", "PUT /placements", "GET /prefs", "PUT /library", "GET /nutrition",
   "GET /dayHints", "PUT /dayHints", "PUT /meal-method", "GET /today", "PUT /today", "GET /products", "PUT /products",
   "GET /expiring", "GET /product-ranking", "GET /ratings", "GET /why", "GET /scale",
+  "GET /drafts", "POST /drafts",
 ]);
 const METHOD_PATH = /^\/meal\/([^/]+)\/method$/;
+const DRAFT_PATH = /^\/drafts\/([^/]+)$/;
 const RATING_PATH = /^\/meal\/([^/]+)\/rating$/;
 const SLOT_TYPES = ["breakfast", "lunch", "dinner", "snack"];
 const MEALDB_BASE = "https://www.themealdb.com/api/json/v1/1/";
@@ -53,7 +55,7 @@ const DISCOVER_LIMIT = 8;
 
 const CORS = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "GET, PUT, OPTIONS",
+  "Access-Control-Allow-Methods": "GET, PUT, POST, DELETE, OPTIONS",
   "Access-Control-Allow-Headers": "Content-Type, X-Auth-Token",
   "Access-Control-Max-Age": "86400",
 };
@@ -340,6 +342,73 @@ function methodError(method) {
     if (s.minutes !== undefined && (!Number.isInteger(s.minutes) || s.minutes < 1 || s.minutes > 600)) return "step minutes must be an integer 1-600";
   }
   return null;
+}
+
+const DRAFT_KEYS = ["name", "description", "mealTypes", "servings", "prepEffort", "ingredients", "method", "tags", "source", "sourceRef", "unreadable", "cost"];
+const DRAFT_SOURCES = ["description", "link", "screenshot", "photo"];
+const MAX_DRAFTS = 20;
+
+/** @param {any} b  the POST /drafts body @returns {string|null} */
+function draftError(b) {
+  if (typeof b !== "object" || b === null || Array.isArray(b)) return "expected a JSON object";
+  for (const k of Object.keys(b)) if (!DRAFT_KEYS.includes(k)) return "unknown key: " + k;
+  const str = (v, max) => typeof v === "string" && v.trim().length >= 1 && v.length <= max;
+  if (!str(b.name, 80)) return "name must be 1-80 characters";
+  if (b.description !== undefined && (typeof b.description !== "string" || b.description.length > 300)) return "description must be <= 300 characters";
+  if (b.mealTypes !== undefined && (!Array.isArray(b.mealTypes) || b.mealTypes.some((t) => !SLOT_TYPES.includes(t)))) return "bad mealTypes";
+  if (b.servings !== undefined && (!Number.isInteger(b.servings) || b.servings < 1 || b.servings > 12)) return "servings must be an integer 1-12";
+  if (b.prepEffort !== undefined && b.prepEffort !== "quick" && b.prepEffort !== "batch") return "prepEffort must be quick or batch";
+  if (!Array.isArray(b.ingredients) || b.ingredients.length < 1 || b.ingredients.length > 40) return "ingredients must be 1-40 entries";
+  for (const i of b.ingredients) {
+    if (typeof i !== "object" || i === null || Array.isArray(i)) return "each ingredient must be an object";
+    for (const k of Object.keys(i)) if (k !== "name" && k !== "qty") return "unknown ingredient key: " + k;
+    if (!str(i.name, 60)) return "ingredient name must be 1-60 characters";
+    if (i.qty !== undefined && (typeof i.qty !== "string" || i.qty.length > 40)) return "ingredient qty must be <= 40 characters";
+  }
+  if (b.method !== undefined) { const m = methodError(b.method); if (m) return m; }
+  if (b.tags !== undefined) {
+    if (typeof b.tags !== "object" || b.tags === null || Array.isArray(b.tags)) return "tags must be an object";
+    for (const [k, v] of Object.entries(b.tags)) {
+      if (!Nutrition.TRACKED_NUTRIENTS.includes(k)) return "unknown tag nutrient: " + k;
+      if (v !== "low" && v !== "med" && v !== "high") return "tag levels are low, med or high";
+    }
+  }
+  if (!DRAFT_SOURCES.includes(b.source)) return "source must be description, link, screenshot or photo";
+  if (b.sourceRef !== undefined && (typeof b.sourceRef !== "string" || b.sourceRef.length > 300)) return "sourceRef must be <= 300 characters";
+  if (b.unreadable !== undefined && (!Array.isArray(b.unreadable) || b.unreadable.length > 20 || b.unreadable.some((u) => typeof u !== "string" || u.length > 200))) return "unreadable must be up to 20 strings of <= 200 characters";
+  if (b.cost !== undefined && (typeof b.cost !== "number" || !Number.isFinite(b.cost) || b.cost < 0)) return "cost must be a number >= 0";
+  return null;
+}
+
+async function readDrafts(env) {
+  let d = null;
+  try { d = JSON.parse(await env.MP_KV.get("drafts")); } catch (e) {}
+  return { updatedAt: (d && d.updatedAt) || null, drafts: d && Array.isArray(d.drafts) ? d.drafts : [] };
+}
+
+/** POST /drafts — matches ingredients to known keys, runs the hard exclusions, stores it. Never touches the library. */
+async function postDraft(request, env) {
+  let body;
+  try { body = JSON.parse(await request.text()); } catch (e) { return json(400, "invalid JSON"); }
+  const bad = draftError(body);
+  if (bad) return json(400, bad);
+  const store = await readDrafts(env);
+  if (store.drafts.length >= MAX_DRAFTS) return json(409, "too many drafts");
+  const keys = globalThis.MP.knownKeys(TAGS.tags, PACK_DATA.items);
+  const now = new Date().toISOString();
+  const draft = { id: "draft-" + Array.from(crypto.getRandomValues(new Uint8Array(4)), (x) => x.toString(16).padStart(2, "0")).join(""), createdAt: now, ...body };
+  draft.ingredients = globalThis.MP.matchDraftIngredients(body.ingredients, keys);
+  const ex = Exclusions.check(globalThis.MP.draftToMeal(draft, {}));
+  if (!ex.ok) return json(422, { error: "excluded meal", reasons: ex.reasons });
+  await env.MP_KV.put("drafts", JSON.stringify({ updatedAt: now, drafts: [draft, ...store.drafts] }));
+  return json(201, { id: draft.id, unmatched: draft.ingredients.filter((i) => i.key === null).map((i) => i.name) });
+}
+
+async function deleteDraft(env, id) {
+  const store = await readDrafts(env);
+  if (!store.drafts.some((d) => d.id === id)) return json(404, "unknown draft");
+  await env.MP_KV.put("drafts", JSON.stringify({ updatedAt: new Date().toISOString(), drafts: store.drafts.filter((d) => d.id !== id) }));
+  return json(204);
 }
 
 /** The library KV value (object or bare array), or null. */
@@ -668,8 +737,18 @@ export default {
     const isAssistant = !!env.ASSISTANT_TOKEN && token === env.ASSISTANT_TOKEN;
     if (!isHermes && !isAssistant) return json(401, "unauthorized");
     const methodMatch = METHOD_PATH.exec(url.pathname);
-    if (!isHermes && !(request.method === "GET" && methodMatch) && !(request.method === "PUT" && RATING_PATH.test(url.pathname)) && !ASSISTANT_ALLOWED.has(`${request.method} ${url.pathname}`)) return json(403, "forbidden");
+    if (!isHermes && !(request.method === "GET" && methodMatch) && !(request.method === "PUT" && RATING_PATH.test(url.pathname)) && !(request.method === "DELETE" && DRAFT_PATH.test(url.pathname)) && !ASSISTANT_ALLOWED.has(`${request.method} ${url.pathname}`)) return json(403, "forbidden");
 
+    const draftMatch = DRAFT_PATH.exec(url.pathname);
+    if (draftMatch) {
+      if (request.method !== "DELETE") return json(405, "method not allowed");
+      return deleteDraft(env, decodeURIComponent(draftMatch[1]));
+    }
+    if (url.pathname === "/drafts") {
+      if (request.method === "POST") return postDraft(request, env);
+      if (request.method !== "GET") return json(405, "method not allowed");
+      return json(200, await readDrafts(env));
+    }
     const ratingMatch = RATING_PATH.exec(url.pathname);
     if (ratingMatch) {
       if (request.method !== "PUT") return json(405, "method not allowed");

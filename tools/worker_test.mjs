@@ -159,4 +159,34 @@ for (const p of ["0", "13", "x", "1.5"]) assert.equal((await call("GET", `/scale
 assert.equal((await call("GET", "/scale?meal=nope&portions=2", "a")).status, 404);
 kv.delete("pantry");
 assert.equal((await call("GET", "/scale?meal=chilli&portions=2", "a")).body.buy.length, 3);
+// Phase 50: /drafts
+const dr = { name: "Lentil curry", servings: 4, source: "link", sourceRef: "https://x/y", cost: 3.5, unreadable: ["amount of salt"],
+  tags: { iron: "high" }, ingredients: [{ name: "Rice", qty: "200g" }, { name: "Dragonfruit paste" }], method: [{ text: "Cook" }] };
+r = await call("POST", "/drafts", "a", dr);
+assert.equal(r.status, 201);
+assert.match(r.body.id, /^draft-[0-9a-f]{8}$/);
+assert.deepEqual(r.body.unmatched, ["Dragonfruit paste"]);
+const g = (await call("GET", "/drafts", "a")).body;
+assert.deepEqual([g.drafts.length, g.drafts[0].ingredients.map((i) => i.key)], [1, ["rice", null]]);
+assert.equal(g.drafts[0].createdAt.length > 10, true);
+for (const bad of [{ ...dr, extra: 1 }, { ...dr, id: "x" }, { ...dr, name: "" }, { ...dr, source: "web" }, { ...dr, ingredients: [] },
+  { ...dr, ingredients: [{ name: "Rice", key: "rice" }] }, { ...dr, tags: { iron: "huge" } }, { ...dr, tags: { bogus: "low" } }, { ...dr, cost: -1 },
+  { ...dr, servings: 13 }, { ...dr, method: [] }, [], "s"])
+  assert.equal((await call("POST", "/drafts", "a", bad)).status, 400, JSON.stringify(bad).slice(0, 60));
+r = await call("POST", "/drafts", "a", { name: "Mushroom stew", source: "description", ingredients: [{ name: "Mushrooms" }] });
+assert.deepEqual([r.status, r.body.reasons], [422, ["contains mushroom"]]);
+assert.equal(JSON.parse(kv.get("drafts")).drafts.length, 1); // 422 stored nothing
+assert.equal((await call("PUT", "/drafts", "a", {})).status, 403);
+assert.equal((await call("PUT", "/drafts", "h", {})).status, 405);
+assert.equal((await call("POST", "/drafts", "bad", dr)).status, 401);
+assert.equal((await call("DELETE", "/drafts/nope", "a")).status, 404);
+for (let i = 1; i < 20; i++) assert.equal((await call("POST", "/drafts", "a", dr)).status, 201);
+assert.equal((await call("POST", "/drafts", "a", dr)).status, 409);
+const first = JSON.parse(kv.get("drafts")).drafts[0].id;
+assert.equal((await call("DELETE", "/drafts/" + first, "a")).status, 204);
+assert.equal(JSON.parse(kv.get("drafts")).drafts.length, 19);
+assert.equal((await call("DELETE", "/drafts/" + first, "a")).status, 404);
+assert.equal(JSON.stringify(JSON.parse(kv.get("library")).meals.map((m) => m.id)), '["chilli"]'); // library untouched
+kv.delete("drafts");
+assert.deepEqual((await call("GET", "/drafts", "a")).body.drafts, []);
 console.log("worker_test: ok");

@@ -130,6 +130,104 @@
       .join("")}</div>`;
   }
 
+  /** True when an ingredient key has no entry in ingredient-nutrient-tags.json (a gap, not zero). */
+  function untracked(key) {
+    return !!(tagsData && tagsData.tags) && !(key in tagsData.tags);
+  }
+
+  // ---- Drafts (Phase 50): assistant-made drafts from KV `drafts`, never in the library until accepted ----
+  let drafts = [];
+  const NEW_KEY = "__new__";
+
+  function pendingDrafts() {
+    const accepted = new Set(library.map((m) => m.fromDraft).filter(Boolean));
+    drafts.filter((d) => accepted.has(d.id)).forEach((d) => MP.Sync.deleteDraft(d.id)); // retry, idempotent
+    return drafts.filter((d) => !accepted.has(d.id));
+  }
+
+  function resolutionsOf(card) {
+    const out = {};
+    card.querySelectorAll("select.draft-map").forEach((sel) => {
+      if (sel.value) out[sel.dataset.name] = sel.value === NEW_KEY ? MP.slugify(sel.dataset.name) : sel.value;
+    });
+    return out;
+  }
+
+  function renderDrafts() {
+    const section = document.getElementById("drafts");
+    const grid = document.getElementById("drafts-grid");
+    const list = MP.Sync.config().enabled ? pendingDrafts() : [];
+    section.classList.toggle("hidden", !list.length);
+    const keys = knownKeys();
+    grid.innerHTML = list
+      .map((d) => {
+        const tags = Object.entries(d.tags || {})
+          .map(([n, l]) => `<span class="tag ${esc(l)}">${esc(labelize(n))} ${esc(l)}</span>`)
+          .join("");
+        const rows = d.ingredients
+          .map((ing) => {
+            const qty = ing.qty ? " — " + esc(ing.qty) : "";
+            if (ing.key) {
+              const lbl = labelize(ing.key);
+              const snap = lbl.toLowerCase() !== ing.name.toLowerCase() ? ` → ${esc(lbl)}` : "";
+              return `<li>${esc(ing.name)}${snap}${qty}</li>`;
+            }
+            return `<li>${esc(ing.name)}${qty}
+              <select class="draft-map" data-name="${esc(ing.name)}" aria-label="Map ${esc(ing.name)}">
+                <option value="">Choose…</option>
+                <option value="${NEW_KEY}">Add as new ingredient</option>
+                ${keys.map((k) => `<option value="${esc(k)}">${esc(labelize(k))}</option>`).join("")}
+              </select></li>`;
+          })
+          .join("");
+        const unreadable = (d.unreadable || []).length
+          ? `<p class="muted">Couldn't read / assumed: ${d.unreadable.map(esc).join("; ")}</p>`
+          : "";
+        return `<div class="card draft-card" data-id="${esc(d.id)}"><div class="card-body">
+          <h3>${esc(d.name)} <span class="tag">${esc(d.source)}</span>${d.cost != null ? ` <span class="tag cost">£${esc(Number(d.cost).toFixed(2))}</span>` : ""}</h3>
+          <p>${esc(d.description || "")}</p>
+          ${tags ? `<div class="tag-row"><span class="muted">inferred:</span>${tags}</div>` : ""}
+          <ul class="ingredient-list">${rows}</ul>
+          ${unreadable}
+          <div class="modal-actions">
+            <button class="btn draft-accept">Accept</button>
+            <button class="ghost draft-edit">Edit</button>
+            <button class="ghost danger draft-reject">Reject</button>
+          </div></div></div>`;
+      })
+      .join("");
+    grid.querySelectorAll(".draft-card").forEach((card) => {
+      const d = list.find((x) => x.id === card.dataset.id);
+      const accept = card.querySelector(".draft-accept");
+      const sync = () => (accept.disabled = [...card.querySelectorAll("select.draft-map")].some((s) => !s.value));
+      card.querySelectorAll("select.draft-map").forEach((s) => s.addEventListener("change", sync));
+      sync();
+      accept.addEventListener("click", () => acceptDraft(d, resolutionsOf(card)));
+      card.querySelector(".draft-edit").addEventListener("click", () => openForm(MP.draftToMeal(d, resolutionsOf(card))));
+      card.querySelector(".draft-reject").addEventListener("click", async () => {
+        if (await MP.Sync.deleteDraft(d.id)) drafts = drafts.filter((x) => x.id !== d.id);
+        else toast("Couldn't reject — try again.");
+        renderDrafts();
+      });
+    });
+  }
+
+  function acceptDraft(d, resolutions) {
+    const meal = MP.draftToMeal(d, resolutions);
+    const { ok, reasons } = MP.Exclusions.check(meal);
+    if (!ok) return toast(`Can't accept — ${reasons.join(", ")}.`);
+    const similar = MP.findSimilarName(library, meal.name, null);
+    try {
+      library = MP.upsertMeal(meal);
+    } catch (e) {
+      return toast("Couldn't save — browser storage is full.");
+    }
+    MP.Sync.deleteDraft(d.id).then((gone) => { if (gone) drafts = drafts.filter((x) => x.id !== d.id); });
+    renderLibrary();
+    renderDrafts();
+    toast(`Added "${meal.name}"` + (similar ? ` (similar to "${similar.name}")` : ""));
+  }
+
   function renderLibrary() {
     const grid = document.getElementById("library-grid");
     const query = document.getElementById("library-search").value;
@@ -172,7 +270,7 @@
     const overlay = document.getElementById("modal-overlay");
     const sheet = document.getElementById("modal-sheet");
     const ingredientsHtml = (meal.ingredients || [])
-      .map((i) => `<li>${esc(i.label || labelize(i.key))}${i.qty ? " — " + esc(i.qty) : ""}</li>`)
+      .map((i) => `<li>${esc(i.label || labelize(i.key))}${i.qty ? " — " + esc(i.qty) : ""}${untracked(i.key) ? ` <span class="tag untracked">not tracked yet</span>` : ""}</li>`)
       .join("");
     sheet.innerHTML = `
       <button class="close-btn" aria-label="Close">✕</button>
@@ -223,9 +321,7 @@
   }
 
   function knownKeys() {
-    const tagKeys = tagsData ? Object.keys(tagsData.tags) : [];
-    const packKeys = packData ? Object.keys(packData.items) : [];
-    return [...tagKeys, ...packKeys].filter((k) => !k.startsWith("_"));
+    return MP.knownKeys(tagsData && tagsData.tags, packData && packData.items);
   }
 
   function variantIdFor(name, keepId) {
@@ -560,6 +656,10 @@
     closeDetail();
     renderLibrary();
     toast(`Saved "${candidate.name}"`);
+    if (candidate.fromDraft) { // a draft opened in Edit: Save accepts it
+      MP.Sync.deleteDraft(candidate.fromDraft).then((gone) => { if (gone) drafts = drafts.filter((x) => x.id !== candidate.fromDraft); renderDrafts(); });
+      renderDrafts();
+    }
   }
 
   async function backfillImages(btn) {
@@ -655,6 +755,7 @@
     initSyncSettings();
     MP.Sync.start();
     MP.Sync.fetchRatings().then(renderLibrary);
+    MP.Sync.fetchDrafts().then((r) => { drafts = r.drafts; renderDrafts(); });
   }
 
   init();

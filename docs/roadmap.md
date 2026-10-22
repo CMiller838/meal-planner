@@ -505,7 +505,7 @@ app (follow the `/nutrition` precedent), and how a partly-filled existing plan i
 **Verify:** the same constraints give the same draft in the app and via the route; apply is idempotent.
 Requires Phases 37 and 48. Assistant side: `notion_assistant` Phase 68.
 
-## Phase 50: Draft meals and recipe import [L] — not started
+## Phase 50: Draft meals and recipe import [L] — built 2026-10-22, live checks pending
 
 **Added 2026-10-19.** A meal can be saved as a **draft**: name, ingredients with amounts, steps, and nutrient tags that are
 marked `inferred` (low/med/high only, never exact numbers). Drafts are visible in the app, are excluded from the generator and

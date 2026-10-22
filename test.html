@@ -2038,6 +2038,37 @@
         && pressureFormula(blownWeek1, "second", 50, 1) === 0);
     }
 
+    // Phase 50: draft helpers, drafts never planned, accept/reject.
+    {
+      const keys = MP.knownKeys(tags.tags, realPackData.items);
+      check("knownKeys: tag + pack keys, no _ keys", keys.includes("rice") && !keys.some((k) => k.startsWith("_")));
+      const mi = MP.matchDraftIngredients([{ name: "Rice" }, { name: "Chickpeas", qty: "1 tin" }, { name: "Dragonfruit paste" }], ["rice", "chickpea"]);
+      check("matchDraftIngredients: hit, plural, miss(null), qty kept", mi[0].key === "rice" && mi[1].key === "chickpea" && mi[1].qty === "1 tin" && mi[2].key === null);
+      const draft = { id: "draft-1a2b3c4d", name: "Lentil Curry", servings: 4, source: "link", sourceRef: "u", cost: 3, unreadable: ["x"], tags: { iron: "high" },
+        ingredients: [{ name: "Rice", key: "rice", qty: "200g" }, { name: "Dragonfruit paste", key: null }], method: [{ text: "Cook" }] };
+      const dm = MP.draftToMeal(draft, { "Dragonfruit paste": "dragonfruit_paste" });
+      check("draftToMeal: no tags/cost/unreadable, fromDraft + source set", !("tags" in dm) && !("cost" in dm) && !("unreadable" in dm) && dm.fromDraft === draft.id && dm.source === "link" && dm.sourceRef === "u");
+      check("draftToMeal: resolutions applied, slug fallback, defaults", dm.ingredients[1].key === "dragonfruit_paste" && MP.draftToMeal(draft, {}).ingredients[1].key === "dragonfruit_paste"
+        && deepEqual(dm.mealTypes, ["dinner"]) && dm.prepEffort === "quick" && dm.methodStatus === "accepted" && /^user-lentil_curry-/.test(dm.id));
+      check("draftToMeal: no steps -> no method", !("method" in MP.draftToMeal({ ...draft, method: undefined }, {})));
+
+      localStorage.setItem("mp_drafts", JSON.stringify({ drafts: [draft] }));
+      const lib0 = JSON.stringify(library);
+      const planD = MP.Generator.generatePlan(library, tags, targets, shelfData, "2026-09-07");
+      check("generatePlan: never schedules a draft id", !JSON.stringify(planD).includes(draft.id) && JSON.stringify(library) === lib0);
+
+      localStorage.setItem("mp_library", JSON.stringify(library));
+      const after = MP.upsertMeal(dm);
+      check("accept: meal lands in library carrying fromDraft",after.length === library.length + 1 && after.some((m) => m.id === dm.id && m.fromDraft === draft.id));
+      const libAccepted = localStorage.getItem("mp_library");
+      const keep = { drafts: [draft, { ...draft, id: "draft-other" }] };
+      const rejected = { drafts: keep.drafts.filter((d) => d.id !== "draft-other") };
+      check("reject: removes that draft only, library byte-identical", rejected.drafts.length === 1 && rejected.drafts[0].id === draft.id && localStorage.getItem("mp_library") === libAccepted);
+      localStorage.removeItem("mp_drafts");
+      localStorage.removeItem("mp_library");
+      check("Sync.fetchDrafts: sync off -> empty, never throws", deepEqual(await MP.Sync.fetchDrafts(), { drafts: [] }) && (await MP.Sync.deleteDraft("x")) === false);
+    }
+
     // Phase 51: MP.Ratings + rankSlot rating layer / never filter.
     {
       const R = MP.Ratings;

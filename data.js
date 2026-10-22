@@ -161,6 +161,41 @@
     return best || slug;
   }
 
+  /** Tag keys + pack-sizes `items` keys, `_`-prefixed dropped. tags/packItems are the files' `tags` / `items` objects. */
+  function knownKeys(tags, packItems) {
+    return [...new Set([...Object.keys(tags || {}), ...Object.keys(packItems || {})])].filter((k) => !k.startsWith("_"));
+  }
+
+  /** Draft ingredients with `key` set to the snapKey hit, or null when nothing matched. */
+  function matchDraftIngredients(ingredients, keys) {
+    return ingredients.map((ing) => {
+      const slug = slugify(ing.name);
+      const hit = snapKey(slug, keys);
+      return { ...ing, key: keys.includes(hit) ? hit : null };
+    });
+  }
+
+  /** A pending draft -> library meal. Never carries tags, cost or unreadable. resolutions: { [ingredientName]: key }. */
+  function draftToMeal(draft, resolutions) {
+    const res = resolutions || {};
+    const meal = {
+      id: `user-${slugify(draft.name)}-${Date.now().toString(36)}`,
+      name: draft.name,
+      description: draft.description || "",
+      instructions: "",
+      mealTypes: draft.mealTypes && draft.mealTypes.length ? draft.mealTypes : ["dinner"],
+      servings: draft.servings || 1,
+      prepEffort: draft.prepEffort || "quick",
+      image: null,
+      source: draft.source,
+      fromDraft: draft.id,
+      ingredients: draft.ingredients.map((ing) => ({ key: ing.key || res[ing.name] || slugify(ing.name), qty: ing.qty, label: ing.name })),
+    };
+    if (draft.sourceRef) meal.sourceRef = draft.sourceRef;
+    if (draft.method && draft.method.length) { meal.method = draft.method; meal.methodStatus = "accepted"; }
+    return meal;
+  }
+
   /** Parse the ingredients textarea into meal-record ingredient objects.
    *  Never returns an entry with an empty `key` — data.js does
    *  `ing.key.replace(...)` and would throw on one.
@@ -357,6 +392,9 @@
   MP.qtyText = qtyText;
   MP.labelize = labelize;
   MP.slugify = slugify;
+  MP.knownKeys = knownKeys;
+  MP.matchDraftIngredients = matchDraftIngredients;
+  MP.draftToMeal = draftToMeal;
   MP.getLibrary = getLibrary;
   MP.saveLibrary = saveLibrary;
   MP.applyRemoteLibrary = applyRemoteLibrary;
