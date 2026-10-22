@@ -241,6 +241,66 @@ window.MP = window.MP || {};
     }
   }
 
+  // ---- Shopping lines (Phase 55): server mirror + pending writes, merged per line by MP.ShoppingList.mergeLines ----
+  const LS_LINES = "mp_shopping";
+  const LS_LINES_PENDING = "mp_shopping_pending";
+
+  function readJson(key, fallback) {
+    try {
+      const v = JSON.parse(localStorage.getItem(key) || "null");
+      return v === null ? fallback : v;
+    } catch (e) {
+      return fallback;
+    }
+  }
+
+  const linesMirror = () => { const m = readJson(LS_LINES, null); return m && Array.isArray(m.lines) ? m.lines : []; };
+  const linesPending = () => { const p = readJson(LS_LINES_PENDING, {}); return p && typeof p === "object" && !Array.isArray(p) ? p : {}; };
+
+  /** Sync read: the mirror with pending writes applied. */
+  function shoppingLines() {
+    return MP.ShoppingList.mergeLines(linesMirror(), Object.values(linesPending()), new Date().toISOString()).lines;
+  }
+
+  /** Stamps `partial` (id + fields to change) now, queues it and mirrors it; the flush is fire-and-forget. */
+  function setLine(partial) {
+    const prev = shoppingLines().find((l) => l.id === partial.id);
+    let at = Date.now();
+    if (prev && at <= Date.parse(prev.updatedAt)) at = Date.parse(prev.updatedAt) + 1; // must beat the line it replaces
+    const line = { ...prev, ...partial, updatedAt: new Date(at).toISOString() };
+    localStorage.setItem(LS_LINES_PENDING, JSON.stringify({ ...linesPending(), [line.id]: line }));
+    flushShoppingLines();
+    return line;
+  }
+
+  /** GET /shopping/lines into the mirror. Never throws; off or failing falls back to the local view. */
+  async function fetchShoppingLines() {
+    if (config().enabled) {
+      try {
+        const body = await req("GET", "/shopping/lines");
+        if (body && Array.isArray(body.lines)) localStorage.setItem(LS_LINES, JSON.stringify(body));
+      } catch (e) { /* keep the mirror */ }
+    }
+    return shoppingLines();
+  }
+
+  // ponytail: one POST of at most 100 pending lines per flush; the next trigger (start, resume, setLine) sends the rest.
+  async function flushShoppingLines() {
+    if (!config().enabled) return "off";
+    const sent = Object.values(linesPending()).slice(0, 100);
+    if (!sent.length) return "noop";
+    try {
+      const body = await req("POST", "/shopping/lines", { lines: sent });
+      if (body && Array.isArray(body.lines)) localStorage.setItem(LS_LINES, JSON.stringify(body));
+      const pending = linesPending();
+      sent.forEach((l) => { if (pending[l.id] && pending[l.id].updatedAt === l.updatedAt) delete pending[l.id]; });
+      localStorage.setItem(LS_LINES_PENDING, JSON.stringify(pending));
+      return "ok";
+    } catch (e) {
+      return "error";
+    }
+  }
+
   /** Pure: slims a plan to the KV mirror shape — mealId + eatenAt per filled
    *  slot, empty slots omitted. No recipe/name data ever leaves the device. */
   function planMirror(plan) {
@@ -624,12 +684,14 @@ window.MP = window.MP || {};
       // eat applied in parallel could be overwritten.
       syncPlacements().then(syncEatRequests).then(fetchPlanDraft);
       pushPrefs();
+      flushShoppingLines();
     });
     syncLibrary();
     syncPlacements().then(syncEatRequests).then(fetchPlanDraft);
     pushPrefs();
     pushCooks(MP.Cooks ? MP.Cooks.all() : []);
     flushOps();
+    flushShoppingLines();
   }
 
   // ---- Product records (Phase 33a): whole-key GET/PUT, merged per record by MP.Products.merge ----
@@ -696,7 +758,8 @@ window.MP = window.MP || {};
 
   /** Pull one KV key back into the local copy after an undo changed it on the Worker. */
   function resyncKey(key) {
-    if (key === "pantry" || key === "adhoc") return fetchItems(key);
+    if (key === "pantry") return fetchItems(key);
+    if (key === "adhoc" || key === "shopping") return fetchShoppingLines();
     if (key === "library") return syncLibrary();
     if (key === "placements" || key === "eatRequests") return syncPlacements().then(syncEatRequests);
     if (key === "dayHints") return fetchDayHints();
@@ -708,6 +771,7 @@ window.MP = window.MP || {};
 
   MP.Sync = {
     decide, needsPlan, config, saveConfig, syncLibrary, syncPlanFlag, ackPlanFlag,
+    shoppingLines, setLine, fetchShoppingLines, flushShoppingLines,
     fetchItems, fetchPantry, localItems, writeLocalItems, queueOp, applyOps, flushOps,
     planMirror, pushPlan, pushPrefs, fetchPlanPrefs, fetchDayHints, fetchPlanDraft, ackPlanDraft, fetchRatings, fetchSettings, settings, hardTerms, fetchDrafts, deleteDraft, pushRating, pushPlanPrefs, newPlacements, newSince, syncPlacements, ackPlacements, syncEatRequests,
     localEatenLog, logEaten, unlogEaten, pushEatenLog, pushCooks, start,

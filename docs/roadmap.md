@@ -582,7 +582,7 @@ assistant's Today view both read it, so they cannot disagree. Read-only, assembl
 route says when it was assembled). **Verify:** a meal logged in the app appears in the route within the KV delay; an empty day
 returns empty lists, not an error. Requires Phases 41, 44, 45, 46. Assistant side: `notion_assistant` Phase 85.
 
-## Phase 55: Shopping list as the single shared state [L] — not started
+## Phase 55: Shopping list as the single shared state [L] — built 2026-10-22, live checks pending
 
 **Added 2026-10-19.** The planner's shopping list becomes the one list. Each line has a stable id, a state (`needed`, `got`,
 `skipped`), a `source` (plan, ran-out tick, assistant, manual) and `updatedAt`, so the app, Google Tasks and the assistant's

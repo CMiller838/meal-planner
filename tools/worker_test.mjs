@@ -442,4 +442,81 @@ assert.equal((await call("GET", "/today", "a")).body.water, 3); // /today untouc
   assert.equal((await call("POST", "/plan/apply", "a", { draft: { ...d.body.draft, changes: [{ ...ch, slot: "x" }] } })).status, 400);
   assert.equal((await call("POST", "/plan/draft", "bad", {})).status, 401);
 }
+// Phase 55: shared shopping lines
+{
+  kv.delete("activity"); kv.delete("shopping");
+  const ago = (ms) => new Date(Date.now() + ms).toISOString();
+  const L = (id, state, at, x) => ({ id, state, updatedAt: at, ...x });
+  const X = (name, state, at, source = "manual") => L("x:" + name, state, at, { label: name, source });
+  // lazy migration from the old KV adhoc, nothing written
+  kv.set("adhoc", JSON.stringify({ updatedAt: "2026-10-01T00:00:00.000Z", items: [{ name: "Milk", qty: "2 pints" }] }));
+  r = await call("GET", "/shopping/lines", "a");
+  assert.deepEqual([r.body.lines.length, r.body.lines[0].id, r.body.lines[0].qty, kv.has("shopping")], [1, "x:milk", "2 pints", false]);
+  // two devices, different lines: both survive; repeat is a no-op with no activity
+  r = await call("POST", "/shopping/lines", "h", { lines: [L("p:2026-10-26:1:rice", "got", ago(-2000))] });
+  assert.deepEqual([r.status, r.body.changed], [200, 1]);
+  const jam = X("jam", "needed", ago(-1000), "assistant");
+  r = await call("POST", "/shopping/lines", "a", { lines: [jam] });
+  assert.equal(r.body.changed, 1);
+  assert.deepEqual(r.body.lines.map((l) => l.id).sort(), ["p:2026-10-26:1:rice", "x:jam", "x:milk"]);
+  const nAct = acts().length, saved = kv.get("shopping");
+  r = await call("POST", "/shopping/lines", "a", { lines: [jam] });
+  assert.deepEqual([r.body.changed, kv.get("shopping"), acts().length], [0, saved, nAct]);
+  // tick/untick race, both arrival orders
+  const t1 = ago(-900), t2 = ago(-800);
+  for (const order of [[0, 1], [1, 0]]) {
+    const id = "p:2026-10-26:1:race" + order[0];
+    const w = [L(id, "got", t1), L(id, "needed", t2)];
+    for (const i of order) await call("POST", "/shopping/lines", "h", { lines: [w[i]] });
+    assert.equal(JSON.parse(kv.get("shopping")).lines.find((l) => l.id === id).state, "needed");
+  }
+  // stale tombstone holds; future stamp clamped
+  await call("POST", "/shopping/lines", "h", { lines: [X("tea", "deleted", ago(-500))] });
+  await call("POST", "/shopping/lines", "h", { lines: [X("tea", "needed", ago(-5000))] });
+  assert.equal(JSON.parse(kv.get("shopping")).lines.find((l) => l.id === "x:tea").state, "deleted");
+  await call("POST", "/shopping/lines", "h", { lines: [L("p:2026-10-26:1:pin", "got", "2099-01-01T00:00:00.000Z")] });
+  assert.ok(Date.parse(JSON.parse(kv.get("shopping")).lines.find((l) => l.id === "p:2026-10-26:1:pin").updatedAt) < Date.now() + 60000);
+  // bad shapes 400, whole request rejected
+  const before = kv.get("shopping");
+  for (const bad of [
+    [X("ok", "needed", ago(0)), L("q:z", "got", ago(0))], [L("x:a", "needed", ago(0), { source: "manual" })],
+    [X("a".repeat(81), "needed", ago(0))], [L("p:a", "weird", ago(0))], [L("p:a", "got", "nope")],
+    [L("p:" + "a".repeat(120), "got", ago(0))], Array(101).fill(L("p:a", "got", ago(0))), [{ ...X("a", "needed", ago(0)), extra: 1 }],
+    [L("x:a", "needed", ago(0), { label: "a", source: "bogus" })],
+  ]) assert.equal((await call("POST", "/shopping/lines", "h", { lines: bad })).status, 400, JSON.stringify(bad).slice(0, 60));
+  assert.equal(kv.get("shopping"), before);
+  assert.equal((await call("POST", "/shopping/lines", "h", [])).status, 400);
+  assert.equal((await call("POST", "/shopping/lines", "bad", { lines: [] })).status, 401);
+  // /adhoc shim round trip with source stamping
+  r = await call("PUT", "/adhoc", "a", { items: [{ name: "Milk", qty: "2 pints", source: "manual" }, { name: "Jam" }, { name: "Eggs" }] });
+  assert.equal(r.status, 204);
+  r = await call("GET", "/adhoc", "a");
+  assert.deepEqual(r.body.items.map((i) => i.name + ":" + i.source).sort(), ["Eggs:assistant", "Jam:assistant", "Milk:manual"]); // an echoed source is kept, a bare item takes the caller's
+  await new Promise((res) => setTimeout(res, 5)); // a later stamp, not a same-ms tie
+  r = await call("PUT", "/adhoc", "h", { items: [{ name: "Milk", qty: "2 pints" }, { name: "Salt", source: "ranout" }] });
+  assert.equal(r.status, 204);
+  r = await call("GET", "/adhoc", "h");
+  assert.deepEqual(r.body.items.map((i) => i.name + ":" + i.source).sort(), ["Milk:manual", "Salt:ranout"]);
+  assert.equal(JSON.parse(kv.get("shopping")).lines.find((l) => l.id === "x:jam").state, "deleted");
+  assert.equal((await call("PUT", "/adhoc", "h", { items: [{ name: "" }] })).status, 400);
+  // GET /shopping carries id/state/extras
+  kv.set("library", JSON.stringify({ meals: [{ id: "m", name: "M", servings: 1, mealTypes: ["dinner"], ingredients: [{ key: "rice", qty: "100g" }] }] }));
+  kv.set("plan", JSON.stringify({ startDate: "2026-10-26", days: [{ day: 1, slots: { dinner: { mealId: "m" } } }] }));
+  await call("POST", "/shopping/lines", "h", { lines: [L("p:2026-10-26:1:rice", "skipped", ago(-100))] });
+  r = await call("GET", "/shopping", "a");
+  const all = Object.values(r.body.lists).flatMap((l) => [...l.lines, ...l.staples, ...l.estimated]);
+  const rice = all.find((l) => l.key === "rice");
+  assert.deepEqual([rice.id, rice.state], ["p:2026-10-26:1:rice", "skipped"]);
+  assert.deepEqual(r.body.extras.map((l) => l.id).sort(), ["x:milk", "x:salt"]);
+  // assistant is logged under `shopping`; undo restamps
+  kv.delete("activity");
+  await call("POST", "/shopping/lines", "a", { lines: [X("oats", "needed", ago(-50), "assistant")] }, { "X-Reason": "test" });
+  const e = acts()[0];
+  assert.deepEqual([acts().length, e.key, e.who], [1, "shopping", "assistant"]);
+  r = await call("POST", "/activity/undo", "a", { id: e.id });
+  assert.equal(r.status, 200);
+  const oats = JSON.parse(kv.get("shopping")).lines.find((l) => l.id === "x:oats");
+  assert.ok(oats.state === "deleted" && Date.parse(oats.updatedAt) > Date.now() - 5000);
+  assert.equal((await call("GET", "/shopping/lines", "a")).status, 200);
+}
 console.log("worker_test: ok");

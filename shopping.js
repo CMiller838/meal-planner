@@ -12,16 +12,17 @@
     return stored ? JSON.parse(stored) : null;
   }
 
-  function loadTicked(plan) {
+  // Phase 55: old per-plan ticks become pending "got" lines once, then the key goes.
+  function migrateTicked(plan) {
     const stored = JSON.parse(localStorage.getItem(LS_TICKED) || "null");
-    if (!stored || stored.generatedAt !== (plan.generatedAt || undefined)) {
-      return { generatedAt: plan.generatedAt, keys: [] };
+    if (!stored) return;
+    if (stored.generatedAt === (plan.generatedAt || undefined)) {
+      for (const k of stored.keys || []) {
+        const [day, ...rest] = k.split(":");
+        MP.Sync.setLine({ id: MP.ShoppingList.lineId(plan.startDate, day, rest.join(":")), state: "got", source: "plan" });
+      }
     }
-    return stored;
-  }
-
-  function saveTicked(ticked) {
-    localStorage.setItem(LS_TICKED, JSON.stringify(ticked));
+    localStorage.removeItem(LS_TICKED);
   }
 
   function fmtQty(line) {
@@ -29,80 +30,100 @@
     return `${line.packs} × ${line.needed.value}${line.needed.unit}`;
   }
 
-  function lineHtml(shopDay, line, ticked, showPrice) {
-    const key = `${shopDay}:${line.key}`;
-    const checked = ticked.keys.includes(key) ? "checked" : "";
+  function lineHtml(plan, shopDay, line, states, showPrice) {
+    const state = (states.get(MP.ShoppingList.lineId(plan.startDate, shopDay, line.key)) || {}).state;
     const classes = ["shop-line"];
-    if (ticked.keys.includes(key)) classes.push("ticked");
+    if (state === "got") classes.push("ticked");
+    if (state === "skipped") classes.push("skipped");
     if (line.packs === 0) classes.push("covered");
     const meals = line.meals.map(esc).join(", ");
     return `<li class="${classes.join(" ")}">
       <label>
-        <input type="checkbox" data-shop="${shopDay}" data-key="${esc(line.key)}" ${checked}>
+        <input type="checkbox" data-shop="${shopDay}" data-key="${esc(line.key)}" ${state === "got" ? "checked" : ""}>
         <span class="shop-qty">${esc(fmtQty(line))}</span>
         <span class="shop-name">${esc(line.label)}</span>
         ${line.pantryQty ? `<span class="have">have ${esc(line.pantryQty)}</span>` : ""}
         ${showPrice ? `<span class="shop-price${line.estimated ? " estimated" : ""}">${line.price != null ? (line.estimated ? "~£" : "£") + line.lineCost.toFixed(2) : ""}</span>` : ""}
       </label>
+      <button class="ghost shop-skip" data-skip="${shopDay}" data-key="${esc(line.key)}" aria-label="${state === "skipped" ? "Restore" : "Skip"} ${esc(line.label)}">${state === "skipped" ? "↺" : "×"}</button>
       ${meals ? `<span class="shop-why">${meals}</span>` : ""}
     </li>`;
   }
 
-  function blockHtml(list, ticked) {
+  function blockHtml(plan, list, states) {
     return `<section class="shop-block">
       <h3>Shop day ${list.shopDay} <span class="shop-total">£${list.total.toFixed(2)}</span></h3>
-      <ul class="shop-list">${list.lines.map((l) => lineHtml(list.shopDay, l, ticked, true)).join("")}</ul>
+      <ul class="shop-list">${list.lines.map((l) => lineHtml(plan, list.shopDay, l, states, true)).join("")}</ul>
       ${list.staples.length ? `<details class="shop-extra">
         <summary>Check you have these (${list.staples.length})</summary>
-        <ul class="shop-list">${list.staples.map((l) => lineHtml(list.shopDay, l, ticked, false)).join("")}</ul>
+        <ul class="shop-list">${list.staples.map((l) => lineHtml(plan, list.shopDay, l, states, false)).join("")}</ul>
       </details>` : ""}
       ${list.estimated.length ? `<details class="shop-extra">
         <summary>Estimated — category price, not exact (${list.estimated.length})</summary>
-        <ul class="shop-list">${list.estimated.map((l) => lineHtml(list.shopDay, l, ticked, true)).join("")}</ul>
+        <ul class="shop-list">${list.estimated.map((l) => lineHtml(plan, list.shopDay, l, states, true)).join("")}</ul>
       </details>` : ""}
     </section>`;
   }
 
-  function render(plan, lists, ticked) {
+  let wired = false;
+  function render(plan, lists) {
     const meta = document.getElementById("shopping-meta");
     const root = document.getElementById("shopping-root");
     meta.textContent = plan.startDate
       ? `From your plan starting ${plan.startDate} — prices are a hand-entered estimate`
       : "Prices are a hand-entered estimate";
-    root.innerHTML = [1, 8].map((d) => blockHtml(lists[d], ticked)).join("");
+    const open = [...root.querySelectorAll("details[open]")].map((d) => d.querySelector("summary").textContent);
+    const states = new Map(MP.Sync.shoppingLines().map((l) => [l.id, l]));
+    root.innerHTML = [1, 8].map((d) => blockHtml(plan, lists[d], states)).join("");
+    root.querySelectorAll("details").forEach((d) => { if (open.includes(d.querySelector("summary").textContent)) d.open = true; });
+    if (wired) return;
+    wired = true;
 
+    const idOf = (el) => MP.ShoppingList.lineId(plan.startDate, el.dataset.shop || el.dataset.skip, el.dataset.key);
     root.addEventListener("change", (e) => {
       const input = e.target.closest('input[type="checkbox"]');
       if (!input) return;
-      const key = `${input.dataset.shop}:${input.dataset.key}`;
-      const idx = ticked.keys.indexOf(key);
-      if (input.checked && idx === -1) ticked.keys.push(key);
-      if (!input.checked && idx !== -1) ticked.keys.splice(idx, 1);
-      saveTicked(ticked);
-      input.closest(".shop-line").classList.toggle("ticked", input.checked);
+      MP.Sync.setLine({ id: idOf(input), state: input.checked ? "got" : "needed", source: "plan" });
       if (input.checked) clearOut(input.dataset.key);
+      render(plan, lists);
+    });
+    root.addEventListener("click", (e) => {
+      const b = e.target.closest("[data-skip]");
+      if (!b) return;
+      const skipped = b.closest(".shop-line").classList.contains("skipped");
+      MP.Sync.setLine({ id: idOf(b), state: skipped ? "needed" : "skipped", source: "plan" });
+      render(plan, lists);
+    });
+    // another device may have ticked lines while this tab was hidden
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "visible") MP.Sync.fetchShoppingLines().then(() => { render(plan, lists); renderAdhoc(); });
     });
   }
 
-  // ---- Ad-hoc list ----
-  function adhocLineHtml(item) {
-    return `<li class="shop-line">
+  // ---- Ad-hoc list: the x: lines of the shared shopping list (Phase 55) ----
+  const extras = () => MP.Sync.shoppingLines().filter((l) => l.id.startsWith("x:") && l.state !== "deleted");
+
+  function adhocLineHtml(l) {
+    return `<li class="shop-line${l.state === "got" ? " ticked" : ""}">
       <label>
-        <input type="checkbox" data-name="${esc(item.name)}">
-        <span class="shop-qty">${esc(MP.qtyText(item.qty))}</span>
-        <span class="shop-name">${esc(item.name)}</span>
+        <input type="checkbox" data-id="${esc(l.id)}" ${l.state === "got" ? "checked" : ""}>
+        <span class="shop-qty">${esc(MP.qtyText(l.qty))}</span>
+        <span class="shop-name">${esc(l.label)}</span>
       </label>
+      <button class="ghost shop-skip" data-del="${esc(l.id)}" aria-label="Remove ${esc(l.label)}">×</button>
     </li>`;
   }
 
   function adhocHtml(items) {
+    const gotCount = items.filter((l) => l.state === "got").length;
     return `<section class="shop-block adhoc">
       ${items.length
         ? `<ul class="shop-list">${items.map(adhocLineHtml).join("")}</ul>`
         : `<p class="muted">Nothing on your ad-hoc list.</p>`}
+      ${gotCount ? `<button id="adhoc-clear-btn" class="ghost">Clear got (${gotCount})</button>` : ""}
       <div class="adhoc-add">
-        <input type="text" id="adhoc-name" placeholder="Add an item">
-        <input type="text" id="adhoc-qty" placeholder="qty (optional)">
+        <input type="text" id="adhoc-name" placeholder="Add an item" aria-label="Item name">
+        <input type="text" id="adhoc-qty" placeholder="qty (optional)" aria-label="Quantity">
         <button id="adhoc-add-btn" class="ghost">Add</button>
       </div>
     </section>`;
@@ -111,29 +132,32 @@
   function renderAdhoc() {
     const root = document.getElementById("adhoc-root");
     if (!root) return;
-    const items = MP.Sync.localItems("adhoc");
+    const items = extras();
     root.innerHTML = adhocHtml(items);
 
     root.querySelectorAll('input[type="checkbox"]').forEach((cb) => {
       cb.addEventListener("change", () => {
-        MP.Sync.queueOp({ list: "adhoc", type: "remove", name: cb.dataset.name });
-        MP.Sync.writeLocalItems("adhoc", MP.Sync.applyOps(MP.Sync.localItems("adhoc"), [{ type: "remove", name: cb.dataset.name }]));
+        MP.Sync.setLine({ id: cb.dataset.id, state: cb.checked ? "got" : "needed" });
+        if (cb.checked) clearOut(cb.closest(".shop-line").querySelector(".shop-name").textContent);
         renderAdhoc();
-        MP.Sync.flushOps();
       });
+    });
+    root.querySelectorAll("[data-del]").forEach((b) => b.addEventListener("click", () => {
+      MP.Sync.setLine({ id: b.dataset.del, state: "deleted" });
+      renderAdhoc();
+    }));
+    const clear = root.querySelector("#adhoc-clear-btn");
+    if (clear) clear.addEventListener("click", () => {
+      items.filter((l) => l.state === "got").forEach((l) => MP.Sync.setLine({ id: l.id, state: "deleted" }));
+      renderAdhoc();
     });
 
     root.querySelector("#adhoc-add-btn").addEventListener("click", () => {
-      const nameInput = root.querySelector("#adhoc-name");
-      const qtyInput = root.querySelector("#adhoc-qty");
-      const name = nameInput.value.trim();
+      const name = root.querySelector("#adhoc-name").value.trim().slice(0, 80);
       if (!name) return;
-      const qty = qtyInput.value.trim();
-      const op = { list: "adhoc", type: "add", name, ...(qty ? { qty } : {}) };
-      MP.Sync.queueOp(op);
-      MP.Sync.writeLocalItems("adhoc", MP.Sync.applyOps(MP.Sync.localItems("adhoc"), [op]));
+      const qty = root.querySelector("#adhoc-qty").value.trim();
+      MP.Sync.setLine({ id: "x:" + MP.ShoppingList.normalizeKey(name), state: "needed", source: "manual", label: name, ...(qty ? { qty } : {}) });
       renderAdhoc();
-      MP.Sync.flushOps();
     });
   }
 
@@ -502,7 +526,7 @@
     initTabs();
     initPantry();
     renderAdhoc();
-    MP.Sync.fetchItems("adhoc").then(() => renderAdhoc());
+    MP.Sync.fetchShoppingLines().then(() => renderAdhoc());
 
     const plan = loadPlan();
     const root = document.getElementById("shopping-root");
@@ -513,8 +537,9 @@
     const [library, packData, pantry] = await Promise.all([MP.getLibrary(), MP.ShoppingList.load(), MP.Sync.fetchPantry()]);
     const mealsById = Object.fromEntries(library.map((m) => [m.id, m]));
     const lists = MP.ShoppingList.buildLists(plan, mealsById, packData, pantry);
-    const ticked = loadTicked(plan);
-    render(plan, lists, ticked);
+    migrateTicked(plan);
+    render(plan, lists);
+    MP.Sync.fetchShoppingLines().then(() => render(plan, lists));
   }
 
   init();

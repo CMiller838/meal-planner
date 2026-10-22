@@ -649,6 +649,11 @@ button.ghost.danger { color: var(--danger); border-color: var(--danger); }
   padding: .5rem 0;
 }
 .shop-line:last-child { border-bottom: none; }
+.shop-line { display: flex; flex-wrap: wrap; align-items: center; gap: 0 .4rem; }
+.shop-line label { flex: 1; min-width: 0; }
+.shop-skip { padding: .1rem .55rem; line-height: 1.2; transition: opacity .15s; }
+.shop-line.skipped label { opacity: .4; text-decoration: line-through; }
+.shop-why { flex-basis: 100%; }
 .shop-line label {
   display: grid;
   grid-template-columns: auto 3.5rem 1fr auto;

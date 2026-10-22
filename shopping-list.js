@@ -457,5 +457,57 @@
     return { buy, covered };
   }
 
-  MP.ShoppingList = { scaleMeal, scaleShortfall, mealsUsing, load, loadGroups, groupIndex, buildLists, parseQty, packsFor, normalizeKey, pantryIndex, pantryOverlap, hasEnough, cookable, quickPicks, remainingQty, eatPlan, priceFor, mealCost, costIndex, costTier, costBadgeHtml };
+  // Phase 55: the shared shopping list. Pure line logic; the Worker and hermes-sync.js both call it.
+  const LINE_STATES = ["needed", "got", "skipped", "deleted"];
+  const LINE_SOURCES = ["plan", "manual", "assistant", "ranout"];
+  const SKEW_MS = 5 * 60 * 1000;
+  const PRUNE_MS = 30 * 24 * 3600 * 1000;
+
+  function lineId(startDate, shopDay, key) {
+    return `p:${startDate}:${shopDay}:${normalizeKey(key)}`;
+  }
+
+  /** Per-line last-write-wins: later updatedAt wins, a tie keeps current, a stamp >5 min ahead is clamped to now,
+   *  non-needed lines older than 30 days are dropped. Never throws; malformed incoming lines are skipped.
+   *  @returns {{lines: object[], changed: object[]}} changed = incoming lines that took effect. */
+  function mergeLines(current, incoming, nowIso) {
+    const now = Date.parse(nowIso);
+    const byId = new Map((Array.isArray(current) ? current : []).map((l) => [l.id, l]));
+    const changed = [];
+    for (const raw of Array.isArray(incoming) ? incoming : []) {
+      if (!raw || typeof raw.id !== "string" || !Number.isFinite(Date.parse(raw.updatedAt))) continue;
+      const line = Date.parse(raw.updatedAt) > now + SKEW_MS ? { ...raw, updatedAt: nowIso } : raw;
+      const cur = byId.get(line.id);
+      if (cur && Date.parse(line.updatedAt) <= Date.parse(cur.updatedAt)) continue;
+      byId.set(line.id, line);
+      changed.push(line);
+    }
+    const lines = [...byId.values()].filter((l) => l.state === "needed" || now - Date.parse(l.updatedAt) <= PRUNE_MS);
+    return { lines, changed };
+  }
+
+  /** The ad-hoc list as the old PUT /adhoc shape: needed extra (x:) lines only. */
+  function adhocView(lines) {
+    return (Array.isArray(lines) ? lines : []).filter((l) => l.id.startsWith("x:") && l.state === "needed")
+      .map((l) => ({ name: l.label, ...(l.qty ? { qty: l.qty } : {}), source: l.source }));
+  }
+
+  /** Incoming lines for a whole-list ad-hoc PUT: new/changed names -> needed, needed lines missing from items -> deleted. */
+  function adhocToLines(lines, items, source, nowIso) {
+    const cur = new Map((Array.isArray(lines) ? lines : []).filter((l) => l.id.startsWith("x:")).map((l) => [l.id, l]));
+    const out = [], seen = new Set();
+    for (const it of Array.isArray(items) ? items : []) {
+      const id = "x:" + normalizeKey(it.name);
+      const src = LINE_SOURCES.includes(it.source) ? it.source : source;
+      seen.add(id);
+      const c = cur.get(id);
+      const qty = it.qty ? { qty: it.qty } : {};
+      if (c && c.state === "needed" && c.label === it.name && c.source === src && JSON.stringify(c.qty || null) === JSON.stringify(it.qty || null)) continue;
+      out.push({ id, state: "needed", updatedAt: nowIso, source: src, label: it.name, ...qty });
+    }
+    for (const [id, c] of cur) if (c.state === "needed" && !seen.has(id)) out.push({ ...c, state: "deleted", updatedAt: nowIso });
+    return out;
+  }
+
+  MP.ShoppingList = { scaleMeal, scaleShortfall, mealsUsing, load, loadGroups, groupIndex, buildLists, parseQty, packsFor, normalizeKey, lineId, mergeLines, adhocView, adhocToLines, LINE_STATES, LINE_SOURCES, pantryIndex, pantryOverlap, hasEnough, cookable, quickPicks, remainingQty, eatPlan, priceFor, mealCost, costIndex, costTier, costBadgeHtml };
 })(typeof globalThis !== "undefined" ? globalThis : this);

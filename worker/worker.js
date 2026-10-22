@@ -31,7 +31,7 @@ const Ratings = globalThis.MP.Ratings;
 const MPData = globalThis.MP;
 
 const KEYS = {
-  "/library": "library", "/planFlag": "planFlag", "/pantry": "pantry", "/adhoc": "adhoc",
+  "/library": "library", "/planFlag": "planFlag", "/pantry": "pantry",
   "/plan": "plan", "/placements": "placements", "/prefs": "prefs",
   "/eaten-log": "eatenLog", "/planPrefs": "planPrefs", "/eat-requests": "eatRequests",
   "/dayHints": "dayHints", "/today": "today", "/products": "products", "/settings": "settings", "/cooks": "cooks",
@@ -43,7 +43,7 @@ const KEYS = {
 // only library adds (see the PUT /library check). Everything else answers 403.
 const ASSISTANT_ALLOWED = new Set([
   "GET /library", "GET /plan", "GET /eaten-log", "GET /shopping", "GET /eat-requests", "PUT /eat-requests",
-  "GET /discover", "GET /pantry", "PUT /pantry", "GET /adhoc", "PUT /adhoc", "PUT /planFlag",
+  "GET /discover", "GET /pantry", "PUT /pantry", "GET /adhoc", "PUT /adhoc", "GET /shopping/lines", "POST /shopping/lines", "PUT /planFlag",
   "GET /placements", "PUT /placements", "GET /prefs", "PUT /library", "GET /nutrition",
   "GET /dayHints", "PUT /dayHints", "PUT /meal-method", "GET /today", "PUT /today", "GET /products", "PUT /products",
   "GET /expiring", "GET /day", "GET /product-ranking", "GET /ratings", "GET /why", "GET /scale", "GET /cookable", "GET /substitutions", "GET /leftovers", "GET /quick",
@@ -526,8 +526,8 @@ async function productRanking(env) {
 }
 
 async function shopping(env) {
-  const [libraryRaw, planRaw, pantryRaw, adhocRaw] = await Promise.all([
-    env.MP_KV.get("library"), env.MP_KV.get("plan"), env.MP_KV.get("pantry"), env.MP_KV.get("adhoc"),
+  const [libraryRaw, planRaw, pantryRaw] = await Promise.all([
+    env.MP_KV.get("library"), env.MP_KV.get("plan"), env.MP_KV.get("pantry"),
   ]);
   const parse = (raw) => {
     try {
@@ -541,14 +541,107 @@ async function shopping(env) {
   const plan = parse(planRaw);
   if (!meals || !plan || !Array.isArray(plan.days)) return json(409, "library and plan must be synced first");
   const pantry = parse(pantryRaw);
-  const adhoc = parse(adhocRaw);
   const mealsById = Object.fromEntries(meals.map((m) => [m.id, m]));
+  const lists = ShoppingList.buildLists(plan, mealsById, PACK_DATA, pantry && Array.isArray(pantry.items) ? pantry : null);
+  const { lines } = await readShopping(env);
+  const byId = new Map(lines.map((l) => [l.id, l]));
+  for (const list of Object.values(lists)) {
+    for (const l of [...list.lines, ...list.staples, ...list.estimated]) {
+      l.id = ShoppingList.lineId(plan.startDate, list.shopDay, l.key);
+      const st = byId.get(l.id);
+      l.state = st ? st.state : "needed";
+      l.stateAt = st ? st.updatedAt : null;
+    }
+  }
+  const extras = lines.filter((l) => l.id.startsWith("x:") && l.state !== "deleted");
   return json(200, {
     updatedAt: plan.updatedAt || null,
     startDate: plan.startDate || null,
-    lists: ShoppingList.buildLists(plan, mealsById, PACK_DATA, pantry && Array.isArray(pantry.items) ? pantry : null),
-    adhoc: adhoc && Array.isArray(adhoc.items) ? adhoc.items : [],
+    lists,
+    adhoc: ShoppingList.adhocView(lines),
+    extras,
   });
+}
+
+// Phase 55: KV `shopping` is every shopping line's state (plan ticks and extras). KV `adhoc` is read once, to migrate.
+const LINE_KEYS = ["id", "state", "updatedAt", "source", "label", "qty"];
+
+/** @param {any} lines  @returns {string|null} */
+function linesError(lines) {
+  if (!Array.isArray(lines)) return "lines must be an array";
+  if (lines.length > 100) return "at most 100 lines";
+  for (const l of lines) {
+    if (typeof l !== "object" || l === null || Array.isArray(l)) return "each line must be an object";
+    for (const k of Object.keys(l)) if (!LINE_KEYS.includes(k)) return "unknown line key: " + k;
+    if (typeof l.id !== "string" || l.id.length > 120 || !/^[px]:./.test(l.id)) return "id must be p:... or x:... (<= 120 characters)";
+    if (!ShoppingList.LINE_STATES.includes(l.state)) return "state must be needed, got, skipped or deleted";
+    if (typeof l.updatedAt !== "string" || !Number.isFinite(Date.parse(l.updatedAt))) return "updatedAt must be an ISO string";
+    if (l.source !== undefined && !ShoppingList.LINE_SOURCES.includes(l.source)) return "unknown source";
+    if (l.id.startsWith("x:")) {
+      if (typeof l.label !== "string" || !l.label.trim() || l.label.length > 80) return "an x: line needs a label of 1-80 characters";
+      if (!ShoppingList.LINE_SOURCES.includes(l.source)) return "an x: line needs a source";
+      const q = qtyError(l.qty);
+      if (q) return q;
+    }
+  }
+  return null;
+}
+
+/** @param {any} v  the stored/undone `shopping` value */
+function shoppingError(v) {
+  return typeof v === "object" && v !== null && !Array.isArray(v) ? linesError(v.lines) : "expected an object";
+}
+
+/** The stored lines; before the first write they come from KV `adhoc` (lazy migration). */
+async function readShopping(env) {
+  const v = parseKV(await env.MP_KV.get("shopping"));
+  if (v && Array.isArray(v.lines)) return { updatedAt: v.updatedAt || null, lines: v.lines };
+  const old = parseKV(await env.MP_KV.get("adhoc"));
+  if (!old || !Array.isArray(old.items)) return { updatedAt: null, lines: [] };
+  const lines = ShoppingList.adhocToLines([], old.items, "manual", old.updatedAt || new Date().toISOString());
+  return { updatedAt: old.updatedAt || null, lines };
+}
+
+/** Merge incoming lines into KV `shopping` (per-line last-write-wins). Writes and logs only when something changed.
+ *  ponytail: KV read-merge-write is not atomic; two POSTs in the same ~second can lose one. Durable Object if it bites. */
+async function mergeShopping(env, incoming, { who, why, dryRun }) {
+  const cur = await readShopping(env);
+  const nowIso = new Date().toISOString();
+  const { lines, changed } = ShoppingList.mergeLines(cur.lines, incoming, nowIso);
+  if (!changed.length) return { updatedAt: cur.updatedAt, lines: cur.lines, changed: 0 };
+  const changes = diffItems("shopping", { lines: cur.lines }, { lines });
+  if (dryRun) return { dry: { changes, summary: summarize("shopping", changes) } };
+  await env.MP_KV.put("shopping", JSON.stringify({ updatedAt: nowIso, lines }));
+  if (who === "assistant") await logWrite(env, { who, key: "shopping", why, changes });
+  return { updatedAt: nowIso, lines, changed: changed.length };
+}
+
+/** POST /shopping/lines { lines } */
+async function postLines(request, env, who) {
+  let b;
+  try { b = JSON.parse(await request.text()); } catch (e) { return json(400, "invalid JSON"); }
+  if (typeof b !== "object" || b === null || Array.isArray(b)) return json(400, "expected a JSON object");
+  const bad = linesError(b.lines);
+  if (bad) return json(400, bad);
+  const r = await mergeShopping(env, b.lines, { who, why: reasonOf(request) });
+  return json(200, r);
+}
+
+/** GET|PUT /adhoc: compatibility shim over `shopping` until Phase 56. */
+async function adhocShim(request, env, who, dryRun) {
+  const { updatedAt, lines } = await readShopping(env);
+  if (request.method === "GET") return json(200, { updatedAt, items: ShoppingList.adhocView(lines) });
+  if (request.method !== "PUT") return json(405, "method not allowed");
+  let b;
+  try { b = JSON.parse(await request.text()); } catch (e) { return json(400, "invalid JSON"); }
+  if (typeof b !== "object" || b === null || Array.isArray(b)) return json(400, "expected a JSON object");
+  const bad = itemsError(b);
+  if (bad) return json(400, bad);
+  const incoming = ShoppingList.adhocToLines(lines, b.items, who === "assistant" ? "assistant" : "manual", new Date().toISOString());
+  const bad2 = linesError(incoming);
+  if (bad2) return json(400, bad2);
+  const r = await mergeShopping(env, incoming, { who, why: reasonOf(request), dryRun });
+  return r.dry ? json(200, r.dry) : new Response(null, { status: 204, headers: CORS });
 }
 
 /** @param {any} parsed  @returns {string|null} */
@@ -981,7 +1074,7 @@ const VALIDATE = {
   products: productsError,
   library: mealsError,
   pantry: itemsError,
-  adhoc: itemsError,
+  shopping: shoppingError,
   planFlag: null,
   plan: planError,
   placements: placementsError,
@@ -1000,7 +1093,7 @@ const VALIDATE = {
 // entry of per-item before/after pairs to the `activity` KV key.
 const ITEMS = {
   pantry: ["items", (i) => ShoppingList.normalizeKey(i.name)],
-  adhoc: ["items", (i) => ShoppingList.normalizeKey(i.name)],
+  shopping: ["lines", (l) => l.id],
   library: ["meals", (m) => m.id],
   products: ["products", (p) => p.id],
   eatRequests: ["requests", (r) => r.id],
@@ -1063,6 +1156,13 @@ const reasonOf = (request) => (request.headers.get("X-Reason") || "").trim().sli
 function restore(key, current, changes) {
   const [field, idOf] = ITEMS[key];
   if (field === null) return changes[0].before;
+  if (key === "shopping") {
+    // Restamp to now, else the restored lines would lose last-write-wins at once; an undone add becomes a tombstone.
+    const nowIso = new Date().toISOString();
+    const byId = new Map(((current && current.lines) || []).map((l) => [l.id, l]));
+    for (const c of changes) byId.set(c.id, c.before ? { ...c.before, updatedAt: nowIso } : { ...c.after, state: "deleted", updatedAt: nowIso });
+    return { updatedAt: nowIso, lines: [...byId.values()] };
+  }
   const out = Array.isArray(current) ? [...current] : { ...(current || {}) };
   if (idOf) {
     const list = [...(Array.isArray(current) ? current : (current && current[field]) || [])];
@@ -1214,6 +1314,13 @@ export default {
       if (request.method !== "GET") return json(405, "method not allowed");
       return productRanking(env);
     }
+
+    if (url.pathname === "/shopping/lines") {
+      if (request.method === "POST") return postLines(request, env, who);
+      if (request.method !== "GET") return json(405, "method not allowed");
+      return json(200, await readShopping(env));
+    }
+    if (url.pathname === "/adhoc") return adhocShim(request, env, who, url.searchParams.get("dryRun") === "1");
 
     if (url.pathname === "/shopping") {
       if (request.method !== "GET") return json(405, "method not allowed");

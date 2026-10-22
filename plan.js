@@ -913,12 +913,13 @@
   /** Pantry/ad-hoc side of a cook: apply locally, queue for the relay. Only
    *  commitCook and applyEatRequests' cook branch call it (both cooks). */
   function applyCookOps(ops) {
-    ["pantry", "adhoc"].forEach((list) => {
-      const listOps = ops.filter((op) => op.list === list);
-      if (!listOps.length) return;
-      MP.Sync.writeLocalItems(list, MP.Sync.applyOps(MP.Sync.localItems(list), listOps));
-    });
-    ops.forEach(MP.Sync.queueOp);
+    const pantryOps = ops.filter((op) => op.list === "pantry");
+    if (pantryOps.length) MP.Sync.writeLocalItems("pantry", MP.Sync.applyOps(MP.Sync.localItems("pantry"), pantryOps));
+    pantryOps.forEach(MP.Sync.queueOp);
+    // Shortfalls join the shared shopping list as extra lines (Phase 55).
+    ops.filter((op) => op.list === "adhoc").forEach((op) => MP.Sync.setLine({
+      id: "x:" + MP.ShoppingList.normalizeKey(op.name), state: "needed", source: "plan", label: op.name, ...(op.qty ? { qty: op.qty } : {}),
+    }));
   }
 
   /** The only pantry writer (§4a). Deducts once per cook instance, then

@@ -2764,6 +2764,33 @@
       && A(base, [{ type: "storage", name: "Eggs", storage: "fridge" }]).length === 1);
     check("applyOps add keeps storage (with and without qty)", A(base, [{ type: "add", name: "Milk", qty: "1 pint" }])[0].storage === "fridge"
       && A(base, [{ type: "add", name: "Milk" }])[0].storage === "fridge");
+
+    // Phase 55: shared shopping lines
+    const N0 = "2026-10-22T12:00:00.000Z", ln = (id, state, at, x) => ({ id, state, updatedAt: at, ...x });
+    check("lineId: p:<start>:<day>:<normalized key>", SL.lineId("2026-10-26", 8, "Chopped Tomatoes") === "p:2026-10-26:8:chopped_tomatoe");
+    const m1 = SL.mergeLines([ln("p:a", "got", "2026-10-22T10:00:00.000Z")], [ln("p:a", "needed", "2026-10-22T11:00:00.000Z"), ln("p:b", "got", "2026-10-22T11:00:00.000Z")], N0);
+    check("mergeLines: later stamp wins, new id added, both reported changed", m1.lines.find((l) => l.id === "p:a").state === "needed" && m1.lines.length === 2 && m1.changed.length === 2);
+    const m2 = SL.mergeLines(m1.lines, m1.changed, N0);
+    check("mergeLines: repeat is a no-op (tie keeps current)", m2.changed.length === 0 && m2.lines.length === 2);
+    check("mergeLines: older stamp loses to a tombstone", SL.mergeLines([ln("x:a", "deleted", "2026-10-22T11:00:00.000Z")], [ln("x:a", "needed", "2026-10-22T10:00:00.000Z")], N0).lines[0].state === "deleted");
+    check("mergeLines: future stamp clamped to now", SL.mergeLines([], [ln("p:a", "got", "2030-01-01T00:00:00.000Z")], N0).lines[0].updatedAt === N0);
+    check("mergeLines: prunes non-needed >30d, keeps needed, skips junk",
+      SL.mergeLines([ln("p:old", "got", "2026-08-01T00:00:00.000Z"), ln("p:oldn", "needed", "2026-08-01T00:00:00.000Z")], [null, { id: 1 }, { id: "p:z", updatedAt: "nope" }], N0).lines.map((l) => l.id).join() === "p:oldn");
+    const ex = [ln("x:milk", "needed", N0, { label: "Milk", source: "manual" }), ln("x:eg", "got", N0, { label: "Eg", source: "manual" }), ln("p:a", "needed", N0)];
+    check("adhocView: needed x: lines only", JSON.stringify(SL.adhocView(ex)) === '[{"name":"Milk","source":"manual"}]');
+    const back = SL.adhocToLines(ex, [{ name: "Milk" }, { name: "Eg" }, { name: "Jam", qty: "1 jar", source: "assistant" }], "manual", N0);
+    check("adhocToLines: unchanged skipped, got->needed, new added with source", back.map((l) => l.id + ":" + l.state).join() === "x:eg:needed,x:jam:needed" && back[1].source === "assistant" && back[1].qty === "1 jar");
+    const gone = SL.adhocToLines(ex, [], "manual", "2026-10-23T00:00:00.000Z");
+    check("adhocToLines: missing needed -> deleted, got/plan untouched", gone.length === 1 && gone[0].id === "x:milk" && gone[0].state === "deleted");
+    {
+      const sv = [localStorage.getItem("mp_shopping"), localStorage.getItem("mp_shopping_pending")];
+      localStorage.removeItem("mp_shopping"); localStorage.removeItem("mp_shopping_pending");
+      const a1 = MP.Sync.setLine({ id: "p:t:1:rice", state: "got", source: "plan" }), a2 = MP.Sync.setLine({ id: "p:t:1:rice", state: "needed" });
+      check("Sync.setLine: second write beats the first, merged view reads it", a2.updatedAt > a1.updatedAt && a2.source === "plan"
+        && MP.Sync.shoppingLines().find((l) => l.id === "p:t:1:rice").state === "needed");
+      sv.forEach((v, i) => { const k = ["mp_shopping", "mp_shopping_pending"][i]; if (v === null) localStorage.removeItem(k); else localStorage.setItem(k, v); });
+    }
+    check("adhocToLines: item source honoured", SL.adhocToLines([], [{ name: "Tea", source: "ranout" }], "manual", N0)[0].source === "ranout");
   }
 
   lines.push("", `${pass} passed, ${fail} failed`);

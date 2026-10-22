@@ -89,7 +89,9 @@ Nine keys, all plain JSON values, no versioning scheme beyond `updatedAt`:
   `MP.ShoppingList.remainingQty` — the pantry is a running balance across
   cooks, though `raw` provenance is still lost at that point (`raw` becomes
   freshly formatted display text, not the original pack wording).
-- `adhoc` → `{ updatedAt: <ISO8601>, items: [{name, qty?}] }` — the same
+- `shopping` (Phase 55) → `{ updatedAt, lines: [{id, state, updatedAt, source?, label?, qty?}] }`; `adhoc` is read once to
+  migrate, then superseded (the `/adhoc` shim writes `shopping`).
+- `adhoc` (legacy) → `{ updatedAt: <ISO8601>, items: [{name, qty?}] }` — the same
   shape as `pantry` (including the string-or-structured `qty`), but for a
   scratch "ran out of / want to buy this week" list, separate from the
   two-week planned shop (Phase 12).
@@ -149,7 +151,7 @@ also *pulled* (Hermes may write it), on open of the Plan-with-me screen only.
 - `GET /library`, `PUT /library`
 - `GET /planFlag`, `PUT /planFlag`
 - `GET /pantry`, `PUT /pantry`
-- `GET /adhoc`, `PUT /adhoc`
+- `GET /adhoc`, `PUT /adhoc` (shim over `shopping`), `GET /shopping/lines`, `POST /shopping/lines`
 - `GET /plan`, `PUT /plan`
 - `GET /placements`, `PUT /placements`
 - `GET /prefs`, `PUT /prefs`
