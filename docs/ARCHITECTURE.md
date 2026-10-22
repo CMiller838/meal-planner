@@ -514,3 +514,12 @@ Spec: `.claude/specs/phase52.md`.
 
 ## v8 - day route (Phase 54)
 `GET /day?date=&gym=1` (both tokens, read-only) returns the Today screen as one ordered card list (meal, routine, counter, expiring, leftover, coverage) plus `assembledAt`. It reuses `dayView` (shared with `/nutrition?date=`), `MP.dueRoutines` (moved to `data.js` so the Worker can import it; `MP.Today.dueRoutines` delegates) and `ShelfLife.expiringItems`; leftovers stay `[]` until Phase 43's `leftoverView` exists. `/today` is unchanged.
+
+## v9 - shared shopping state (Phase 55)
+One KV key `shopping` (`{ updatedAt, lines }`) holds every shopping line's state (`needed|got|skipped|deleted`, `updatedAt`,
+`source`). Plan lines stay computed by `buildLists`; only their state is stored, id `p:<startDate>:<shopDay>:<key>` so ticks
+survive a same-start regenerate. The ad-hoc list folded in as `x:<key>` lines (user-chosen over a separate overlay, so one
+store holds every line). Writes go through `POST /shopping/lines`, merged per line by later `updatedAt` (tie keeps current,
+future stamps clamped, removal is a `deleted` tombstone pruned after 30 days), so two devices ticking different lines both
+survive. `GET|PUT /adhoc` are a shim over it until Phase 56; the whole-list `PUT /adhoc` keeps its lost-update risk. "Got"
+never writes the pantry: the assistant's intake preview is the only path in.
