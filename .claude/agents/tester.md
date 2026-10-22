@@ -20,7 +20,9 @@ claim of the spec with evidence you produced yourself, or to say it is unproven.
   list it under "Needs the user", do not fake it and do not fail the build for it.
 - **Capture before you assert.** Run, record the output, then compare it to the expectation.
 - **Clean up always**, even on failure: kill the servers you started (unique names/ports, check the port is free
-  first and poll until ready before sending requests), delete temp files.
+  first and poll until ready before sending requests), delete temp files. `$TMPDIR` can be empty here: put scratch
+  under `.claude/audits/<spec>-scratch/` instead. Find servers with `pgrep -f "[p]attern"` and kill by PID; never
+  `pkill -f` (it matches and kills your own shell).
 - **Budget.** Hard cap 45 turns (`maxTurns`; hitting it ends you with no verdict, so write the report file by turn
   ~38 at the latest). Aim for 25 or fewer. The browser step (3) and the real-environment step (6) are for diffs that
   touch the UI or when the spec's Verification asks for them; a backend-only diff gets the app on temp data plus the
