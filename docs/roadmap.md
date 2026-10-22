@@ -494,7 +494,7 @@ and which writes are exempt (one-tap logs such as "had it" are logged but need n
 **Verify:** undo of a pantry change returns the exact quantities; a stale undo is refused with a clear message; the log is
 append-only. Requires Phase 32. Assistant side: `notion_assistant` Phases 75 and 78.
 
-## Phase 49: Week-plan draft and apply routes [M] — not started
+## Phase 49: Week-plan draft and apply routes [M] — blocked 2026-10-22: PIPELINE: BLOCKED Phase 48 (activity log `logWrite`/`ITEMS`) is not built, only blocked and saved as a patch. It must be completed and committed before Phase 49
 
 **Added 2026-10-19.** For planning a week together in chat. `POST /plan/draft` takes constraints (days to fill, the per-day effort
 hints from Phase 37, meals to keep, meals to avoid, a budget cap) and returns a *proposed* week built by the existing generator
