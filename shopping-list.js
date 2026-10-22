@@ -356,5 +356,41 @@
       .map(({ meal, hits }) => ({ meal, hits }));
   }
 
-  MP.ShoppingList = { mealsUsing, load, loadGroups, groupIndex, buildLists, parseQty, packsFor, normalizeKey, pantryIndex, pantryOverlap, remainingQty, eatPlan, priceFor, mealCost, costIndex, costTier, costBadgeHtml };
+  /** Phase 53: scale a meal's lines to `portions`. Only a leading number is scaled (replaced in the original text);
+   * anything parseQty can't read is returned unchanged with check:true. Structured qty scales `value`. */
+  function scaleMeal(meal, portions) {
+    const eff = MP.effectiveMeal ? MP.effectiveMeal(meal) : meal;
+    const ratio = portions / (eff.servings || 1);
+    const fmt = (n) => String(Math.round(n * 100) / 100);
+    return (eff.ingredients || []).filter((ing) => !isSkippedIngredient(ing)).map((ing) => {
+      const q = ing.qty;
+      if (q && typeof q === "object" && parseQty(q)) {
+        const scaled = { ...q, value: Math.round(q.value * ratio * 100) / 100 };
+        return { key: ing.key, qty: q, scaled, check: false };
+      }
+      if (typeof q === "string" && parseQty(q)) {
+        return { key: ing.key, qty: q, scaled: q.replace(/\d+(?:\.\d+)?/, (n) => fmt(Number(n) * ratio)), check: false };
+      }
+      return { key: ing.key, qty: q, scaled: q, check: true };
+    });
+  }
+
+  /** Phase 53: split scaled lines into buy/covered with pantryOverlap's rule (absent -> buy; unparseable or
+   * unit-mismatched stock -> covered). An unparseable need with stock present is covered. */
+  function scaleShortfall(lines, pantry) {
+    const have = pantryIndex(pantry);
+    const buy = [], covered = [];
+    lines.forEach((l) => {
+      const stock = have[normalizeKey(l.key)];
+      let ok = stock !== undefined;
+      if (ok) {
+        const need = parseQty(l.scaled), st = parseQty(stock);
+        if (need && st && st.unit === need.unit) ok = st.value >= need.value;
+      }
+      (ok ? covered : buy).push(l);
+    });
+    return { buy, covered };
+  }
+
+  MP.ShoppingList = { scaleMeal, scaleShortfall, mealsUsing, load, loadGroups, groupIndex, buildLists, parseQty, packsFor, normalizeKey, pantryIndex, pantryOverlap, remainingQty, eatPlan, priceFor, mealCost, costIndex, costTier, costBadgeHtml };
 })(typeof globalThis !== "undefined" ? globalThis : this);

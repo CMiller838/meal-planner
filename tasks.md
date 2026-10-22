@@ -608,13 +608,13 @@ Spec: `.claude/specs/phase40.md` (tasks live there).
 
 ## Phase 53: Portion scaling route
 Requires Phase 43 (storage/`frozenMonths` helpers) built first. Decided: scale a line only when `MP.ShoppingList.parseQty` reads a leading number (replace that number in the original text, keep the rest, e.g. "2 cloves" → "3 cloves"; structured qty scales `value`); otherwise return the line unchanged with `check: true`. Portions are an integer 1–12, else 400. No new scoring.
-- [ ] `scaleMeal(meal, portions)` in `shopping-list.js` (pure, Worker-importable): `[{ key, qty, scaled, check }]`, ratio `portions / meal.servings`, `effectiveMeal`-resolved, skips `isSkippedIngredient`
-- [ ] Shortfall from the scaled lines via `pantryIndex` + `parseQty` (same rule as `pantryOverlap`: absent → buy, unit mismatch/unparseable stock → covered): `{ buy: [...], covered: [...] }`
-- [ ] Cook-time note: sum of `method[].minutes` plus `prepEffort`; no method → `null` (never guessed)
-- [ ] Storage: the `cooked_leftovers` category via Phase 43's `shelf-life.js` helpers → `{ fridgeDays, freezerMonths, estimate: true }` only when `portions > 1` leftovers exist
-- [ ] Worker `GET /scale?meal=&portions=` (reads `library` + `pantry` KV, 404 unknown meal, 400 bad portions); add to `ASSISTANT_ALLOWED`
-- [ ] Tests in `test.html` + `tools/worker_test.mjs`: portions = own servings returns every qty unchanged; "handful, grated" flagged `check` and unchanged; "2 cloves" ×1.5 → "3 cloves"; portions 0/13/"x" → 400; empty pantry → everything in `buy`
-- [ ] `python3 check.py` green
+- [x] `scaleMeal(meal, portions)` in `shopping-list.js` (pure, Worker-importable): `[{ key, qty, scaled, check }]`, ratio `portions / meal.servings`, `effectiveMeal`-resolved, skips `isSkippedIngredient`
+- [x] Shortfall from the scaled lines via `pantryIndex` + `parseQty` (same rule as `pantryOverlap`: absent → buy, unit mismatch/unparseable stock → covered): `{ buy: [...], covered: [...] }`
+- [x] Cook-time note: sum of `method[].minutes` plus `prepEffort`; no method → `null` (never guessed)
+- [x] Storage: the `cooked_leftovers` category via Phase 43's `shelf-life.js` helpers → `{ fridgeDays, freezerMonths, estimate: true }` only when `portions > 1` leftovers exist
+- [x] Worker `GET /scale?meal=&portions=` (reads `library` + `pantry` KV, 404 unknown meal, 400 bad portions); add to `ASSISTANT_ALLOWED`
+- [x] Tests in `test.html` + `tools/worker_test.mjs`: portions = own servings returns every qty unchanged; "handful, grated" flagged `check` and unchanged; "2 cloves" ×1.5 → "3 cloves"; portions 0/13/"x" → 400; empty pantry → everything in `buy`
+- [x] `python3 check.py` green
 - [ ] Live: ask the assistant "scale the chilli to 6" and check the buy list against the pantry (needs `notion_assistant` Phase 83)
 
 ## Phase 54: Day route: one read-only source for the Today screen

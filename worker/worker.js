@@ -43,7 +43,7 @@ const ASSISTANT_ALLOWED = new Set([
   "GET /discover", "GET /pantry", "PUT /pantry", "GET /adhoc", "PUT /adhoc", "PUT /planFlag",
   "GET /placements", "PUT /placements", "GET /prefs", "PUT /library", "GET /nutrition",
   "GET /dayHints", "PUT /dayHints", "PUT /meal-method", "GET /today", "PUT /today", "GET /products", "PUT /products",
-  "GET /expiring", "GET /product-ranking", "GET /ratings", "GET /why",
+  "GET /expiring", "GET /product-ranking", "GET /ratings", "GET /why", "GET /scale",
 ]);
 const METHOD_PATH = /^\/meal\/([^/]+)\/method$/;
 const RATING_PATH = /^\/meal\/([^/]+)\/rating$/;
@@ -362,6 +362,28 @@ async function why(params, env) {
   return json(200, { mealId, rank: i < 0 ? null : i + 1, reasons: rankingReasons(m, day, c), approximate: true });
 }
 
+/** GET /scale?meal=&portions= — a meal scaled to N portions, the shortfall against the pantry, cook time and leftover storage. */
+async function scale(params, env) {
+  const raw = params.get("portions");
+  const portions = /^\d+$/.test(raw || "") ? Number(raw) : NaN;
+  if (!(portions >= 1 && portions <= 12)) return json(400, "portions must be an integer 1-12");
+  const parse = (r) => { try { return JSON.parse(r); } catch (e) { return null; } };
+  const lib = await readLibrary(env);
+  const meals = Array.isArray(lib) ? lib : lib && Array.isArray(lib.meals) ? lib.meals : null;
+  const meal = meals && meals.find((m) => m.id === params.get("meal"));
+  if (!meal) return json(404, "unknown meal");
+  const pantry = parse(await env.MP_KV.get("pantry"));
+  const lines = ShoppingList.scaleMeal(meal, portions);
+  const steps = Array.isArray(meal.method) ? meal.method.filter((s) => typeof s.minutes === "number") : [];
+  const cat = SHELF_DATA.cooked_leftovers;
+  return json(200, {
+    mealId: meal.id, portions, servings: meal.servings || 1, lines,
+    ...ShoppingList.scaleShortfall(lines, pantry && Array.isArray(pantry.items) ? pantry : null),
+    cookTime: steps.length ? { minutes: steps.reduce((n, s) => n + s.minutes, 0), prepEffort: meal.prepEffort || null } : null,
+    storage: portions > 1 && cat ? { fridgeDays: cat.fridgeDays, freezerMonths: cat.frozenMonths, estimate: true } : null,
+  });
+}
+
 /** GET /ratings */
 async function getRatings(env) {
   let r = null;
@@ -656,6 +678,10 @@ export default {
     if (url.pathname === "/ratings") {
       if (request.method !== "GET") return json(405, "method not allowed");
       return getRatings(env);
+    }
+    if (url.pathname === "/scale") {
+      if (request.method !== "GET") return json(405, "method not allowed");
+      return scale(url.searchParams, env);
     }
     if (url.pathname === "/why") {
       if (request.method !== "GET") return json(405, "method not allowed");

@@ -141,4 +141,22 @@ assert.equal((await call("GET", "/why?meal=m1&day=0", "a")).status, 400);
 // the assistant token still can't reach other writes
 assert.equal((await call("PUT", "/plan", "a", { days: [] })).status, 403);
 assert.equal((await call("PUT", "/planPrefs", "a", {})).status, 403);
+
+// Phase 53: /scale
+kv.set("library", JSON.stringify({ meals: [{ id: "chilli", name: "Chilli", servings: 4, prepEffort: "batch",
+  method: [{ text: "a", minutes: 10 }, { text: "b", minutes: 20 }, { text: "c" }],
+  ingredients: [{ key: "garlic", qty: "2 cloves" }, { key: "rice", qty: "200g" }, { key: "cheese", qty: "handful, grated" }] }] }));
+kv.set("pantry", JSON.stringify({ items: [{ name: "rice", qty: "1kg" }] }));
+r = await call("GET", "/scale?meal=chilli&portions=6", "a");
+assert.equal(r.status, 200);
+assert.deepEqual(r.body.lines.map((l) => [l.scaled, l.check]), [["3 cloves", false], ["300g", false], ["handful, grated", true]]);
+assert.deepEqual([r.body.buy.map((l) => l.key), r.body.covered.map((l) => l.key)], [["garlic", "cheese"], ["rice"]]);
+assert.deepEqual(r.body.cookTime, { minutes: 30, prepEffort: "batch" });
+assert.deepEqual(r.body.storage, { fridgeDays: 3, freezerMonths: 3, estimate: true });
+r = await call("GET", "/scale?meal=chilli&portions=4", "a");
+assert.deepEqual(r.body.lines.map((l) => l.scaled), ["2 cloves", "200g", "handful, grated"]);
+for (const p of ["0", "13", "x", "1.5"]) assert.equal((await call("GET", `/scale?meal=chilli&portions=${p}`, "a")).status, 400);
+assert.equal((await call("GET", "/scale?meal=nope&portions=2", "a")).status, 404);
+kv.delete("pantry");
+assert.equal((await call("GET", "/scale?meal=chilli&portions=2", "a")).body.buy.length, 3);
 console.log("worker_test: ok");

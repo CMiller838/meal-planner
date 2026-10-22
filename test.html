@@ -151,6 +151,13 @@
     check('parseQty("") == null', MP.ShoppingList.parseQty("") === null);
     check('parseQty("handful, grated") == null', MP.ShoppingList.parseQty("handful, grated") === null);
     check('parseQty("Bisto") == null', MP.ShoppingList.parseQty("Bisto") === null);
+    {
+      const m = { servings: 4, ingredients: [{ key: "garlic", qty: "2 cloves" }, { key: "cheese", qty: "handful, grated" }] };
+      check('scaleMeal own servings unchanged', deepEqual(MP.ShoppingList.scaleMeal(m, 4).map((l) => l.scaled), ["2 cloves", "handful, grated"]));
+      const l = MP.ShoppingList.scaleMeal(m, 6);
+      check('scaleMeal "2 cloves" x1.5 == "3 cloves"', l[0].scaled === "3 cloves" && !l[0].check);
+      check('scaleMeal unparseable flagged, unchanged', l[1].check && l[1].scaled === "handful, grated");
+    }
     check('parseQty("whole") == null', MP.ShoppingList.parseQty("whole") === null);
   }
 

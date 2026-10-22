@@ -557,7 +557,9 @@ and the app both change; and whether a drafts folder is the place to review and 
 next sync; nothing in the mirror carries a secret or the token. Requires Phases 32, 34 and 48.
 Assistant side: `notion_assistant` Phase 77; reuses the vault access from its Phase 28.
 
-## Phase 53: Portion scaling route [S] — not started
+## Phase 53: Portion scaling route [S] — built 2026-10-22, live checks pending
+
+**Built 2026-10-22; verified by `worker_test.mjs`, `test.html` and `check.py` 8/8, tester PASS.** Storage reads `shelf-life.json` `cooked_leftovers` directly (Phase 43 helpers were not built).
 
 **Added 2026-10-19.** `GET /scale?meal=&portions=` returns the meal's ingredients scaled to N portions, the shortfall against the
 pantry (what to buy, what is already covered), the cook-time note, and storage guidance for the leftovers (fridge days, freezer
