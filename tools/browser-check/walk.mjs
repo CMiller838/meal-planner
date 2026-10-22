@@ -19,7 +19,8 @@ for (const [vp, size] of Object.entries({ pc: { width: 1440, height: 900 }, phon
   const ctx = await browser.newContext({ viewport: size }), page = await ctx.newPage(), errs = [];
   page.on('pageerror', e => errs.push(String(e)));
   const step = async (name, fn) => {
-    try { await fn(); console.log(`ok   ${vp} ${name}`); }
+    const t0 = Date.now(), ms = () => ` (${((Date.now() - t0) / 1000).toFixed(1)}s)`;
+    try { await fn(); console.log(`ok   ${vp} ${name}${ms()}`); }
     catch (e) { failed++; console.log(`FAIL ${vp} ${name}: ${String(e.message).split('\n')[0].slice(0, 160)}`); }
   };
   const shot = n => shots && page.screenshot({ path: path.join(shots, `walk-${vp}-${n}.png`) });
@@ -101,7 +102,7 @@ for (const [vp, size] of Object.entries({ pc: { width: 1440, height: 900 }, phon
     await page.waitForSelector('.modal-sheet [data-meal]');
     await shot('useitup');
     await page.keyboard.press('Escape');
-    await page.click('[data-useby="bread"]').catch(() => {}); // bread only has the link when an estimate exists
+    await page.click('[data-useby="bread"]', { timeout: 1000 }).catch(() => {}); // bread only has the link when an estimate exists
     await page.click('[data-useby="cheese"]');
     await page.fill('#useby-in', '2099-01-01');
     await page.click('#useby-save');

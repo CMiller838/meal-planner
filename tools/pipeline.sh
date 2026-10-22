@@ -239,8 +239,11 @@ for arg in "$@"; do
         final=0; [ $((i + 1)) -eq "$n" ] && final=1
         status "$spec" building ""
         [ "$n" -gt 1 ] && notify "pipeline: $spec stage $((i + 1))/$n ${label:-whole}"
+        t0=$(date +%s)
         run_stage "$spec" "$((i + 1))" "$kind" "$label" "$final"
         verdict=$(awk '{print $2}' <<<"$line")
+        # wall seconds per stage (build + tester + commit), to see where overnight time goes
+        printf '%s\t%s\ts%s\t%s\t%s\n' "$(date -Is)" "$spec" "$((i + 1))" "$(( $(date +%s) - t0 ))" "${verdict:-none}" >> logs/stage-times.tsv
         # a PASS needs proof the tester ran checks (the builder may already have committed: it is then marked blocked, not tagged)
         if [ "$final" = 1 ] && [ "$verdict" = PASS ] && ! python3 tools/tester_evidence.py "${sid:-none}"; then
             line="PIPELINE: INCOMPLETE committed, but no sign the tester ran any check (session $sid): re-run the tester"; verdict=INCOMPLETE

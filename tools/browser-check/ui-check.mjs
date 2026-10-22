@@ -22,7 +22,7 @@ const { base, close } = await serve(root);
 const browser = await chromium.launch(process.env.BROWSER_CHANNEL ? { channel: process.env.BROWSER_CHANNEL } : {});
 if (shots) fs.mkdirSync(shots, { recursive: true });
 let failed = 0, warned = 0;
-const report = (ok, label, why = '') => { if (!ok) failed++; console.log(`${ok ? 'ok  ' : 'FAIL'} ${label}${why ? ': ' + why : ''}`); };
+const report = (ok, label, why = '', say = console.log) => { if (!ok) failed++; say(`${ok ? 'ok  ' : 'FAIL'} ${label}${why ? ': ' + why : ''}`); };
 
 if (fs.existsSync(path.join(root, suite))) {
   const page = await browser.newPage();
@@ -64,7 +64,10 @@ const AUDIT = ({ phone }) => {
 };
 const STRICT = process.argv.includes('--strict-ui');
 
-for (const [vp, size] of Object.entries(VIEWPORTS)) for (const theme of THEMES) {
+// the 4 viewport x theme combos run concurrently (own context each); output is buffered so lines stay in order
+const combos = Object.entries(VIEWPORTS).flatMap(([vp, size]) => THEMES.map(theme => [vp, size, theme]));
+const outputs = await Promise.all(combos.map(async ([vp, size, theme]) => {
+  const lines = [], say = l => lines.push(l);
   const ctx = await browser.newContext({ viewport: size });
   if (themeKey) await ctx.addInitScript(([k, t]) => localStorage.setItem(k, t), [themeKey, theme]);
   for (const name of pages) {
@@ -76,15 +79,17 @@ for (const [vp, size] of Object.entries(VIEWPORTS)) for (const theme of THEMES) 
     await page.waitForTimeout(700);
     const s = await page.evaluate(() => ({ over: document.documentElement.scrollWidth - innerWidth, len: document.body.innerText.trim().length, theme: document.documentElement.dataset.theme }));
     const why = [errs.length && errs[0].slice(0, 160), s.over > 1 && `horizontal scroll ${s.over}px`, s.len < 20 && 'empty page', s.theme && s.theme !== theme && `theme is ${s.theme}`].filter(Boolean).join('; ');
-    report(!why, `${name} ${vp} ${theme}`, why);
+    report(!why, `${name} ${vp} ${theme}`, why, say);
     const polish = await page.evaluate(AUDIT, { phone: vp === 'phone' });
-    for (const p of polish.slice(0, 5)) console.log(`${STRICT ? 'FAIL' : 'warn'} ${name} ${vp} ${theme}: ${p}`);
+    for (const p of polish.slice(0, 5)) say(`${STRICT ? 'FAIL' : 'warn'} ${name} ${vp} ${theme}: ${p}`);
     if (STRICT && polish.length) failed++; else warned += polish.length;
     if (shots) await page.screenshot({ path: path.join(shots, `${name.replace('.html', '')}-${vp}-${theme}.png`) });
     await page.close();
   }
   await ctx.close();
-}
+  return lines;
+}));
+outputs.flat().forEach(l => console.log(l));
 await browser.close(); close();
 console.log(failed ? `\n${failed} failed` : '\nall ok' + (warned ? ` (${warned} polish warnings: contrast < AA or tap target < 44 px; --strict-ui makes them fail)` : ''));
 process.exit(failed ? 1 : 0);

@@ -10,6 +10,8 @@ import os
 import re
 import subprocess
 import sys
+import time
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
@@ -115,8 +117,19 @@ def main(argv):
     if not checks:
         sys.exit(f"no checks match {' '.join(argv)}")
     failed = []
-    for name, cmd in checks:
-        ok, out = run(name, cmd)
+
+    def timed(item):
+        t = time.time()
+        return (*run(*item), time.time() - t)
+
+    # checks are independent (each browser check serves its own free port): run them concurrently, report in order.
+    # CHECK_JOBS=1 restores strictly serial runs. ponytail: fixed worker cap, raise only if a box has cores to spare
+    with ThreadPoolExecutor(max_workers=max(1, int(os.environ.get("CHECK_JOBS", "4")))) as pool:
+        results = list(pool.map(timed, checks))
+    (ROOT / "logs").mkdir(exist_ok=True)
+    with open(ROOT / "logs" / "check-times.tsv", "a") as f:  # per-check seconds, for tuning (logs/ is gitignored)
+        f.writelines(f"{time.strftime('%Y-%m-%dT%H:%M:%S')}\t{n}\t{sec:.1f}\n" for (n, _), (_, _, sec) in zip(checks, results))
+    for (name, cmd), (ok, out, _) in zip(checks, results):
         print(f"{'ok  ' if ok else 'FAIL'} {name}", flush=True)
         if not ok:
             failed.append(name)
