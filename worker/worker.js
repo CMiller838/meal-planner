@@ -1064,7 +1064,7 @@ export default {
       let b;
       try { b = JSON.parse(await request.text()); } catch (e) { return json(400, "invalid JSON"); }
       if (typeof b !== "object" || b === null || typeof b.id !== "string" || !b.id) return json(400, "id required");
-      return undoActivity(env, who, { id: b.id, force: b.force === true });
+      return undoActivity(env, who, { id: b.id, force: b.force === true && !isAssistant }); // force ("Undo anyway") is the app's call, never the assistant token's
     }
 
     if (url.pathname === "/discover") {
