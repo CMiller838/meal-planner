@@ -44,7 +44,8 @@ claim of the spec with evidence you produced yourself, or to say it is unproven.
    npx playwright install chromium`.
 3. **Live.** Serve the site from WSL on a free temp port such as 8798 (`python3 -m http.server 8798`; never a port the
    user's own server may hold). Go through the new feature the way a user would, on **PC and phone**: write a one-off
-   Playwright script in the scratchpad (import `playwright` from `tools/browser-check/node_modules`), happy path, bad
+   Playwright script in the scratchpad (import `playwright` from `tools/browser-check/node_modules`; run it with
+   `PLAYWRIGHT_BROWSERS_PATH=<repo>/tools/browser-check/.browsers`, or launch fails), happy path, bad
    input, repeat the action twice, empty state, reload and check what persisted. State lives in `localStorage`, so
    seed it with `page.evaluate`. Run it at 1440x900 and 390x844, in both themes (`localStorage.mp_theme`), with
    `reducedMotion`, assert computed styles where the change is visual, and save and view screenshots. **Every test run
