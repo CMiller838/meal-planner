@@ -582,3 +582,40 @@ Spec: `.claude/specs/phase40.md` (tasks live there).
 - [x] Logic: `MP.Today`, pool filter (generator `rankSlot`/`generatePlan`), Worker `/today` + `VALIDATE.today`, `counters.json` + `data_check`, `sw.js` bump
 - [x] UI: Today card on `plan.html` (routine chips, water/caffeine, gym toggle)
 - [ ] Live: assistant sets `gym` via `PUT /today` and the protein shake chip appears on the phone PWA's Today card
+
+## Phase 43: Pantry and leftover read routes: cookable, substitutions, leftovers, quick fallback
+- Spec: `.claude/specs/phase43.md`
+- [ ] Live: on the phone PWA, cook a batch meal, tap Freeze 1 on the Today card, and see the frozen portion in the assistant's `GET /leftovers` and `GET /quick`
+
+## Phase 48: Activity log and undo for every assistant write
+- Spec: `.claude/specs/phase48.md`
+- [ ] Live: ask the assistant to change a pantry item, see it in Assistant activity on the phone PWA, tap Undo and see the old quantity back
+
+## Phase 49: Week-plan draft and apply routes
+- Spec: `.claude/specs/phase49.md`
+
+## Phase 50: Draft meals and recipe import
+- Spec: `.claude/specs/phase50.md`
+- [ ] Live: ask the assistant to draft a meal from a photo or link; it shows under Drafts in Browse, map an unknown ingredient, Accept; it is in the library and a generated plan can pick it (needs notion_assistant Phase 45)
+
+## Phase 51: Meal ratings, flags and reasons ("never again")
+- Spec: `.claude/specs/phase51.md`
+- [ ] Live: rate a meal 👍 with a note in the phone PWA, ask the assistant to read it; flag a meal Never again, regenerate the plan and see it absent; ask "why this meal?" (needs notion_assistant Phases 61 and 73)
+
+## Phase 52: Vault data layer and personal profile
+- Spec: `.claude/specs/phase52.md`
+- [ ] Live: edit `Meals/Profile.md` (calories, an allergy, budget), Apply in the assistant, reload the phone PWA: targets, Plan-with-me budget and generated plan reflect it
+
+## Phase 53: Portion scaling route
+Requires Phase 43 (storage/`frozenMonths` helpers) built first. Decided: scale a line only when `MP.ShoppingList.parseQty` reads a leading number (replace that number in the original text, keep the rest, e.g. "2 cloves" → "3 cloves"; structured qty scales `value`); otherwise return the line unchanged with `check: true`. Portions are an integer 1–12, else 400. No new scoring.
+- [ ] `scaleMeal(meal, portions)` in `shopping-list.js` (pure, Worker-importable): `[{ key, qty, scaled, check }]`, ratio `portions / meal.servings`, `effectiveMeal`-resolved, skips `isSkippedIngredient`
+- [ ] Shortfall from the scaled lines via `pantryIndex` + `parseQty` (same rule as `pantryOverlap`: absent → buy, unit mismatch/unparseable stock → covered): `{ buy: [...], covered: [...] }`
+- [ ] Cook-time note: sum of `method[].minutes` plus `prepEffort`; no method → `null` (never guessed)
+- [ ] Storage: the `cooked_leftovers` category via Phase 43's `shelf-life.js` helpers → `{ fridgeDays, freezerMonths, estimate: true }` only when `portions > 1` leftovers exist
+- [ ] Worker `GET /scale?meal=&portions=` (reads `library` + `pantry` KV, 404 unknown meal, 400 bad portions); add to `ASSISTANT_ALLOWED`
+- [ ] Tests in `test.html` + `tools/worker_test.mjs`: portions = own servings returns every qty unchanged; "handful, grated" flagged `check` and unchanged; "2 cloves" ×1.5 → "3 cloves"; portions 0/13/"x" → 400; empty pantry → everything in `buy`
+- [ ] `python3 check.py` green
+- [ ] Live: ask the assistant "scale the chilli to 6" and check the buy list against the pantry (needs `notion_assistant` Phase 83)
+
+## Phase 54: Day route: one read-only source for the Today screen
+- Spec: `.claude/specs/phase54.md`

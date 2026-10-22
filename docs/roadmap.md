@@ -536,7 +536,7 @@ reads the existing ranking inputs. (2) Per-meal user flags: `never` (excluded fr
 **Verify:** every reason shown corresponds to a real term in the ranking; a `never` meal is never generated until un-flagged.
 Requires Phases 42 and 48. Assistant side: `notion_assistant` Phase 73.
 
-## Phase 52: Vault data layer and personal profile [L] — not started
+## Phase 52: Vault data layer and personal profile [M] — not started
 
 **Added 2026-10-19.** The user wants all meal data in Obsidian so every tool (the assistant, Gemini, NotebookLM) can read it.
 The planner runs on Workers KV so the phone app works anywhere with no PC on, and the vault is a folder on the PC. Both facts
@@ -562,13 +562,13 @@ pantry (what to buy, what is already covered), the cook-time note, and storage g
 months, marked as estimates per Phase 34). Reads the existing servings and quantities; no new scoring. **Decisions:** how
 free-text quantities ("1, diced", "2 cloves") scale (scale only when a number can be parsed, otherwise return the original line
 flagged "check this"), and a cap on portions. **Verify:** scaling to the meal's own servings returns the original; an
-unparseable line is flagged and never silently changed. Requires Phases 34 and 47. Assistant side: `notion_assistant` Phase 83.
+unparseable line is flagged and never silently changed. Requires Phases 34 and 43 (old 47 merged into 43; supplies `frozenMonths` storage helpers). Assistant side: `notion_assistant` Phase 83.
 
 ## Phase 54: Today route (one source for the Today screen) [M] — not started
 
-**Added 2026-10-19.** `GET /today` returns what a Today screen needs in one call: the day's planned meals and their state
+**Added 2026-10-19.** `GET /day` (not `/today`, which is Phase 41's raw counters record; spec 2026-10-22) returns what a Today screen needs in one call: the day's planned meals and their state
 (planned, cooked, eaten), routine items due and done (Phase 41), counters (Phase 41), expiring-soon items (Phase 34), leftovers
-(Phase 43), the day's coverage (with `gym=1` when given, Phase 35) and the cook-or-skip state. The app's Today view and the
+(Phase 43), the day's coverage (with `gym=1` when given, Phase 35) (cook-or-skip state dropped: no source data). The app's Today view and the
 assistant's Today view both read it, so they cannot disagree. Read-only, assembled from existing data. **Decisions:** the shape
 (keep it a flat list of typed cards so each side can render what it wants), and caching (KV is eventually consistent, so the
 route says when it was assembled). **Verify:** a meal logged in the app appears in the route within the KV delay; an empty day
@@ -593,3 +593,13 @@ cannot drift from the code, and a test fails if a route exists in the Worker but
 endpoints (`/planFlag`, `/library`, `/pantry` raw PUTs) are kept for the app but marked "app-side"; Hermes uses the activity-logged
 routes from Phase 48 for writes. **Verify:** the list matches the Worker; every write route in the list is covered by Phase 48.
 Assistant side: `notion_assistant` Phase 89.
+
+## Phase 57: Measured nutrient levels for new ingredients (CoFID) [M] — not started
+
+**Added 2026-10-22** (from Phase 50 planning: the user wants accurate health tracking, not assistant-guessed tags). An
+ingredient that isn't in `ingredient-nutrient-tags.json` (one added from a draft or a TheMealDB import, shown as "not tracked
+yet") gets its low/med/high levels **derived from measured CoFID per-100 g values** by a threshold rule kept as data (for
+example a share of the daily target per 100 g), never typed in by hand or inferred by the assistant. It extends
+`tools/cofid-map.json` + `tools/cofid_build.py`, and the tags file stays the single source. Needs the CoFID 2021 xlsx (a user
+step). **Verify:** re-deriving the existing 33 ingredients reproduces their current levels or lists every difference for the
+user to approve; a newly mapped ingredient stops showing "not tracked yet". Requires Phase 50.

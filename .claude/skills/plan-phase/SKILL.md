@@ -33,6 +33,8 @@ wrong, say so in one line and update the heading.
    Also, for any phase that writes state (a route, a KV key), grep where that state lives: the app's `localStorage` is
    the authority and the Worker's KV copy is a derived mirror (e.g. `plan`), so a "write the plan" roadmap line may need
    a pending-queue + app-apply path, which is a gate.
+   For a phase that adds a Worker route, also grep `worker/worker.js` for that route name: an existing route with the
+   same path is a naming gate (new path vs replace), found before any spec text.
    If the phase touches nutrition, nutrient tags or targets, read `SPEC.md`'s "Nutrition targets" section (Grep
    `^## Nutrition targets`, read to the next `^## `) before any gate: it fixes the accuracy model (a low/med/high
    coverage checklist, not gram-precise), and the user wants accurate health tracking, so frame gates against both.
@@ -49,9 +51,12 @@ wrong, say so in one line and update the heading.
    fallback, never as an assumed existing function. If a required phase has no heading (merged or renumbered),
    grep for the symbols the spec depends on: found means met, not found means a stated fallback.
    For a dependency on a sibling repo's phase (e.g. "<other app> Phase N"; CLAUDE.md names the repo path), grep
-   `^## Phase N ` in that repo's `docs/roadmap.md`; a heading not marked done is unbuilt.
+   `^## Phase N ` in that repo's `docs/roadmap.md`; a heading not marked done is unbuilt. No heading found: it may be
+   renumbered, so grep that roadmap for `was .*\bN\b` and its code for the route/key this phase adds before calling it unbuilt.
    Also check every UI surface the roadmap names (a page, tab, strip, sheet): grep the code, then `.claude/specs/`.
    Found only in an unbuilt spec means the phase depends on that spec's phase: state "Requires Phase Na" in the spec.
+   When a phase exposes existing logic (reasons, scores, fields), grep that each item the roadmap lists is a real input
+   in the code; drop the ones that are not and say so in the spec.
    Check whether the roadmap's "no UI to do X" assumption holds (e.g. the app may have no editor for the field).
    If most of a phase's dependencies are unbuilt, that is the first gate (split, fallbacks or wait), asked before any code reading.
 3. **Gates.** Gate only a fork that changes user-facing behaviour or is expensive to undo

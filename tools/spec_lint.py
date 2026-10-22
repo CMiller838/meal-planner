@@ -43,6 +43,8 @@ RISKS = [(r"/mnt/[a-z]/|\b[A-Z]:\\|\bEdge\b|powershell", "touches Windows paths 
 def risks(text):
     """Warnings for what could stop an unattended run (a human step, a credential, a path outside the repo). Advisory only."""
     ver = (section(text, "Verification") or "") + (section(text, "Tasks") or "")
+    if re.search(r"no real credential", ver, re.I):  # spec states its tokens are test fakes (e.g. worker_test.mjs's)
+        ver = re.sub(RISKS[1][0], "", ver, flags=re.I)
     return [why for pat, why in RISKS if re.search(pat, ver, re.I)]
 
 
