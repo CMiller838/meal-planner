@@ -56,7 +56,7 @@ stages_for() {
     fi
 }
 
-TAIL_LINE='End your reply with exactly one line, the last line:'
+TAIL_LINE='End your reply with two lines. First `SELF-IMPROVE: <the ONE thing that would have made this build more efficient or effective, e.g. a missing doc pointer, a slow or noisy check, an ambiguous rule; or none>`. Then, as the last line, exactly one of:'
 VERDICTS='PIPELINE: PASS <commit sha>   or   PIPELINE: FAIL <one-line reason>   or   PIPELINE: BLOCKED <what you need>'
 
 # stage_prompt <spec.md> <kind> <label> <final 0|1> <attempt>
@@ -127,6 +127,8 @@ run_stage() {
             "$log" >> logs/usage.tsv 2>/dev/null || true
         sid=$(jq -r '.session_id // empty' "$log" 2>/dev/null)
         line=$(grep -o 'PIPELINE: .*' <<<"$result" | tail -1)
+        imp=$(grep -o 'SELF-IMPROVE: .*' <<<"$result" | tail -1 | sed 's/^SELF-IMPROVE: *//')
+        grep -qiE '^(none\.?)?$' <<<"$imp" || IMPS="$IMPS$imp"$'\n'
         [ -n "$line" ] && return 0
         # no verdict: a usage limit or a cut-off run. Wait out the limit, then continue in a FRESH session
         # (a resumed session re-sends its whole history and the cache has expired).
@@ -158,6 +160,60 @@ park() {
     git add docs/roadmap.md && git commit -q -m "docs: ${spec%.md} blocked, work saved in $base.patch" -m "Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>" \
         || notify "pipeline: could not commit the blocked mark for $spec (roadmap.md left edited)"
 }
+# self_improve <spec>: a fresh Sonnet judges the builder's SELF-IMPROVE suggestions and applies one only if it helps the
+# whole setup. Runs on a clean tree after a spec ends; edits outside the allowed workflow paths are thrown away.
+SI_ALLOWED='^(tools/|\.claude/(skills|agents|rules)/|CLAUDE\.md$|WORKFLOW\.md$)'
+# only instruction text may be applied unattended; any change under tools/ (code) is saved as a proposal for the user
+SI_AUTO='^(\.claude/(skills|agents|rules)/|CLAUDE\.md$|WORKFLOW\.md$)'
+SI_FORBIDDEN='^(tools/(githooks|test_guard|tester_evidence)|check\.py|.*test.*\.(html|mjs|js)$)'
+self_improve() {
+    local spec=$1 out verdict bad="" f
+    [ -n "${IMPS//[$' \n']/}" ] || { echo "pipeline: $spec self-improve: none"; return; }
+    printf '%s\t%s\t%s\n' "$(date -Is)" "$spec" "$(tr '\n' '|' <<<"$IMPS")" >> logs/self-improve.tsv
+    [ -z "$(git status --porcelain --untracked-files=no)" ] || { notify "pipeline: $spec self-improve skipped (tree not clean)"; return; }
+    out=$(timeout 1800 claude -p --model sonnet 2>&1 <<PROMPT
+You maintain the unattended build setup of this repo (tools/pipeline.sh, skills, agents, rules, CLAUDE.md). While building $spec the builder suggested:
+$IMPS
+Judge the suggestion(s): would applying one benefit the setup in general (it will recur across phases, and it cuts tokens, time or failures)?
+Reject one-offs for this spec, anything that weakens tests, checks, guards, permissions or hooks, and anything vague.
+If yes, make the smallest edit, ONLY under tools/, .claude/skills/, .claude/agents/, .claude/rules/, CLAUDE.md or WORKFLOW.md, run python3 check.py, do not commit. If the edit is risky or you are unsure, still make it but end with PROPOSED (it is then saved as a patch for the user, not applied). Edits under tools/ are always proposals.
+If no, change nothing. Never edit app code, test files, check.py, tools/githooks, tools/test_guard.py, tools/tester_evidence.py or any settings file.
+End with exactly one last line: IMPROVE: APPLIED <what you changed, one line>   or   IMPROVE: PROPOSED <what and why it needs the user, one line>   or   IMPROVE: REJECTED <why, one line>
+PROMPT
+)
+    verdict=$(grep -o 'IMPROVE: .*' <<<"$out" | tail -1)
+    # enforce the boundary in code, not just in the prompt
+    mine() { git status --porcelain --untracked-files=all | sed 's/^...//' | grep -vxFf "$UNTRACKED0"; }  # not untracked before the run
+    for f in $(mine); do
+        if ! grep -qE "$SI_ALLOWED" <<<"$f" || grep -qE "$SI_FORBIDDEN" <<<"$f"; then
+            git checkout -q HEAD -- "$f" 2>/dev/null || rm -rf -- "$f"
+            bad="$bad $f"
+        fi
+    done
+    if [ -n "$(mine)" ]; then
+        local risky=0 changed
+        changed=$(mine)
+        grep -qE '^IMPROVE: PROPOSED' <<<"$verdict" && risky=1
+        grep -qvE "$SI_AUTO" <<<"$changed" && risky=1
+        if [ "$risky" = 1 ]; then
+            mkdir -p logs/self-improve; local patch="logs/self-improve/${spec%.md}-$(date +%Y%m%d-%H%M).patch"
+            git add -N -- $changed 2>/dev/null; git diff HEAD > "$patch"
+            git reset -q; git checkout -q -- . 2>/dev/null
+            for f in $changed; do git ls-files --error-unmatch -- "$f" >/dev/null 2>&1 || rm -rf -- "$f"; done
+            notify "pipeline: $spec self-improve PROPOSED, not applied (needs your OK): ${verdict#IMPROVE: } | patch: $patch (git apply it to accept)"
+        else
+            git add -A -- .claude/skills .claude/agents .claude/rules CLAUDE.md WORKFLOW.md 2>/dev/null
+            if AUTO_LAUNCH=0 git commit -q -m "chore: self-improve after $spec: ${verdict#IMPROVE: }" -m "Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>"; then
+                notify "pipeline: $spec self-improve APPLIED ($(git log --oneline -1))${bad:+; discarded out-of-bounds edits:$bad}. ${verdict#IMPROVE: }"
+            else
+                git reset -q HEAD; git checkout -q -- . 2>/dev/null
+                notify "pipeline: $spec self-improve edit failed the commit checks and was reverted. ${verdict#IMPROVE: }"
+            fi
+        fi
+    else
+        notify "pipeline: $spec self-improve ${verdict:-gave no verdict}"
+    fi
+}
 UNTRACKED0=$(mktemp); git ls-files --others --exclude-standard > "$UNTRACKED0"
 SKIP=" "; BLOCKED=0
 mapfile -t ALL < <(printf '%s\n' "$@" | sed 's/\.md$//')
@@ -169,6 +225,7 @@ for arg in "$@"; do
     mapfile -t stages < <(stages_for "$spec")
     if [ "$PLAN" = 1 ]; then echo "$spec: ${stages[*]}"; continue; fi
     n=${#stages[@]}
+    IMPS=""
     notify "pipeline: building $spec on sonnet ($n stage$([ "$n" -gt 1 ] && echo s))"
     for i in "${!stages[@]}"; do
         kind=${stages[$i]%%|*}; label=${stages[$i]#*|}
@@ -189,12 +246,14 @@ for arg in "$@"; do
         notify "pipeline: $spec stage $((i + 1))/$n ${line:-ended without a verdict (see $log)}. Resume: claude -r $sid"
         park "$spec" "${line:-ended without a verdict}"
         BLOCKED=1
+        self_improve "$spec"
         SKIP="$SKIP$(python3 tools/workflow_audit.py --dependents "${spec%.md}" "${ALL[@]}") "
         continue 2
     done
     status "$spec" PASS PASS
     git tag -f "built/${spec%.md}" "$(awk '{print $3}' <<<"$line")" >/dev/null 2>&1 || true
     notify "pipeline: $spec $line"
+    self_improve "$spec"
 done
 [ "$PLAN" = 1 ] || notify "pipeline: queue finished ($*)$([ "$BLOCKED" = 1 ] && echo ', some blocked: see the roadmap')"
 exit "$BLOCKED"
