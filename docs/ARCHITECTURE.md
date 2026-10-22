@@ -486,3 +486,13 @@ Storage is one KV key on the existing relay, no new route type. A pantry item sh
 via the hand-reviewed `tools/cofid-map.json` (ingredient key -> food code). Values are estimates (`basis: "cofid"`, shown "est.").
 Contains public sector information licensed under the Open Government Licence v3.0. Source: McCance and Widdowson's The
 Composition of Foods Integrated Dataset 2021.
+
+## v7 - activity log and undo (Phase 48)
+
+**Fork: log in the Worker, not in the assistant.** Every assistant write already passes through the Worker, so the Worker
+diffs the old and new KV value per item and appends one `activity` entry per write. The assistant cannot skip it, and
+the "before" comes from live KV, not from the assistant's possibly stale copy. Only `ASSISTANT_TOKEN` writes are logged:
+the app's own syncs (library push, plan mirror, eaten log) would flood a 200-entry cap within a day and push out the
+entries worth undoing; the app already has its own undo toasts. Undo restores the recorded `before` per item, only when
+each item still equals its recorded `after` (otherwise 409 listing what changed, with `force` to override), and is itself
+an appended entry, so the log stays append-only. Spec: `.claude/specs/phase48.md`.
