@@ -91,6 +91,7 @@
     const items = pantry && Array.isArray(pantry.items) ? pantry.items : [];
     const idx = {};
     items.forEach((item) => {
+      if (item.out) return; // Phase 39: ran out = absent for every reader
       idx[normalizeKey(item.name)] = item.qty || "";
     });
     return idx;

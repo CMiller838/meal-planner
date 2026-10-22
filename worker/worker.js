@@ -410,6 +410,7 @@ function itemsError(parsed) {
     seenNames.add(key);
     const qErr = qtyError(item.qty);
     if (qErr) return qErr;
+    if (item.out != null && typeof item.out !== "boolean") return "out must be a boolean";
     if (item.useBy != null && !ShelfLife.isIsoDate(item.useBy)) return "useBy must be YYYY-MM-DD";
   }
   return null;

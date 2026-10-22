@@ -188,10 +188,17 @@ window.MP = window.MP || {};
           if (op.qty) item.qty = op.qty;
           result.push(item);
         } else {
-          const { useBy } = result[idx];
+          const { useBy, out } = result[idx];
+          const zero = op.qty && (MP.ShoppingList.parseQty(op.qty) || {}).value === 0;
           result[idx] = op.qty ? { ...result[idx], qty: op.qty } : { name: result[idx].name };
           if (!op.qty && useBy) result[idx].useBy = useBy;
+          if (zero && out) result[idx].out = true; else delete result[idx].out; // bought / qty > 0 clears out
         }
+      } else if (op.type === "out") {
+        // never-stocked item: ignored. Qty dropped so it can't go negative.
+        if (idx === -1) continue;
+        const { qty: _q, ...rest } = result[idx];
+        result[idx] = { ...rest, out: true };
       } else if (op.type === "useBy") {
         if (idx === -1) continue;
         const { useBy: _drop, ...rest } = result[idx];

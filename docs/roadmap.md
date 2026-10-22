@@ -394,7 +394,7 @@ plan already syncs), how stale hints expire, and whether the user can see why a 
 Requires Phase 32 (assistant token). Assistant side: `notion_assistant` Phase 52.
 **Verified 2026-10-21:** `test.html` (resolve/merge/dismiss, freeDays reorder keeps in-group order), Worker harness (assistant GET/PUT `/dayHints` 204/200, bad effort/>28 dates/long `why` 400, other writes 403, `/ranking` marks the day busy + returns `hint`), plan chip at PC and 390 px with `<b>` shown as text and tap-dismiss persisting, `check.py`. Live check left in `tasks.md`.
 
-## Phase 39: "Ran out" items steer the plan [S] — not started
+## Phase 39: "Ran out" items steer the plan [S] — built 2026-10-22, live checks pending
 
 **Added 2026-10-19.** When an item is ticked as run out (from the Google Tasks pantry list or the app), the planner records it
 as out-of-stock on the pantry and the next plan generation treats meals that need it as needing a shop (they are not removed,
@@ -402,6 +402,7 @@ and the shopping list gains the item). The ad-hoc list already exists; this adds
 "can I cook this now" check. **Decisions:** the flag clears when the item is bought (shopping tick) or when the pantry quantity
 is set above zero, and a ran-out tick on a never-stocked item is ignored. **Verify:** the pantry write path stays
 `commitCook`/merge only; the out flag cannot make a quantity go negative.
+**Verified 2026-10-22:** `check.py` 8/8; test.html + worker_test cases for out/clear/never-stocked/non-boolean; Pantry "Ran out" button at PC and 390 px, both themes; tester PASS.
 Requires Phase 32. Assistant side: `notion_assistant` Phase 49.
 
 ## Phase 40: Cooking mode data: steps, timers and a confirm-cook route [M] — built 2026-10-22, live checks pending

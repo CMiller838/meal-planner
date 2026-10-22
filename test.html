@@ -751,6 +751,20 @@
     }
   }
 
+  // 30b. Phase 39 — "ran out" flag
+  {
+    const { applyOps } = MP.Sync;
+    const base = [{ name: "Rice", qty: "500g" }, { name: "Milk" }];
+    const out = applyOps(base, [{ type: "out", name: "rice" }]);
+    check("out: sets flag, drops qty", out[0].out === true && out[0].qty === undefined);
+    check("out: never-stocked item ignored", applyOps(base, [{ type: "out", name: "Saffron" }]).length === 2);
+    check("pantryIndex skips out items", !("rice" in MP.ShoppingList.pantryIndex({ items: out })) && "milk" in MP.ShoppingList.pantryIndex({ items: out }));
+    check("add with qty clears out", applyOps(out, [{ type: "add", name: "Rice", qty: "1kg" }])[0].out === undefined);
+    check("bought (add, no qty) clears out", applyOps(out, [{ type: "add", name: "Rice" }])[0].out === undefined);
+    check("add qty 0g keeps out", applyOps(out, [{ type: "add", name: "Rice", qty: { value: 0, unit: "g", raw: "0g" } }])[0].out === true);
+    check("sub on out item stays non-negative/no-op", applyOps(out, [{ type: "sub", name: "Rice", qty: "100g" }])[0].qty === undefined);
+  }
+
   // 31. Phase 12 — eat flow deduction/shortfall maths + op-log sync
   {
     const { remainingQty, eatPlan, buildLists } = MP.ShoppingList;

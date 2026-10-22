@@ -562,13 +562,14 @@ but shows the "est." marker; no shopping-list rows (YAGNI). Informational only, 
 
 ## Phase 39: "Ran out" items steer the plan
 
-- [ ] Roadmap: `docs/roadmap.md` Phase 39 [S]. Requires Phase 32 (done). Design: an out item stays in the pantry list with `out: true`; no new endpoint/KV key (rides `PUT /pantry`).
-- [ ] Logic (TDD): `pantryIndex` (`shopping-list.js`) skips `out` items, so `pantryOverlap`, `buildLists` and the generator's pantry reads treat them as absent (meal kept, ingredient lands on the shopping list). One change, all readers.
-- [ ] Logic (TDD): `markOut(name)` helper in the pantry write path: sets `out: true` and drops qty; ignored when the name isn't already in the pantry (never-stocked). Never writes a negative qty.
-- [ ] Logic (TDD): clear `out` when the item is ticked bought on Shopping, or when its pantry qty is set above zero (`commitCook` stays the only deduction writer; it must not set or clear `out`).
-- [ ] Worker: allow `out` through the `PUT /pantry` merge and `ASSISTANT_ALLOWED` validation; add to `data_check`/worker tests (no new route; do not widen `ASSISTANT_TOKEN`).
-- [ ] UI: "Ran out" toggle on a pantry row (Pantry/Shopping surface), `esc()` on names, checked PC + 390 px, both themes (`ui-build`).
-- [ ] Verify: out flag + `qty` zero never goes negative; ran-out on unknown item no-ops; bump `CACHE` in `sw.js`; mark roadmap `— done`.
+- [x] Roadmap: `docs/roadmap.md` Phase 39 [S]. Requires Phase 32 (done). Design: an out item stays in the pantry list with `out: true`; no new endpoint/KV key (rides `PUT /pantry`).
+- [x] Logic (TDD): `pantryIndex` (`shopping-list.js`) skips `out` items, so `pantryOverlap`, `buildLists` and the generator's pantry reads treat them as absent (meal kept, ingredient lands on the shopping list). One change, all readers.
+- [x] Logic (TDD): `markOut(name)` helper in the pantry write path: sets `out: true` and drops qty; ignored when the name isn't already in the pantry (never-stocked). Never writes a negative qty.
+- [x] Logic (TDD): clear `out` when the item is ticked bought on Shopping, or when its pantry qty is set above zero (`commitCook` stays the only deduction writer; it must not set or clear `out`).
+- [x] Worker: allow `out` through the `PUT /pantry` merge and `ASSISTANT_ALLOWED` validation; add to `data_check`/worker tests (no new route; do not widen `ASSISTANT_TOKEN`).
+- [x] UI: "Ran out" toggle on a pantry row (Pantry/Shopping surface), `esc()` on names, checked PC + 390 px, both themes (`ui-build`).
+- [x] Verify: out flag + `qty` zero never goes negative; ran-out on unknown item no-ops; bump `CACHE` in `sw.js`; mark roadmap `— done`.
+- [ ] Live: on the phone PWA, Shopping > Pantry, tap "Ran out" on a stocked item, Generate a plan: the meal stays and the ingredient is on the Shopping list; tick it bought and the out state clears.
 
 ## Phase 40: Cooking mode data: steps, timers and a confirm-cook route
 

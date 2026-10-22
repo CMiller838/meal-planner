@@ -80,6 +80,7 @@
       if (!input.checked && idx !== -1) ticked.keys.splice(idx, 1);
       saveTicked(ticked);
       input.closest(".shop-line").classList.toggle("ticked", input.checked);
+      if (input.checked) clearOut(input.dataset.key);
     });
   }
 
@@ -365,6 +366,7 @@
       return `<li class="shop-line prod-row"><span class="shop-qty">${esc(MP.qtyText(item.qty))}</span>
         <span class="shop-name">${esc(item.name)}</span>
         ${useByHtml(item, today, plan)}
+        ${item.out ? `<button class="prod-chip" data-restock="${esc(item.name)}">Out — restocked?</button>` : `<button class="prod-chip muted" data-out="${esc(item.name)}">Ran out</button>`}
         ${p ? chipHtml(p) : `<button class="prod-chip muted" data-link="${esc(key)}">Link product</button>`}</li>`;
     });
     const best = MP.Products.rank(products, packData);
@@ -392,6 +394,17 @@
     MP.Sync.writeLocalItems("pantry", MP.Sync.applyOps(MP.Sync.localItems("pantry"), [op]));
     MP.Sync.flushOps();
     renderPantry();
+  }
+
+  // Phase 39: ran-out flag, same op log. Bought (shopping tick) clears it via an `add`.
+  function pantryOp(op) {
+    MP.Sync.queueOp({ list: "pantry", ...op });
+    MP.Sync.writeLocalItems("pantry", MP.Sync.applyOps(MP.Sync.localItems("pantry"), [{ list: "pantry", ...op }]));
+    MP.Sync.flushOps();
+  }
+  function clearOut(key) {
+    const item = MP.Sync.localItems("pantry").find((i) => i.out && MP.ShoppingList.normalizeKey(i.name) === MP.ShoppingList.normalizeKey(key));
+    if (item) pantryOp({ type: "add", name: item.name });
   }
 
   function useByDialog(name) {
@@ -434,6 +447,8 @@
     root.querySelectorAll("[data-open]").forEach((b) => b.addEventListener("click", () => viewProduct(products.find((p) => p.id === b.dataset.open))));
     root.querySelectorAll("[data-link]").forEach((b) => b.addEventListener("click", () => scanSheet(b.dataset.link)));
     root.querySelectorAll("[data-useby]").forEach((b) => b.addEventListener("click", () => useByDialog(b.dataset.useby)));
+    root.querySelectorAll("[data-out]").forEach((b) => b.addEventListener("click", () => { pantryOp({ type: "out", name: b.dataset.out }); renderPantry(); }));
+    root.querySelectorAll("[data-restock]").forEach((b) => b.addEventListener("click", () => { pantryOp({ type: "add", name: b.dataset.restock }); renderPantry(); }));
     const useup = root.querySelector("#useup-btn");
     if (useup) useup.addEventListener("click", useItUpSheet);
   }

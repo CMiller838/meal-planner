@@ -78,6 +78,10 @@ assert.equal((await call("PUT", "/pantry", "a", pan({ name: "Milk", useBy: "2026
 assert.equal((await call("GET", "/pantry", "a")).body.items[0].useBy, "2026-10-30");
 for (const bad of ["2026-02-30", "tomorrow", 5, "2026-1-1"])
   assert.equal((await call("PUT", "/pantry", "a", pan({ name: "Milk", useBy: bad }))).status, 400, String(bad));
+assert.equal((await call("PUT", "/pantry", "a", pan({ name: "Rice", out: true }))).status, 204);
+assert.equal((await call("GET", "/pantry", "a")).body.items[0].out, true);
+assert.equal((await call("PUT", "/pantry", "a", pan({ name: "Rice", out: "yes" }))).status, 400);
+assert.equal((await call("PUT", "/pantry", "a", pan({ name: "Milk", useBy: "2026-10-30" }, { name: "Yogurt", useBy: "2026-10-18" }, { name: "Chicken breast" }, { name: "Tuna tin" }))).status, 204);
 r = await call("GET", "/expiring?today=2026-10-20", "a");
 assert.deepEqual([r.status, r.body.days, r.body.today, r.body.items.map((i) => [i.name, i.basis, i.daysLeft])],
   [200, 2, "2026-10-20", [["Yogurt", "entered", -2], ["Chicken breast", "estimate", 1]]]);
