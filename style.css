@@ -609,6 +609,7 @@ button.ghost.danger { color: var(--danger); border-color: var(--danger); }
 .top-actions { display: flex; gap: .6rem; margin-bottom: 1rem; flex-wrap: wrap; }
 
 .muted { color: var(--text-dim); font-size: .9rem; }
+.muted.fine { font-size: .75rem; }
 
 /* ---- Shopping list page ---- */
 .shop-block {

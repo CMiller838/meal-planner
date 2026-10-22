@@ -2487,6 +2487,27 @@
     check("merge: union, newer wins, ties to remote", m.length === 4 && mv.a === "L" && mv.t === "R" && mv.c === "L" && mv.r === "R");
     check("merge: null sides treated as []", P.merge(null, undefined).length === 0);
   }
+  // Phase 33b: CoFID fill
+  {
+    const P = MP.Products;
+    const cofid = { map: { rice: { default: "R", cooked: "RC" }, milk: { default: "M" } },
+      foods: { R: { nutrients: { iron_mg: 0.5, protein_g: 7, vitC_mg: 0 } }, RC: { nutrients: { iron_mg: 0.2 } }, M: { nutrients: { calcium_mg: 120 } } } };
+    const base = { ingredient: "rice", state: null, nutrients: { protein_g: { value: 9, basis: "label" }, fat_g: { value: 1, basis: "off" } } };
+    const f = P.fillFromCofid(base, cofid);
+    check("fillFromCofid: fills absent micro with basis cofid", f.nutrients.iron_mg.basis === "cofid" && f.nutrients.iron_mg.value === 0.5);
+    check("fillFromCofid: never overwrites label/off", f.nutrients.protein_g.value === 9 && f.nutrients.protein_g.basis === "label");
+    check("fillFromCofid: Tr (0) comes through as 0", f.nutrients.vitC_mg.value === 0);
+    check("fillFromCofid: pure", !("iron_mg" in base.nutrients));
+    check("fillFromCofid: idempotent", JSON.stringify(P.fillFromCofid(f, cofid)) === JSON.stringify(f));
+    check("fillFromCofid: state picks code, falls back to default", P.fillFromCofid({ ...base, state: "cooked" }, cofid).nutrients.iron_mg.value === 0.2
+      && P.fillFromCofid({ ...base, state: "dry" }, cofid).nutrients.iron_mg.value === 0.5);
+    const re = P.fillFromCofid({ ...f, ingredient: "milk" }, cofid);
+    check("fillFromCofid: ingredient change removes old cofid entries", !("iron_mg" in re.nutrients) && re.nutrients.calcium_mg.value === 120);
+    const cl = P.fillFromCofid({ ...f, ingredient: null }, cofid);
+    check("fillFromCofid: null ingredient clears cofid, keeps label", !("iron_mg" in cl.nutrients) && cl.nutrients.protein_g.basis === "label");
+    check("fillFromCofid: unmapped key clears, adds nothing", Object.keys(P.fillFromCofid({ ...f, ingredient: "zzz" }, cofid).nutrients).join() === "protein_g,fat_g");
+    check("fillFromCofid: null cofid = skip, nothing removed", P.fillFromCofid(f, null) === f);
+  }
 
   lines.push("", `${pass} passed, ${fail} failed`);
   document.getElementById("out").textContent = lines.join("\n");

@@ -260,7 +260,7 @@ they exist and clearly labelled estimates where they don't. The assistant side i
 > Merged 2026-10-21: similar not-started phases were combined, keeping the lowest number (51 for ratings, since it needs 48).
 > Old to new: 38→34, 46→35, 45→41, 44 and 47→43, 42→51. Assistant-side `notion_assistant` phase numbers are unchanged.
 
-## Phase 33: Product nutrition reference (scan a barcode, read a photo) [L] — not started
+## Phase 33: Product nutrition reference (scan a barcode, read a photo) [L] — built 2026-10-22, live checks pending
 
 **Where it lives:** the barcode scanner is in this app (the phone PWA) and nowhere else. The notion_assistant has no scanner;
 its Phase 48 reads photos and uses the records created here. The planner is the specialist for meals, ingredients, pantry and

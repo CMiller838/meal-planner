@@ -525,12 +525,17 @@ window.MP = window.MP || {};
     localStorage.setItem("mp_products", JSON.stringify({ updatedAt: new Date().toISOString(), products }));
   }
 
-  async function syncProducts() {
+  /** `cofid` = loaded cofid.json; null skips the fill (offline first visit), it never clears. */
+  async function syncProducts(cofid) {
     if (!config().enabled) return "off";
     try {
       const remote = await req("GET", "/products");
       const remoteList = remote && Array.isArray(remote.products) ? remote.products : [];
-      const merged = MP.Products.merge(localProducts(), remoteList);
+      const now = new Date().toISOString();
+      const merged = MP.Products.merge(localProducts(), remoteList).map((p) => {
+        const f = MP.Products.fillFromCofid(p, cofid);
+        return JSON.stringify(f.nutrients) === JSON.stringify(p.nutrients) ? p : { ...f, updatedAt: now };
+      });
       writeLocalProducts(merged);
       if (JSON.stringify(merged) !== JSON.stringify(remoteList)) {
         await req("PUT", "/products", { updatedAt: new Date().toISOString(), products: merged });
@@ -542,10 +547,10 @@ window.MP = window.MP || {};
   }
 
   /** Stamps updatedAt, upserts into the mirror (works offline), then syncs. */
-  function saveProduct(p) {
-    const saved = { ...p, updatedAt: new Date().toISOString() };
+  function saveProduct(p, cofid) {
+    const saved = { ...MP.Products.fillFromCofid(p, cofid), updatedAt: new Date().toISOString() };
     writeLocalProducts([...localProducts().filter((x) => x.id !== saved.id), saved]);
-    return syncProducts();
+    return syncProducts(cofid);
   }
 
   MP.Sync = {

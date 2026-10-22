@@ -62,6 +62,17 @@ MP.Products = (function () {
     return { ...product, nutrients };
   }
 
+  /** Replaces the product's `cofid` entries with the mapped CoFID food's values (per 100 g). Pure; `null` cofid = no-op. */
+  function fillFromCofid(product, cofid) {
+    if (!cofid) return product;
+    const nutrients = {};
+    for (const [k, e] of Object.entries(product.nutrients || {})) if (e.basis !== "cofid") nutrients[k] = e;
+    const base = { ...product, nutrients };
+    const m = product.ingredient && cofid.map && cofid.map[product.ingredient];
+    const food = m && cofid.foods && cofid.foods[(product.state && m[product.state]) || m.default];
+    return food ? setNutrients(base, food.nutrients, "cofid") : base;
+  }
+
   const isEstimate = (entry) => !!entry && ESTIMATE_BASES.has(entry.basis);
 
   function perServing(product, key) {
@@ -88,5 +99,5 @@ MP.Products = (function () {
     return [...byId.values()];
   }
 
-  return { LABEL_KEYS, BASES, ESTIMATE_BASES, validBarcode, fromOff, setNutrients, isEstimate, perServing, forIngredient, merge };
+  return { LABEL_KEYS, BASES, ESTIMATE_BASES, validBarcode, fromOff, setNutrients, fillFromCofid, isEstimate, perServing, forIngredient, merge };
 })();

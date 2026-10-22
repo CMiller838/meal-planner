@@ -526,7 +526,9 @@ task starts editing one, stop and re-read the spec.
 - [x] 33a: records, `/products`, barcode scan, Pantry tab: `.claude/specs/phase33a.md` (built; `MP.Products` in test.html, `/products` in tools/worker_test.mjs, Pantry step in walk.mjs)
 - [ ] Live: scan a real pack on the Pixel PWA, record saved and visible after reload
 - [ ] Live: assistant writes one product from a label photo via PUT /products and it shows on the Pantry tab
-- [ ] 33b: CoFID vitamin/mineral fill-in: `.claude/specs/phase33b.md`
+- [x] 33b: CoFID vitamin/mineral fill-in: `.claude/specs/phase33b.md` (built; fillFromCofid in test.html; spot checks: chicken light meat raw protein 24.0 g, broccoli boiled vit C 44 mg, semi-skimmed milk calcium 120 mg)
+- [ ] Live: on the Pixel PWA set a product's ingredient to rice, reopen it: vitamins/minerals show "est." with the OGL footnote
+- [ ] Live: with the real Worker, an assistant-written product record gets CoFID-filled and pushed after a Pantry tab visit
 
 ## Phase 34: Use-by dates, expiring-soon route and "use it up"
 

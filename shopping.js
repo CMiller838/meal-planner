@@ -146,6 +146,8 @@
   const sheetEl = () => document.getElementById("modal-sheet");
   let stopCamera = () => {};
   let ingredientKeys = null;
+  let cofid = null; // cofid.json, loaded once; null while offline = sync skips the fill
+  const loadCofid = () => fetch("cofid.json").then((r) => r.json()).then((j) => { cofid = j; }, () => {});
 
   function closeSheet() {
     stopCamera();
@@ -203,6 +205,7 @@
       <p class="muted">${[p.brand, p.barcode && "Barcode " + p.barcode, p.ingredient && "Ingredient " + p.ingredient].filter(Boolean).map(esc).join(" · ") || "No brand or barcode"}</p>
       <p class="muted">Pack ${pack} · Price ${p.price == null ? "—" : "£" + esc(p.price.toFixed(2))} · State ${esc(p.state || "—")}</p>
       ${nutrientTable(p)}
+      ${cofid && Object.values(p.nutrients).some((e) => e.basis === "cofid") ? `<p class="muted fine">${esc(cofid._attribution)}</p>` : ""}
       <div class="modal-actions"><button id="prod-edit" class="btn">Edit</button></div>`);
     sheet.querySelector("#prod-edit").addEventListener("click", () => editProduct(p));
   }
@@ -255,7 +258,7 @@
         if (i.value !== "" && (!cur || cur.value !== Number(i.value))) typed[i.dataset.nutrient] = i.value;
       });
       next = MP.Products.setNutrients(next, typed, "label");
-      await MP.Sync.saveProduct(next);
+      await MP.Sync.saveProduct(next, cofid);
       closeSheet();
       renderPantry();
     });
@@ -360,7 +363,7 @@
 
   function initPantry() {
     renderPantry();
-    Promise.all([MP.Sync.fetchPantry(), MP.Sync.syncProducts()]).then(renderPantry);
+    loadCofid().then(() => Promise.all([MP.Sync.fetchPantry(), MP.Sync.syncProducts(cofid)])).then(renderPantry);
     const overlay = document.getElementById("modal-overlay");
     overlay.addEventListener("click", (e) => { if (e.target === overlay) closeSheet(); });
     document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeSheet(); });
