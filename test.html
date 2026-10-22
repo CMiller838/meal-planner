@@ -2509,6 +2509,50 @@
     check("fillFromCofid: null cofid = skip, nothing removed", P.fillFromCofid(f, null) === f);
   }
 
+  // Phase 34: use-by dates
+  {
+    const SL = MP.ShelfLife, plan = { startDate: "2026-10-19" };
+    check("isIsoDate: good / bad / impossible", SL.isIsoDate("2026-10-19") && !SL.isIsoDate("19/10/2026") && !SL.isIsoDate("2026-02-30") && !SL.isIsoDate(null));
+    check("estimateUseBy: chicken = shop day + 2", SL.estimateUseBy({ name: "Chicken breast" }, plan, "2026-10-20", shelfData) === "2026-10-21");
+    check("estimateUseBy: week 2 uses day-8 shop day", SL.estimateUseBy({ name: "chicken breast" }, plan, "2026-10-27", shelfData) === "2026-10-28");
+    check("estimateUseBy: plural names match (carrots)", SL.estimateUseBy({ name: "Carrots" }, plan, "2026-10-20", shelfData) === "2026-10-26");
+    check("estimateUseBy: ambient, uncategorised, no plan, before start = null",
+      SL.estimateUseBy({ name: "tuna tin" }, plan, "2026-10-20", shelfData) === null
+      && SL.estimateUseBy({ name: "dragonfruit" }, plan, "2026-10-20", shelfData) === null
+      && SL.estimateUseBy({ name: "milk" }, null, "2026-10-20", shelfData) === null
+      && SL.estimateUseBy({ name: "milk" }, plan, "2026-10-18", shelfData) === null);
+    const items = [
+      { name: "Milk", useBy: "2026-10-30" }, { name: "Yogurt", useBy: "2026-10-18" }, { name: "Chicken breast", qty: "500g" },
+      { name: "Cheese", useBy: "garbage" }, { name: "tuna tin" }, { name: "Onion", useBy: "2026-10-20" },
+    ];
+    const ex = SL.expiringItems(items, plan, "2026-10-20", 2, shelfData);
+    check("expiringItems: overdue first, soonest order, window respected", ex.map((e) => e.name).join() === "Yogurt,Onion,Chicken breast");
+    check("expiringItems: basis + daysLeft", ex[0].basis === "entered" && ex[0].daysLeft === -2 && ex[2].basis === "estimate" && ex[2].daysLeft === 1 && ex[2].qty === "500g");
+    check("expiringItems: malformed useBy treated blank (cheese est. out of window)", !ex.some((e) => e.name === "Cheese"));
+    check("expiringItems: no plan keeps entered dates only", SL.expiringItems(items, null, "2026-10-20", 2, shelfData).map((e) => e.name).join() === "Yogurt,Onion");
+
+    const A = MP.Sync.applyOps;
+    const base = [{ name: "Milk", qty: "2 pints", useBy: "2026-10-30" }];
+    check("applyOps useBy: sets", A([{ name: "Milk" }], [{ type: "useBy", name: "milk", useBy: "2026-10-25" }])[0].useBy === "2026-10-25");
+    check("applyOps useBy: empty/null/bad clears", ["", null, "nope"].every((v) => !("useBy" in A(base, [{ type: "useBy", name: "Milk", useBy: v }])[0])));
+    check("applyOps useBy: unknown item skipped", A(base, [{ type: "useBy", name: "Eggs", useBy: "2026-10-25" }]).length === 1);
+    check("applyOps add with qty keeps useBy", A(base, [{ type: "add", name: "Milk", qty: "1 pint" }])[0].useBy === "2026-10-30");
+    check("applyOps add without qty keeps useBy, drops qty", (() => { const r = A(base, [{ type: "add", name: "Milk" }])[0]; return r.useBy === "2026-10-30" && !("qty" in r); })());
+    check("applyOps sub keeps useBy", A([{ name: "Rice", qty: { value: 500, unit: "g", raw: "500g" }, useBy: "2026-10-30" }], [{ type: "sub", name: "Rice", qty: "200g" }])[0].useBy === "2026-10-30");
+    check("applyOps: old item without useBy unchanged", deepEqual(A([{ name: "Rice", qty: "1kg" }], []), [{ name: "Rice", qty: "1kg" }]));
+
+    const lib = [
+      { id: "a", ingredients: [{ key: "milk" }, { key: "chicken_breast" }] },
+      { id: "b", ingredients: [{ key: "milk" }] },
+      { id: "c", ingredients: [{ key: "onion" }] },
+      { id: "d", ingredients: [{ key: "mushroom" }, { key: "milk" }, { key: "onion" }] },
+      { id: "e", ingredients: [{ key: "rice" }] },
+    ];
+    const mu = MP.ShoppingList.mealsUsing([{ name: "Milk", daysLeft: 3 }, { name: "Chicken breast", daysLeft: 1 }, { name: "Onions", daysLeft: 0 }], lib);
+    check("mealsUsing: ranked by items used, then soonest; excluded + no-hit dropped", mu.map((m) => m.meal.id).join() === "a,c,b");
+    check("mealsUsing: hits named", deepEqual(mu[0].hits, ["Milk", "Chicken breast"]));
+  }
+
   lines.push("", `${pass} passed, ${fail} failed`);
   document.getElementById("out").textContent = lines.join("\n");
 })();

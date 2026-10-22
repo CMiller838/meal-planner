@@ -93,6 +93,21 @@ for (const [vp, size] of Object.entries({ pc: { width: 1440, height: 900 }, phon
     await shot('pantry');
     await page.keyboard.press('Escape');
   });
+  await step('pantry: overdue use-by shows in the strip, use it up lists meals, date entry sticks', async () => {
+    await page.evaluate(() => localStorage.setItem('mp_pantry', JSON.stringify({ updatedAt: new Date().toISOString(), items: [{ name: 'cheese', qty: '200g', useBy: '2020-01-01' }, { name: 'bread' }] })));
+    await page.reload();
+    await page.waitForSelector('.useup-strip li.over');
+    await page.click('#useup-btn');
+    await page.waitForSelector('.modal-sheet [data-meal]');
+    await shot('useitup');
+    await page.keyboard.press('Escape');
+    await page.click('[data-useby="bread"]').catch(() => {}); // bread only has the link when an estimate exists
+    await page.click('[data-useby="cheese"]');
+    await page.fill('#useby-in', '2099-01-01');
+    await page.click('#useby-save');
+    await page.waitForSelector('.useby:not(.over)');
+    if (await page.locator('.useup-strip').count()) throw new Error('strip should be empty after moving the date');
+  });
   await step('no uncaught page errors during the walk', async () => { if (errs.length) throw new Error(errs[0]); });
   await ctx.close();
 }

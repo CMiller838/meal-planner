@@ -301,9 +301,9 @@ protein" (Phase 36) and for the assistant's answers. The generator never reads i
 **Verify:** test.html cases for the record shape, provenance rules, null-versus-zero and the barcode check digit; a real scan
 on the Pixel; one product read from a label photo; `/products` 403 for no token and 200 for the assistant token.
 
-## Phase 34: Use-by dates, expiring-soon route and "use it up" [L] — not started
+## Phase 34: Use-by dates, expiring-soon route and "use it up" [L] — built 2026-10-22, live checks pending
 
-Merged from old Phases 34, 38. Build as one phase; each part keeps its own decisions and verify.
+Verified: test.html, worker harness, check.py 8/8, tester PASS (PC + 390 px, both themes). Merged from old Phases 34, 38. Build as one phase; each part keeps its own decisions and verify.
 
 ### Part: Use-by dates on pantry items
 **Goal:** An optional per-item `useBy` date on the pantry, entered by the user, with shelf-life estimates only as a labelled

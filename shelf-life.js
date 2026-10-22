@@ -131,5 +131,51 @@
     return warnings;
   }
 
-  MP.ShelfLife = { load, checkPlanWarnings, shopDayFor, rawSafeOn };
+  const DAY = 86400000;
+  const isoMs = (iso) => Date.parse(iso + "T00:00:00Z");
+  const addDays = (iso, n) => new Date(isoMs(iso) + n * DAY).toISOString().slice(0, 10);
+
+  /** True only for a real calendar date written YYYY-MM-DD (rejects 2026-02-30). */
+  function isIsoDate(s) {
+    return typeof s === "string" && /^\d{4}-\d{2}-\d{2}$/.test(s) && !isNaN(isoMs(s)) && addDays(s, 0) === s;
+  }
+
+  // Item name -> category: exact key first, then normalizeKey on both sides
+  // (normalizeKey strips plural s, so "carrots" must match on the normalized form too).
+  let normCat = null;
+  function categoryFor(name) {
+    const norm = MP.ShoppingList.normalizeKey;
+    if (!normCat) normCat = Object.fromEntries(Object.entries(INGREDIENT_CATEGORY).map(([k, v]) => [norm(k), v]));
+    return normCat[norm(name)] || null;
+  }
+
+  /** Shelf-life estimate for an item with no entered date: most recent shop day
+   * on or before today + the category's fridgeDays. Needs a plan; ambient or
+   * uncategorised items get null (never guessed). */
+  function estimateUseBy(item, plan, todayIso, shelfData) {
+    if (!item || !plan || !isIsoDate(plan.startDate) || !isIsoDate(todayIso)) return null;
+    const info = (shelfData || cache || {})[categoryFor(item.name)];
+    if (!info || info.ambient || info.fridgeDays == null) return null;
+    const since = Math.floor((isoMs(todayIso) - isoMs(plan.startDate)) / DAY);
+    if (since < 0) return null;
+    return addDays(plan.startDate, since >= 7 ? 7 + info.fridgeDays : info.fridgeDays);
+  }
+
+  /** Pantry items whose use-by (entered, else estimated) falls within `days` of
+   * today, overdue included, soonest first. A malformed stored useBy counts as blank. */
+  function expiringItems(items, plan, todayIso, days, shelfData) {
+    const out = [];
+    for (const item of Array.isArray(items) ? items : []) {
+      if (!item || typeof item.name !== "string") continue;
+      const entered = isIsoDate(item.useBy);
+      const useBy = entered ? item.useBy : estimateUseBy(item, plan, todayIso, shelfData);
+      if (!useBy) continue;
+      const daysLeft = Math.round((isoMs(useBy) - isoMs(todayIso)) / DAY);
+      if (daysLeft > days) continue;
+      out.push({ name: item.name, qty: item.qty ?? null, useBy, basis: entered ? "entered" : "estimate", daysLeft });
+    }
+    return out.sort((a, b) => a.daysLeft - b.daysLeft);
+  }
+
+  MP.ShelfLife = { load, checkPlanWarnings, shopDayFor, rawSafeOn, INGREDIENT_CATEGORY, isIsoDate, estimateUseBy, expiringItems };
 })(typeof globalThis !== "undefined" ? globalThis : this);

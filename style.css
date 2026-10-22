@@ -731,3 +731,16 @@ button.ghost.danger { color: var(--danger); border-color: var(--danger); }
 .scan-video { width: 100%; max-height: 40vh; border-radius: .8rem; background: #000; margin-bottom: .6rem; }
 .scan-video.hidden { display: none; }
 @media (prefers-reduced-motion: reduce) { .prod-row { animation: none; } .prod-chip { transition: none; } }
+
+/* ---- Use-by dates / use it up (Phase 34) ---- */
+.useby { font-size: .8rem; color: var(--text-dim); }
+.useby.soon { color: var(--butter); font-weight: 700; }
+.useby.over { color: var(--danger); font-weight: 700; }
+.useby.est-by { font-style: italic; }
+.useup-strip { background: var(--surface-alt); border: 1px solid var(--border); border-radius: var(--radius); padding: .8rem 1rem; margin: .8rem 0; animation: mp-slot-in 220ms ease-out both; }
+.useup-strip h3 { margin: 0 0 .4rem; }
+.useup-strip ul { list-style: none; margin: 0 0 .6rem; padding: 0; display: flex; flex-wrap: wrap; gap: .4rem; }
+.useup-strip li { background: var(--surface); border: 1px solid var(--border); border-radius: 999px; padding: .2rem .7rem; font-size: .85rem; }
+.useup-strip li span { color: var(--butter); font-weight: 700; }
+.useup-strip li.over span { color: var(--danger); }
+@media (prefers-reduced-motion: reduce) { .useup-strip { animation: none; } }

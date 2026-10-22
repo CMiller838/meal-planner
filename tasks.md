@@ -532,7 +532,8 @@ task starts editing one, stop and re-read the spec.
 
 ## Phase 34: Use-by dates, expiring-soon route and "use it up"
 
-- [ ] Spec and tasks (requires 33a): `.claude/specs/phase34.md`
+- [x] Spec and tasks (requires 33a): `.claude/specs/phase34.md` (built; Node harness, test.html, check.py, tester PASS at PC and 390 px)
+- [ ] Live: enter a use-by date on the phone PWA's Pantry tab and see it appear in the assistant's `GET /pantry` and `GET /expiring`
 
 ## Phase 35: Weekly nutrient-gap view and gym-day targets
 

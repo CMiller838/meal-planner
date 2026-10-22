@@ -188,8 +188,14 @@ window.MP = window.MP || {};
           if (op.qty) item.qty = op.qty;
           result.push(item);
         } else {
+          const { useBy } = result[idx];
           result[idx] = op.qty ? { ...result[idx], qty: op.qty } : { name: result[idx].name };
+          if (!op.qty && useBy) result[idx].useBy = useBy;
         }
+      } else if (op.type === "useBy") {
+        if (idx === -1) continue;
+        const { useBy: _drop, ...rest } = result[idx];
+        result[idx] = MP.ShelfLife.isIsoDate(op.useBy) ? { ...rest, useBy: op.useBy } : rest;
       } else if (op.type === "remove") {
         if (idx !== -1) result.splice(idx, 1);
       }

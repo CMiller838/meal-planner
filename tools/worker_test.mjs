@@ -64,6 +64,19 @@ for (const bad of [
   prods({ ...prod, nutrients: { protein_g: { value: -1, basis: "off" } } }), prods({ ...prod, per: "100oz" }), prods({ ...prod, name: " " }),
   prods({ ...prod, updatedAt: "yesterday" }), { products: "x" }, [],
 ]) assert.equal((await call("PUT", "/products", "a", bad)).status, 400, JSON.stringify(bad).slice(0, 80));
+// Phase 34: useBy on /pantry, GET /expiring
+kv.set("plan", JSON.stringify({ startDate: "2026-10-19", days: [] }));
+const pan = (...items) => ({ updatedAt: "2026-10-22T00:00:00.000Z", items });
+assert.equal((await call("PUT", "/pantry", "a", pan({ name: "Milk", useBy: "2026-10-30" }, { name: "Yogurt", useBy: "2026-10-18" }, { name: "Chicken breast" }, { name: "Tuna tin" }))).status, 204);
+assert.equal((await call("GET", "/pantry", "a")).body.items[0].useBy, "2026-10-30");
+for (const bad of ["2026-02-30", "tomorrow", 5, "2026-1-1"])
+  assert.equal((await call("PUT", "/pantry", "a", pan({ name: "Milk", useBy: bad }))).status, 400, String(bad));
+r = await call("GET", "/expiring?today=2026-10-20", "a");
+assert.deepEqual([r.status, r.body.days, r.body.today, r.body.items.map((i) => [i.name, i.basis, i.daysLeft])],
+  [200, 2, "2026-10-20", [["Yogurt", "entered", -2], ["Chicken breast", "estimate", 1]]]);
+assert.equal((await call("GET", "/expiring?days=30&today=2026-10-20", "h")).status, 200);
+assert.equal((await call("GET", "/expiring", "")).status, 401);
+for (const q of ["?days=99", "?days=-1", "?days=x", "?today=nope"]) assert.equal((await call("GET", "/expiring" + q, "a")).status, 400, q);
 // the assistant token still can't reach other writes
 assert.equal((await call("PUT", "/plan", "a", { days: [] })).status, 403);
 assert.equal((await call("PUT", "/planPrefs", "a", {})).status, 403);

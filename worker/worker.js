@@ -9,6 +9,7 @@ import "../mealdb.js";
 import "../nutrition.js";
 import "../generator.js";
 import "../day-hints.js";
+import SHELF_DATA from "../shelf-life.json";
 import SUBS from "../substitutions.json";
 import TAGS from "../ingredient-nutrient-tags.json";
 import TARGETS from "../nutrition-targets.json";
@@ -21,6 +22,7 @@ const Nutrition = globalThis.MP.Nutrition;
 const Generator = globalThis.MP.Generator;
 const DayHints = globalThis.MP.DayHints;
 const ShoppingList = globalThis.MP.ShoppingList;
+const ShelfLife = globalThis.MP.ShelfLife;
 
 const KEYS = {
   "/library": "library", "/planFlag": "planFlag", "/pantry": "pantry", "/adhoc": "adhoc",
@@ -37,6 +39,7 @@ const ASSISTANT_ALLOWED = new Set([
   "GET /discover", "GET /pantry", "PUT /pantry", "GET /adhoc", "PUT /adhoc", "PUT /planFlag",
   "GET /placements", "PUT /placements", "GET /prefs", "PUT /library", "GET /nutrition",
   "GET /dayHints", "PUT /dayHints", "PUT /meal-method", "GET /today", "PUT /today", "GET /products", "PUT /products",
+  "GET /expiring",
 ]);
 const METHOD_PATH = /^\/meal\/([^/]+)\/method$/;
 const SLOT_TYPES = ["breakfast", "lunch", "dinner", "snack"];
@@ -225,6 +228,21 @@ async function nutrition(params, env) {
 /** The planned two-week shopping list, computed by the same
  *  MP.ShoppingList.buildLists the shopping page runs, over the KV plan
  *  mirror, library and pantry. As stale as the plan mirror is. */
+/** GET /expiring?days=N&today=YYYY-MM-DD: pantry items due within N days (default 2), overdue included. */
+async function expiring(params, env) {
+  const dRaw = params.get("days");
+  const days = dRaw == null ? 2 : /^\d+$/.test(dRaw) ? Number(dRaw) : -1;
+  if (days < 0 || days > 30) return json(400, "days must be 0-30");
+  const today = params.get("today") || new Date().toISOString().slice(0, 10);
+  if (!ShelfLife.isIsoDate(today)) return json(400, "today must be YYYY-MM-DD");
+  const read = async (k) => {
+    try { return JSON.parse(await env.MP_KV.get(k)); } catch (e) { return null; }
+  };
+  const [pantry, plan] = await Promise.all([read("pantry"), read("plan")]);
+  const items = pantry && Array.isArray(pantry.items) ? pantry.items : [];
+  return json(200, { days, today, items: ShelfLife.expiringItems(items, plan, today, days, SHELF_DATA) });
+}
+
 async function shopping(env) {
   const [libraryRaw, planRaw, pantryRaw, adhocRaw] = await Promise.all([
     env.MP_KV.get("library"), env.MP_KV.get("plan"), env.MP_KV.get("pantry"), env.MP_KV.get("adhoc"),
@@ -379,6 +397,7 @@ function itemsError(parsed) {
     seenNames.add(key);
     const qErr = qtyError(item.qty);
     if (qErr) return qErr;
+    if (item.useBy != null && !ShelfLife.isIsoDate(item.useBy)) return "useBy must be YYYY-MM-DD";
   }
   return null;
 }
@@ -573,6 +592,11 @@ export default {
     if (url.pathname === "/nutrition") {
       if (request.method !== "GET") return json(405, "method not allowed");
       return nutrition(url.searchParams, env);
+    }
+
+    if (url.pathname === "/expiring") {
+      if (request.method !== "GET") return json(405, "method not allowed");
+      return expiring(url.searchParams, env);
     }
 
     if (url.pathname === "/shopping") {

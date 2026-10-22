@@ -339,5 +339,21 @@
     return { rows, ops };
   }
 
-  MP.ShoppingList = { load, loadGroups, groupIndex, buildLists, parseQty, packsFor, normalizeKey, pantryIndex, pantryOverlap, remainingQty, eatPlan, priceFor, mealCost, costIndex, costTier, costBadgeHtml };
+  /** Existing meals that use expiring pantry items. `keys` is [{ name, daysLeft }]
+   * (expiringItems output); ranked by items used, then soonest useBy. Hard-excluded meals dropped. */
+  function mealsUsing(keys, library) {
+    const want = (keys || []).map((k) => ({ norm: normalizeKey(k.name), name: k.name, daysLeft: k.daysLeft }));
+    const out = [];
+    for (const meal of library || []) {
+      if (!meal || !Array.isArray(meal.ingredients) || !MP.Exclusions.check(meal).ok) continue;
+      const have = new Set(meal.ingredients.map((i) => normalizeKey(i.key)));
+      const hit = want.filter((w) => have.has(w.norm));
+      if (hit.length) out.push({ meal, hits: hit.map((h) => h.name), soonest: Math.min(...hit.map((h) => h.daysLeft)) });
+    }
+    return out
+      .sort((a, b) => b.hits.length - a.hits.length || a.soonest - b.soonest)
+      .map(({ meal, hits }) => ({ meal, hits }));
+  }
+
+  MP.ShoppingList = { mealsUsing, load, loadGroups, groupIndex, buildLists, parseQty, packsFor, normalizeKey, pantryIndex, pantryOverlap, remainingQty, eatPlan, priceFor, mealCost, costIndex, costTier, costBadgeHtml };
 })(typeof globalThis !== "undefined" ? globalThis : this);

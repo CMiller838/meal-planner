@@ -64,14 +64,14 @@ use-it-up sheet. Live (user, `tasks.md`): enter a date on the phone PWA and see 
 
 ## Tasks
 ### Logic (TDD)
-- [ ] `estimateUseBy`, `expiringItems` + export `INGREDIENT_CATEGORY` in `shelf-life.js`; test.html cases
-- [ ] `useBy` op + `add` preserving `useBy` in `applyOps`; test.html cases
-- [ ] `mealsUsing` in `shopping-list.js`; test.html cases
-- [ ] Worker: `useBy` validation, `GET /expiring`, `ASSISTANT_ALLOWED`
+- [x] `estimateUseBy`, `expiringItems` + export `INGREDIENT_CATEGORY` in `shelf-life.js`; test.html cases
+- [x] `useBy` op + `add` preserving `useBy` in `applyOps`; test.html cases
+- [x] `mealsUsing` in `shopping-list.js`; test.html cases
+- [x] Worker: `useBy` validation, `GET /expiring`, `ASSISTANT_ALLOWED`
 ### UI (`ui-build`)
-- [ ] Pantry-tab row: entered date / muted estimate / "Add use-by" field
-- [ ] "Use these up" strip, soonest first, overdue marked
-- [ ] "Use it up" button + sheet listing meals (opens existing meal sheet)
+- [x] Pantry-tab row: entered date / muted estimate / "Add use-by" field
+- [x] "Use these up" strip, soonest first, overdue marked
+- [x] "Use it up" button + sheet listing meals (opens existing meal sheet)
 ### Docs and close
-- [ ] `CLAUDE.md` two invariants, `docs/HERMES.md`, `docs/FUTURE.md`, bump `sw.js` `CACHE`
-- [ ] Live check line in `tasks.md`; mark Phase 34 `— done` with what was verified
+- [x] `CLAUDE.md` two invariants, `docs/HERMES.md`, `docs/FUTURE.md`, bump `sw.js` `CACHE`
+- [x] Live check line in `tasks.md`; mark Phase 34 `— done` with what was verified

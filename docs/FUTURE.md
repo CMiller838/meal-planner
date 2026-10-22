@@ -257,3 +257,6 @@ already-eaten slot.
 - **Revisit trigger**: none currently anticipated — would need a real
   reason the propose-then-app-applies model is causing friction in
   practice.
+
+- **Near-expiry plan reordering and frozen stock** (parked from Phase 34): `generator.js` stays untouched; `frozenOn`/`frozenMonths` not built.
+  **Revisit trigger**: food repeatedly wasted despite the use-it-up list.

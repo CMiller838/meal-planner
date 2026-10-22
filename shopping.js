@@ -333,22 +333,90 @@
     return `<button class="prod-chip" data-open="${esc(p.id)}">${[p.brand, p.name].filter(Boolean).map(esc).join(" · ")}${protText}</button>`;
   }
 
+  const localIso = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; };
+  const dayName = (iso) => new Date(iso + "T12:00:00").toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" });
+  const whenText = (n) => (n < 0 ? `${-n}d overdue` : n === 0 ? "today" : n === 1 ? "tomorrow" : `in ${n}d`);
+  let shelfData = null; // shelf-life.json once loaded; null = no estimates yet
+  let expiring = [];
+
+  function useByHtml(item, today, plan) {
+    const SL = MP.ShelfLife;
+    if (SL.isIsoDate(item.useBy)) {
+      const n = Math.round((Date.parse(item.useBy) - Date.parse(today)) / 86400000);
+      return `<span class="useby ${n < 0 ? "over" : n <= 2 ? "soon" : ""}">use by ${esc(dayName(item.useBy))}${n < 0 ? " · overdue" : ""}</span>
+        <button class="prod-chip muted" data-useby="${esc(item.name)}" aria-label="Change use-by for ${esc(item.name)}">Edit</button>`;
+    }
+    const est = SL.estimateUseBy(item, plan, today, shelfData);
+    if (!est) return "";
+    return `<span class="useby est-by">est. use by ${esc(dayName(est))}</span>
+      <button class="prod-chip muted" data-useby="${esc(item.name)}">Add use-by</button>`;
+  }
+
   function pantryHtml(items, products) {
+    const today = localIso(), plan = loadPlan();
+    expiring = MP.ShelfLife.expiringItems(items, plan, today, 2, shelfData);
     const rows = items.map((item) => {
       const key = MP.ShoppingList.normalizeKey(item.name);
       const p = MP.Products.forIngredient(products, key);
       return `<li class="shop-line prod-row"><span class="shop-qty">${esc(MP.qtyText(item.qty))}</span>
         <span class="shop-name">${esc(item.name)}</span>
+        ${useByHtml(item, today, plan)}
         ${p ? chipHtml(p) : `<button class="prod-chip muted" data-link="${esc(key)}">Link product</button>`}</li>`;
     });
     const all = [...products].sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt));
+    const strip = expiring.length ? `<div class="useup-strip" role="region" aria-label="Use these up">
+        <h3>Use these up</h3>
+        <ul>${expiring.map((e) => `<li class="${e.daysLeft < 0 ? "over" : ""}"><b>${esc(e.name)}</b> <span>${esc(whenText(e.daysLeft))}${e.basis === "estimate" ? " (est.)" : ""}</span></li>`).join("")}</ul>
+        <button id="useup-btn" class="btn">Use it up</button>
+      </div>` : "";
     return `<section class="shop-block">
       <div class="top-actions"><button id="scan-btn" class="btn">Scan a product</button><button id="add-product-btn" class="ghost">Add without barcode</button></div>
+      ${strip}
       <h3>In your pantry</h3>
       ${rows.length ? `<ul class="shop-list">${rows.join("")}</ul>` : `<p class="empty">Nothing in your pantry.</p>`}
       <h3>All products</h3>
       ${all.length ? `<ul class="shop-list">${all.map((p) => `<li class="shop-line prod-row">${chipHtml(p)}</li>`).join("")}</ul>` : `<p class="empty">No products yet. Scan one to start.</p>`}
     </section>`;
+  }
+
+  // The only pantry write here besides commitCook: `useBy` alone, via the same op log.
+  function setUseBy(name, useBy) {
+    const op = { list: "pantry", type: "useBy", name, useBy };
+    MP.Sync.queueOp(op);
+    MP.Sync.writeLocalItems("pantry", MP.Sync.applyOps(MP.Sync.localItems("pantry"), [op]));
+    MP.Sync.flushOps();
+    renderPantry();
+  }
+
+  function useByDialog(name) {
+    const cur = (MP.Sync.localItems("pantry").find((i) => i.name === name) || {}).useBy;
+    const sheet = openSheet(`<h2>Use-by: ${esc(name)}</h2>
+      <label class="prod-form"><span>Date</span><input type="date" id="useby-in" value="${esc(MP.ShelfLife.isIsoDate(cur) ? cur : "")}"></label>
+      <div class="top-actions"><button id="useby-save" class="btn">Save</button><button id="useby-clear" class="ghost">Clear</button></div>`);
+    sheet.querySelector("#useby-save").addEventListener("click", () => {
+      const v = sheet.querySelector("#useby-in").value;
+      if (!MP.ShelfLife.isIsoDate(v)) return;
+      closeSheet(); setUseBy(name, v);
+    });
+    sheet.querySelector("#useby-clear").addEventListener("click", () => { closeSheet(); setUseBy(name, null); });
+  }
+
+  async function useItUpSheet() {
+    const library = await MP.getLibrary();
+    const found = MP.ShoppingList.mealsUsing(expiring, library);
+    const sheet = openSheet(`<h2>Use it up</h2>${found.length
+      ? `<ul class="shop-list">${found.map((f, i) => `<li class="shop-line"><button class="prod-chip" data-meal="${i}">${esc(f.meal.name)}</button>
+          <span class="muted">uses ${f.hits.map(esc).join(", ")}</span></li>`).join("")}</ul>`
+      : `<p class="empty">No meals in your library use these.</p>`}`);
+    sheet.querySelectorAll("[data-meal]").forEach((b) => b.addEventListener("click", () => mealSheet(found[b.dataset.meal].meal)));
+  }
+
+  function mealSheet(meal) {
+    openSheet(`${meal.image ? `<img src="${esc(meal.image)}" alt="${esc(meal.name)}">` : ""}
+      <h2>${esc(meal.name)}</h2><p>${esc(meal.description || "")}</p>
+      <h3>Ingredients</h3>
+      <ul class="ingredient-list">${(meal.ingredients || []).map((i) => `<li>${esc(i.label || i.key)}${i.qty ? " — " + esc(i.qty) : ""}</li>`).join("")}</ul>
+      <h3>Instructions</h3><p>${esc(meal.instructions || "")}</p>`);
   }
 
   function renderPantry() {
@@ -359,9 +427,13 @@
     root.querySelector("#add-product-btn").addEventListener("click", () => editProduct(blankProduct({})));
     root.querySelectorAll("[data-open]").forEach((b) => b.addEventListener("click", () => viewProduct(products.find((p) => p.id === b.dataset.open))));
     root.querySelectorAll("[data-link]").forEach((b) => b.addEventListener("click", () => scanSheet(b.dataset.link)));
+    root.querySelectorAll("[data-useby]").forEach((b) => b.addEventListener("click", () => useByDialog(b.dataset.useby)));
+    const useup = root.querySelector("#useup-btn");
+    if (useup) useup.addEventListener("click", useItUpSheet);
   }
 
   function initPantry() {
+    MP.ShelfLife.load().then((d) => { shelfData = d; renderPantry(); }, () => {});
     renderPantry();
     loadCofid().then(() => Promise.all([MP.Sync.fetchPantry(), MP.Sync.syncProducts(cofid)])).then(renderPantry);
     const overlay = document.getElementById("modal-overlay");
