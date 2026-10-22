@@ -446,8 +446,10 @@ the smallest change that survives the sync model), and the daily water goal, whi
 **Verify:** counters sync between app and assistant without double counting; a day with no taps is zero, not missing.
 Requires Phase 32. Assistant side: `notion_assistant` Phase 64.
 
-## Phase 43: Pantry and leftover read routes: cookable, substitutions, leftovers, quick fallback [L] — blocked 2026-10-22: PIPELINE: BLOCKED tester verdict INCOMPLETE because the Edge walk run was denied; allow the copy to C:\Users\cody\browser-check and re-run the tester, or accept
+## Phase 43: Pantry and leftover read routes: cookable, substitutions, leftovers, quick fallback [L] — built 2026-10-22, live checks pending
 
+
+_Verified 2026-10-22: worker_test ok, check.py 8/8 (test.html asserts, ui pages, ui walk). Built by the pipeline, tester found no defects but its Edge walk was denied (Edge since dropped from the tester); patch hand-merged onto Phases 50-54 with `git apply --3way` and re-checked. New UI (Today leftovers, Pantry storage select) not re-viewed by eye at PC/390 px. Phase 48 absent._
 Merged from old Phases 43, 44, 47. Build as one phase; each part keeps its own decisions and verify.
 
 ### Part: "Can I cook it now" read route and substitution-group read route

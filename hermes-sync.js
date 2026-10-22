@@ -188,9 +188,10 @@ window.MP = window.MP || {};
           if (op.qty) item.qty = op.qty;
           result.push(item);
         } else {
-          const { useBy, out } = result[idx];
+          const { useBy, out, storage } = result[idx];
           const zero = op.qty && (MP.ShoppingList.parseQty(op.qty) || {}).value === 0;
           result[idx] = op.qty ? { ...result[idx], qty: op.qty } : { name: result[idx].name };
+          if (storage) result[idx].storage = storage;
           if (!op.qty && useBy) result[idx].useBy = useBy;
           if (zero && out) result[idx].out = true; else delete result[idx].out; // bought / qty > 0 clears out
         }
@@ -203,6 +204,10 @@ window.MP = window.MP || {};
         if (idx === -1) continue;
         const { useBy: _drop, ...rest } = result[idx];
         result[idx] = MP.ShelfLife.isIsoDate(op.useBy) ? { ...rest, useBy: op.useBy } : rest;
+      } else if (op.type === "storage") {
+        if (idx === -1) continue;
+        const { storage: _drop, ...rest } = result[idx];
+        result[idx] = MP.ShelfLife.STORAGES.includes(op.storage) ? { ...rest, storage: op.storage } : rest;
       } else if (op.type === "remove") {
         if (idx !== -1) result.splice(idx, 1);
       }
@@ -509,6 +514,17 @@ window.MP = window.MP || {};
     pushEatenLog(kept);
   }
 
+  /** Phase 43: mirrors the whole mp_cooks array to KV `cooks` (the assistant reads it via GET /leftovers). Best-effort, never throws. */
+  async function pushCooks(records) {
+    if (!config().enabled) return "off";
+    try {
+      await req("PUT", "/cooks", records);
+      return "ok";
+    } catch (e) {
+      return "error";
+    }
+  }
+
   // Phase 41: today's one-tap counters. Local first (mp_today), push best-effort; a stored date != today reads as zeros.
   const LS_TODAY = "mp_today";
   const londonDate = (d) => new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/London" }).format(d || new Date());
@@ -589,6 +605,7 @@ window.MP = window.MP || {};
     syncLibrary();
     syncPlacements().then(syncEatRequests);
     pushPrefs();
+    pushCooks(MP.Cooks ? MP.Cooks.all() : []);
     flushOps();
   }
 
@@ -638,7 +655,7 @@ window.MP = window.MP || {};
     decide, needsPlan, config, saveConfig, syncLibrary, syncPlanFlag, ackPlanFlag,
     fetchItems, fetchPantry, localItems, writeLocalItems, queueOp, applyOps, flushOps,
     planMirror, pushPlan, pushPrefs, fetchPlanPrefs, fetchDayHints, fetchRatings, fetchSettings, settings, hardTerms, fetchDrafts, deleteDraft, pushRating, pushPlanPrefs, newPlacements, newSince, syncPlacements, ackPlacements, syncEatRequests,
-    localEatenLog, logEaten, unlogEaten, pushEatenLog, start,
+    localEatenLog, logEaten, unlogEaten, pushEatenLog, pushCooks, start,
     syncProducts, localProducts, saveProduct,
   };
 })();

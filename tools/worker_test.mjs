@@ -138,6 +138,51 @@ assert.equal((await call("GET", "/why?meal=m1&day=1&slot=dinner", "a")).body.ran
 assert.equal((await call("GET", "/why?meal=zz&day=1&slot=dinner", "a")).status, 404);
 assert.equal((await call("GET", "/why?meal=m1&day=0", "a")).status, 400);
 
+
+// Phase 43: cookable / substitutions / leftovers / quick / cooks / storage (same fixture as test.html's cookable block)
+{
+  const ing = (...keys) => keys.map((k) => ({ key: k, qty: "100g" }));
+  const lib43 = [
+    { id: "r1", name: "R1", prepEffort: "quick", ingredients: ing("rice", "chicken_breast") },
+    { id: "r2", name: "R2", prepEffort: "batch", ingredients: ing("rice", "onion") },
+    { id: "near", name: "Near", ingredients: ing("rice", "saffron") },
+    { id: "far", name: "Far", ingredients: ing("saffron", "truffle", "caviar") },
+    { id: "mush", name: "Mush", ingredients: ing("rice", "mushroom") },
+    { id: "skip", name: "Skip", ingredients: [{ key: "leftover_chicken", qty: "leftover" }, ...ing("rice")] },
+    { id: "empty", name: "Empty", ingredients: [{ key: "leftover_chicken", qty: "leftover" }] },
+  ];
+  kv.set("library", JSON.stringify({ updatedAt: "2026-10-20T00:00:00.000Z", meals: lib43 }));
+  kv.set("plan", JSON.stringify({ startDate: "2026-10-19", days: [] }));
+  assert.equal((await call("PUT", "/pantry", "a", { items: [{ name: "Rice", qty: "1kg" }, { name: "Chicken breast" }, { name: "Onion", useBy: "2026-10-20" }, { name: "Frozen veg", storage: "freezer" }] })).status, 204);
+  assert.deepEqual((await call("GET", "/pantry", "a")).body.items[3], { name: "Frozen veg", storage: "freezer" }); // round trip keeps storage
+  for (const bad of ["attic", 3]) assert.equal((await call("PUT", "/pantry", "a", { items: [{ name: "Rice", storage: bad }] })).status, 400);
+
+  r = await call("GET", "/cookable?today=2026-10-20", "a");
+  assert.deepEqual([r.status, r.body.ready.map((p) => p.id), r.body.nearMiss.map((p) => p.id)], [200, ["r2", "r1", "skip"], ["near"]]);
+  assert.equal((await call("GET", "/cookable?today=2026-10-20&n=1", "h")).body.ready.length, 1);
+  assert.equal((await call("GET", "/substitutions", "a")).body.groups[0].id, "aromatic_veg");
+  for (const path of ["/cookable", "/substitutions", "/leftovers", "/quick"]) {
+    assert.equal((await call("GET", path, "")).status, 401, path);
+    assert.equal((await call("GET", path, "h")).status, 200, path);
+  }
+  for (const q of ["/cookable?n=99", "/cookable?n=0", "/quick?n=x", "/leftovers?today=nope", "/quick?today=nope"]) assert.equal((await call("GET", q, "a")).status, 400, q);
+
+  assert.deepEqual((await call("GET", "/leftovers?today=2026-10-20", "a")).body.leftovers, []); // no cooks yet
+  const cooks = [
+    { id: "a", mealId: "r1", name: "R1", cookedAt: "2026-10-19T12:00:00.000Z", portionsLeft: 2 },
+    { id: "d", mealId: "r1", name: "R1", cookedAt: "2026-10-01T12:00:00.000Z", portionsLeft: 1, storage: "freezer" },
+  ];
+  assert.equal((await call("PUT", "/cooks", "a", cooks)).status, 403);
+  assert.equal((await call("PUT", "/cooks", "h", cooks)).status, 204);
+  for (const bad of [{}, [{ id: "x" }], [{ ...cooks[0], portionsLeft: 1.5 }], [{ ...cooks[0], portionsLeft: -1 }], [{ ...cooks[0], storage: "cupboard" }], Array(201).fill(cooks[0])])
+    assert.equal((await call("PUT", "/cooks", "h", bad)).status, 400, JSON.stringify(bad).slice(0, 50));
+  r = await call("GET", "/leftovers?today=2026-10-20", "a");
+  assert.deepEqual(r.body.leftovers.map((l) => [l.id, l.storage, l.eatBy, l.lastDay]), [["a", "fridge", "2026-10-22", false], ["d", "freezer", "2027-01-01", false]]);
+  r = await call("GET", "/quick?today=2026-10-20", "a");
+  assert.deepEqual(r.body.items.map((i) => i.kind + ":" + (i.id || i.name)), ["meal:r1", "leftover:a", "leftover:d", "frozen:Frozen veg"]);
+  kv.set("cooks", "garbage"); kv.set("pantry", "garbage");
+  assert.equal((await call("GET", "/quick?today=2026-10-20", "a")).status, 200); // malformed KV = empty, never 500
+}
 // the assistant token still can't reach other writes
 assert.equal((await call("PUT", "/plan", "a", { days: [] })).status, 403);
 assert.equal((await call("PUT", "/planPrefs", "a", {})).status, 403);

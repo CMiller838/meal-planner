@@ -39,7 +39,8 @@
   // touching the pantry.
 
   /** shelfOverride lets tests supply shelfData without a real fetch; falls
-   *  back to the module's own shelfData (unavailable => never prune on age). */
+   *  back to the module's own shelfData (unavailable => never prune on age).
+   *  A record is kept until its eat-by (fridge days, or frozen months) passes. */
   function cooksAll(shelfOverride) {
     let raw;
     try {
@@ -49,21 +50,28 @@
     }
     if (!Array.isArray(raw)) raw = [];
     const sd = shelfOverride !== undefined ? shelfOverride : shelfData;
-    const fridgeDays = sd && sd.cooked_leftovers && sd.cooked_leftovers.fridgeDays;
-    const now = Date.now();
+    const today = new Date().toISOString().slice(0, 10);
     const kept = raw.filter((r) => {
       if (!r || r.portionsLeft <= 0) return false;
-      if (fridgeDays == null) return true;
-      return (now - new Date(r.cookedAt).getTime()) / 86400000 <= fridgeDays;
+      const eatBy = sd && MP.ShelfLife.leftoverEatBy(r, sd);
+      return !eatBy || eatBy >= today;
     });
     if (kept.length !== raw.length) localStorage.setItem(LS_COOKS, JSON.stringify(kept));
     return kept;
   }
 
+  /** The one write path: persist, then mirror to the Worker best-effort. */
+  function cooksWrite(all) {
+    localStorage.setItem(LS_COOKS, JSON.stringify(all));
+    if (MP.Sync && MP.Sync.pushCooks) MP.Sync.pushCooks(all);
+  }
+
+  /** Fridge records first (the freezer is the reserve), then newest. */
   function cooksOpenFor(mealId, shelfOverride) {
+    const frozen = (r) => (r.storage === "freezer" ? 1 : 0);
     return cooksAll(shelfOverride)
       .filter((r) => r.mealId === mealId)
-      .sort((a, b) => new Date(b.cookedAt) - new Date(a.cookedAt));
+      .sort((a, b) => frozen(a) - frozen(b) || new Date(b.cookedAt) - new Date(a.cookedAt));
   }
 
   function cooksOpen(meal, variantId, portions) {
@@ -79,7 +87,7 @@
     };
     const all = cooksAll();
     all.push(record);
-    localStorage.setItem(LS_COOKS, JSON.stringify(all));
+    cooksWrite(all);
     return record;
   }
 
@@ -88,11 +96,39 @@
     const idx = all.findIndex((r) => r.id === cookId);
     if (idx === -1) return null;
     all[idx] = { ...all[idx], portionsLeft: all[idx].portionsLeft - 1 };
-    localStorage.setItem(LS_COOKS, JSON.stringify(all));
+    cooksWrite(all);
     return all[idx];
   }
 
-  MP.Cooks = { all: cooksAll, openFor: cooksOpenFor, open: cooksOpen, take: cooksTake };
+  /** "Threw away": closes the record, no log entry. */
+  function cooksDiscard(cookId) {
+    const all = cooksAll();
+    const idx = all.findIndex((r) => r.id === cookId);
+    if (idx === -1) return false;
+    all[idx] = { ...all[idx], portionsLeft: 0 };
+    cooksWrite(all);
+    return true;
+  }
+
+  /** Moves one portion from a fridge record to its freezer twin (created if absent). */
+  function cooksFreezeOne(cookId) {
+    const all = cooksAll();
+    const idx = all.findIndex((r) => r.id === cookId);
+    if (idx === -1 || all[idx].storage === "freezer") return null;
+    const src = all[idx];
+    all[idx] = { ...src, portionsLeft: src.portionsLeft - 1 };
+    const twinId = `${src.id}:frozen`;
+    let twin = all.find((r) => r.id === twinId);
+    if (twin) twin.portionsLeft += 1;
+    else {
+      twin = { ...src, id: twinId, cookedAt: new Date().toISOString(), portionsLeft: 1, storage: "freezer" };
+      all.push(twin);
+    }
+    cooksWrite(all);
+    return twin;
+  }
+
+  MP.Cooks = { all: cooksAll, openFor: cooksOpenFor, open: cooksOpen, take: cooksTake, discard: cooksDiscard, freezeOne: cooksFreezeOne };
 
   function generatePlan() {
     const budget = packData
@@ -274,12 +310,20 @@
         <button class="btn" data-bump="${field}" data-d="-1" aria-label="One less ${field}">−</button>
         <strong>${t[field]}</strong>
         <button class="btn" data-bump="${field}" data-d="1" aria-label="One more ${field}">+</button>${extra || ""}</div>`;
+    const todayIso = new Date().toLocaleDateString("en-CA");
+    const lefts = shelfData ? MP.ShelfLife.leftoverView(MP.Cooks.all(), todayIso, shelfData) : [];
+    const leftoverRow = (l) => `<li class="leftover-row${l.lastDay ? " last-day" : ""}"><span class="leftover-name">${esc(l.name)} · ${l.portionsLeft} left · ${l.storage}</span>
+        <span class="leftover-when">${l.lastDay ? "eat or freeze today" : `eat by ${esc(l.eatBy)} (est.)`}</span>
+        ${mealsById[l.mealId] ? `<button class="btn" data-left-eat="${esc(l.id)}">Ate one</button>` : ""}
+        ${l.storage === "fridge" ? `<button class="btn" data-left-freeze="${esc(l.id)}">Freeze 1</button>` : ""}
+        <button class="ghost" data-left-bin="${esc(l.id)}">Threw away</button></li>`;
     el.innerHTML = `<div class="gap-head"><strong>Today</strong>
         <label class="gap-gym"><input type="checkbox" id="today-gym"${t.gym ? " checked" : ""}> Gym day today</label></div>
       ${due.length ? `<div class="today-routines">${due.map((m) => {
         const done = t.routineDone.includes(m.id);
         return `<button class="btn today-chip${done ? " done" : ""}" data-routine="${esc(m.id)}" aria-pressed="${done}">${esc(m.name)} · ${done ? "Done ✓" : "Had it"}</button>`;
       }).join("")}</div>` : ""}
+      ${lefts.length ? `<div class="leftovers"><strong>Leftovers</strong><ul>${lefts.map(leftoverRow).join("")}</ul></div>` : ""}
       ${counter("water", "Water (cups)", goal ? ` <small>of ${goal}</small>` : "")}
       ${counter("caffeine", "Caffeine (cups)",
         ` <select id="today-cup" aria-label="Cup type"><option value="">type?</option>${Object.keys(countersData.caffeine.cupMg).map((k) => `<option value="${esc(k)}"${k === cup ? " selected" : ""}>${esc(k)}</option>`).join("")}</select>` +
@@ -295,6 +339,26 @@
       toast(MP.Today.toggleRoutine(meal, tags) === "logged" ? `Logged ${meal.name}` : `Undid ${meal.name}`);
       renderTodayCard();
       renderGapStrip();
+    }));
+    // "Ate one" is a portion-eat: it never touches the pantry (see eatPortion).
+    el.querySelectorAll("[data-left-eat]").forEach((b) => b.addEventListener("click", () => {
+      const cook = MP.Cooks.take(b.dataset.leftEat);
+      const meal = cook && mealsById[cook.mealId];
+      if (!meal) return;
+      const eatenAt = new Date().toISOString();
+      if (MP.Prefs) MP.Prefs.bump(meal, "eaten");
+      logPortion(meal, eatenAt);
+      toast(`Portion eaten — ${cook.portionsLeft} left`);
+      renderTodayCard();
+      renderGapStrip();
+    }));
+    el.querySelectorAll("[data-left-freeze]").forEach((b) => b.addEventListener("click", () => {
+      if (MP.Cooks.freezeOne(b.dataset.leftFreeze)) toast("Moved one portion to the freezer");
+      renderTodayCard();
+    }));
+    el.querySelectorAll("[data-left-bin]").forEach((b) => b.addEventListener("click", () => {
+      MP.Cooks.discard(b.dataset.leftBin);
+      renderTodayCard();
     }));
     el.querySelector("#today-gym").addEventListener("change", (ev) => {
       MP.Today.setGym(ev.target.checked);

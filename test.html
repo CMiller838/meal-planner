@@ -2672,6 +2672,100 @@
     check("rankSlot profile: hard filtered, like first, dislike last", ids(r) === "l,e,o");
   }
 
+  // Phase 43: cookable, storage, leftovers, quick
+  {
+    const SL = MP.ShoppingList, SH = MP.ShelfLife, plan = { startDate: "2026-10-19" }, today = "2026-10-20";
+    const ing = (...keys) => keys.map((k) => ({ key: k, qty: "100g" }));
+    const lib = [
+      { id: "r1", name: "R1", prepEffort: "quick", ingredients: ing("rice", "chicken_breast") },
+      { id: "r2", name: "R2", prepEffort: "batch", ingredients: ing("rice", "onion") },
+      { id: "near", name: "Near", ingredients: ing("rice", "saffron") },
+      { id: "far", name: "Far", ingredients: ing("saffron", "truffle", "caviar") },
+      { id: "mush", name: "Mush", ingredients: ing("rice", "mushroom") },
+      { id: "skip", name: "Skip", ingredients: [{ key: "leftover_chicken", qty: "leftover" }, ...ing("rice")] },
+      { id: "empty", name: "Empty", ingredients: [{ key: "leftover_chicken", qty: "leftover" }] },
+    ];
+    const pantry = [{ name: "Rice", qty: "1kg" }, { name: "Chicken breast" }, { name: "Onion", useBy: "2026-10-20" }, { name: "Ghost", out: true }];
+    const opts = { tags, targets, shelfData };
+
+    check("hasEnough: absent / present / enough / short", !SL.hasEnough({ key: "rice", qty: "100g" }, {})
+      && SL.hasEnough({ key: "rice", qty: "100g" }, { rice: "" }) && SL.hasEnough({ key: "rice", qty: "100g" }, { rice: "1kg" })
+      && !SL.hasEnough({ key: "rice", qty: "500g" }, { rice: "200g" }));
+    const ck = SL.cookable(lib, pantry, plan, today, opts);
+    check("cookable: ready = 0 missing, soonest use-by first, skipped ingredient ignored", ck.ready.map((p) => p.id).join() === "r2,r1,skip");
+    check("cookable: near-miss lists the missing key; exclusion and 3-missing dropped; zero-ingredient excluded",
+      ck.nearMiss.map((p) => p.id).join() === "near" && deepEqual(ck.nearMiss[0].missing, ["saffron"]));
+    check("cookable: urgency from entered vs estimated use-by, null when undated",
+      ck.ready[0].urgency.basis === "entered" && ck.ready[0].urgency.daysLeft === 0 && ck.ready[1].urgency.basis === "estimate" && ck.ready[2].urgency === null);
+    check("cookable: ?n cap", SL.cookable(lib, pantry, plan, today, { ...opts, n: 1 }).ready.length === 1);
+    const bare = SL.cookable(lib, [{ name: "Rice", qty: "1kg" }], null, today, opts);
+    check("cookable: no plan / no dates -> urgency null, still answers", bare.ready.every((p) => p.urgency === null) && bare.ready.length === 1);
+    check("cookable: empty pantry -> no ready", SL.cookable(lib, [], plan, today, opts).ready.length === 0);
+    check("cookable: junk inputs never throw", (() => { SL.cookable(null, null, null, today, opts); return true; })());
+
+    check("storageFor: entered beats category", deepEqual(SH.storageFor({ name: "Milk", storage: "freezer" }, shelfData), { storage: "freezer", basis: "entered" }));
+    check("storageFor: category defaults", SH.storageFor({ name: "Milk" }, shelfData).storage === "fridge"
+      && SH.storageFor({ name: "frozen veg" }, shelfData).storage === "freezer" && SH.storageFor({ name: "tuna tin" }, shelfData).storage === "cupboard");
+    check("storageFor: uncategorised / bad value", SH.storageFor({ name: "dragonfruit" }, shelfData) === null
+      && SH.storageFor({ name: "dragonfruit", storage: "attic" }, shelfData) === null);
+    check("addMonths: clamps month end", SH.addMonths("2026-01-31", 1) === "2026-02-28" && SH.addMonths("2026-10-19", 6) === "2027-04-19");
+    check("estimateUseBy: freezer = shop day + frozenMonths", SH.estimateUseBy({ name: "Chicken breast", storage: "freezer" }, plan, today, shelfData) === "2027-07-19");
+    check("estimateUseBy: freezer without frozenMonths = null", SH.estimateUseBy({ name: "Milk", storage: "freezer" }, plan, today, shelfData) === null);
+
+    const recs = [
+      { id: "a", mealId: "r1", name: "R1", cookedAt: "2026-10-19T12:00:00.000Z", portionsLeft: 2 },
+      { id: "b", mealId: "r2", name: "R2", cookedAt: "2026-10-17T12:00:00.000Z", portionsLeft: 1 },
+      { id: "c", mealId: "gone", name: "Gone", cookedAt: "2026-10-10T12:00:00.000Z", portionsLeft: 1 },
+      { id: "d", mealId: "r1", name: "R1", cookedAt: "2026-10-01T12:00:00.000Z", portionsLeft: 1, storage: "freezer" },
+      { id: "e", mealId: "r1", name: "R1", cookedAt: "2026-10-19T12:00:00.000Z", portionsLeft: 0 },
+    ];
+    const lv = SH.leftoverView(recs, today, shelfData);
+    check("leftoverView: expired + empty dropped, soonest first, lastDay on fridge due today", lv.map((l) => l.id).join() === "b,a,d" && lv[0].lastDay && !lv[1].lastDay && !lv[2].lastDay);
+    check("leftoverView: frozen eat-by = months", lv[2].eatBy === "2027-01-01" && lv[2].storage === "freezer" && lv[0].basis === "estimate");
+
+    {
+      const store = {}, realGet = localStorage.getItem, realSet = localStorage.setItem;
+      localStorage.getItem = (k) => (k === "mp_cooks" ? (store.v ?? null) : realGet.call(localStorage, k));
+      localStorage.setItem = (k, v) => { if (k === "mp_cooks") store.v = v; else realSet.call(localStorage, k, v); };
+      try {
+        const m = { id: "mq", name: "MQ" };
+        const c = MP.Cooks.open(m, null, 3);
+        const t1 = MP.Cooks.freezeOne(c.id);
+        check("freezeOne: fridge -1, twin created with 1", t1.storage === "freezer" && t1.portionsLeft === 1 && t1.id === `${c.id}:frozen` && MP.Cooks.all().find((r) => r.id === c.id).portionsLeft === 2);
+        MP.Cooks.freezeOne(c.id);
+        check("freezeOne: twice increments the same twin", MP.Cooks.all().filter((r) => r.storage === "freezer").length === 1 && MP.Cooks.all().find((r) => r.storage === "freezer").portionsLeft === 2);
+        check("openFor: fridge record before freezer", MP.Cooks.openFor("mq").map((r) => r.storage || "fridge").join() === "fridge,freezer");
+        check("freezeOne: unknown id / a freezer record -> null", MP.Cooks.freezeOne("nope") === null && MP.Cooks.freezeOne(t1.id) === null);
+        MP.Cooks.freezeOne(c.id);
+        check("freezeOne: last fridge portion leaves fridge at 0 (pruned)", !MP.Cooks.all().some((r) => !r.storage) && MP.Cooks.all()[0].portionsLeft === 3);
+        const old = JSON.parse(store.v).map((r) => ({ ...r, cookedAt: new Date(Date.now() - 5 * 86400000).toISOString() }));
+        store.v = JSON.stringify(old);
+        check("prune: a 5-day-old frozen record survives the 3-day fridge window", MP.Cooks.all(shelfData).length === 1);
+        check("discard: closes the record; unknown id false", MP.Cooks.discard(MP.Cooks.all()[0].id) === true && MP.Cooks.all().length === 0 && MP.Cooks.discard("nope") === false);
+      } finally {
+        localStorage.getItem = realGet;
+        localStorage.setItem = realSet;
+        localStorage.removeItem("mp_cooks");
+      }
+    }
+
+    const qp = SL.quickPicks(lib, [...pantry, { name: "frozen veg", storage: "freezer", qty: "1 bag" }], recs, plan, today, opts);
+    check("quickPicks: mix of meal, leftovers (fridge+freezer) and frozen item, in urgency order",
+      qp.map((i) => i.kind + ":" + (i.id || i.name)).join() === "leftover:b,meal:r1,leftover:a,leftover:d,frozen:frozen veg");
+    check("quickPicks: deleted-meal leftover has null protein, frozen item flagged estimate", qp.find((i) => i.id === "b").proteinGramsApprox !== undefined
+      && SL.quickPicks(lib, [], [recs[2]], plan, "2026-10-11", opts)[0].proteinGramsApprox === null && qp[4].basis === "estimate");
+    check("quickPicks: empty freezer + no cooks still answers; n caps", SL.quickPicks(lib, pantry, [], plan, today, opts).length === 1
+      && SL.quickPicks(lib, pantry, recs, plan, today, { ...opts, n: 2 }).length === 2);
+
+    const A = MP.Sync.applyOps, base = [{ name: "Milk", qty: "2 pints", storage: "fridge" }];
+    check("applyOps storage: sets, clears on null/empty/bad, unknown skipped",
+      A([{ name: "Milk" }], [{ type: "storage", name: "milk", storage: "freezer" }])[0].storage === "freezer"
+      && [null, "", "attic"].every((v) => !("storage" in A(base, [{ type: "storage", name: "Milk", storage: v }])[0]))
+      && A(base, [{ type: "storage", name: "Eggs", storage: "fridge" }]).length === 1);
+    check("applyOps add keeps storage (with and without qty)", A(base, [{ type: "add", name: "Milk", qty: "1 pint" }])[0].storage === "fridge"
+      && A(base, [{ type: "add", name: "Milk" }])[0].storage === "fridge");
+  }
+
   lines.push("", `${pass} passed, ${fail} failed`);
   document.getElementById("out").textContent = lines.join("\n");
 })();

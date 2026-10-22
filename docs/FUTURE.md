@@ -260,3 +260,6 @@ already-eaten slot.
 
 - **Near-expiry plan reordering and frozen stock** (parked from Phase 34): `generator.js` stays untouched; `frozenOn`/`frozenMonths` not built.
   **Revisit trigger**: food repeatedly wasted despite the use-it-up list.
+
+- **Entered eat-by on leftovers and waste figures** (parked from Phase 43): leftover eat-by is always the shelf-life estimate and "Threw away" just closes the record; no per-leftover date input, no waste totals.
+  **Revisit trigger**: the estimate repeatedly disagrees with what actually spoiled, or the user wants a waste count.

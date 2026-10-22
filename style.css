@@ -522,6 +522,15 @@ button.ghost.danger { color: var(--danger); border-color: var(--danger); }
 .today-count strong { min-width: 1.5rem; text-align: center; color: var(--text); }
 .today-card { animation: today-in .25s ease-out; }
 @keyframes today-in { from { opacity: 0; transform: translateY(6px); } }
+/* Phase 43: leftovers on the Today card, storage select on pantry rows */
+.leftovers { margin-bottom: .5rem; }
+.leftovers ul { list-style: none; margin: .3rem 0 0; padding: 0; display: grid; gap: .4rem; }
+.leftover-row { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem; animation: today-in .25s ease-out; }
+.leftover-name { flex: 1 1 10rem; }
+.leftover-when { font-size: .8rem; color: var(--text-dim); }
+.leftover-row.last-day .leftover-when { color: var(--butter); font-weight: 700; }
+.stor-sel { font-size: .8rem; max-width: 9rem; }
+@media (prefers-reduced-motion: reduce) { .leftover-row { animation: none; } }
 @media (prefers-reduced-motion: reduce) { .today-card { animation: none; } .today-chip { transition: none; } }
 .gap-list { margin: .3rem 0 0; padding-left: 1.1rem; }
 .gap-list .gap-flag { color: var(--danger); }

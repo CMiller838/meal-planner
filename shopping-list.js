@@ -97,24 +97,89 @@
     return idx;
   }
 
-  /** Count of a meal's ingredients on hand in sufficient quantity.
-   * Absent -> no. Unparseable/unit-mismatched/amount-unknown -> yes
-   * (fallback: "present, amount unknown"). Both parseable + unit-matched ->
-   * only enough if stock.value >= need.value. */
+  /** One ingredient on hand in sufficient quantity? Absent -> no.
+   * Unparseable/unit-mismatched/amount-unknown -> yes (fallback: "present,
+   * amount unknown"). Both parseable + unit-matched -> only enough if
+   * stock.value >= need.value. */
+  function hasEnough(ing, have) {
+    const stock = have[normalizeKey(ing.key)];
+    if (stock === undefined) return false;
+    const need = parseQty(ing.qty);
+    const stockQty = parseQty(stock);
+    if (!need || !stockQty || stockQty.unit !== need.unit) return true;
+    return stockQty.value >= need.value;
+  }
+
+  /** Count of a meal's ingredients on hand in sufficient quantity. */
   function pantryOverlap(meal, have) {
-    return (meal.ingredients || []).filter((ing) => {
-      const key = normalizeKey(ing.key);
-      const stock = have[key];
-      if (stock === undefined) return false;
-      const need = parseQty(ing.qty);
-      const stockQty = parseQty(stock);
-      if (!need || !stockQty || stockQty.unit !== need.unit) return true;
-      return stockQty.value >= need.value;
-    }).length;
+    return (meal.ingredients || []).filter((ing) => hasEnough(ing, have)).length;
   }
 
   function isSkippedIngredient(ing) {
     return ing.key.startsWith("leftover_") || /leftover|from roast/i.test(ing.qty || "");
+  }
+
+  const byUrgency = (a, b) => {
+    const da = a.daysLeft ?? a.urgency?.daysLeft ?? null, db = b.daysLeft ?? b.urgency?.daysLeft ?? null;
+    if (da !== db) return da === null ? 1 : db === null ? -1 : da - db;
+    return (b.proteinGramsApprox ?? -1) - (a.proteinGramsApprox ?? -1);
+  };
+  const clampN = (n, def) => Math.min(20, Math.max(1, Number.isInteger(n) ? n : def));
+
+  /** Library meals split by what the pantry covers: ready = nothing missing,
+   * nearMiss = 1-2 missing. Skipped (leftover_) ingredients don't count, hard
+   * exclusions apply. Soonest use-by among the pantry items used first, then protein. */
+  function cookable(library, pantryItems, plan, todayIso, opts) {
+    const o = opts || {};
+    const items = (Array.isArray(pantryItems) ? pantryItems : []).filter((i) => i && typeof i.name === "string" && !i.out);
+    const have = pantryIndex({ items });
+    const itemByKey = Object.fromEntries(items.map((i) => [normalizeKey(i.name), i]));
+    const n = clampN(o.n, 10);
+    const ready = [], nearMiss = [];
+    for (const meal of Array.isArray(library) ? library : []) {
+      if (!meal || !MP.Exclusions.check(meal).ok) continue;
+      const ings = (meal.ingredients || []).filter((ing) => !isSkippedIngredient(ing));
+      if (!ings.length) continue;
+      const missing = ings.filter((ing) => !hasEnough(ing, have)).map((ing) => ing.key);
+      if (missing.length > 2) continue;
+      let urgency = null;
+      for (const ing of ings) {
+        const item = itemByKey[normalizeKey(ing.key)];
+        if (!item) continue;
+        const entered = MP.ShelfLife.isIsoDate(item.useBy);
+        const useBy = entered ? item.useBy : MP.ShelfLife.estimateUseBy(item, plan, todayIso, o.shelfData);
+        if (!useBy) continue;
+        const daysLeft = Math.round((Date.parse(useBy) - Date.parse(todayIso)) / 86400000);
+        if (!urgency || daysLeft < urgency.daysLeft) urgency = { name: item.name, useBy, basis: entered ? "entered" : "estimate", daysLeft };
+      }
+      const protein = o.tags && o.targets ? MP.Nutrition.dayCoverage([meal], o.tags, o.targets).proteinGramsApprox : 0;
+      (missing.length ? nearMiss : ready).push({ id: meal.id, name: meal.name, prepEffort: meal.prepEffort || null, proteinGramsApprox: protein, missing, urgency });
+    }
+    return { ready: ready.sort(byUrgency).slice(0, n), nearMiss: nearMiss.sort(byUrgency).slice(0, n) };
+  }
+
+  /** What to eat on a night you're not cooking: open leftovers (fridge and freezer),
+   * freezer pantry items, and ready quick library meals; urgency then protein, capped at n. */
+  function quickPicks(library, pantryItems, cooks, plan, todayIso, opts) {
+    const o = opts || {};
+    const SL = MP.ShelfLife;
+    const byId = Object.fromEntries((Array.isArray(library) ? library : []).map((m) => [m.id, m]));
+    const out = SL.leftoverView(cooks, todayIso, o.shelfData).map((l) => {
+      const meal = byId[l.mealId];
+      const protein = meal && o.tags && o.targets ? MP.Nutrition.dayCoverage([meal], o.tags, o.targets).proteinGramsApprox : null;
+      return { kind: "leftover", id: l.id, mealId: l.mealId, name: l.name, portionsLeft: l.portionsLeft, storage: l.storage, eatBy: l.eatBy, basis: "estimate", daysLeft: l.daysLeft, proteinGramsApprox: protein };
+    });
+    for (const item of Array.isArray(pantryItems) ? pantryItems : []) {
+      if (!item || typeof item.name !== "string" || item.out) continue;
+      const st = SL.storageFor(item, o.shelfData);
+      if (!st || st.storage !== "freezer") continue;
+      const entered = SL.isIsoDate(item.useBy);
+      const useBy = entered ? item.useBy : SL.estimateUseBy(item, plan, todayIso, o.shelfData);
+      out.push({ kind: "frozen", name: item.name, qty: item.qty ?? null, useBy: useBy || null, basis: useBy ? (entered ? "entered" : "estimate") : null, daysLeft: useBy ? Math.round((Date.parse(useBy) - Date.parse(todayIso)) / 86400000) : null, storageBasis: st.basis });
+    }
+    const { ready } = cookable(library, pantryItems, plan, todayIso, { ...o, n: 20 });
+    ready.filter((p) => p.prepEffort === "quick").forEach((p) => out.push({ kind: "meal", ...p }));
+    return out.sort(byUrgency).slice(0, clampN(o.n, 5));
   }
 
   /** priceFor: exact items hit -> longest keyword substring -> categories.default.
@@ -392,5 +457,5 @@
     return { buy, covered };
   }
 
-  MP.ShoppingList = { scaleMeal, scaleShortfall, mealsUsing, load, loadGroups, groupIndex, buildLists, parseQty, packsFor, normalizeKey, pantryIndex, pantryOverlap, remainingQty, eatPlan, priceFor, mealCost, costIndex, costTier, costBadgeHtml };
+  MP.ShoppingList = { scaleMeal, scaleShortfall, mealsUsing, load, loadGroups, groupIndex, buildLists, parseQty, packsFor, normalizeKey, pantryIndex, pantryOverlap, hasEnough, cookable, quickPicks, remainingQty, eatPlan, priceFor, mealCost, costIndex, costTier, costBadgeHtml };
 })(typeof globalThis !== "undefined" ? globalThis : this);

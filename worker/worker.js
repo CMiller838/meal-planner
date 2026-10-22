@@ -13,6 +13,7 @@ import "../products.js";
 import "../ratings.js";
 import SHELF_DATA from "../shelf-life.json";
 import SUBS from "../substitutions.json";
+import SUB_GROUPS from "../substitution-groups.json";
 import TAGS from "../ingredient-nutrient-tags.json";
 import TARGETS from "../nutrition-targets.json";
 import PLAN_VOCAB from "../plan-preferences.json";
@@ -33,7 +34,7 @@ const KEYS = {
   "/library": "library", "/planFlag": "planFlag", "/pantry": "pantry", "/adhoc": "adhoc",
   "/plan": "plan", "/placements": "placements", "/prefs": "prefs",
   "/eaten-log": "eatenLog", "/planPrefs": "planPrefs", "/eat-requests": "eatRequests",
-  "/dayHints": "dayHints", "/today": "today", "/products": "products", "/settings": "settings",
+  "/dayHints": "dayHints", "/today": "today", "/products": "products", "/settings": "settings", "/cooks": "cooks",
 };
 // The personal assistant's own token (ASSISTANT_TOKEN, never Hermes's
 // AUTH_TOKEN) reaches only these method+path pairs: read the plan side, queue
@@ -44,7 +45,7 @@ const ASSISTANT_ALLOWED = new Set([
   "GET /discover", "GET /pantry", "PUT /pantry", "GET /adhoc", "PUT /adhoc", "PUT /planFlag",
   "GET /placements", "PUT /placements", "GET /prefs", "PUT /library", "GET /nutrition",
   "GET /dayHints", "PUT /dayHints", "PUT /meal-method", "GET /today", "PUT /today", "GET /products", "PUT /products",
-  "GET /expiring", "GET /day", "GET /product-ranking", "GET /ratings", "GET /why", "GET /scale",
+  "GET /expiring", "GET /day", "GET /product-ranking", "GET /ratings", "GET /why", "GET /scale", "GET /cookable", "GET /substitutions", "GET /leftovers", "GET /quick",
   "GET /drafts", "POST /drafts", "GET /settings", "PUT /settings",
 ]);
 const METHOD_PATH = /^\/meal\/([^/]+)\/method$/;
@@ -380,6 +381,47 @@ async function expiring(params, env) {
   return json(200, { days, today, items: ShelfLife.expiringItems(items, plan, today, days, SHELF_DATA) });
 }
 
+/** Shared by /cookable, /leftovers, /quick: validated today + n, and the KV mirrors (null/malformed -> empty). */
+async function readMirrors(params, env, defN) {
+  const nRaw = params.get("n");
+  const n = nRaw == null ? defN : /^\d+$/.test(nRaw) ? Number(nRaw) : 0;
+  if (n < 1 || n > 20) return { error: json(400, "n must be 1-20") };
+  const today = params.get("today") || new Date().toISOString().slice(0, 10);
+  if (!ShelfLife.isIsoDate(today)) return { error: json(400, "today must be YYYY-MM-DD") };
+  const read = async (k) => {
+    try { return JSON.parse(await env.MP_KV.get(k)); } catch (e) { return null; }
+  };
+  const [lib, pantry, plan, cooks] = await Promise.all([read("library"), read("pantry"), read("plan"), read("cooks")]);
+  const meals = Array.isArray(lib) ? lib : lib && Array.isArray(lib.meals) ? lib.meals : [];
+  return {
+    n, today, plan, meals: meals.filter((m) => m && typeof m === "object"),
+    items: pantry && Array.isArray(pantry.items) ? pantry.items : [],
+    cooks: Array.isArray(cooks) ? cooks : [],
+    opts: { n, tags: TAGS, targets: TARGETS, shelfData: SHELF_DATA },
+  };
+}
+
+/** GET /cookable?n=: library meals the pantry covers (ready) or nearly covers (1-2 missing). */
+async function cookable(params, env) {
+  const m = await readMirrors(params, env, 10);
+  if (m.error) return m.error;
+  return json(200, { today: m.today, ...ShoppingList.cookable(m.meals, m.items, m.plan, m.today, m.opts) });
+}
+
+/** GET /leftovers: open cooked portions, fridge and freezer, soonest eat-by first. */
+async function leftovers(params, env) {
+  const m = await readMirrors(params, env, 10);
+  if (m.error) return m.error;
+  return json(200, { today: m.today, leftovers: ShelfLife.leftoverView(m.cooks, m.today, SHELF_DATA) });
+}
+
+/** GET /quick?n=: what to eat on a night you're not cooking. Suggestions only. */
+async function quick(params, env) {
+  const m = await readMirrors(params, env, 5);
+  if (m.error) return m.error;
+  return json(200, { today: m.today, items: ShoppingList.quickPicks(m.meals, m.items, m.cooks, m.plan, m.today, m.opts) });
+}
+
 /** GET /product-ranking: products by cost per 25 g protein, cheapest first (read-only; uses KV products + pack-sizes.json). */
 async function productRanking(env) {
   let parsed = null;
@@ -675,6 +717,7 @@ function itemsError(parsed) {
     if (qErr) return qErr;
     if (item.out != null && typeof item.out !== "boolean") return "out must be a boolean";
     if (item.useBy != null && !ShelfLife.isIsoDate(item.useBy)) return "useBy must be YYYY-MM-DD";
+    if (item.storage != null && !ShelfLife.STORAGES.includes(item.storage)) return "storage must be fridge, freezer or cupboard";
   }
   return null;
 }
@@ -779,6 +822,19 @@ function eatenLogError(parsed) {
   return null;
 }
 
+/** @param {any} parsed  the PUT /cooks body (a bare array of cook records)  @returns {string|null} */
+function cooksError(parsed) {
+  if (!Array.isArray(parsed)) return "expected an array";
+  if (parsed.length > 200) return "at most 200 records";
+  for (const r of parsed) {
+    if (typeof r !== "object" || r === null || Array.isArray(r)) return "each record must be an object";
+    for (const f of ["id", "mealId", "name", "cookedAt"]) if (typeof r[f] !== "string" || !r[f]) return "each record needs a non-empty " + f;
+    if (!Number.isInteger(r.portionsLeft) || r.portionsLeft < 0) return "portionsLeft must be an integer >= 0";
+    if (r.storage != null && r.storage !== "fridge" && r.storage !== "freezer") return "storage must be fridge or freezer";
+  }
+  return null;
+}
+
 const PRODUCT_PER = ["100g", "100ml"];
 const PRODUCT_BASES = ["label", "off", "cofid", "usda", "estimate"];
 
@@ -827,6 +883,7 @@ const VALIDATE = {
   placements: placementsError,
   prefs: prefsError,
   eatenLog: eatenLogError,
+  cooks: cooksError,
   planPrefs: planPrefsError,
   eatRequests: eatRequestsError,
   dayHints: dayHintsError,
@@ -914,6 +971,16 @@ export default {
       return expiring(url.searchParams, env);
     }
 
+    const READ_ROUTES = { "/cookable": cookable, "/leftovers": leftovers, "/quick": quick };
+    if (READ_ROUTES[url.pathname]) {
+      if (request.method !== "GET") return json(405, "method not allowed");
+      return READ_ROUTES[url.pathname](url.searchParams, env);
+    }
+    if (url.pathname === "/substitutions") {
+      if (request.method !== "GET") return json(405, "method not allowed");
+      return json(200, SUB_GROUPS);
+    }
+
     if (url.pathname === "/product-ranking") {
       if (request.method !== "GET") return json(405, "method not allowed");
       return productRanking(env);
@@ -942,7 +1009,7 @@ export default {
       }
       // eaten-log is the one key whose wire shape is a bare array (D1); every
       // other key stays an object.
-      if (kvKey === "eatenLog") {
+      if (kvKey === "eatenLog" || kvKey === "cooks") {
         if (!Array.isArray(parsed)) return json(400, "expected a JSON array");
       } else if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
         return json(400, "expected a JSON object");

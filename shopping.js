@@ -357,6 +357,14 @@
       <button class="prod-chip muted" data-useby="${esc(item.name)}">Add use-by</button>`;
   }
 
+  function storageHtml(item) {
+    const def = MP.ShelfLife.storageFor({ name: item.name }, shelfData);
+    const cur = MP.ShelfLife.STORAGES.includes(item.storage) ? item.storage : "";
+    return `<select class="stor-sel" data-stor="${esc(item.name)}" aria-label="Storage for ${esc(item.name)}">
+      <option value=""${cur ? "" : " selected"}>${def ? `${def.storage} (est.)` : "storage?"}</option>
+      ${MP.ShelfLife.STORAGES.map((s) => `<option value="${s}"${s === cur ? " selected" : ""}>${s}</option>`).join("")}</select>`;
+  }
+
   function pantryHtml(items, products) {
     const today = localIso(), plan = loadPlan();
     expiring = MP.ShelfLife.expiringItems(items, plan, today, 2, shelfData);
@@ -366,6 +374,7 @@
       return `<li class="shop-line prod-row"><span class="shop-qty">${esc(MP.qtyText(item.qty))}</span>
         <span class="shop-name">${esc(item.name)}</span>
         ${useByHtml(item, today, plan)}
+        ${storageHtml(item)}
         ${item.out ? `<button class="prod-chip" data-restock="${esc(item.name)}">Out — restocked?</button>` : `<button class="prod-chip muted" data-out="${esc(item.name)}">Ran out</button>`}
         ${p ? chipHtml(p) : `<button class="prod-chip muted" data-link="${esc(key)}">Link product</button>`}</li>`;
     });
@@ -447,6 +456,7 @@
     root.querySelectorAll("[data-open]").forEach((b) => b.addEventListener("click", () => viewProduct(products.find((p) => p.id === b.dataset.open))));
     root.querySelectorAll("[data-link]").forEach((b) => b.addEventListener("click", () => scanSheet(b.dataset.link)));
     root.querySelectorAll("[data-useby]").forEach((b) => b.addEventListener("click", () => useByDialog(b.dataset.useby)));
+    root.querySelectorAll("[data-stor]").forEach((sel) => sel.addEventListener("change", () => { pantryOp({ type: "storage", name: sel.dataset.stor, storage: sel.value || null }); renderPantry(); }));
     root.querySelectorAll("[data-out]").forEach((b) => b.addEventListener("click", () => { pantryOp({ type: "out", name: b.dataset.out }); renderPantry(); }));
     root.querySelectorAll("[data-restock]").forEach((b) => b.addEventListener("click", () => { pantryOp({ type: "add", name: b.dataset.restock }); renderPantry(); }));
     const useup = root.querySelector("#useup-btn");

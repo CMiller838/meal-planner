@@ -149,16 +149,72 @@
     return normCat[norm(name)] || null;
   }
 
+  const STORAGES = ["fridge", "freezer", "cupboard"];
+
+  /** Calendar-month add, day clamped to the target month's end (31 Jan + 1 -> 28/29 Feb). */
+  function addMonths(iso, n) {
+    const d = new Date(isoMs(iso));
+    const day = d.getUTCDate();
+    d.setUTCDate(1);
+    d.setUTCMonth(d.getUTCMonth() + n);
+    const last = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0)).getUTCDate();
+    d.setUTCDate(Math.min(day, last));
+    return d.toISOString().slice(0, 10);
+  }
+
+  /** Where an item lives: entered `storage` wins, else the category default
+   * (fridgeDays -> fridge, frozenMonths only -> freezer, ambient -> cupboard);
+   * uncategorised -> null (never guessed). A bad stored value counts as blank. */
+  function storageFor(item, shelfData) {
+    if (!item) return null;
+    if (STORAGES.includes(item.storage)) return { storage: item.storage, basis: "entered" };
+    const info = (shelfData || cache || {})[categoryFor(item.name)];
+    if (!info) return null;
+    if (info.fridgeDays != null) return { storage: "fridge", basis: "estimate" };
+    if (info.frozenMonths != null) return { storage: "freezer", basis: "estimate" };
+    if (info.ambient) return { storage: "cupboard", basis: "estimate" };
+    return null;
+  }
+
   /** Shelf-life estimate for an item with no entered date: most recent shop day
-   * on or before today + the category's fridgeDays. Needs a plan; ambient or
-   * uncategorised items get null (never guessed). */
+   * on or before today + the category's fridgeDays (frozenMonths months when it
+   * lives in the freezer). Needs a plan; ambient or uncategorised items get
+   * null (never guessed). */
   function estimateUseBy(item, plan, todayIso, shelfData) {
     if (!item || !plan || !isIsoDate(plan.startDate) || !isIsoDate(todayIso)) return null;
     const info = (shelfData || cache || {})[categoryFor(item.name)];
-    if (!info || info.ambient || info.fridgeDays == null) return null;
+    if (!info || info.ambient) return null;
     const since = Math.floor((isoMs(todayIso) - isoMs(plan.startDate)) / DAY);
     if (since < 0) return null;
-    return addDays(plan.startDate, since >= 7 ? 7 + info.fridgeDays : info.fridgeDays);
+    const shopDay = addDays(plan.startDate, since >= 7 ? 7 : 0);
+    const st = storageFor(item, shelfData);
+    if (st && st.storage === "freezer") return info.frozenMonths != null ? addMonths(shopDay, info.frozenMonths) : null;
+    if (info.fridgeDays == null) return null;
+    return addDays(shopDay, info.fridgeDays);
+  }
+
+  /** A cooked-leftover record's eat-by: cooked date + fridgeDays, or + frozenMonths if in the freezer. */
+  function leftoverEatBy(record, shelfData) {
+    const info = (shelfData || cache || {}).cooked_leftovers;
+    const day = record && typeof record.cookedAt === "string" ? record.cookedAt.slice(0, 10) : "";
+    if (!info || !isIsoDate(day)) return null;
+    if (record.storage === "freezer") return info.frozenMonths != null ? addMonths(day, info.frozenMonths) : null;
+    return info.fridgeDays != null ? addDays(day, info.fridgeDays) : null;
+  }
+
+  /** Open leftovers still in date, soonest first. lastDay = a fridge portion due today. */
+  function leftoverView(records, todayIso, shelfData) {
+    const out = [];
+    for (const r of Array.isArray(records) ? records : []) {
+      if (!r || !(r.portionsLeft > 0)) continue;
+      const eatBy = leftoverEatBy(r, shelfData);
+      if (!eatBy) continue;
+      const daysLeft = Math.round((isoMs(eatBy) - isoMs(todayIso)) / DAY);
+      if (daysLeft < 0) continue;
+      const storage = r.storage === "freezer" ? "freezer" : "fridge";
+      out.push({ id: r.id, mealId: r.mealId, name: r.name, portionsLeft: r.portionsLeft, storage, cookedAt: r.cookedAt, eatBy, basis: "estimate", daysLeft, lastDay: storage === "fridge" && daysLeft === 0 });
+    }
+    return out.sort((a, b) => a.daysLeft - b.daysLeft);
   }
 
   /** Pantry items whose use-by (entered, else estimated) falls within `days` of
@@ -177,5 +233,5 @@
     return out.sort((a, b) => a.daysLeft - b.daysLeft);
   }
 
-  MP.ShelfLife = { load, checkPlanWarnings, shopDayFor, rawSafeOn, INGREDIENT_CATEGORY, isIsoDate, estimateUseBy, expiringItems };
+  MP.ShelfLife = { load, checkPlanWarnings, shopDayFor, rawSafeOn, INGREDIENT_CATEGORY, isIsoDate, estimateUseBy, expiringItems, storageFor, addMonths, leftoverEatBy, leftoverView, STORAGES };
 })(typeof globalThis !== "undefined" ? globalThis : this);

@@ -170,13 +170,13 @@ Installable as a PWA on Android Chrome via `manifest.json` + `sw.js`.
   call site stays a bare, instant call.
 - **A pantry/ad-hoc `qty` (Phase 30) is a free-text string or a structured `{ value, unit, raw }` object**, never a
   second sibling field. `MP.ShoppingList.parseQty` is the only reader of its structure and `MP.qtyText` (`data.js`) the
-  only reader of its display text. Quantity, plus an optional `useBy` (Phase 34): no price, pack size or purchase date on a pantry item (pricing is
+  only reader of its display text. Quantity, plus an optional `useBy` (Phase 34) and `storage` (Phase 43, fridge|freezer|cupboard): no price, pack size or purchase date on a pantry item (pricing is
   `pack-sizes.json`'s job, shelf-life stays category-based). Quantities arrive only through the existing `PUT /pantry` /
   `PUT /adhoc` relay: no new endpoint, route or KV key. Library ingredient `qty` (`meals.json`) stays free text.
   **A computed remainder (Phase 31) is always structured**: `MP.ShoppingList.remainingQty` is its only producer (the
   pantry is a running balance, never a re-rounded display string). `pantryOverlap` means "on hand **in sufficient
   quantity**": absent is not counted, unparseable/unit-mismatched/amount-unknown stock falls back to "present".
-  `commitCook` (`plan.js`) is still the only writer of `qty`; the Pantry tab's date field also writes `useBy`, and only that.
+  `commitCook` (`plan.js`) is still the only writer of `qty`; the Pantry tab also writes `useBy` and `storage`, and only those. `MP.Cooks` is mirrored to KV `cooks` via `MP.Sync.pushCooks` (Phase 43, `PUT /cooks` is Hermes-only); the portion-eat path still never touches the pantry.
 
 ## Working style: plan with the user, build and test alone
 

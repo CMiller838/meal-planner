@@ -109,6 +109,19 @@ for (const [vp, size] of Object.entries({ pc: { width: 1440, height: 900 }, phon
     await page.waitForSelector('.useby:not(.over)');
     if (await page.locator('.useup-strip').count()) throw new Error('strip should be empty after moving the date');
   });
+  await step('plan: Today card lists a seeded leftover and Freeze 1 moves a portion to the freezer', async () => {
+    await page.goto(`${base}/plan.html`);
+    await page.evaluate(async () => {
+      const lib = await fetch('meals.json').then(r => r.json());
+      const m = (Array.isArray(lib) ? lib : lib.meals)[0];
+      localStorage.setItem('mp_cooks', JSON.stringify([{ id: `${m.id}:seed`, mealId: m.id, name: m.name, variantId: null, cookedAt: new Date().toISOString(), portionsLeft: 2 }]));
+    });
+    await page.reload();
+    await page.waitForSelector('.leftover-row [data-left-freeze]');
+    await page.click('[data-left-freeze]');
+    await page.waitForFunction(() => document.querySelectorAll('.leftover-row').length === 2 && /freezer/.test(document.body.innerText));
+    await shot('leftovers');
+  });
   await step('no uncaught page errors during the walk', async () => { if (errs.length) throw new Error(errs[0]); });
   await ctx.close();
 }
