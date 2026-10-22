@@ -568,7 +568,7 @@ free-text quantities ("1, diced", "2 cloves") scale (scale only when a number ca
 flagged "check this"), and a cap on portions. **Verify:** scaling to the meal's own servings returns the original; an
 unparseable line is flagged and never silently changed. Requires Phases 34 and 43 (old 47 merged into 43; supplies `frozenMonths` storage helpers). Assistant side: `notion_assistant` Phase 83.
 
-## Phase 54: Today route (one source for the Today screen) [M] — not started
+## Phase 54: Today route (one source for the Today screen) [M] — built 2026-10-22, live checks pending
 
 **Added 2026-10-19.** `GET /day` (not `/today`, which is Phase 41's raw counters record; spec 2026-10-22) returns what a Today screen needs in one call: the day's planned meals and their state
 (planned, cooked, eaten), routine items due and done (Phase 41), counters (Phase 41), expiring-soon items (Phase 34), leftovers

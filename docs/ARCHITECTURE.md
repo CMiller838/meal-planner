@@ -509,3 +509,6 @@ no small-pool fallback, `/discover`, `mealdb.js` and the add-meal check reject t
 chip prefer/avoid groups (reorder only). While `budgetTarget > 0` it overrides `mp_planPrefs.budgetTarget` at read time
 (`PlanPrefs.get`) and the slider is disabled. Phase 48's `logWrite` was absent when built, so `PUT /settings` is not logged.
 Spec: `.claude/specs/phase52.md`.
+
+## v8 - day route (Phase 54)
+`GET /day?date=&gym=1` (both tokens, read-only) returns the Today screen as one ordered card list (meal, routine, counter, expiring, leftover, coverage) plus `assembledAt`. It reuses `dayView` (shared with `/nutrition?date=`), `MP.dueRoutines` (moved to `data.js` so the Worker can import it; `MP.Today.dueRoutines` delegates) and `ShelfLife.expiringItems`; leftovers stay `[]` until Phase 43's `leftoverView` exists. `/today` is unchanged.

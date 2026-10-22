@@ -407,6 +407,11 @@
   MP.effectiveMeal = effectiveMeal;
   MP.applySubs = applySubs;
   MP.subsLabel = subsLabel;
+  /** Pure: daily routines always, gymDays only when today.gym. Shared by MP.Today (browser) and the Worker's /day. */
+  MP.dueRoutines = function (meals, today) {
+    return meals.filter((m) => m.routine && (m.routine.when === "daily" || (m.routine.when === "gymDays" && today.gym)))
+      .sort((a, b) => a.routine.time.localeCompare(b.routine.time));
+  };
   MP.isBatch = isBatch;
   MP.methodOf = methodOf;
   MP.methodHtml = methodHtml;

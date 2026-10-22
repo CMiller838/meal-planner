@@ -27,6 +27,7 @@ const ShoppingList = globalThis.MP.ShoppingList;
 const ShelfLife = globalThis.MP.ShelfLife;
 const Products = globalThis.MP.Products;
 const Ratings = globalThis.MP.Ratings;
+const MPData = globalThis.MP;
 
 const KEYS = {
   "/library": "library", "/planFlag": "planFlag", "/pantry": "pantry", "/adhoc": "adhoc",
@@ -43,7 +44,7 @@ const ASSISTANT_ALLOWED = new Set([
   "GET /discover", "GET /pantry", "PUT /pantry", "GET /adhoc", "PUT /adhoc", "PUT /planFlag",
   "GET /placements", "PUT /placements", "GET /prefs", "PUT /library", "GET /nutrition",
   "GET /dayHints", "PUT /dayHints", "PUT /meal-method", "GET /today", "PUT /today", "GET /products", "PUT /products",
-  "GET /expiring", "GET /product-ranking", "GET /ratings", "GET /why", "GET /scale",
+  "GET /expiring", "GET /day", "GET /product-ranking", "GET /ratings", "GET /why", "GET /scale",
   "GET /drafts", "POST /drafts", "GET /settings", "PUT /settings",
 ]);
 const METHOD_PATH = /^\/meal\/([^/]+)\/method$/;
@@ -265,6 +266,59 @@ async function ranking(params, env) {
   });
 }
 
+/** One day's eaten log, planned slots and coverage: shared by GET /nutrition?date= and GET /day. */
+async function dayView(date, gym, { byId, log, planRaw, dayFmt }, env) {
+  const baseTargets = Nutrition.withProfile(TARGETS, await readSettings(env));
+  const targets = gym ? Nutrition.withGymDay(baseTargets) : baseTargets;
+  const eatenToday = log.filter((e) => dayFmt.format(new Date(e.eatenAt)) === date);
+  const { cov, missing, partial } = Nutrition.eatenDayCoverage(eatenToday, byId, TAGS, targets);
+  const planned = [];
+  if (planRaw && Array.isArray(planRaw.days) && planRaw.startDate) {
+    const start = Date.parse(planRaw.startDate + "T00:00:00Z");
+    const idx = Math.round((Date.parse(date + "T00:00:00Z") - start) / 86400000);
+    const day = planRaw.days.find((d) => d.day === idx + 1);
+    for (const slot of SLOT_TYPES) {
+      const v = day && day.slots && day.slots[slot];
+      if (v && v.mealId && !v.eatenAt) planned.push({ slot, mealId: v.mealId, name: (byId[v.mealId] || {}).name || v.mealId });
+    }
+  }
+  return { eatenToday, planned, cov, missing, partial };
+}
+
+/** GET /day?date=&gym=1: the Today screen as one flat, ordered card list (read-only; /today stays the raw counters). */
+async function day(params, env) {
+  const dayFmt = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/London" });
+  const date = params.has("date") ? params.get("date") : dayFmt.format(new Date());
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || isNaN(Date.parse(date)) || new Date(date).toISOString().slice(0, 10) !== date) return json(400, "date must be YYYY-MM-DD");
+  const gRaw = params.get("gym");
+  if (gRaw !== null && gRaw !== "0" && gRaw !== "1") return json(400, "gym must be 0 or 1");
+  const gym = gRaw === "1" && !!TARGETS.gymDay;
+  const read = async (k) => {
+    try { return JSON.parse(await env.MP_KV.get(k)); } catch (e) { return null; }
+  };
+  const [libRaw, planRaw, logRaw, pantryRaw, todayRaw, cooksRaw] = await Promise.all(["library", "plan", "eatenLog", "pantry", "today", "cooks"].map(read));
+  const meals = Array.isArray(libRaw) ? libRaw : libRaw && Array.isArray(libRaw.meals) ? libRaw.meals : [];
+  const byId = Object.fromEntries(meals.map((m) => [m.id, m]));
+  const log = Array.isArray(logRaw) ? logRaw : [];
+  const v = await dayView(date, gym, { byId, log, planRaw, dayFmt }, env);
+  const t = todayRaw && typeof todayRaw === "object" && todayRaw.date === date ? todayRaw : null;
+  const count = (f) => (t && Number.isInteger(t[f]) && t[f] > 0 ? Math.min(t[f], 99) : 0);
+  const done = t && Array.isArray(t.routineDone) ? t.routineDone : [];
+  const cards = [];
+  for (const p of v.planned) cards.push({ type: "meal", slot: p.slot, mealId: p.mealId, name: p.name, state: "planned" });
+  for (const e of v.eatenToday) cards.push({ type: "meal", slot: null, mealId: e.mealId, name: e.name, state: "eaten", eatenAt: e.eatenAt });
+  for (const m of MPData.dueRoutines(meals, { gym: gym || !!(t && t.gym) })) cards.push({ type: "routine", mealId: m.id, name: m.name, done: done.includes(m.id) });
+  for (const c of ["water", "caffeine"]) cards.push({ type: "counter", counter: c, count: count(c) });
+  const items = pantryRaw && Array.isArray(pantryRaw.items) ? pantryRaw.items : [];
+  for (const x of ShelfLife.expiringItems(items, planRaw, date, 2, SHELF_DATA)) cards.push({ type: "expiring", name: x.name, useBy: x.useBy, basis: x.basis, daysLeft: x.daysLeft });
+  // Phase 43 not built yet: leftoverView absent or cooks malformed -> no leftover cards.
+  if (typeof ShelfLife.leftoverView === "function" && cooksRaw) {
+    try { for (const l of ShelfLife.leftoverView(cooksRaw, date)) cards.push({ type: "leftover", ...l }); } catch (e) { /* malformed cooks */ }
+  }
+  cards.push({ type: "coverage", proteinGramsApprox: v.cov.proteinGramsApprox, proteinTarget: v.cov.proteinTarget, missing: v.missing, partial: v.partial });
+  return json(200, { date, assembledAt: new Date().toISOString(), gym, cards });
+}
+
 /** One local day's approximate nutrition: what the eaten log says was eaten that
  *  day, scored with the app's own dayCoverage, plus the day's uneaten planned
  *  slots and (when protein is short) a few library meals ranked for protein.
@@ -298,25 +352,11 @@ async function nutrition(params, env) {
     return json(200, { from: dates[0], to: dates[dates.length - 1], nutrients: g.nutrients, notLogged: g.notLogged });
   }
   const gym = params.get("gym") === "1" && !!TARGETS.gymDay;
-  const baseTargets = Nutrition.withProfile(TARGETS, await readSettings(env));
-  const targets = gym ? Nutrition.withGymDay(baseTargets) : baseTargets;
-  const eatenToday = log.filter((e) => dayFmt.format(new Date(e.eatenAt)) === date);
-  const { cov, missing, partial } = Nutrition.eatenDayCoverage(eatenToday, byId, TAGS, targets);
-
-  const planned = [];
-  if (planRaw && Array.isArray(planRaw.days) && planRaw.startDate) {
-    const start = Date.parse(planRaw.startDate + "T00:00:00Z");
-    const idx = Math.round((Date.parse(date + "T00:00:00Z") - start) / 86400000);
-    const day = planRaw.days.find((d) => d.day === idx + 1);
-    for (const slot of SLOT_TYPES) {
-      const v = day && day.slots && day.slots[slot];
-      if (v && v.mealId && !v.eatenAt) planned.push({ slot, name: (byId[v.mealId] || {}).name || v.mealId });
-    }
-  }
+  const { eatenToday, planned, cov, missing, partial } = await dayView(date, gym, { meals, byId, log, planRaw, dayFmt }, env);
   const short = cov.proteinGramsApprox < 0.8 * cov.proteinTarget;
   const swaps = short ? Nutrition.rankByGap(meals, ["protein"], TAGS).slice(0, 3).map((m) => ({ id: m.id, name: m.name })) : [];
   return json(200, {
-    date, eaten: eatenToday.map((e) => e.name), planned,
+    date, eaten: eatenToday.map((e) => e.name), planned: planned.map(({ slot, name }) => ({ slot, name })),
     ...(gym ? { gym: true } : {}),
     proteinGramsApprox: cov.proteinGramsApprox, proteinTarget: cov.proteinTarget, missing, partial, swaps,
   });
@@ -862,6 +902,11 @@ export default {
     if (url.pathname === "/nutrition") {
       if (request.method !== "GET") return json(405, "method not allowed");
       return nutrition(url.searchParams, env);
+    }
+
+    if (url.pathname === "/day") {
+      if (request.method !== "GET") return json(405, "method not allowed");
+      return day(url.searchParams, env);
     }
 
     if (url.pathname === "/expiring") {

@@ -620,3 +620,6 @@ Requires Phase 43 (storage/`frozenMonths` helpers) built first. Decided: scale a
 
 ## Phase 54: Day route: one read-only source for the Today screen
 - Spec: `.claude/specs/phase54.md`
+- [x] Logic: dayView extraction, dayCards, `GET /day` + `ASSISTANT_ALLOWED`, worker_test cases, `MP.dueRoutines` Worker-importable
+- [x] ARCHITECTURE.md route line
+- [ ] Live: ask the assistant for its Today view after logging a meal in the app and check they match (needs `notion_assistant` Phase 85)

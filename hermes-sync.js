@@ -552,10 +552,7 @@ window.MP = window.MP || {};
       return "logged";
     },
     /** Pure: daily routines always, gymDays only when today.gym. Meals deleted from the library simply aren't passed in. */
-    dueRoutines(meals, today) {
-      return meals.filter((m) => m.routine && (m.routine.when === "daily" || (m.routine.when === "gymDays" && today.gym)))
-        .sort((a, b) => a.routine.time.localeCompare(b.routine.time));
-    },
+    dueRoutines: (meals, today) => MP.dueRoutines(meals, today),
     async push(t) {
       if (!config().enabled) return "off";
       try { await req("PUT", "/today", t); return "ok"; } catch (e) { return "error"; }

@@ -213,3 +213,45 @@ r = await call("GET", "/ranking?day=1&slot=dinner&n=10", "h");
 assert.equal(r.status, 200);
 const ids = r.body.candidates.map((m) => m.mealId);
 assert.ok(ids.length && !ids.includes("p") && ids.indexOf("e") < ids.indexOf("o"), JSON.stringify(r.body).slice(0, 200));
+
+// Phase 54: GET /day
+kv.clear();
+const D = "2026-10-22";
+kv.set("library", JSON.stringify([
+  { id: "d1", name: "Dinner One", mealTypes: ["dinner"], ingredients: [{ key: "rice", label: "Rice" }] },
+  { id: "r1", name: "Vitamins", routine: { when: "daily", time: "08:00" }, ingredients: [] },
+  { id: "r2", name: "Creatine", routine: { when: "daily", time: "09:00" }, ingredients: [] },
+]));
+r = await call("GET", `/day?date=${D}`, "a"); // empty KV apart from the library
+assert.equal(r.status, 200);
+assert.deepEqual(r.body.cards.map((c) => c.type), ["routine", "routine", "counter", "counter", "coverage"]);
+assert.ok(r.body.cards.filter((c) => c.type === "counter").every((c) => c.count === 0));
+kv.clear();
+r = await call("GET", `/day?date=${D}`, "h"); // fully empty KV
+assert.deepEqual([r.status, r.body.cards.map((c) => c.type)], [200, ["counter", "counter", "coverage"]]);
+kv.set("library", JSON.stringify([
+  { id: "d1", name: "Dinner One", mealTypes: ["dinner"], ingredients: [{ key: "rice", label: "Rice" }] },
+  { id: "r1", name: "Vitamins", routine: { when: "daily", time: "08:00" }, ingredients: [] },
+]));
+kv.set("plan", JSON.stringify({ startDate: D, days: Array.from({ length: 14 }, (_, i) => ({ day: i + 1, slots: i === 0 ? { dinner: { mealId: "d1" } } : {} })) }));
+kv.set("today", JSON.stringify({ date: D, water: 3, caffeine: 1, gym: false, routineDone: ["r1", "gone"] }));
+kv.set("pantry", JSON.stringify({ items: [{ name: "milk", useBy: D }] }));
+kv.set("cooks", "not json{");
+r = await call("GET", `/day?date=${D}`, "a");
+assert.deepEqual(r.body.cards.map((c) => c.type), ["meal", "routine", "counter", "counter", "expiring", "coverage"]);
+assert.deepEqual([r.body.cards[0].state, r.body.cards[1].done, r.body.cards[2].count, r.body.cards[4].daysLeft], ["planned", true, 3, 0]);
+assert.equal(typeof r.body.assembledAt, "string");
+assert.equal((await call("PUT", "/eaten-log", "h", [{ id: "e1", mealId: "d1", name: "Dinner One", eatenAt: `${D}T12:00:00.000Z`, tags: [] }])).status, 204);
+r = await call("GET", `/day?date=${D}`, "a");
+const meals54 = r.body.cards.filter((c) => c.type === "meal");
+assert.deepEqual(meals54.map((c) => c.state), ["planned", "eaten"]);
+const nut = (await call("GET", `/nutrition?date=${D}`, "a")).body;
+const cov = r.body.cards.at(-1);
+assert.deepEqual([cov.proteinGramsApprox, cov.proteinTarget, cov.missing, cov.partial], [nut.proteinGramsApprox, nut.proteinTarget, nut.missing, nut.partial]);
+assert.equal((await call("GET", "/day?date=nope", "a")).status, 400);
+assert.equal((await call("GET", `/day?date=${D}&gym=2`, "a")).status, 400);
+assert.equal((await call("GET", `/day?date=${D}`, "bad")).status, 401);
+assert.equal((await call("GET", `/day?date=${D}`, "")).status, 401);
+assert.equal((await call("PUT", "/day", "a", {})).status, 403);
+assert.equal((await call("GET", `/day?date=2030-01-01`, "a")).status, 200); // outside plan
+assert.equal((await call("GET", "/today", "a")).body.water, 3); // /today untouched
