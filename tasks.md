@@ -626,3 +626,16 @@ Requires Phase 43 (storage/`frozenMonths` helpers) built first. Decided: scale a
 - [x] Logic: dayView extraction, dayCards, `GET /day` + `ASSISTANT_ALLOWED`, worker_test cases, `MP.dueRoutines` Worker-importable
 - [x] ARCHITECTURE.md route line
 - [ ] Live: ask the assistant for its Today view after logging a meal in the app and check they match (needs `notion_assistant` Phase 85)
+
+## Phase 55: Shopping list as the single shared state
+- Spec: `.claude/specs/phase55.md`
+- [ ] Live: tick a line on the phone PWA and a different line on the PC within a minute, reload both: both ticks show on both
+- [ ] Live: once notion_assistant Phase 44 ships, tick a line in Google Tasks and see it got in the app (no duplicate line)
+
+## Phase 56: Hermes contract rewrite and tool parity
+- Spec: `.claude/specs/phase56.md`
+- [ ] Live: have Hermes add an item to the shopping list sending `X-Actor: hermes`; it shows in the app's Assistant activity with Undo
+
+## Phase 57: Measured nutrient levels for new ingredients (CoFID)
+- Spec: `.claude/specs/phase57.md`
+- [ ] Live: with the CoFID 2021 xlsx, map one new ingredient and confirm "not tracked yet" disappears (see spec)
