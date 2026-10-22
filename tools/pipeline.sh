@@ -22,7 +22,8 @@ mkdir -p logs
 PLAN=0
 [ "${1:-}" = --plan ] && { PLAN=1; shift; }
 # no args: every not-started roadmap phase that already has a spec, in roadmap order
-[ $# -gt 0 ] || set -- $(python3 tools/workflow_audit.py --queue)
+# (skipping specs already built: a PASS tags the commit built/<spec>, so a phase left "not started" for its later parts is not rebuilt)
+[ $# -gt 0 ] || { q=(); for n in $(python3 tools/workflow_audit.py --queue); do git rev-parse -q --verify "refs/tags/built/$n" >/dev/null || q+=("$n"); done; set -- ${q[@]+"${q[@]}"}; }
 [ $# -gt 0 ] || { echo "nothing queued: no not-started phase has a spec yet (plan-phase first)" >&2; exit 2; }
 # a dirty tree would be swept into the first phase's commit
 [ "$PLAN" = 1 ] || [ -z "$(git status --porcelain --untracked-files=no)" ] || { echo "uncommitted changes: commit or stash first" >&2; exit 2; }
@@ -186,6 +187,7 @@ for arg in "$@"; do
         continue 2
     done
     status "$spec" PASS PASS
+    git tag -f "built/${spec%.md}" "$(awk '{print $3}' <<<"$line")" >/dev/null 2>&1 || true
     notify "pipeline: $spec $line"
 done
 [ "$PLAN" = 1 ] || notify "pipeline: queue finished ($*)$([ "$BLOCKED" = 1 ] && echo ', some blocked: see the roadmap')"
