@@ -49,9 +49,12 @@ def risks(text):
 def main(args):
     roadmap = (ROOT / "docs" / "roadmap.md").read_text(encoding="utf-8")
     on_disk = sorted(p.name for p in SPECS.glob("phase*.md"))
-    queued = workflow_audit.queue(roadmap, set(on_disk))
+    tasks = (ROOT / "tasks.md").read_text(encoding="utf-8")
+    queued = workflow_audit.queue(roadmap, set(on_disk), tasks)
     bad = 0
     for name in [a.removesuffix(".md") for a in args] or queued:
+        if not (SPECS / f"{name}.md").exists():  # [S] phase: its plan is the tasks.md section, nothing to lint
+            continue
         for p in lint((SPECS / f"{name}.md").read_text(encoding="utf-8")):
             print(f"SPEC LINT {name}: {p}")
             bad = 1

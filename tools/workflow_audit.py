@@ -70,10 +70,21 @@ def phases(roadmap):
     return re.findall(r"^## Phase (\w+): (.*not started.*)$", roadmap, re.M)
 
 
-def queue(roadmap, specs):
+def has_plan(tasks, n):
+    """tasks.md has a `## Phase n` section with at least one unticked, non-Live checkbox: an [S] phase's whole plan."""
+    m = re.search(rf"^## Phase {re.escape(n)}\b.*?\n(.*?)(?=^## |\Z)", tasks, re.M | re.S)
+    return bool(m and re.search(r"^- \[ \] (?!Live)", m.group(1), re.M))
+
+
+def queue(roadmap, specs, tasks=""):
     """Spec names the pipeline should build, in roadmap order: not-started phases whose spec (or sub-specs
-    phaseNa.md, phaseNb.md, ...) exists in `specs`."""
-    return [s[:-3] for n, _ in phases(roadmap) for s in sorted(specs) if re.fullmatch(rf"phase{n.lower()}[a-z]?\.md", s)]
+    phaseNa.md, phaseNb.md, ...) exists in `specs`. An [S] phase has no spec by design: its tasks.md section is the plan,
+    so it is queued as `phaseN` when that section has open non-Live tasks."""
+    out = []
+    for n, head in phases(roadmap):
+        hit = [s[:-3] for s in sorted(specs) if re.fullmatch(rf"phase{n.lower()}[a-z]?\.md", s)]
+        out += hit or ([f"phase{n.lower()}"] if "[S]" in head and has_plan(tasks, n) else [])
+    return out
 
 
 def order(names, texts):
@@ -133,7 +144,7 @@ def _read(name):
 def next_line():
     """One line for SessionStart: the next phase, what /overnight would build, and open human checks."""
     open_ = phases(_read("docs/roadmap.md"))
-    q = queue(_read("docs/roadmap.md"), {p.name for p in (ROOT / ".claude/specs").glob("*.md")})
+    q = queue(_read("docs/roadmap.md"), {p.name for p in (ROOT / ".claude/specs").glob("*.md")}, _read("tasks.md"))
     nxt = f"Phase {open_[0][0]}: {open_[0][1].split(' [')[0]}" if open_ else "none"
     return (f"Next: {nxt}. /overnight queue: {', '.join(q) or 'empty (plan-phase first)'}. "
             f"Open checks in tasks.md: {len(open_checks(_read('tasks.md')))}.")
@@ -191,6 +202,9 @@ def _selftest():
     assert queue(rm, {"phase40b.md", "phase38.md", "phase9.md"}) == ["phase38", "phase40b"]
     assert queue("## Phase 4: X — not started\n## Phase 43: Y — not started\n",
                  {"phase43b.md", "phase43a.md", "phase40.md", "phase4.md"}) == ["phase4", "phase43a", "phase43b"]
+    rs = "## Phase 36: C [S] — not started\n## Phase 39: D [M] — not started\n"
+    assert queue(rs, set(), "## Phase 36: C\n- [ ] Logic\n## Phase 39: D\n- [ ] x\n") == ["phase36"]
+    assert queue(rs, set(), "## Phase 36: C\n- [ ] Live: phone\n- [x] done\n") == []
     t = {"phase33a": "Risk: high\n", "phase33b": "Requires Phase 33a (x)", "phase34": "**Requires Phase 33a**", "phase35": "", "phase41": "Requires Phase 35"}
     assert order(["phase33a", "phase33b", "phase34", "phase35", "phase41"], t) == ["phase35", "phase41", "phase33a", "phase33b", "phase34"]
     assert order(["phase1", "phase2"], {}) == ["phase1", "phase2"]
@@ -216,7 +230,7 @@ if __name__ == "__main__":
     elif sys.argv[1:2] == ["--dependents"]:  # --dependents <blocked> <spec...>: those that require it
         print(" ".join(dependents([sys.argv[2]], sys.argv[3:], {n: _read(f".claude/specs/{n}.md") for n in sys.argv[3:]})))
     elif sys.argv[1:] == ["--queue"]:
-        q = queue(_read("docs/roadmap.md"), {p.name for p in (ROOT / ".claude/specs").glob("*.md")})
+        q = queue(_read("docs/roadmap.md"), {p.name for p in (ROOT / ".claude/specs").glob("*.md")}, _read("tasks.md"))
         print(" ".join(order(q, {n: _read(f".claude/specs/{n}.md") for n in q})))
     else:
         main("--force" in sys.argv)

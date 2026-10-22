@@ -44,6 +44,7 @@ status() { printf '{"spec":"%s","stage":"%s","at":%s000,"verdict":"%s"}\n' "$1" 
 # stages_for <spec.md>: one "kind|label" line per build stage
 stages_for() {
     local f=".claude/specs/$1" heads nums
+    [ -f "$f" ] || { echo "whole|"; return; }  # an [S] phase: no spec, its tasks.md section is the plan
     heads=$(awk '/^## Tasks/{t=1;next} /^## /{t=0} t&&/^### /{print}' "$f")
     nums=$(grep -E '^### [0-9]+\.' <<<"$heads")
     if [ "$(grep -c . <<<"$nums")" -ge 2 ]; then
@@ -68,7 +69,8 @@ tree: read the spec, \`git status\` and \`git diff --stat\` first, and do not re
 
 EOF
     fi
-    echo "Build .claude/specs/$spec unattended. Nobody is watching, so never ask a question."
+    if [ -f ".claude/specs/$spec" ]; then echo "Build .claude/specs/$spec unattended. Nobody is watching, so never ask a question."
+    else echo "Build phase ${spec%.md} (an [S] phase, no spec file: its plan is the \`## Phase N\` section of tasks.md plus its roadmap section) unattended. Nobody is watching, so never ask a question."; fi
     case $kind in
         section) echo "SCOPE: build ONLY section \"$label\" of the spec's ## Tasks. Earlier sections are already committed; do not start later ones. Read the spec's Decisions and this section's signatures, skip the others." ;;
         part)    echo "SCOPE: build ONLY the tasks under the \"### $label\" heading of the spec's ## Tasks."
@@ -163,7 +165,7 @@ mapfile -t ALL < <(printf '%s\n' "$@" | sed 's/\.md$//')
 for arg in "$@"; do
     spec=${arg%.md}.md
     case "$SKIP" in *" ${spec%.md} "*) notify "pipeline: skipping $spec (requires a blocked phase)"; continue;; esac
-    [ -f ".claude/specs/$spec" ] || { notify "pipeline: no spec .claude/specs/$spec"; exit 2; }
+    [ -f ".claude/specs/$spec" ] || [ "$(python3 tools/workflow_audit.py --queue | tr " " "\n" | grep -cx "${spec%.md}")" -gt 0 ] || { notify "pipeline: no spec .claude/specs/$spec"; exit 2; }
     mapfile -t stages < <(stages_for "$spec")
     if [ "$PLAN" = 1 ]; then echo "$spec: ${stages[*]}"; continue; fi
     n=${#stages[@]}
