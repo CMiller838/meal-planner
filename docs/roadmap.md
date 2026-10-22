@@ -446,7 +446,7 @@ the smallest change that survives the sync model), and the daily water goal, whi
 **Verify:** counters sync between app and assistant without double counting; a day with no taps is zero, not missing.
 Requires Phase 32. Assistant side: `notion_assistant` Phase 64.
 
-## Phase 43: Pantry and leftover read routes: cookable, substitutions, leftovers, quick fallback [L] — not started
+## Phase 43: Pantry and leftover read routes: cookable, substitutions, leftovers, quick fallback [L] — blocked 2026-10-22: PIPELINE: BLOCKED tester verdict INCOMPLETE because the Edge walk run was denied; allow the copy to C:\Users\cody\browser-check and re-run the tester, or accept
 
 Merged from old Phases 43, 44, 47. Build as one phase; each part keeps its own decisions and verify.
 
