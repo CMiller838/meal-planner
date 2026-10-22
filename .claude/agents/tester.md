@@ -48,13 +48,9 @@ claim of the spec with evidence you produced yourself, or to say it is unproven.
    `PLAYWRIGHT_BROWSERS_PATH=<repo>/tools/browser-check/.browsers`, or launch fails), happy path, bad
    input, repeat the action twice, empty state, reload and check what persisted. State lives in `localStorage`, so
    seed it with `page.evaluate`. Run it at 1440x900 and 390x844, in both themes (`localStorage.mp_theme`), with
-   `reducedMotion`, assert computed styles where the change is visual, and save and view screenshots. **Every test run
-   also goes through the same flow in the Windows browser (Edge)**, not only headless Chromium: copy
-   `tools/browser-check/walk.mjs` and `serve.mjs` to `C:\Users\cody\browser-check` (as `mp-walk.mjs` and `serve.mjs`) and run
-   `timeout 110 powershell.exe -NoProfile -Command "cd C:\Users\cody\browser-check; $env:BROWSER_CHANNEL='msedge'; node mp-walk.mjs --base http://127.0.0.1:8798"`
-   with the Bash sandbox off, plus your own script for the new flow. Linux checks need no sandbox override. TheMealDB and
-   Hermes are blocked here, so Discover renders empty: not a defect. If Windows or Edge is unreachable, say so and mark
-   the verdict INCOMPLETE.
+   `reducedMotion`, assert computed styles where the change is visual, and save and view screenshots.
+   Linux checks need no sandbox override. There is no Windows/Edge run: the user browses with Firefox, so it proves nothing.
+   TheMealDB and Hermes are blocked here, so Discover renders empty: not a defect.
 4. **Regression.** Step 2's `check.py` already covers every page and the core flow; do not re-run it unless code changed
    since. Exercise two or three pre-existing features near the change (a plan with a pantry item, a swap, the shopping tabs).
    **Test integrity.** Read `git diff` of `test.html`, `data_check.py` and `tools/browser-check/*.mjs`: any deleted,

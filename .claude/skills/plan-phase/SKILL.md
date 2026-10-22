@@ -87,7 +87,7 @@ wrong, say so in one line and update the heading.
    or a `## Verification` without a runnable command in backticks (`/overnight` refuses to start on the same check).
    Under the first line add `Plain: <one everyday sentence on what this gives the user>`: the building-now pane shows it.
    **Devil's advocate before you finish:** ask "what would stop this running unattended?" (a human step, a credential, a
-   path outside the repo such as the Windows Edge walk, a dependency on a phase not yet built) and fix the spec or add a
+   path outside the repo, a dependency on a phase not yet built) and fix the spec or add a
    `Requires Phase N` line / `- [ ] Live:` task. `spec_lint.py` prints `SPEC RISK` for the common ones (if the only tokens are test fakes, say "No real credential
    needed" in Verification and the credential warning clears).
    Anything only the user can verify goes in `tasks.md` as a `- [ ] Live: ...` line, not in Verification.
