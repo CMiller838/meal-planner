@@ -738,7 +738,7 @@ Requires Phase 70.
 
 **Verified 2026-10-23:** `MP.Plan.whatIf` (planMetrics + buildLists on a clone) deltas equal planMetrics after the swap, plan unmutated (test.html); hover preview leaves `mp_plan` byte-identical (walk.mjs); check.py 9/9. Phone long-press untested (live).
 
-## Phase 72: Planning chat with Hermes (guided, animated) [L] — not started
+## Phase 72: Planning chat with Hermes (guided, animated) [L] — built 2026-10-23, live checks pending
 
 **Added 2026-10-22** (decided with the user: Hermes interprets, full-screen guided flow, one message at a time). A full-screen
 flow in the app steps through the plan one day at a time, a chat bar under each day card. The user types ("busy Monday, cheap
@@ -788,3 +788,27 @@ does not cover. No Telegram push in this phase. **Verify:** picking an alternati
 exclusions. Requires Phases 54, 66.
 
 **Verified 2026-10-23:** `check.py` 10/10; walk (PC + phone): alternatives equal `candidatesFor` top 3, Keep locks without changing the meal, a pick changes only day 2 and locks, a refused exclusion leaves `mp_plan` byte-identical, a leftover tomorrow shows no alternatives, last plan day (rolling off) shows no card.
+
+
+## Phase 76: Cheaper swaps route [M] — not started
+
+**Added 2026-10-23** (from `notion_assistant` Phase 44; the planner is the meal specialist). `GET /swaps?day=` returns, for the priciest
+shopping lines, in-group alternatives from `substitution-groups.json` that cost less by `pack-sizes.json`, each with
+`tagChanges` (nutrient levels that differ via `ingredient-nutrient-tags.json`) and a re-check against the hard exclusions. Read-only
+suggestions; the assistant applies an accepted one through `POST /shopping/lines`. **Verify:** a swap onto an excluded food is never
+returned; a tag change is listed; no group, no swap. Requires Phases 28, 55.
+
+## Phase 77: Weekly spend log [S] — not started
+
+**Added 2026-10-23.** `POST /spend { week, total, source: asda|manual|estimate }` (logged, undoable via Phase 48) and `GET /spend`
+(weeks, plus `budgetTarget` from `/settings`), one row per week and shop day so a re-preview overwrites rather than adds. The
+cost meter (Phase 70) may show planned against actual. **Verify:** a repeat POST for the same key does not double; undo restores.
+Assistant side: Phase 44.
+
+## Phase 78: Pantry audit route [M] — not started
+
+**Added 2026-10-23.** `GET /pantry/audit?location=` returns the next batch to confirm for a location (fridge, freezer, cupboard) and
+`GET /pantry/sanity` the monthly findings (negative or implausible quantities, long-untouched items, perishables with no use-by,
+duplicates). Read-only; answers go back through the existing pantry write, never a delete on its own. Snoozes are stored per
+finding. **Verify:** each finding class fires on a fixture pantry; a snoozed finding is withheld. Requires Phases 34, 48.
+Assistant side: Phase 43a.
