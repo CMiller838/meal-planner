@@ -666,7 +666,7 @@ Phase 51. Not in `notion_assistant` (checked 2026-10-22).
 
 **Built 2026-10-23, verified:** check.py 9/9, worker_test ok, unit asserts for profile/rankSlot window/orderByTaste; no cuisine (ingredients + cook style only). Discover reorder with a stubbed pool is unit-proven only.
 
-## Phase 63: Mid-week re-flow [L] — not started
+## Phase 63: Mid-week re-flow [L] — blocked 2026-10-23: PIPELINE: BLOCKED Phase 63 requires Phase 66 (`slot.locked`, `generatePlan`'s trailing `locked` arg, `MP.chainDays`), which isn't built. Build Phase 66 first, t
 
 **Added 2026-10-22.** Skipping a cook, eating out or running out of an ingredient re-plans only the remaining days. Eaten and
 cooked days are frozen, the user's manual edits are kept, and leftover chains, pantry stock and use-by dates are recomputed for
