@@ -74,11 +74,11 @@ window.MP = window.MP || {};
   /** Stable permutation of `list`, descending by summed ingredient-token
    *  taste score, minus a penalty for a repeatedly-dismissed meal. Never
    *  filters — identity ordering when prefs is empty. */
-  function orderByTaste(list, prefs, meals) {
+  function orderByTaste(list, prefs, meals, taste) {
     const scores = tasteScores(prefs, meals);
     return list
       .map((meal, i) => {
-        const tokenScore = tokensOf(meal).reduce((sum, t) => sum + (scores[t] || 0), 0);
+        const tokenScore = tokensOf(meal).reduce((sum, t) => sum + (scores[t] || 0), 0) + (taste && MP.Ratings ? MP.Ratings.tasteScore(taste, meal) : 0);
         const rec = prefs[meal.id];
         const penalty = rec && rec.dismissed >= 2 ? 1000 : 0;
         return { meal, i, s: tokenScore - penalty };

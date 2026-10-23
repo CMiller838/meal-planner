@@ -62,6 +62,8 @@
     "shortlistSize": 4,
     "reuseCredit": 0.60,
     "subCredit": 0.30,
+    "tasteWindow": 4,
+    "tasteMinRated": 3,
     "budgetTarget": { "max": 120, "step": 5, "default": 0, "maxShortlist": 10 }
   },
   "aisles": [

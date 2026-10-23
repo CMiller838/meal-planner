@@ -2137,6 +2137,29 @@
         if (pl.days.some((d) => Object.values(d.slots).some((sl) => sl.mealId === victim))) seen = true;
       }
       check("ratings: a never meal never appears in generatePlan", !seen);
+      // Phase 62: taste profile
+      {
+        const mk = (id, keys, eff) => ({ id, name: id, prepEffort: eff || "quick", mealTypes: ["dinner"], ingredients: keys.map((k) => ({ key: k })) });
+        const tm = [mk("t1", ["lime", "salt"]), mk("t2", ["lime", "salt"]), mk("t3", ["lime"]), mk("t4", ["beef", "salt"]), mk("t5", ["beef"]), mk("t6", ["beef", "salt"]),
+          mk("c1", ["lime"]), mk("c2", ["beef"]), mk("n1", ["rice"]), mk("n2", ["rice"]), mk("n3", ["rice"]), mk("n4", ["rice"])];
+        const rat = { t1: { rating: "up" }, t2: { rating: "up" }, t3: { rating: "up" }, t4: { rating: "down" }, t5: { rating: "down" }, t6: { rating: "down" } };
+        check("taste: inert below 3 rated meals", Object.keys(R.tasteProfile({ t1: { rating: "up" }, t2: { rating: "up" } }, tm).tokens).length === 0);
+        check("taste: ids not in library are not counted", R.tasteProfile({ ...rat, gone: { rating: "up" } }, tm).n === 6);
+        const prof = R.tasteProfile(rat, tm);
+        check("taste: candidate sharing 👍 ingredients outscores one sharing 👎", R.tasteScore(prof, tm[6]) > R.tasteScore(prof, tm[7]) && R.tasteScore(R.tasteProfile({}, tm), tm[6]) === 0);
+        const order = (taste) => MP.Generator.rankSlot(tm.slice(6), 1, [], { ...rc, taste }).map((m) => m.id);
+        const none = order(undefined);
+        const withT = order(prof);
+        check("taste: rankSlot permutation of no-taste, liked ahead", deepEqual([...withT].sort(), [...none].sort()) && withT.indexOf("c1") < withT.indexOf("c2"));
+        check("taste: inert profile = identical order", deepEqual(order(R.tasteProfile({}, tm)), none));
+        const rr = MP.Generator.rankSlot(tm, 1, [], { ...rc, ratings: rat, taste: prof }).map((m) => m.id);
+        check("taste: rating groups keep up/neutral/down order", rr.slice(0, 3).every((id) => rat[id] && rat[id].rating === "up") && rr.slice(-3).every((id) => rat[id] && rat[id].rating === "down"));
+        const pm = [mk("d1", ["lime"]), mk("d2", ["beef"])];
+        const small = MP.Generator.rankSlot(pm, 1, [], { ...rc, taste: prof });
+        check("taste: pool smaller than window still fills", small.length === 2);
+        const dl = MP.Prefs.orderByTaste(tm.slice(6), {}, tm, prof).map((m) => m.id);
+        check("orderByTaste: ratings profile puts liked first; absent = today's", dl.indexOf("c1") < dl.indexOf("c2") && deepEqual(MP.Prefs.orderByTaste(tm.slice(6), {}, tm).map((m) => m.id), tm.slice(6).map((m) => m.id)));
+      }
       R.set("r1", { rating: "up", note: " hi " });
       check("Ratings.set: record shaped, note trimmed, neverIds", R.get().r1.rating === "up" && R.get().r1.note === "hi" && R.get().r1.never === false && R.neverIds().size === 0);
       R.set("r1", { never: true, note: "x".repeat(200) });

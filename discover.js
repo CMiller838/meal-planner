@@ -293,7 +293,8 @@
       }
       if (MP.Prefs) {
         const library = await MP.getLibrary();
-        next = MP.Prefs.orderByTaste(next, MP.Prefs.get(), [...library, ...MP.getSavedLater()]);
+        next = MP.Prefs.orderByTaste(next, MP.Prefs.get(), [...library, ...MP.getSavedLater()],
+          MP.Ratings && MP.Ratings.tasteProfile(MP.Ratings.get(), [...library, ...MP.getSavedLater()]));
       }
       if (pantryFirst) next = orderPool(next, await pantryIndexCached());
     } catch (e) {

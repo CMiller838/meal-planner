@@ -656,13 +656,15 @@ Requires Phase 51. Not in `notion_assistant` (checked 2026-10-22).
 
 **Built 2026-10-23.** `repeatGap` (0–14) in `mp_planPrefs`, `rankSlot` layer 3c, Worker pass-through; check.py 9/9 and tester PASS (unit assertions for 12-meal gap and 3-meal fill).
 
-## Phase 62: Taste profile from ratings [M] — not started
+## Phase 62: Taste profile from ratings [M] — built 2026-10-23, live checks pending
 
 **Added 2026-10-22.** Ratings, notes and "never again" flags (Phase 51) build a profile of cuisines, main ingredients and cook
 styles you favour, stored as data derived from `mp_ratings`, never hand-typed. It reorders Discover's TheMealDB suggestions and
 breaks ties in `rankSlot` after the ratings layer; it never re-scores nutrition and never filters (`never` stays the one filter).
 **Verify:** after 10 ratings, Discover's top five shift toward liked cuisines; deleting ratings restores today's order. Requires
 Phase 51. Not in `notion_assistant` (checked 2026-10-22).
+
+**Built 2026-10-23, verified:** check.py 9/9, worker_test ok, unit asserts for profile/rankSlot window/orderByTaste; no cuisine (ingredients + cook style only). Discover reorder with a stubbed pool is unit-proven only.
 
 ## Phase 63: Mid-week re-flow [L] — not started
 

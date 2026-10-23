@@ -485,6 +485,7 @@
       lastUsedDay,
       excludeIds,
       ratings: MP.Ratings.get(),
+      taste: MP.Ratings.tasteProfile(MP.Ratings.get(), library),
       profile: MP.Nutrition.profileOf(MP.Sync.settings()),
     });
   }

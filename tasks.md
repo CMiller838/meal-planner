@@ -680,6 +680,8 @@ Requires Phase 51 (built). Decision (own call): one plain number `repeatGap` (mi
 
 ## Phase 62: Taste profile from ratings
 Spec: `.claude/specs/phase62.md` [M] (no cuisine, ingredient + cook-style profile derived from `mp_ratings`, reorder-only).
+- [x] Logic, wiring, `sw.js` CACHE, CLAUDE.md (built 2026-10-23)
+- [ ] Live: Phase 62 — after rating 3+ meals, Discover leans toward 👍 ingredients; clearing ratings restores the order.
 
 ## Phase 63: Mid-week re-flow
 - Spec: `.claude/specs/phase63.md`

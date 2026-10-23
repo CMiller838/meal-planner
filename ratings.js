@@ -103,6 +103,36 @@
     return row;
   }
 
+  const TASTE_W = { up: 2, down: -3 }; // never: -4 (mirrors Prefs.scoreOf weights)
+  const tokensOf = (m) => (m.ingredients || []).map((i) => (i.key || "").toLowerCase().trim()).filter(Boolean)
+    .concat(m.prepEffort ? ["effort:" + m.prepEffort] : []);
+
+  /** Phase 62: derived on read, never stored. `planning` = pack-sizes.json planning (tasteWindow/tasteMinRated), optional.
+   *  @returns {{n:number, window:number, tokens:{[t:string]:number}}} tokens {} (inert) below tasteMinRated rated meals. */
+  function tasteProfile(ratings, meals, planning) {
+    const minRated = (planning && planning.tasteMinRated) || 3;
+    const out = { n: 0, window: (planning && planning.tasteWindow) || 4, tokens: {} };
+    const freq = {};
+    for (const m of meals || []) for (const t of new Set(tokensOf(m))) freq[t] = (freq[t] || 0) + 1;
+    const totals = {};
+    for (const m of meals || []) {
+      const r = (ratings || {})[m.id];
+      if (!r) continue;
+      const s = r.never ? -4 : TASTE_W[r.rating] || 0;
+      if (!s && !r.rating && !r.never) continue;
+      out.n++;
+      if (!s) continue;
+      for (const t of new Set(tokensOf(m))) totals[t] = (totals[t] || 0) + s / freq[t];
+    }
+    if (out.n >= minRated) out.tokens = totals;
+    return out;
+  }
+
+  function tasteScore(profile, meal) {
+    const tk = (profile && profile.tokens) || {};
+    return tokensOf(meal).reduce((sum, t) => sum + (tk[t] || 0), 0);
+  }
+
   root.MP = root.MP || {};
-  root.MP.Ratings = { KEY, NOTE_MAX, patchError, applyPatch, mergeMaps, get, set, merge, neverIds, byId: get, rowEl };
+  root.MP.Ratings = { KEY, NOTE_MAX, patchError, applyPatch, mergeMaps, get, set, merge, neverIds, byId: get, rowEl, tasteProfile, tasteScore };
 })(typeof globalThis !== "undefined" ? globalThis : this);

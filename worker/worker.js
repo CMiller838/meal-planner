@@ -211,7 +211,7 @@ async function slotContext(day, slot, env) {
   const hint = resolved.byDay[day] ? { effort: resolved.byDay[day].effort, why: resolved.byDay[day].why } : null;
   const pool = library.filter((m) => (m.mealTypes || []).includes(slot));
   const settings = await readSettings(env);
-  const ranked = Generator.rankSlot(pool, day, others, { tags: TAGS, targets: Nutrition.withProfile(TARGETS, settings), prefs, ratings, profile: Nutrition.profileOf(settings) });
+  const ranked = Generator.rankSlot(pool, day, others, { tags: TAGS, targets: Nutrition.withProfile(TARGETS, settings), prefs, ratings, taste: Ratings.tasteProfile(ratings, library, PACK_DATA.planning), profile: Nutrition.profileOf(settings) });
 
   const gap = Nutrition.dayCoverage(others, TAGS, Nutrition.withProfile(TARGETS, settings));
   const shortOn = [...gap.missing, ...gap.partial];

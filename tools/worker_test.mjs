@@ -336,6 +336,23 @@ assert.equal(r.status, 200);
 const ids = r.body.candidates.map((m) => m.mealId);
 assert.ok(ids.length && !ids.includes("p") && ids.indexOf("e") < ids.indexOf("o"), JSON.stringify(r.body).slice(0, 200));
 
+// Phase 62: taste only reorders; removing ratings restores the no-taste order
+{
+  const mk = (id, k) => ({ id, name: id, mealTypes: ["dinner"], prepEffort: "quick", ingredients: [{ key: k, label: k }] });
+  kv.set("plan", JSON.stringify({ startDate: "2026-10-22", days: Array.from({ length: 14 }, (_, i) => ({ day: i + 1, slots: {} })) }));
+  kv.set("library", JSON.stringify([mk("u1", "lime"), mk("u2", "lime"), mk("u3", "lime"), mk("d1", "beef"), mk("d2", "beef"), mk("d3", "beef"), mk("x1", "beef"), mk("x2", "lime")]));
+  const order = async () => ((r) => { if (!r.body.candidates) throw new Error(JSON.stringify(r.body)); return r.body.candidates; })(await call("GET", "/ranking?day=1&slot=dinner&n=10", "h")).map((m) => m.mealId);
+  kv.delete("ratings");
+  const base = await order();
+  const rate = (up, down) => JSON.stringify({ meals: Object.fromEntries([...up.map((i) => [i, { rating: "up" }]), ...down.map((i) => [i, { rating: "down" }])]) });
+  kv.set("ratings", rate(["u1", "u2", "u3"], ["d1", "d2", "d3"]));
+  const withT = await order();
+  assert.deepEqual([...withT].sort(), [...base].sort());
+  assert.ok(withT.indexOf("x2") < withT.indexOf("x1"), withT.join());
+  kv.delete("ratings");
+  assert.deepEqual(await order(), base);
+}
+
 // Phase 54: GET /day
 kv.clear();
 const D = "2026-10-22";

@@ -118,7 +118,7 @@
   /**
    * Ordered candidates for one slot, best first. Layers, in order:
    *   1 nutrition (rankByGap)  2 chips  3 effort/busy
-   *   3b ratings (Phase 51: up/neutral/down; `never` filtered above)  3c repeat gap (Phase 61)  4 budget shortlist (cost, pack reuse + group substitutions; width scales with budget pressure)  5 recency
+   *   3b ratings (Phase 51: up/neutral/down; `never` filtered above)  3c taste window (Phase 62)  3d repeat gap (Phase 61)  4 budget shortlist (cost, pack reuse + group substitutions; width scales with budget pressure)  5 recency
    * Layers 2-5 are stable reorders of layer 1 - none of them re-score nutrition.
    * Returns every meal in `pool` (minus exclusions); chips never filter.
    */
@@ -174,6 +174,17 @@
     if (Object.keys(ratings).length) { // Phase 51: 👍 ahead of neutral ahead of 👎, order inside each group kept
       const r = (m) => (ratings[m.id] && ratings[m.id].rating) || "";
       ranked = ranked.filter((m) => r(m) === "up").concat(ranked.filter((m) => r(m) !== "up" && r(m) !== "down"), ranked.filter((m) => r(m) === "down"));
+    }
+
+    const taste = opts.taste;
+    if (taste && Object.keys(taste.tokens).length) { // Phase 62: top window of each rating group reordered by taste (stable, never filters)
+      const r = (m) => (ratings[m.id] && ratings[m.id].rating) || "";
+      const win = (grp) => {
+        const head = grp.slice(0, taste.window).map((m, i) => ({ m, i, s: MP.Ratings.tasteScore(taste, m) }))
+          .sort((a, b) => b.s - a.s || a.i - b.i).map((x) => x.m);
+        return head.concat(grp.slice(taste.window));
+      };
+      ranked = win(ranked.filter((m) => r(m) === "up")).concat(win(ranked.filter((m) => r(m) !== "up" && r(m) !== "down")), win(ranked.filter((m) => r(m) === "down")));
     }
 
     const repeatGap = Number(prefs && prefs.repeatGap) || 0;
@@ -236,6 +247,7 @@
     have = have || {};
     prefs = prefs || {};
     const mealsById = Object.fromEntries(library.map((m) => [m.id, m]));
+    const taste = MP.Ratings.tasteProfile(ratings, library, budget);
     library = library.filter((m) => !m.routine); // routine items are logged, never scheduled (Phase 41)
     const dinnerPool = library.filter((m) => (m.mealTypes || []).includes("dinner"));
     const days = Array.from({ length: 14 }, (_, i) => ({ day: i + 1, slots: {} }));
@@ -286,7 +298,7 @@
 
     const pickMeal = (pool, dayNum, dayMealsSoFar, opts) =>
       rankSlot(pool, dayNum, dayMealsSoFar,
-        { ...opts, tags, targets, prefs, budget, halfKeys, lastUsedDay, ratings, profile: prefs.profile, pressure: pressureFor(dayNum) })[0] || null;
+        { ...opts, tags, targets, prefs, budget, halfKeys, lastUsedDay, ratings, taste, profile: prefs.profile, pressure: pressureFor(dayNum) })[0] || null;
 
     const runs = weekendRuns(startDate).map((run) => {
       if (run.some((d) => !(prefs.busyDays || []).includes(d))) {
