@@ -1002,6 +1002,41 @@
       check("planMirror: carries locked", MP.Sync.planMirror({ days: [{ day: 1, slots: { dinner: { mealId: "m1", locked: true } } }] }).days[0].slots.dinner.locked === true);
     }
 
+    // Phase 63: mid-week re-flow
+    {
+      const ser = (x) => JSON.stringify(x);
+      const mk = (id, extra) => ({ id, name: id, mealTypes: ["dinner"], ingredients: [], ...extra });
+      const lib = [mk("P", { servings: 3 }), mk("C", { leftoverOf: "P" }), mk("X"), mk("Y", { ingredients: [{ key: "Rice", label: "Rice" }] }), mk("N")];
+      const mkPlan = () => ({ startDate: "2026-09-07", days: Array.from({ length: 14 }, (_, i) => ({ day: i + 1, slots: { dinner: { mealId: ["P", "C", "C", "X"][i] || "X" } } })) });
+      const fill = (locked) => ({ days: Array.from({ length: 14 }, (_, i) => ({ day: i + 1, slots: { dinner: (locked[i + 1] || {}).dinner || { mealId: "N" } } })) });
+      const p0 = mkPlan();
+      p0.days[4].slots.dinner.locked = true; // day 5
+      p0.days[5].slots.dinner.eatenAt = "2026-09-12T18:00:00Z"; // day 6
+      const keep = ser(p0);
+      const r = MP.Plan.reflow(p0, { skipped: [{ day: 1, slot: "dinner" }, { day: 5, slot: "dinner" }, { day: 6, slot: "dinner" }] }, lib, { fromDay: 1, generate: fill });
+      check("reflow: batch skip frees the whole chain", ser(r.changes.map((c) => c.day)) === "[1,2,3]" && r.plan.days.slice(0, 3).every((d) => d.slots.dinner.mealId === "N"));
+      check("reflow: locked and eaten identical, reported ignored", ser(r.plan.days[4]) === ser(p0.days[4]) && ser(r.plan.days[5]) === ser(p0.days[5]) && r.ignored.length === 2);
+      check("reflow: input not mutated", ser(p0) === keep);
+      const r2 = MP.Plan.reflow(p0, { skipped: [{ day: 3, slot: "dinner" }] }, lib, { fromDay: 1, generate: fill });
+      check("reflow: skipping a leftover moves only that slot", ser(r2.changes.map((c) => c.day)) === "[3]");
+      const r3 = MP.Plan.reflow(p0, { skipped: [{ day: 1, slot: "dinner" }] }, lib, { fromDay: 3, generate: fill });
+      check("reflow: past days frozen", r3.changes.length === 0 && r3.ignored.length === 1);
+      const r4 = MP.Plan.reflow(p0, { eatingOut: [{ day: 4, slot: "dinner" }] }, lib, { fromDay: 1, generate: fill });
+      check("reflow: eating out stays empty and sticky", ser(r4.plan.days[3].slots.dinner) === '{"eatingOut":true}' && MP.Plan.reflow(r4.plan, { skipped: [{ day: 1, slot: "dinner" }] }, lib, { fromDay: 1, generate: fill }).plan.days[3].slots.dinner.eatingOut === true);
+      let seen = null;
+      const r5 = MP.Plan.reflow(p0, { ranOut: [" rice"] }, lib, { fromDay: 1, generate: (l, ro) => { seen = ro; return fill(l); } });
+      check("reflow: ranOut key reaches the generator, empty input changes nothing", ser(seen) === '["rice"]' && MP.Plan.reflow(p0, {}, lib, { fromDay: 1, generate: fill }).changes.length === 0 && r5.changes.length === 0);
+      check("reflow: input validation", MP.reflowInputError({ skipped: [{ day: 0, slot: "dinner" }] }) && MP.reflowInputError({ eatingOut: [{ day: 15, slot: "dinner" }] }) && MP.reflowInputError({ skipped: [{ day: 1, slot: "brunch" }] }) && MP.reflowInputError({ skipped: "x" }) && MP.reflowInputError({ ranOut: [1] }) && !MP.reflowInputError({}));
+      localStorage.removeItem("mp_planUndo");
+      MP.Plan.snapshot(p0);
+      check("reflow: restore returns the exact prior plan", ser(MP.Plan.restore()) === keep);
+      localStorage.removeItem("mp_planUndo");
+      const real = MP.Generator.generatePlan(library, tags, targets, shelfData, "2026-09-07");
+      const rr = MP.Plan.reflow(real, { skipped: [{ day: 3, slot: "dinner" }] }, library, { fromDay: 2, generate: (l, ro, av) => MP.Generator.generatePlan(library.filter((m) => !av.includes(m.id)), tags, targets, shelfData, "2026-09-07", undefined, undefined, undefined, undefined, l) });
+      check("reflow: real generator really replaces a skipped meal", rr.changes.some((c) => c.day === 3 && c.slot === "dinner" && c.after.mealId !== c.before.mealId));
+      check("reflow: real generator leaves untouched slots identical", rr.plan.days.every((d, i) => ser(d.slots) === ser(real.days[i].slots) || rr.changes.some((c) => c.day === d.day)));
+    }
+
     // planMirror
     {
       const p = { startDate: "2026-09-07", days: [

@@ -666,13 +666,15 @@ Phase 51. Not in `notion_assistant` (checked 2026-10-22).
 
 **Built 2026-10-23, verified:** check.py 9/9, worker_test ok, unit asserts for profile/rankSlot window/orderByTaste; no cuisine (ingredients + cook style only). Discover reorder with a stubbed pool is unit-proven only.
 
-## Phase 63: Mid-week re-flow [L] — blocked 2026-10-23: PIPELINE: BLOCKED Phase 63 requires Phase 66 (`slot.locked`, `generatePlan`'s trailing `locked` arg, `MP.chainDays`), which isn't built. Build Phase 66 first, t
+## Phase 63: Mid-week re-flow [L] — built 2026-10-23, live checks pending
 
 **Added 2026-10-22.** Skipping a cook, eating out or running out of an ingredient re-plans only the remaining days. Eaten and
 cooked days are frozen, the user's manual edits are kept, and leftover chains, pantry stock and use-by dates are recomputed for
 the rest of the plan. Exposed as an app button and a Worker route for Hermes through the Phase 48 activity log (so it is
 undoable). The assistant today only offers a one-evening fallback (`notion_assistant` Phase 47). **Verify:** skipping Tuesday's
 batch cook moves its dependent leftover slots; edited slots do not change; undo restores the plan. Requires Phases 43, 48, 49.
+
+**Verified 2026-10-23:** check.py 9/9, worker_test ok; unit asserts for chain-unit skip, locked/eaten/past frozen, ranOut, sticky eating-out, restore deep-equal, real-generator replace; browser at PC and 390 px, both themes (Skip cook, Eating out, Undo re-flow); tester PASS after one fix (skipped meals excluded from the pool).
 
 ## Phase 64: Three candidate weeks [M] — built 2026-10-23, live checks pending
 

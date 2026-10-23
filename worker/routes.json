@@ -405,6 +405,14 @@
   },
   {
     "method": "POST",
+    "path": "/plan/reflow",
+    "assistant": true,
+    "kind": "write",
+    "log": "logged",
+    "note": "re-plans only skipped / eatingOut / ranOut slots and parks the result in planDraft"
+  },
+  {
+    "method": "POST",
     "path": "/activity/undo",
     "assistant": true,
     "kind": "write",

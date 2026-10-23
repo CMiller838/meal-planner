@@ -461,6 +461,43 @@ assert.equal((await call("GET", "/today", "a")).body.water, 3); // /today untouc
   assert.equal((await call("PUT", "/planDraft", "h", { ...stored, pending: false, ackedId: stored.id })).status, 204);
   r = await call("POST", "/plan/apply", "a", { draft: d.body.draft });
   assert.deepEqual([r.status, r.body.status], [200, "already applied"]);
+  // Phase 63: POST /plan/reflow
+  {
+    assert.equal((await call("POST", "/plan/reflow", "a", { skipped: [{ day: 0, slot: "dinner" }] })).status, 400);
+    assert.equal((await call("POST", "/plan/reflow", "a", { eatingOut: [{ day: 1, slot: "brunch" }] })).status, 400);
+    assert.equal((await call("POST", "/plan/reflow", "a", { ranOut: [1] })).status, 400);
+    assert.equal((await call("POST", "/plan/reflow", "a", [])).status, 400);
+    const planKv = kv.get("plan");
+    const rm = JSON.parse(planKv).days.map((x) => ({ ...x, slots: { ...x.slots } }));
+    rm[12].slots.dinner = { mealId: "m1" };
+    rm[11].slots.dinner = { mealId: "m2", locked: true };
+    kv.set("plan", JSON.stringify({ startDate: "2999-01-01", days: rm }));
+    const body = { skipped: [{ day: 13, slot: "dinner" }, { day: 12, slot: "dinner" }], eatingOut: [{ day: 14, slot: "dinner" }] };
+    const n1 = acts().length;
+    const f1 = await call("POST", "/plan/reflow", "a", body);
+    assert.equal(f1.status, 200);
+    const dn = f1.body.plan.days;
+    assert.deepEqual(dn[11].slots.dinner, { mealId: "m2", locked: true }); // locked kept, skip ignored
+    assert.deepEqual(dn[13].slots.dinner, { eatingOut: true });
+    assert.ok(f1.body.draft.changes.some((c) => c.day === 13) && f1.body.draft.changes.every((c) => c.day >= 13));
+    assert.ok(f1.body.draft.summary.includes("ignored 1"));
+    assert.equal(acts().length, n1 + 1);
+    const st = JSON.parse(kv.get("planDraft"));
+    assert.deepEqual([st.pending, st.reflow, st.id], [true, true, f1.body.draft.id]);
+    const f2 = await call("POST", "/plan/reflow", "a", body);
+    assert.equal(f2.body.draft.id, f1.body.draft.id); // idempotent
+    assert.equal(acts().length, n1 + 1);
+    assert.equal(JSON.stringify(JSON.parse(kv.get("plan")).days), JSON.stringify(rm)); // mirror untouched
+    assert.equal((await call("POST", "/plan/reflow", "a", {})).body.draft.changes.length, 0);
+    const ro = await call("POST", "/plan/reflow", "a", { ranOut: ["rice"] }); // every test meal uses rice: all unlocked slots are freed
+    assert.ok(ro.status === 200 && ro.body.draft.changes.length > 0);
+    assert.equal(JSON.parse(kv.get("pantry") || "{\"items\":[]}").items.length, 0); // re-flow never writes the pantry
+    kv.set("plan", planKv);
+    kv.delete("plan");
+    assert.equal((await call("POST", "/plan/reflow", "a", {})).status, 409);
+    kv.set("plan", planKv);
+    kv.delete("planDraft");
+  }
   // bad applies
   const ch = d.body.draft.changes[0];
   const bogus = { ...d.body.draft, changes: [{ ...ch, after: { mealId: "nope" } }] };

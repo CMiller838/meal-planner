@@ -25,13 +25,19 @@
   let vocabAll = null; // whole plan-preferences.json (chips + candidates)
   let prefs = {}; // { vocab, busyDays, chips } from MP.PlanPrefs, set once at init
 
-  function toast(msg) {
+  function toast(msg, action) {
     const root = document.getElementById("toast-root");
     const el = document.createElement("div");
     el.className = "toast";
     el.textContent = msg;
+    if (action) {
+      const b = document.createElement("button");
+      b.textContent = action.label;
+      b.addEventListener("click", () => { el.remove(); action.fn(); });
+      el.appendChild(b);
+    }
     root.appendChild(el);
-    setTimeout(() => el.remove(), 1800);
+    setTimeout(() => el.remove(), action ? 8000 : 1800);
   }
 
   // ---- MP.Cooks: leftover-portion bookkeeping (Phase 20) ----
@@ -131,12 +137,14 @@
 
   MP.Cooks = { all: cooksAll, openFor: cooksOpenFor, open: cooksOpen, take: cooksTake, discard: cooksDiscard, freezeOne: cooksFreezeOne };
 
-  function generatePlan(override, locked) {
+  function generatePlan(override, locked, ranOut, avoid) {
+    const lib = avoid && avoid.length ? library.filter((m) => !avoid.includes(m.id)) : library;
     const budget = packData
-      ? { costIndex: MP.ShoppingList.costIndex(library, packData), groups: MP.ShoppingList.groupIndex(groupsData), ...packData.planning }
+      ? { costIndex: MP.ShoppingList.costIndex(lib, packData), groups: MP.ShoppingList.groupIndex(groupsData), ...packData.planning }
       : null;
     const have = MP.ShoppingList.pantryIndex({ items: MP.Sync.localItems("pantry") });
-    return MP.Generator.generatePlan(library, tagsData.tags, tagsData.targets, shelfData, undefined, budget, have, Object.assign({}, prefs, override, { profile: MP.Nutrition.profileOf(MP.Sync.settings()) }), MP.Ratings.get(), locked);
+    (ranOut || []).forEach((k) => delete have[k]); // Phase 63: ran out for this generation only; the pantry is never written
+    return MP.Generator.generatePlan(lib, tagsData.tags, tagsData.targets, shelfData, undefined, budget, have, Object.assign({}, prefs, override, { profile: MP.Nutrition.profileOf(MP.Sync.settings()) }), MP.Ratings.get(), locked);
   }
 
   // Phase 64: three candidate fortnights. Generation only; nothing saves until "Use this plan".
@@ -277,6 +285,36 @@
     renderPlan();
   }
 
+  // ---- Mid-week re-flow (Phase 63) ----
+  const LS_UNDO = "mp_planUndo";
+  /** One-level undo snapshot; not plan state. */
+  function snapshot(planIn) {
+    localStorage.setItem(LS_UNDO, JSON.stringify(planIn));
+    return planIn;
+  }
+  function restore() {
+    const raw = localStorage.getItem(LS_UNDO);
+    if (!raw) return null;
+    localStorage.setItem(LS_PLAN, raw);
+    window.dispatchEvent(new CustomEvent("mp:plan-saved", { detail: JSON.parse(raw) }));
+    return JSON.parse(raw);
+  }
+  /** Pure: MP.reflowPlan with the page's generator. ctx = { fromDay, generate(locked, ranOutKeys) }. */
+  function reflow(planIn, input, lib, ctx) {
+    return MP.reflowPlan(planIn, input, Object.fromEntries(lib.map((m) => [m.id, m])), ctx.fromDay, ctx.generate);
+  }
+
+  function doReflow(input) {
+    const res = reflow(plan, input, library, { fromDay: MP.reflowFromDay(plan.startDate, new Date().toLocaleDateString("sv")), generate: (locked, ranOut, avoid) => generatePlan(undefined, locked, ranOut, avoid) });
+    if (!res.changes.length) { closeDayView(); toast(res.ignored.length ? "Eaten, locked or past meals can't be re-flowed" : "Nothing to change"); return; }
+    snapshot(plan);
+    plan = res.plan;
+    savePlan();
+    closeDayView();
+    renderPlan();
+    toast(`Re-planned ${res.changes.length} slot${res.changes.length === 1 ? "" : "s"}`, { label: "Undo re-flow", fn: () => { const p = restore(); if (p) { plan = p; renderPlan(); toast("Back to before the re-flow"); } } });
+  }
+
   function mealAt(day, slotType) {
     const slot = plan.days[day - 1].slots[slotType];
     return slot && slot.mealId ? mealsById[slot.mealId] : null;
@@ -298,8 +336,7 @@
    *  (no stale variantId from the meal it replaced); a variant change never
    *  touches the meal. */
   function setSlotMeal(day, slotType, mealId) {
-    const keep = plan.days[day - 1].slots[slotType];
-    plan.days[day - 1].slots[slotType] = keep && keep.locked ? { mealId, locked: true } : { mealId };
+    plan.days[day - 1].slots[slotType] = { mealId, locked: true }; // Phase 63: a hand swap is the user's act, so it survives a re-flow
     if (!guidedActive) savePlan();
   }
 
@@ -523,7 +560,7 @@
               const locked = meal && plan.days[d.day - 1].slots[slotType].locked;
               return `<div class="slot-card ${meal ? "" : "empty"}${locked ? " locked" : ""}" data-day="${d.day}" data-slot="${slotType}">
                 <div class="slot-type">${slotType}${locked ? ` <span class="lock-icon" aria-label="Locked">🔒</span>` : ""}</div>
-                <div class="slot-meal">${meal ? esc(meal.name) : "tap to add"}</div>
+                <div class="slot-meal">${meal ? esc(meal.name) : plan.days[d.day - 1].slots[slotType] && plan.days[d.day - 1].slots[slotType].eatingOut ? "Eating out" : "tap to add"}</div>
                 ${ratingHintHtml(meal)}
                 ${warningHtml(d.day, slotType, warn)}
               </div>`;
@@ -906,7 +943,9 @@
         <button class="ghost day-swap-btn" data-slot="${slotType}">Swap</button>
         ${meal.variants && meal.variants.length ? `<button class="ghost day-variant-btn" data-slot="${slotType}">Variant</button>` : ""}
         <button class="ghost day-recipe-btn" data-slot="${slotType}">Recipe</button>
-        ${slot.eatenAt ? "" : `<button class="ghost day-lock-btn" data-slot="${slotType}">${slot.locked ? "Unlock" : "Lock"}</button>`}
+        ${slot.eatenAt ? "" : `<button class="ghost day-lock-btn" data-slot="${slotType}">${slot.locked ? "Unlock" : "Lock"}</button>
+        <button class="ghost day-skip-btn" data-slot="${slotType}">${slotType === "dinner" && MP.isBatch(meal) ? "Skip cook" : "Skip"}</button>
+        <button class="ghost day-out-btn" data-slot="${slotType}">Eating out</button>`}
         ${eatBtnHtml(day, slotType)}
       </div>
       ${slotEaten(day, slotType) ? `<p class="day-slot-note">Eaten ${esc(new Date(slotEaten(day, slotType)).toLocaleDateString())}</p>` : ""}
@@ -938,6 +977,10 @@
       b.addEventListener("click", () => openSwapPicker(day, b.dataset.slot)));
     sheet.querySelectorAll(".day-lock-btn").forEach((b) =>
       b.addEventListener("click", () => toggleLock(day, b.dataset.slot)));
+    sheet.querySelectorAll(".day-skip-btn").forEach((b) =>
+      b.addEventListener("click", () => doReflow({ skipped: [{ day, slot: b.dataset.slot }] })));
+    sheet.querySelectorAll(".day-out-btn").forEach((b) =>
+      b.addEventListener("click", () => doReflow({ eatingOut: [{ day, slot: b.dataset.slot }] })));
     sheet.querySelectorAll(".day-variant-btn").forEach((b) =>
       b.addEventListener("click", () => openVariantPicker(day, b.dataset.slot)));
     sheet.querySelectorAll(".day-recipe-btn").forEach((b) => {
@@ -1218,7 +1261,7 @@
     if (!el) return;
     const rows = draft.changes.map((c) => {
       const m = mealsById[c.after.mealId];
-      return `<li>Day ${c.day} ${esc(c.slot)} — ${esc(m ? m.name : c.after.mealId)}</li>`;
+      return `<li>Day ${c.day} ${esc(c.slot)} — ${c.after.eatingOut ? "Eating out" : esc(m ? m.name : c.after.mealId)}</li>`;
     }).join("");
     el.innerHTML = `<p>The assistant drafted ${draft.changes.length} change${draft.changes.length === 1 ? "" : "s"} to your plan:</p><ul>${rows}</ul>
       <button class="btn" data-act="apply">Apply</button> <button class="btn" data-act="dismiss">Dismiss</button>`;
@@ -1228,9 +1271,12 @@
       if (!act) return;
       el.hidden = true;
       if (act === "apply") {
-        const placements = draft.changes.map((c) => ({ day: c.day, slot: c.slot, mealId: c.after.mealId, variantId: c.after.variantId }));
+        if (draft.reflow) MP.Plan.snapshot(plan); // Phase 63: Activity "Undo" on the draft restores this
+        const outs = draft.changes.filter((c) => c.after.eatingOut);
+        const placements = draft.changes.filter((c) => !c.after.eatingOut).map((c) => ({ day: c.day, slot: c.slot, mealId: c.after.mealId, variantId: c.after.variantId }));
         const res = MP.Plan.applyPlacements(plan, placements, library);
         plan = res.plan;
+        outs.forEach((c) => { const sl = plan.days[c.day - 1].slots; if (!(sl[c.slot] && sl[c.slot].eatenAt)) sl[c.slot] = { eatingOut: true }; });
         savePlan();
         renderPlan();
         renderPlacementBanner({ applied: res.applied, rejected: res.rejected });
@@ -1352,7 +1398,7 @@
     renderPlacementBanner(e.detail);
   });
 
-  MP.Plan = { planMetrics, parseGuidedSlots, applyPlacements, logPortion, matchEatRequests, applyEatRequests };
+  MP.Plan = { reflow, snapshot, restore, planMetrics, parseGuidedSlots, applyPlacements, logPortion, matchEatRequests, applyEatRequests };
 
   async function init() {
     MP.initTheme();

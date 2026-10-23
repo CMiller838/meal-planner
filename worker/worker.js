@@ -48,7 +48,7 @@ const ASSISTANT_ALLOWED = new Set([
   "GET /dayHints", "PUT /dayHints", "PUT /meal-method", "GET /today", "PUT /today", "GET /products", "PUT /products",
   "GET /expiring", "GET /day", "GET /product-ranking", "GET /ratings", "GET /why", "GET /scale", "GET /cookable", "GET /substitutions", "GET /leftovers", "GET /quick",
   "GET /drafts", "POST /drafts", "GET /settings", "PUT /settings", "GET /activity", "POST /activity/undo",
-  "POST /plan/draft", "POST /plan/apply", "GET /planDraft",
+  "POST /plan/draft", "POST /plan/apply", "GET /planDraft", "POST /plan/reflow",
 ]);
 const METHOD_PATH = /^\/meal\/([^/]+)\/method$/;
 const DRAFT_PATH = /^\/drafts\/([^/]+)$/;
@@ -230,25 +230,13 @@ const readJSON = async (env, k) => parseKV(await env.MP_KV.get(k));
 const libraryOf = (v) => (Array.isArray(v) ? v : v && Array.isArray(v.meals) ? v.meals : []);
 const slotRef = (v) => (v && v.mealId ? { mealId: v.mealId, ...(v.variantId ? { variantId: v.variantId } : {}) } : null);
 
-/** POST /plan/draft: Generator.generatePlan around the synced inputs, merged over the plan mirror. Stores nothing. */
-async function draftPlan(body, env) {
-  if (typeof body !== "object" || body === null || Array.isArray(body)) return json(400, "expected an object");
-  const { days = null, keep = [], avoid = [], budget = null, useUp = false } = body;
-  if (days !== null && (!Array.isArray(days) || !days.every((d) => Number.isInteger(d) && d >= 1 && d <= 14))) return json(400, "days must be integers 1-14");
-  if (!Array.isArray(keep) || !keep.every((k) => k && Number.isInteger(k.day) && k.day >= 1 && k.day <= 14 && SLOT_TYPES.includes(k.slot))) return json(400, "keep must be [{ day 1-14, slot }]");
-  if (!Array.isArray(avoid) || !avoid.every((a) => typeof a === "string")) return json(400, "avoid must be meal id strings");
-  if (budget !== null && !(typeof budget === "number" && isFinite(budget) && budget > 0)) return json(400, "budget must be a number > 0");
-  if (typeof useUp !== "boolean") return json(400, "useUp must be a boolean");
-
+/** Phase 63: the KV reads and prefs both /plan/draft and /plan/reflow generate from. */
+async function planInputs(env, { useUp = false, budget = null } = {}) {
   const [libRaw, mirror, planPrefs, hints, ratingsRaw, pantry, settings] = await Promise.all(
     ["library", "plan", "planPrefs", "dayHints", "ratings", "pantry"].map((k) => readJSON(env, k)).concat(readSettings(env)));
   const library = libraryOf(libRaw);
-  if (!library.length) return json(409, "library must be synced first");
   const hasMirror = !!(mirror && Array.isArray(mirror.days));
   const startDate = (hasMirror && mirror.startDate) || Generator.isoToday();
-  const want = new Set(days || Array.from({ length: 14 }, (_, i) => i + 1));
-  const kept = new Set(keep.map((k) => `${k.day}:${k.slot}`));
-  const avoidSet = new Set(avoid);
 
   const pp = planPrefs || {};
   const resolved = DayHints.resolve(hints, startDate, Generator.isoToday(), {});
@@ -261,6 +249,34 @@ async function draftPlan(body, env) {
     const items = ShoppingList.useUpItems((pantry && pantry.items) || [], mirror, Generator.isoToday(), SHELF_DATA);
     if (items.length) prefs.useUp = { items, window: PACK_DATA.planning.useUpWindow || 6 };
   }
+  return { library, mirror, hasMirror, startDate, prefs, pantry, ratingsRaw, settings };
+}
+
+/** Generator.generatePlan over `pool`, with `ranOut` pantry keys treated as absent (generation only; the pantry is never written). */
+function runGenerator({ startDate, prefs, pantry, ratingsRaw, settings }, pool, locked, ranOut = []) {
+  const budgetObj = { costIndex: ShoppingList.costIndex(pool, PACK_DATA), groups: ShoppingList.groupIndex(SUB_GROUPS), ...PACK_DATA.planning };
+  const have = ShoppingList.pantryIndex(pantry || { items: [] });
+  ranOut.forEach((k) => delete have[k]);
+  return Generator.generatePlan(pool, TAGS, Nutrition.withProfile(TARGETS, settings), SHELF_DATA, startDate, budgetObj, have, prefs, (ratingsRaw && ratingsRaw.meals) || {}, locked);
+}
+
+/** POST /plan/draft: Generator.generatePlan around the synced inputs, merged over the plan mirror. Stores nothing. */
+async function draftPlan(body, env) {
+  if (typeof body !== "object" || body === null || Array.isArray(body)) return json(400, "expected an object");
+  const { days = null, keep = [], avoid = [], budget = null, useUp = false } = body;
+  if (days !== null && (!Array.isArray(days) || !days.every((d) => Number.isInteger(d) && d >= 1 && d <= 14))) return json(400, "days must be integers 1-14");
+  if (!Array.isArray(keep) || !keep.every((k) => k && Number.isInteger(k.day) && k.day >= 1 && k.day <= 14 && SLOT_TYPES.includes(k.slot))) return json(400, "keep must be [{ day 1-14, slot }]");
+  if (!Array.isArray(avoid) || !avoid.every((a) => typeof a === "string")) return json(400, "avoid must be meal id strings");
+  if (budget !== null && !(typeof budget === "number" && isFinite(budget) && budget > 0)) return json(400, "budget must be a number > 0");
+  if (typeof useUp !== "boolean") return json(400, "useUp must be a boolean");
+
+  const inp = await planInputs(env, { useUp, budget });
+  const { library, mirror, hasMirror, startDate, prefs } = inp;
+  if (!library.length) return json(409, "library must be synced first");
+  const want = new Set(days || Array.from({ length: 14 }, (_, i) => i + 1));
+  const kept = new Set(keep.map((k) => `${k.day}:${k.slot}`));
+  const avoidSet = new Set(avoid);
+
   // Phase 66: slots the merge below keeps are passed as locked, so the draft fills around them.
   const locked = {};
   if (hasMirror) for (let day = 1; day <= 14; day++) {
@@ -270,10 +286,7 @@ async function draftPlan(body, env) {
       if (cur && cur.mealId && (cur.locked || cur.eatenAt || kept.has(`${day}:${slot}`) || !want.has(day))) (locked[day] = locked[day] || {})[slot] = cur;
     }
   }
-  const pool = library.filter((m) => !avoidSet.has(m.id));
-  const budgetObj = { costIndex: ShoppingList.costIndex(pool, PACK_DATA), groups: ShoppingList.groupIndex(SUB_GROUPS), ...PACK_DATA.planning };
-  const gen = Generator.generatePlan(pool, TAGS, Nutrition.withProfile(TARGETS, settings), SHELF_DATA, startDate, budgetObj,
-    ShoppingList.pantryIndex(pantry || { items: [] }), prefs, (ratingsRaw && ratingsRaw.meals) || {}, locked);
+  const gen = runGenerator(inp, library.filter((m) => !avoidSet.has(m.id)), locked);
   // ponytail: a merge can split a batch/leftover chain at a kept/eaten boundary; the user sees the draft before applying.
 
   const merged = [];
@@ -313,15 +326,41 @@ async function applyDraft(body, env, who) {
     if (!c || !Number.isInteger(c.day) || c.day < 1 || c.day > 14 || !SLOT_TYPES.includes(c.slot)) return json(400, "each change needs day 1-14 and a valid slot");
     if (!refOk(c.after)) return json(400, "change references a meal not in the library");
   }
+  return json(200, await parkDraft(env, who, d));
+}
+
+/** Park a draft in KV planDraft (once per id) and log it. `reflow` marks a Phase 63 re-flow draft. */
+async function parkDraft(env, who, d, reflow = false) {
   const cur = await readJSON(env, "planDraft");
   if (cur && cur.id === d.id) {
-    if (cur.pending) return json(200, { id: d.id, status: "already pending" });
-    if (cur.ackedId === d.id) return json(200, { id: d.id, status: "already applied" });
+    if (cur.pending) return { id: d.id, status: "already pending" };
+    if (cur.ackedId === d.id) return { id: d.id, status: "already applied" };
   }
-  const next = { id: d.id, at: new Date().toISOString(), pending: true, startDate: d.startDate, changes: d.changes.map(({ day, slot, before, after }) => ({ day, slot, before: slotRef(before), after: slotRef(after) })) };
+  const next = { id: d.id, at: new Date().toISOString(), pending: true, ...(reflow ? { reflow: true } : {}), startDate: d.startDate, changes: d.changes.map(({ day, slot, before, after }) => ({ day, slot, before: before && before.eatingOut ? before : slotRef(before), after: after && after.eatingOut ? after : slotRef(after) })) };
   await env.MP_KV.put("planDraft", JSON.stringify(next));
-  await logWrite(env, { who, key: "planDraft", why: "", changes: diffItems("planDraft", cur, next) });
-  return json(200, { id: d.id, status: "pending" });
+  await logWrite(env, { who, key: "planDraft", why: reflow ? "re-flow" : "", changes: diffItems("planDraft", cur, next) });
+  return { id: d.id, status: "pending" };
+}
+
+/** POST /plan/reflow (Phase 63): re-plan only skipped / eating-out / ran-out slots of the mirrored plan and park the result as a pending planDraft. */
+async function reflowRoute(body, env, who) {
+  const bad = globalThis.MP.reflowInputError(body);
+  if (bad) return json(400, bad);
+  const inp = await planInputs(env);
+  if (!inp.library.length) return json(409, "library must be synced first");
+  if (!inp.hasMirror) return json(409, "no plan to re-flow");
+  const { library, mirror, startDate } = inp;
+  const planIn = { ...mirror, days: Array.from({ length: 14 }, (_, i) => mirror.days[i] || { day: i + 1, slots: {} }) };
+  const res = globalThis.MP.reflowPlan(planIn, body, Object.fromEntries(library.map((m) => [m.id, m])), globalThis.MP.reflowFromDay(startDate, Generator.isoToday()),
+    (locked, ranOut, avoid) => runGenerator(inp, library.filter((m) => !avoid.includes(m.id)), locked, ranOut));
+  const names = Object.fromEntries(library.map((m) => [m.id, m.name]));
+  const label = (a) => (a.eatingOut ? "eating out" : names[a.mealId] || a.mealId);
+  const shown = res.changes.filter((c) => c.after);
+  const summary = (res.changes.length ? `${res.changes.length} change${res.changes.length === 1 ? "" : "s"}: ${shown.slice(0, 3).map((c) => `day ${c.day} ${c.slot} ${label(c.after)}`).join(", ")}${shown.length > 3 ? ` +${shown.length - 3} more` : ""}` : "no changes")
+    + (res.ignored.length ? `; ignored ${res.ignored.length} eaten, locked or past slot${res.ignored.length === 1 ? "" : "s"}` : "");
+  const draft = { id: draftId(res.changes), startDate, changes: res.changes, summary };
+  if (res.changes.length) await parkDraft(env, who, draft, true);
+  return json(200, { draft, plan: { startDate, days: res.plan.days } });
 }
 
 /** The real ranking terms behind a meal's place, as codes. Only inputs rankSlot reads: gap, prefer chip, busy-day effort, rating. */
@@ -1146,6 +1185,7 @@ export const ROUTES = [
   row("DELETE", "/drafts/:id", "write", { assistant: true, ...quiet("inert until the app accepts") }),
   row("POST", "/plan/draft", "read", { note: "computes a draft, stores nothing; useUp:true cooks expiring pantry items first" }),
   row("POST", "/plan/apply", "write", { log: "logged", note: "parks the draft in planDraft" }),
+  row("POST", "/plan/reflow", "write", { log: "logged", note: "re-plans only skipped / eatingOut / ranOut slots and parks the result in planDraft" }),
   row("POST", "/activity/undo", "write", { log: "logged" }),
 ];
 
@@ -1321,6 +1361,13 @@ export default {
       let b;
       try { b = JSON.parse(await request.text()); } catch (e) { return json(400, "invalid JSON"); }
       return url.pathname === "/plan/draft" ? draftPlan(b, env) : applyDraft(b, env, who);
+    }
+
+    if (url.pathname === "/plan/reflow") {
+      if (request.method !== "POST") return json(405, "method not allowed");
+      let b;
+      try { b = JSON.parse(await request.text()); } catch (e) { return json(400, "invalid JSON"); }
+      return reflowRoute(b, env, who);
     }
 
     if (url.pathname === "/discover") {

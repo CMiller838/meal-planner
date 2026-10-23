@@ -312,6 +312,69 @@
     return out;
   }
 
+  /** Phase 63: why a re-flow body is bad, or null. */
+  function reflowInputError(b) {
+    if (typeof b !== "object" || b === null || Array.isArray(b)) return "expected an object";
+    for (const k of ["skipped", "eatingOut"]) {
+      const v = b[k];
+      if (v !== undefined && !(Array.isArray(v) && v.every((s) => s && Number.isInteger(s.day) && s.day >= 1 && s.day <= 14 && ["breakfast", "lunch", "dinner", "snack"].includes(s.slot)))) return `${k} must be [{ day 1-14, slot }]`;
+    }
+    if (b.ranOut !== undefined && !(Array.isArray(b.ranOut) && b.ranOut.every((s) => typeof s === "string" && s.trim()))) return "ranOut must be ingredient name strings";
+    return null;
+  }
+
+  /** Phase 63: first plan day (1-based) a re-flow may touch: today's day, clamped to 1..15. Today stays re-plannable. */
+  function reflowFromDay(startDate, todayIso) {
+    if (!startDate) return 1;
+    const d = Math.round((Date.parse(todayIso) - Date.parse(startDate)) / 86400000) + 1;
+    return Math.min(Math.max(d, 1), 15);
+  }
+
+  /** Phase 63, pure: re-plan only the freed slots of `plan`. Everything else (past days, eaten, locked, untouched
+   *  slots) is passed to `generate(locked, ranOutKeys, avoidIds)` as locked, so it comes back identical. A skipped batch cook frees
+   *  its whole leftover chain; a slot whose meal uses a ran-out ingredient is freed too. Eating-out slots end up
+   *  `{ eatingOut: true }` and stay that way on later re-flows.
+   *  Returns { plan, changes: [{ day, slot, before, after }], ignored: [{ day, slot, reason }] }. */
+  function reflowPlan(plan, input, mealsById, fromDay, generate) {
+    const SLOTS = ["breakfast", "lunch", "dinner", "snack"];
+    const id = (d, t) => d + ":" + t;
+    const slotAt = (d, t) => plan.days[d - 1] && plan.days[d - 1].slots[t];
+    const held = (d, t) => { const s = slotAt(d, t); return d < fromDay || !!(s && s.mealId && (s.locked || s.eatenAt)); };
+    const free = new Set(), eatingOut = new Set(), ignored = [], avoid = new Set(); // avoid: meals the generator must not re-pick for this call
+    plan.days.forEach((d) => SLOTS.forEach((t) => { if (d.slots[t] && d.slots[t].eatingOut) eatingOut.add(id(d.day, t)); }));
+    for (const e of input.eatingOut || []) {
+      if (held(e.day, e.slot)) ignored.push({ day: e.day, slot: e.slot, reason: "eaten, locked or past" });
+      else { eatingOut.add(id(e.day, e.slot)); free.add(id(e.day, e.slot)); }
+    }
+    for (const e of input.skipped || []) {
+      if (held(e.day, e.slot)) { ignored.push({ day: e.day, slot: e.slot, reason: "eaten, locked or past" }); continue; }
+      free.add(id(e.day, e.slot));
+      const meal = mealsById[(slotAt(e.day, e.slot) || {}).mealId];
+      if (meal) avoid.add(meal.id);
+      if (e.slot === "dinner" && meal && isBatch(meal)) chainDays(plan.days, mealsById, e.day).forEach((d) => { if (!held(d, "dinner")) { free.add(id(d, "dinner")); avoid.add(plan.days[d - 1].slots.dinner.mealId); } });
+    }
+    const ranOut = (input.ranOut || []).map((s) => MP.ShoppingList.normalizeKey(s));
+    if (ranOut.length) plan.days.forEach((d) => SLOTS.forEach((t) => {
+      const meal = mealsById[(d.slots[t] || {}).mealId];
+      if (!held(d.day, t) && meal && (meal.ingredients || []).some((i) => ranOut.includes(MP.ShoppingList.normalizeKey(i.key)))) { free.add(id(d.day, t)); avoid.add(meal.id); }
+    }));
+    const locked = {};
+    plan.days.forEach((d) => SLOTS.forEach((t) => { if (d.slots[t] && d.slots[t].mealId && !free.has(id(d.day, t))) (locked[d.day] = locked[d.day] || {})[t] = d.slots[t]; }));
+    const gen = generate(locked, ranOut, [...avoid]);
+    const ref = (s) => (s && s.eatingOut ? { eatingOut: true } : s && s.mealId ? { mealId: s.mealId, ...(s.variantId ? { variantId: s.variantId } : {}) } : null);
+    const changes = [];
+    const days = plan.days.map((d) => {
+      const slots = { ...d.slots };
+      for (const t of SLOTS) {
+        const next = eatingOut.has(id(d.day, t)) ? { eatingOut: true } : free.has(id(d.day, t)) ? gen.days[d.day - 1].slots[t] : d.slots[t];
+        if (next) slots[t] = next; else delete slots[t];
+        if (JSON.stringify(ref(d.slots[t])) !== JSON.stringify(ref(next))) changes.push({ day: d.day, slot: t, before: ref(d.slots[t]), after: ref(next) });
+      }
+      return { ...d, slots };
+    });
+    return { plan: { ...plan, days }, changes, ignored };
+  }
+
   /** Cook day of a frozen portion's parent, or null. Trusts `frozenFrom` only while that
    *  earlier day's dinner is still the same meal (Phase 59); otherwise it is a plain slot. */
   function frozenParentDay(plan, dayNum, slot) {
@@ -438,6 +501,9 @@
   };
   MP.isBatch = isBatch;
   MP.chainDays = chainDays;
+  MP.reflowPlan = reflowPlan;
+  MP.reflowInputError = reflowInputError;
+  MP.reflowFromDay = reflowFromDay;
   MP.frozenParentDay = frozenParentDay;
   MP.methodOf = methodOf;
   MP.methodHtml = methodHtml;

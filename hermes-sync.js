@@ -309,7 +309,8 @@ window.MP = window.MP || {};
       const slots = {};
       for (const slotType of SLOT_TYPES) {
         const slot = d && d.slots && d.slots[slotType];
-        if (slot && slot.mealId) {
+        if (slot && slot.eatingOut) slots[slotType] = { eatingOut: true };
+        else if (slot && slot.mealId) {
           slots[slotType] = { mealId: slot.mealId, eatenAt: slot.eatenAt || null };
           if (slot.variantId) slots[slotType].variantId = slot.variantId;
           if (Number.isInteger(slot.frozenFrom)) slots[slotType].frozenFrom = slot.frozenFrom;
@@ -768,6 +769,10 @@ window.MP = window.MP || {};
     if (key === "products") return syncProducts(null);
     if (key === "today") return MP.Today.pull();
     if (key === "planFlag") return syncPlanFlag();
+    if (key === "planDraft") { // Phase 63: undoing a re-flow draft restores the app-side snapshot (plan.js's MP.Plan.restore, same two keys)
+      const raw = localStorage.getItem("mp_planUndo");
+      if (raw) localStorage.setItem("mp_plan", raw);
+    }
     return Promise.resolve();
   }
 

@@ -70,6 +70,7 @@ Not logged (`log: "unlogged"` in `routes.json`, each with a `why`): the app-owne
 | `POST /drafts` | A |  | A meal draft; ingredients are matched to known keys, hard exclusions run (`422` on a hit, `409` too many). `201 { id, unmatched }`. |
 | `DELETE /drafts/:id` | A |  | `204`; `404 unknown draft`. |
 | `POST /plan/apply { draft }` | A |  | Parks a draft from `/plan/draft` in `planDraft` for the app to adopt; never touches the plan. `409` until the library is synced. |
+| `POST /plan/reflow { skipped?, eatingOut?, ranOut? }` | A |  | Re-plans only skipped / eating-out / ran-out slots (a skipped batch cook frees its leftover chain; eaten, locked and past slots stay) and parks the result as a pending `planDraft` (`reflow: true`). `409` without a synced library or plan; `400` on a bad day/slot/ranOut. Never writes the pantry. |
 | `POST /activity/undo { id }` | A |  | See above. |
 | `PUT /settings` | A |  | Written only here; validated (`400` with the reason), unknown keys come back in `ignored`. |
 | `PUT /planDraft` |  | yes | Raw key write; prefer `POST /plan/apply`. |

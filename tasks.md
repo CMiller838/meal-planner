@@ -686,6 +686,10 @@ Spec: `.claude/specs/phase62.md` [M] (no cuisine, ingredient + cook-style profil
 
 ## Phase 63: Mid-week re-flow
 - Spec: `.claude/specs/phase63.md`
+- [x] `MP.reflowPlan` / `MP.Plan.reflow` pure + asserts; `snapshot`/`restore`, Activity-undo hook
+- [x] Worker `POST /plan/reflow` (shared `planInputs`/`runGenerator`/`parkDraft`), `ASSISTANT_ALLOWED`, routes.json; `setSlotMeal` locks; Phase 66 spec amended
+- [x] Skip / Eating out buttons in the day sheet, Undo re-flow toast, "Eating out" slot state, sw.js bump
+- [ ] Live: with the real Worker, ask the assistant to re-flow after skipping a cook; Apply in the installed PWA; Undo
 
 ## Phase 64: Three candidate weeks
 - Spec: `.claude/specs/phase64.md` [M] (cheapest / highest-protein / quickest fortnights side by side; adds `prefs.noBatch`).

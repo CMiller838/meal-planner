@@ -18,7 +18,7 @@ All own calls except where marked; no open gate (each fork had a clear answer fr
   plus leftover days). Half a chain re-rolled is a broken plan (CLAUDE.md batch primitive). A toast says "Locked 3 days
   (batch chain)". Chain = consecutive dinner slots from a `MP.isBatch` meal whose later slots are its `leadsTo` child
   (`leftoverOf === parent.id`) or the same meal, mirroring the generator's own run-building.
-- **A manual swap keeps the lock** (you chose that meal for that slot); a variant change never touches it.
+- **A manual swap keeps the lock** (you chose that meal for that slot); a variant change never touches it. *Amended by Phase 63: a manual swap now also sets the lock, so hand-swapped slots survive a re-flow.*
 - **Reroll day = `generatePlan` with every other slot passed as `locked`**, then copy only that day back. Neighbours and
   budget therefore shape the reroll with no second implementation.
 - **Generate and the Hermes request keep locks.** The confirm text becomes "Regenerate the unlocked meals? N locked meals are
