@@ -761,3 +761,23 @@ Requires Phase 72 (the chat's per-slot Reject, `plan-chat.js`, unbuilt: build af
 ## Phase 75: Tomorrow lock-in on Today
 - Spec: `.claude/specs/phase75.md`
 - [ ] Live: on the phone PWA, swap tomorrow's dinner from the Today card in one tap, then Keep it and confirm the lock shows in the day view
+
+## Phase 76: Cheaper swaps route
+Spec: `.claude/specs/phase76.md`
+
+## Phase 77: Weekly spend log [S]
+- [ ] `spend` KV key `{ updatedAt, weeks: { "<shop-day ISO>": { total, source, at } } }`; add `spend: ["weeks", null]` to `ITEMS` (`worker/worker.js` ~1157) so it is logged and undoable (Phase 48); model the handler on `putMealRating`
+- [ ] `POST /spend { week, total, source }`: validate `week` is an ISO date, `total` a finite number >= 0, `source` in asda|manual|estimate (else 400); the key is `week`, so a repeat overwrites, never adds
+- [ ] `GET /spend` returns `{ weeks, budgetTarget }` (`budgetTarget` from `readSettings`, `0` when unset); empty store returns `{ weeks: {}, budgetTarget }`
+- [ ] Register both in `ROUTES` + `ASSISTANT_ALLOWED` (assistant reads and writes), rerun `node tools/routes_build.mjs`, commit `worker/routes.json`
+- [ ] `tools/worker_test.mjs`: repeat POST same week leaves one row; `POST /activity/undo` restores the prior total; bad week/total/source rejected; GET shows `budgetTarget`
+- [ ] Skipped: planned-vs-actual on the cost meter (roadmap says "may"); add when the user asks. No `data_check`/`sw.js` change (Worker only)
+- [ ] Verify: `node tools/worker_test.mjs` and `python3 check.py --changed`
+- [ ] Live: with the assistant, log a week's Asda total, repeat it with a new figure, confirm one row and that undo restores
+
+## Phase 78: Pantry audit route
+Spec: `.claude/specs/phase78.md`
+
+## Phase 79: Cooking mode
+- [ ] Spec [M]: not yet written (roadmap `## Phase 79`)
+- [ ] Live: cook a meal step by step on the phone PWA with a timer running, confirm cook, check the pantry deducted once

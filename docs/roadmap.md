@@ -212,7 +212,7 @@ Requires Phase 32. Assistant side: `notion_assistant` Phase 49.
 
 ## Phase 40: Cooking mode data: steps, timers and a confirm-cook route [M] — built 2026-10-22, live checks pending
 
-**Added 2026-10-19.** Cooking mode itself is the assistant's (voice, timers, step by step). The planner supplies what it needs:
+**Added 2026-10-19.** Cooking mode itself was the assistant's; moved here as Phase 79 on 2026-10-24. The planner supplies what it needs:
 (1) a method for each meal, as an ordered list of short steps, each with an optional timer in minutes, kept in the meal data
 and not inline in code; (2) `GET /meal/:id/method`; (3) a confirm-cook call that runs the existing `commitCook` path, the only
 thing that deducts from the pantry, so an assistant confirmation and an in-app confirmation produce the same result.
@@ -592,3 +592,13 @@ Assistant side: Phase 44.
 duplicates). Read-only; answers go back through the existing pantry write, never a delete on its own. Snoozes are stored per
 finding. **Verify:** each finding class fires on a fixture pantry; a snoozed finding is withheld. Requires Phases 34, 48.
 Assistant side: Phase 43a.
+
+## Phase 79: Cooking mode [M] — not started
+
+**Added 2026-10-24** (moved from `notion_assistant` Phase 46; the assistant keeps prep session and portions). A Cook button on a
+meal opens a step-by-step screen over Phase 40's `GET /meal/:id/method`: one step at a time, big text for the phone, Next/Back,
+and a timer button on any step with minutes (counts down in the app; a phone-clock timer link where the platform allows).
+`drafted` steps are labelled as such; a meal with no method shows its ingredient list only. The last step offers Confirm cook,
+which goes through the existing `PUT /eat-requests` (`commitCook`), so it deducts exactly once, same as the assistant's `log_meal`.
+**Verify:** confirm twice deducts once; a running timer survives Next/Back; no-method fallback; PC and 390 px, both themes.
+Requires Phase 40. Assistant side: none (voice stays wake word every time).
