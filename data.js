@@ -297,6 +297,15 @@
     return (meal.servings || 1) >= 2 && !meal.leftoverOf;
   }
 
+  /** Cook day of a frozen portion's parent, or null. Trusts `frozenFrom` only while that
+   *  earlier day's dinner is still the same meal (Phase 59); otherwise it is a plain slot. */
+  function frozenParentDay(plan, dayNum, slot) {
+    const from = slot && slot.frozenFrom;
+    if (!Number.isInteger(from) || from < 1 || from >= dayNum) return null;
+    const parent = plan && plan.days && plan.days[from - 1] && plan.days[from - 1].slots.dinner;
+    return parent && parent.mealId === slot.mealId ? from : null;
+  }
+
   /** First library meal with a confusably similar name, or null. */
   function findSimilarName(meals, name, ignoreId) {
     const norm = (s) => (s || "").toLowerCase().replace(/[^a-z0-9]/g, "");
@@ -413,6 +422,7 @@
       .sort((a, b) => a.routine.time.localeCompare(b.routine.time));
   };
   MP.isBatch = isBatch;
+  MP.frozenParentDay = frozenParentDay;
   MP.methodOf = methodOf;
   MP.methodHtml = methodHtml;
   MP.fillMethods = fillMethods;

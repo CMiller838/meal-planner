@@ -237,14 +237,14 @@
     const halfKeys = { first: new Set(), second: new Set() };
     const spent = { first: 0, second: 0 };
 
-    function place(day, slotType, meal, countsTowardBudget) {
+    function place(day, slotType, meal, countsTowardBudget, frozenFrom) {
       const variantId = meal ? pickVariant(meal, have) : null;
       const half = day <= 7 ? halfKeys.first : halfKeys.second;
       const subs = meal && budget && budget.groups && countsTowardBudget !== false
         ? subsFor(MP.effectiveMeal(meal, variantId), half, budget.groups)
         : [];
       days[day - 1].slots[slotType] = meal
-        ? { mealId: meal.id, ...(variantId ? { variantId } : {}), ...(subs.length ? { subs } : {}) }
+        ? { mealId: meal.id, ...(frozenFrom ? { frozenFrom } : {}), ...(variantId ? { variantId } : {}), ...(subs.length ? { subs } : {}) }
         : { mealId: null };
       if (meal) lastUsedDay[meal.id] = day;
       if (meal && budget && countsTowardBudget !== false) {
@@ -293,6 +293,7 @@
     // cooks on day 2 and covers day 3; splitting to also cover day 1 needs a
     // second parent and isn't worth it until someone complains.
     const filled = new Set();
+    const spares = []; // { meal, cookDay, count } — portions the fridge run could not cover (Phase 59)
 
     for (const run of runs) {
       if (run.length < 2) continue;
@@ -317,6 +318,19 @@
         const meal = i === 0 ? parent : childId ? mealsById[childId] : parent;
         place(day, "dinner", meal, i === 0);
         filled.add(day);
+      }
+      const spare = Math.min(2, (parent.servings || 2) - coverage);
+      if (spare > 0 && prefs.freezeBatches !== false && parent.freezable !== false) spares.push({ meal: parent, cookDay: d0, count: spare });
+    }
+
+    // Frozen portions land on the earliest unfilled dinner day >= cookDay + 5; no free day, no frozen portion.
+    for (const { meal, cookDay, count } of spares) {
+      let left = count;
+      for (let day = cookDay + 5; day <= 14 && left > 0; day++) {
+        if (filled.has(day)) continue;
+        place(day, "dinner", meal, false, cookDay);
+        filled.add(day);
+        left--;
       }
     }
 

@@ -953,6 +953,7 @@ function planPrefsError(parsed) {
     return "busyDays must be integers 1-14";
   }
   if (!Array.isArray(parsed.chips) || !parsed.chips.every((c) => typeof c === "string")) return "chips must be an array of strings";
+  if (parsed.freezeBatches !== undefined && typeof parsed.freezeBatches !== "boolean") return "freezeBatches must be a boolean";
   return null;
 }
 

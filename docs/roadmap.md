@@ -625,7 +625,9 @@ Requires Phase 55. Not in `notion_assistant` (checked 2026-10-22).
 
 **Verified 2026-10-23:** check.py 9/9; tester PASS (every line once across aisles, tick keeps aisle, PC + 390px, both themes).
 
-## Phase 59: Freezer-aware batch planning [L] — not started
+## Phase 59: Freezer-aware batch planning [L] — built 2026-10-23, live checks pending
+
+Verified: check.py 9/9, worker_test ok, test.html freeze assertions (placement >= cookDay+5, opt-outs, no shelf-life warning, defrost notes, buildLists unchanged, planMirror). Chorizo pasta flagged `freezable:false`.
 
 **Added 2026-10-22** (promotes the `docs/FUTURE.md` entry). The generator may cook a batch meal, freeze the spare portions
 and schedule them later in the 2-week plan, using Phase 43's `storage` and `frozenMonths` helpers and the existing

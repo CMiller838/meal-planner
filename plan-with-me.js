@@ -20,7 +20,7 @@ window.MP = window.MP || {};
       : [];
     const chips = Array.isArray(parsed.chips) ? parsed.chips.filter((c) => typeof c === "string") : [];
     const budgetTarget = Number(parsed.budgetTarget);
-    return { busyDays, chips, budgetTarget: (!raw && profileBudget()) || (isFinite(budgetTarget) && budgetTarget >= 0 ? budgetTarget : 0) };
+    return { busyDays, chips, freezeBatches: parsed.freezeBatches !== false, budgetTarget: (!raw && profileBudget()) || (isFinite(budgetTarget) && budgetTarget >= 0 ? budgetTarget : 0) };
   }
 
   /** Profile.md's budget (Phase 52) wins over the local slider while it is > 0. */
@@ -29,13 +29,14 @@ window.MP = window.MP || {};
     return s && s.budgetTarget > 0 ? s.budgetTarget : 0;
   }
 
-  function save(busyDays, chips, budgetTarget) {
+  function save(busyDays, chips, budgetTarget, freezeBatches) {
     const n = Number(budgetTarget);
     const record = {
       updatedAt: new Date().toISOString(),
       busyDays: [...busyDays].sort((a, b) => a - b),
       chips: [...chips],
       budgetTarget: isFinite(n) && n >= 0 ? n : 0,
+      freezeBatches: freezeBatches !== false,
     };
     localStorage.setItem(KEY, JSON.stringify(record));
     return record;
@@ -142,6 +143,7 @@ window.MP = window.MP || {};
     const prefs = MP.Sync ? await MP.Sync.fetchPlanPrefs() : MP.PlanPrefs.get();
     prefs.busyDays.forEach((d) => busyDays.add(d));
     budgetTarget = prefs.budgetTarget || 0;
+    document.getElementById("freeze-batches").checked = prefs.freezeBatches !== false;
     renderBusyGrid();
 
     MP.ShoppingList.load()
@@ -180,7 +182,7 @@ window.MP = window.MP || {};
     renderSummary();
 
     document.getElementById("pwm-generate-btn").addEventListener("click", () => {
-      MP.PlanPrefs.save([...busyDays], [...chips], profileBudget() ? MP.PlanPrefs.get(true).budgetTarget : budgetTarget);
+      MP.PlanPrefs.save([...busyDays], [...chips], profileBudget() ? MP.PlanPrefs.get(true).budgetTarget : budgetTarget, document.getElementById("freeze-batches").checked);
       if (MP.Sync) MP.Sync.pushPlanPrefs();
       location.href = "plan.html?guided=1";
     });

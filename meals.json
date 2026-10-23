@@ -262,6 +262,7 @@
       "dinner"
     ],
     "prepEffort": "batch",
+    "freezable": false,
     "servings": 2,
     "description": "Any pasta shape with chorizo, white sauce preferred.",
     "instructions": "Cook pasta. Fry sliced chorizo until the oil renders out. Stir through a white sauce and the cooked pasta.",

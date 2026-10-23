@@ -312,6 +312,7 @@ window.MP = window.MP || {};
         if (slot && slot.mealId) {
           slots[slotType] = { mealId: slot.mealId, eatenAt: slot.eatenAt || null };
           if (slot.variantId) slots[slotType].variantId = slot.variantId;
+          if (Number.isInteger(slot.frozenFrom)) slots[slotType].frozenFrom = slot.frozenFrom;
           if (slot.subs && slot.subs.length) slots[slotType].subs = slot.subs;
         }
       }
@@ -367,7 +368,7 @@ window.MP = window.MP || {};
     }
     if (!remote || typeof remote !== "object" || Array.isArray(remote)) return MP.PlanPrefs.get();
     const decision = decide(localPlanPrefsStamp(), remote);
-    if (decision === "pull") return MP.PlanPrefs.save(remote.busyDays, remote.chips, remote.budgetTarget);
+    if (decision === "pull") return MP.PlanPrefs.save(remote.busyDays, remote.chips, remote.budgetTarget, remote.freezeBatches);
     if (decision === "push") pushPlanPrefs();
     return MP.PlanPrefs.get();
   }

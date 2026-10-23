@@ -661,6 +661,7 @@ Requires Phase 43 (storage/`frozenMonths` helpers) built first. Decided: scale a
 
 ## Phase 59: Freezer-aware batch planning
 - Spec: `.claude/specs/phase59.md`
+- [x] Logic, generator, shopping/mirror/prefs/worker, commitCook freezing, plan-card/Today notes, setup toggle, CACHE bump
 - [ ] Live: in the installed phone PWA generate a plan containing chilli; confirm a frozen dinner 5+ days after the cook and the "Defrost tonight" note on Today the evening before
 
 ## Phase 60: Choice screens for breakfast, lunch and snacks

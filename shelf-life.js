@@ -46,7 +46,7 @@
     const occ = {};
     plan.days.forEach((day) => {
       Object.values(day.slots).forEach((slot) => {
-        if (!slot || !slot.mealId) return;
+        if (!slot || !slot.mealId || MP.frozenParentDay(plan, day.day, slot)) return;
         (occ[slot.mealId] = occ[slot.mealId] || []).push(day.day);
       });
     });
@@ -123,12 +123,24 @@
         if (!slot || !slot.mealId) return;
         const meal = mealsById[slot.mealId];
         if (!meal) return;
+        if (MP.frozenParentDay(plan, day.day, slot)) return; // frozen shelf life is months (Phase 59)
         const effMeal = MP.effectiveMeal(meal, slot.variantId, slot.subs);
         const w = evaluateSlot(day.day, effMeal, occ, shelfData);
         if (w) warnings[`${day.day}-${slotType}`] = w;
       });
     });
     return warnings;
+  }
+
+  /** { [day]: [{ mealId, forDay }] } — defrost reminder on the day before each frozen portion (Phase 59). */
+  function defrostNotes(plan, mealsById) {
+    const notes = {};
+    ((plan && plan.days) || []).forEach((day) => {
+      const slot = day.slots && day.slots.dinner;
+      if (!slot || !slot.mealId || !mealsById[slot.mealId] || !MP.frozenParentDay(plan, day.day, slot) || day.day < 2) return;
+      (notes[day.day - 1] = notes[day.day - 1] || []).push({ mealId: slot.mealId, forDay: day.day });
+    });
+    return notes;
   }
 
   const DAY = 86400000;
@@ -233,5 +245,5 @@
     return out.sort((a, b) => a.daysLeft - b.daysLeft);
   }
 
-  MP.ShelfLife = { load, checkPlanWarnings, shopDayFor, rawSafeOn, INGREDIENT_CATEGORY, isIsoDate, estimateUseBy, expiringItems, storageFor, addMonths, leftoverEatBy, leftoverView, STORAGES };
+  MP.ShelfLife = { load, checkPlanWarnings, defrostNotes, shopDayFor, rawSafeOn, INGREDIENT_CATEGORY, isIsoDate, estimateUseBy, expiringItems, storageFor, addMonths, leftoverEatBy, leftoverView, STORAGES };
 })(typeof globalThis !== "undefined" ? globalThis : this);

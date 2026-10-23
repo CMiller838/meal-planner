@@ -276,9 +276,10 @@
         if (!slot || !slot.mealId) return;
         const meal = mealsById[slot.mealId];
         if (!meal) return;
+        if (slotType === "dinner" && MP.frozenParentDay(plan, day.day, slot)) return; // frozen portion: cooked once, no new ingredients (Phase 59)
         if (slotType === "dinner" && idx > 0) {
           const prevSlot = plan.days[idx - 1].slots.dinner;
-          if (prevSlot && prevSlot.mealId === slot.mealId && MP.isBatch(meal)) return;
+          if (prevSlot && prevSlot.mealId === slot.mealId && MP.isBatch(meal) && !MP.frozenParentDay(plan, day.day - 1, prevSlot)) return;
         }
         occ.push({ day: day.day, meal: MP.effectiveMeal(meal, slot.variantId, slot.subs) });
       });

@@ -312,6 +312,8 @@
         <button class="btn" data-bump="${field}" data-d="1" aria-label="One more ${field}">+</button>${extra || ""}</div>`;
     const todayIso = new Date().toLocaleDateString("en-CA");
     const lefts = shelfData ? MP.ShelfLife.leftoverView(MP.Cooks.all(), todayIso, shelfData) : [];
+    const todayDay = plan && plan.startDate ? planDayOf(plan.startDate, todayIso, plan.days.length) : null;
+    const defrost = todayDay && shelfData ? (MP.ShelfLife.defrostNotes(plan, mealsById)[todayDay] || []) : [];
     const leftoverRow = (l) => `<li class="leftover-row${l.lastDay ? " last-day" : ""}"><span class="leftover-name">${esc(l.name)} · ${l.portionsLeft} left · ${l.storage}</span>
         <span class="leftover-when">${l.lastDay ? "eat or freeze today" : `eat by ${esc(l.eatBy)} (est.)`}</span>
         ${mealsById[l.mealId] ? `<button class="btn" data-left-eat="${esc(l.id)}">Ate one</button>` : ""}
@@ -323,6 +325,7 @@
         const done = t.routineDone.includes(m.id);
         return `<button class="btn today-chip${done ? " done" : ""}" data-routine="${esc(m.id)}" aria-pressed="${done}">${esc(m.name)} · ${done ? "Done ✓" : "Had it"}</button>`;
       }).join("")}</div>` : ""}
+      ${defrost.map((n) => `<p class="defrost-note">❄ Defrost tonight: ${esc(mealsById[n.mealId].name)} for tomorrow</p>`).join("")}
       ${lefts.length ? `<div class="leftovers"><strong>Leftovers</strong><ul>${lefts.map(leftoverRow).join("")}</ul></div>` : ""}
       ${counter("water", "Water (cups)", goal ? ` <small>of ${goal}</small>` : "")}
       ${counter("caffeine", "Caffeine (cups)",
@@ -753,6 +756,7 @@
       </div>
       ${tagRowHtml(effMeal)}
       ${meal.leftoverOf ? `<p class="day-slot-note">Leftovers — already shopped for.</p>` : ""}
+      ${frozenNoteHtml(day, slotType)}
       <ul class="ingredient-list">${ingredientListHtml(effMeal)}</ul>
       ${warningHtml(day, slotType, warnings[`${day}-${slotType}`])}
       <div class="day-slot-actions">
@@ -763,6 +767,16 @@
       </div>
       ${slotEaten(day, slotType) ? `<p class="day-slot-note">Eaten ${esc(new Date(slotEaten(day, slotType)).toLocaleDateString())}</p>` : ""}
     </section>`;
+  }
+
+  /** Phase 59: marker on a frozen portion, defrost reminder the evening before (derived at render). */
+  function frozenNoteHtml(day, slotType) {
+    const slot = plan.days[day - 1].slots[slotType];
+    const from = slotType === "dinner" ? MP.frozenParentDay(plan, day, slot) : null;
+    const next = plan.days[day] && plan.days[day].slots.dinner;
+    const defrost = MP.frozenParentDay(plan, day + 1, next) && mealsById[next.mealId];
+    return (from ? `<p class="day-slot-note frozen-note">❄ Frozen portion of day ${from}</p>` : "") +
+      (defrost ? `<p class="day-slot-note defrost-note">Defrost tonight for ${esc(mealsById[next.mealId].name)} tomorrow</p>` : "");
   }
 
   function renderDayView() {
@@ -941,7 +955,11 @@
     }
     if (MP.Prefs) MP.Prefs.bump(meal, "eaten");
 
-    const cook = MP.Cooks.open(meal, variantId, (meal.servings || 1) - 1);
+    let cook = MP.Cooks.open(meal, variantId, (meal.servings || 1) - 1);
+    // Phase 59: move the planned frozen portions to the freezer (cooks only, never the pantry).
+    const toFreeze = day && cook ? plan.days.filter((d) => d.day > day && MP.frozenParentDay(plan, d.day, d.slots.dinner) === day).length : 0;
+    for (let i = 0; i < toFreeze && cook && cook.portionsLeft > 0; i++) MP.Cooks.freezeOne(cook.id);
+    if (cook) cook = MP.Cooks.all().find((r) => r.id === cook.id) || cook;
 
     const shortfallCount = ops.filter((op) => op.list === "adhoc").length;
     closeEatSheet();

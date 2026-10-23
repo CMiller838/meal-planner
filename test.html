@@ -64,6 +64,31 @@
   const mealsById = Object.fromEntries(library.map((m) => [m.id, m]));
   const runs = MP.Generator.weekendRuns("2026-09-07");
 
+
+  // Phase 59: freezer-aware batch planning
+  {
+    const mk = (extra) => library.filter((m) => !["roast-chicken", "chorizo-pasta"].includes(m.id))
+      .map((m) => (m.id === "chilli-con-carne" ? { ...m, servings: 5, ...extra } : m));
+    const frozenSlots = (pl) => pl.days.filter((d) => d.slots.dinner && d.slots.dinner.frozenFrom).map((d) => ({ day: d.day, ...d.slots.dinner }));
+    const fp = MP.Generator.generatePlan(mk({}), tags, targets, shelfData, "2026-09-07");
+    const fz = frozenSlots(fp);
+    check("freeze: 5-serving batch yields 2 frozen slots >= cookDay+5", fz.length === 2 && fz.every((s) => s.day >= s.frozenFrom + 5 && fp.days[s.frozenFrom - 1].slots.dinner.mealId === s.mealId));
+    check("freeze: freezeBatches:false gives no frozen slots", frozenSlots(MP.Generator.generatePlan(mk({}), tags, targets, shelfData, "2026-09-07", undefined, {}, { freezeBatches: false })).length === 0);
+    check("freeze: freezable:false gives no frozen slots", frozenSlots(MP.Generator.generatePlan(mk({ freezable: false }), tags, targets, shelfData, "2026-09-07")).length === 0);
+    const fById = Object.fromEntries(mk({}).map((m) => [m.id, m]));
+    const fw = MP.ShelfLife.checkPlanWarnings(fp, fById, shelfData);
+    check("freeze: no shelf-life warning on frozen slots", fz.every((s) => !fw[`${s.day}-dinner`]));
+    const notes = MP.ShelfLife.defrostNotes(fp, fById);
+    check("freeze: defrost note the day before each frozen slot", fz.every((s) => (notes[s.day - 1] || []).some((n) => n.forDay === s.day)));
+    const emptied = JSON.parse(JSON.stringify(fp));
+    fz.forEach((s) => { emptied.days[s.day - 1].slots.dinner = { mealId: null }; });
+    check("freeze: buildLists unchanged by frozen slots", JSON.stringify(MP.ShoppingList.buildLists(fp, fById, { items: {} })) === JSON.stringify(MP.ShoppingList.buildLists(emptied, fById, { items: {} })));
+    const bad = JSON.parse(JSON.stringify(fp));
+    bad.days[fz[0].frozenFrom - 1].slots.dinner = { mealId: "other" };
+    check("freeze: frozenFrom ignored when the cook day no longer holds the meal", MP.frozenParentDay(bad, fz[0].day, bad.days[fz[0].day - 1].slots.dinner) === null);
+    check("freeze: planMirror keeps frozenFrom", MP.Sync.planMirror(fp).days[fz[0].day - 1].slots.dinner.frozenFrom === fz[0].frozenFrom);
+  }
+
   // 4. every run's first day holds an MP.isBatch meal; leftover days within
   // the parent's coverage (servings/fridge-life cap, same as generator.js's
   // `place()` loop) hold same id or a leadsTo child. Days beyond coverage
@@ -1792,11 +1817,11 @@
     const KEY = P.KEY;
 
     localStorage.removeItem(KEY);
-    check("get() with key absent -> empty default", deepEqual(P.get(), { busyDays: [], chips: [], budgetTarget: 0 }));
+    check("get() with key absent -> empty default", deepEqual(P.get(), { busyDays: [], chips: [], freezeBatches: true, budgetTarget: 0 }));
 
     for (const bad of ["not json", "null", "[]", "3"]) {
       localStorage.setItem(KEY, bad);
-      check(`get() with ${JSON.stringify(bad)} -> empty default, no throw`, deepEqual(P.get(), { busyDays: [], chips: [], budgetTarget: 0 }));
+      check(`get() with ${JSON.stringify(bad)} -> empty default, no throw`, deepEqual(P.get(), { busyDays: [], chips: [], freezeBatches: true, budgetTarget: 0 }));
     }
 
     localStorage.setItem(KEY, JSON.stringify({ busyDays: [0, 3, 15, "4", 3, 14], chips: ["comfort", 5, "no-spice", null] }));
@@ -1808,10 +1833,10 @@
     const saved = P.save([11, 2], ["comfort"]);
     check("save() sorts busyDays ascending", deepEqual(saved.busyDays, [2, 11]));
     check("save() stamps a parseable ISO updatedAt", !isNaN(new Date(saved.updatedAt).getTime()));
-    check("save() round-trips through get()", deepEqual(P.get(), { busyDays: [2, 11], chips: ["comfort"], budgetTarget: 0 }));
+    check("save() round-trips through get()", deepEqual(P.get(), { busyDays: [2, 11], chips: ["comfort"], freezeBatches: true, budgetTarget: 0 }));
 
     const savedEmpty = P.save([], []);
-    check("save([], []) round-trips to the empty shape", deepEqual(P.get(), { busyDays: [], chips: [], budgetTarget: 0 }));
+    check("save([], []) round-trips to the empty shape", deepEqual(P.get(), { busyDays: [], chips: [], freezeBatches: true, budgetTarget: 0 }));
     check("save([], []) has no busyDays/chips leak", deepEqual(savedEmpty.busyDays, []) && deepEqual(savedEmpty.chips, []));
     localStorage.removeItem(KEY);
 
@@ -1855,7 +1880,7 @@
 
     MP.PlanPrefs.save([0, "3", 15, 7, 7], ["comfort", 3, null]);
     check("pull coercion: hostile remote body round-trips to sane shape",
-      deepEqual(MP.PlanPrefs.get(), { busyDays: [7], chips: ["comfort"], budgetTarget: 0 }));
+      deepEqual(MP.PlanPrefs.get(), { busyDays: [7], chips: ["comfort"], freezeBatches: true, budgetTarget: 0 }));
     localStorage.removeItem(KEY);
   }
 
@@ -2167,7 +2192,7 @@
 
       const saved = P.save([2], ["comfort"], 75);
       check("PlanPrefs.save(): round-trips budgetTarget 75 with busyDays/chips intact",
-        deepEqual(P.get(), { busyDays: [2], chips: ["comfort"], budgetTarget: 75 }));
+        deepEqual(P.get(), { busyDays: [2], chips: ["comfort"], freezeBatches: true, budgetTarget: 75 }));
       check("PlanPrefs.save(): return value carries budgetTarget", saved.budgetTarget === 75);
 
       P.save([], [], undefined);
