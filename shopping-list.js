@@ -289,15 +289,18 @@
 
   function buildLists(plan, mealsById, packData, pantry) {
     const have = pantryIndex(pantry);
-    const lists = {
-      1: { shopDay: 1, lines: [], staples: [], estimated: [], total: 0 },
-      8: { shopDay: 8, lines: [], staples: [], estimated: [], total: 0 },
-    };
+    const offset = MP.ShelfLife.shopOffset(plan); // Phase 68: shop cycles are every 7 days from shopAnchor
+    const shopDays = [...new Set(Array.from({ length: 14 }, (_, i) => MP.ShelfLife.shopDayFor(i + 1, offset)))];
+    const lists = {};
     // shopDay -> key -> { parses: [{value,unit}|null], meals: Set, label }
-    const groups = { 1: {}, 8: {} };
+    const groups = {};
+    shopDays.forEach((d) => {
+      lists[d] = { shopDay: d, lines: [], staples: [], estimated: [], total: 0 };
+      groups[d] = {};
+    });
 
     purchaseOccurrences(plan, mealsById).forEach(({ day, meal }) => {
-      const shopDay = MP.ShelfLife.shopDayFor(day);
+      const shopDay = MP.ShelfLife.shopDayFor(day, offset);
       const group = groups[shopDay];
       (meal.ingredients || []).forEach((ing) => {
         if (isSkippedIngredient(ing)) return;
@@ -307,7 +310,7 @@
       });
     });
 
-    [1, 8].forEach((shopDay) => {
+    shopDays.forEach((shopDay) => {
       const list = lists[shopDay];
       let total = 0;
       Object.entries(groups[shopDay]).forEach(([key, g]) => {
@@ -496,6 +499,13 @@
     return `p:${startDate}:${shopDay}:${normalizeKey(key)}`;
   }
 
+  /** Tick id for a plan's shop day. Fixed plans keep lineId(startDate, ...); a rolling plan keys on the shop date so it survives a roll (Phase 68). */
+  function planLineId(plan, shopDay, key) {
+    if (!plan.shopAnchor) return lineId(plan.startDate, shopDay, key);
+    const d = new Date(Date.parse(plan.startDate + "T00:00:00Z") + (shopDay - 1) * 864e5).toISOString().slice(0, 10);
+    return lineId(d, 1, key);
+  }
+
   /** Per-line last-write-wins: later updatedAt wins, a tie keeps current, a stamp >5 min ahead is clamped to now,
    *  non-needed lines older than 30 days are dropped. Never throws; malformed incoming lines are skipped.
    *  @returns {{lines: object[], changed: object[]}} changed = incoming lines that took effect. */
@@ -538,5 +548,5 @@
     return out;
   }
 
-  MP.ShoppingList = { useUpItems, scaleMeal, scaleShortfall, mealsUsing, load, loadGroups, groupIndex, buildLists, parseQty, packsFor, normalizeKey, aisleFor, groupByAisle, lineId, mergeLines, adhocView, adhocToLines, LINE_STATES, LINE_SOURCES, pantryIndex, pantryOverlap, hasEnough, cookable, quickPicks, remainingQty, eatPlan, priceFor, mealCost, costIndex, costTier, costBadgeHtml };
+  MP.ShoppingList = { useUpItems, scaleMeal, scaleShortfall, mealsUsing, load, loadGroups, groupIndex, buildLists, parseQty, packsFor, normalizeKey, aisleFor, groupByAisle, lineId, planLineId, mergeLines, adhocView, adhocToLines, LINE_STATES, LINE_SOURCES, pantryIndex, pantryOverlap, hasEnough, cookable, quickPicks, remainingQty, eatPlan, priceFor, mealCost, costIndex, costTier, costBadgeHtml };
 })(typeof globalThis !== "undefined" ? globalThis : this);

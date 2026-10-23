@@ -19,7 +19,7 @@
     if (stored.generatedAt === (plan.generatedAt || undefined)) {
       for (const k of stored.keys || []) {
         const [day, ...rest] = k.split(":");
-        MP.Sync.setLine({ id: MP.ShoppingList.lineId(plan.startDate, day, rest.join(":")), state: "got", source: "plan" });
+        MP.Sync.setLine({ id: MP.ShoppingList.planLineId(plan, day, rest.join(":")), state: "got", source: "plan" });
       }
     }
     localStorage.removeItem(LS_TICKED);
@@ -31,7 +31,7 @@
   }
 
   function lineHtml(plan, shopDay, line, states, showPrice) {
-    const state = (states.get(MP.ShoppingList.lineId(plan.startDate, shopDay, line.key)) || {}).state;
+    const state = (states.get(MP.ShoppingList.planLineId(plan, shopDay, line.key)) || {}).state;
     const classes = ["shop-line"];
     if (state === "got") classes.push("ticked");
     if (state === "skipped") classes.push("skipped");
@@ -56,9 +56,19 @@
         <ul class="shop-list">${g.lines.map((l) => lineHtml(plan, shopDay, l, states, canSkip)).join("")}</ul>`).join("");
   }
 
+  const isoPlus = (iso, n) => new Date(Date.parse(iso + "T00:00:00Z") + n * 864e5).toISOString().slice(0, 10);
+  // Phase 68: a rolling plan names the cycle by its shop date; a fixed plan keeps "Shop day N"
+  function shopHeading(plan, shopDay) {
+    return plan.shopAnchor && plan.startDate ? `Shop ${esc(isoPlus(plan.startDate, shopDay - 1))}` : `Shop day ${shopDay}`;
+  }
+  // a cycle whose shop date + 7 is already past (only before the next roll) is hidden for rolling plans
+  function cycleOver(plan, shopDay) {
+    return !!plan.shopAnchor && plan.startDate && isoPlus(plan.startDate, shopDay + 6) <= new Date().toLocaleDateString("en-CA");
+  }
+
   function blockHtml(plan, list, states) {
     return `<section class="shop-block">
-      <h3>Shop day ${list.shopDay} <span class="shop-total">£${list.total.toFixed(2)}</span></h3>
+      <h3>${shopHeading(plan, list.shopDay)} <span class="shop-total">£${list.total.toFixed(2)}</span></h3>
       ${aisleHtml(plan, list.shopDay, list.lines, states, true)}
       ${list.staples.length ? `<details class="shop-extra">
         <summary>Check you have these (${list.staples.length})</summary>
@@ -80,12 +90,12 @@
       : "Prices are a hand-entered estimate";
     const open = [...root.querySelectorAll("details[open]")].map((d) => d.querySelector("summary").textContent);
     const states = new Map(MP.Sync.shoppingLines().map((l) => [l.id, l]));
-    root.innerHTML = [1, 8].map((d) => blockHtml(plan, lists[d], states)).join("");
+    root.innerHTML = Object.keys(lists).map(Number).sort((a, b) => a - b).filter((d) => !cycleOver(plan, d)).map((d) => blockHtml(plan, lists[d], states)).join("");
     root.querySelectorAll("details").forEach((d) => { if (open.includes(d.querySelector("summary").textContent)) d.open = true; });
     if (wired) return;
     wired = true;
 
-    const idOf = (el) => MP.ShoppingList.lineId(plan.startDate, el.dataset.shop || el.dataset.skip, el.dataset.key);
+    const idOf = (el) => MP.ShoppingList.planLineId(plan, el.dataset.shop || el.dataset.skip, el.dataset.key);
     root.addEventListener("change", (e) => {
       const input = e.target.closest('input[type="checkbox"]');
       if (!input) return;

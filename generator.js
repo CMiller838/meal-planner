@@ -244,7 +244,7 @@
     }
 
     if (budget) {
-      const half = dayNum <= 7 ? halfKeys.first : halfKeys.second;
+      const half = opts.half || (dayNum <= 7 ? halfKeys.first : halfKeys.second); // Phase 68: generatePlan passes the shop cycle's set
       const shortlist = ranked.slice(0, shortlistSizeFor(budget, pressure)).filter((m) => budget.costIndex[m.id]);
       if (shortlist.length) {
         const scored = shortlist.map((m) => {
@@ -303,12 +303,15 @@
     const days = Array.from({ length: 14 }, (_, i) => ({ day: i + 1, slots: {} }));
     const lastUsedDay = {};
     const useUpLeft = new Set(((prefs.useUp && prefs.useUp.items) || []).map((it) => MP.ShoppingList.normalizeKey(it.name)));
-    const halfKeys = { first: new Set(), second: new Set() };
-    const spent = { first: 0, second: 0 };
+    const shopOffset = Number(prefs.shopOffset) || 0; // Phase 68: per call, never stored
+    const cycleOf = (day) => MP.ShelfLife.shopDayFor(day, shopOffset);
+    const halfKeys = {}; // shop cycle -> Set of ingredient keys already bought
+    const spent = {};
+    const halfOf = (day) => (halfKeys[cycleOf(day)] = halfKeys[cycleOf(day)] || new Set());
 
     function place(day, slotType, meal, countsTowardBudget, frozenFrom) {
       const variantId = meal ? pickVariant(meal, have) : null;
-      const half = day <= 7 ? halfKeys.first : halfKeys.second;
+      const half = halfOf(day);
       const subs = meal && budget && budget.groups && countsTowardBudget !== false
         ? subsFor(MP.effectiveMeal(meal, variantId), half, budget.groups)
         : [];
@@ -323,7 +326,7 @@
           const subFrom = subs.length ? MP.ShoppingList.normalizeKey(subs[0].from) : null;
           const subTo = subs.length ? MP.ShoppingList.normalizeKey(subs[0].to) : null;
           entry.keys.forEach((k) => half.add(k === subFrom ? subTo : k));
-          spent[day <= 7 ? "first" : "second"] += entry.cost;
+          spent[cycleOf(day)] = (spent[cycleOf(day)] || 0) + entry.cost;
         }
       }
     }
@@ -338,12 +341,12 @@
         lastUsedDay[slot.mealId] = day;
         const entry = budget && budget.costIndex && budget.costIndex[slot.mealId];
         if (entry) {
-          const half = day <= 7 ? halfKeys.first : halfKeys.second;
+          const half = halfOf(day);
           const sub = slot.subs && slot.subs[0];
           const subFrom = sub ? MP.ShoppingList.normalizeKey(sub.from) : null;
           const subTo = sub ? MP.ShoppingList.normalizeKey(sub.to) : null;
           entry.keys.forEach((k) => half.add(k === subFrom ? subTo : k));
-          spent[day <= 7 ? "first" : "second"] += entry.cost;
+          spent[cycleOf(day)] = (spent[cycleOf(day)] || 0) + entry.cost;
         }
       }
     }
@@ -368,15 +371,14 @@
     function pressureFor(dayNum) {
       const target = prefs.budgetTarget;
       if (!budget || !budget.budgetTarget || !target || !isFinite(target) || target <= 0) return 0;
-      const dayInHalf = dayNum <= 7 ? dayNum : dayNum - 7;
-      const expected = target * (dayInHalf - 1) / 7;
-      const half = dayNum <= 7 ? "first" : "second";
-      return Math.min(1, Math.max(0, (spent[half] - expected) / target));
+      const dayInCycle = dayNum - cycleOf(dayNum) + 1;
+      const expected = target * (dayInCycle - 1) / 7;
+      return Math.min(1, Math.max(0, ((spent[cycleOf(dayNum)] || 0) - expected) / target));
     }
 
     const pickMeal = (pool, dayNum, dayMealsSoFar, opts) =>
       rankSlot(pool, dayNum, dayMealsSoFar,
-        { ...opts, tags, targets, prefs, budget, halfKeys, lastUsedDay, ratings, taste, useUpLeft, startDate, profile: prefs.profile, pressure: pressureFor(dayNum) })[0] || null;
+        { ...opts, tags, targets, prefs, budget, halfKeys, half: halfOf(dayNum), lastUsedDay, ratings, taste, useUpLeft, startDate, profile: prefs.profile, pressure: pressureFor(dayNum) })[0] || null;
 
     const runs = batchRuns(startDate, prefs.busyDays, prefs.freeDays, (shelfData.cooked_leftovers || {}).fridgeDays);
     const filled = new Set();
@@ -399,7 +401,7 @@
       // and no freezer state — with the seed library and a Monday start only
       // chorizo-pasta survives to Friday. Real fix is freezer-aware planning
       // (buy day 1, freeze, defrost Thursday); logged in docs/FUTURE.md.
-      const safe = batchCandidates.filter((m) => MP.ShelfLife.rawSafeOn(m, d0, shelfData));
+      const safe = batchCandidates.filter((m) => MP.ShelfLife.rawSafeOn(m, d0, shelfData, shopOffset));
       const candidatePool = safe.length ? safe : batchCandidates;
       const parent = pickMeal(candidatePool, d0, [], { prefer: "batch", excludeIds });
       if (!parent) continue; // no batch meal available at all; days fall through to quick fill below

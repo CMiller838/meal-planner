@@ -573,6 +573,11 @@ assert.equal((await call("GET", "/today", "a")).body.water, 3); // /today untouc
   const rice = all.find((l) => l.key === "rice");
   assert.deepEqual([rice.id, rice.state], ["p:2026-10-26:1:rice", "skipped"]);
   assert.deepEqual(r.body.extras.map((l) => l.id).sort(), ["x:milk", "x:salt"]);
+  // Phase 68: shopAnchor 3 days before startDate puts day 1 in a cycle shopped on the anchor date
+  kv.set("plan", JSON.stringify({ startDate: "2026-10-26", shopAnchor: "2026-10-23", days: [{ day: 1, slots: { dinner: { mealId: "m" } } }] }));
+  r = await call("GET", "/shopping", "a");
+  assert.deepEqual(Object.keys(r.body.lists).sort(), ["-2", "12", "5"]);
+  assert.equal(Object.values(r.body.lists).flatMap((l) => l.lines).find((l) => l.key === "rice").id, "p:2026-10-23:1:rice");
   // assistant is logged under `shopping`; undo restamps
   kv.delete("activity");
   await call("POST", "/shopping/lines", "a", { lines: [X("oats", "needed", ago(-50), "assistant")] }, { "X-Reason": "test" });

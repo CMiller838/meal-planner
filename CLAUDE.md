@@ -104,8 +104,7 @@ Installable as a PWA on Android Chrome via `manifest.json` + `sw.js`.
   (`MP.ShoppingList.pantryIndex` fed from `MP.Sync.localItems("pantry")`);
   `plan.js`'s `commitCook` remains the only pantry **writer**.
 - **Shelf-life logic in `shelf-life.js`/`shelf-life.json` is category-based**
-  (no purchase-date tracking exists) — shop day = day 1 and day 8 of each
-  2-week plan, cooked day = first day a dinner is scheduled. Don't add
+  (no purchase-date tracking exists) — shop day = every 7 days from `plan.shopAnchor` (day 1 and day 8 when absent), cooked day = first day a dinner is scheduled. Don't add
   per-SKU or purchase-date tracking without the user asking.
 - **Batch-cook / leftover chains** (`MP.isBatch(meal)` — `servings >= 2 &&
   !leftoverOf`, `data.js`) are a planning primitive — the generator must
@@ -119,7 +118,7 @@ Installable as a PWA on Android Chrome via `manifest.json` + `sw.js`.
   convenience path that lets a portion-eat touch the pantry.
 - **`mp_planUndo` (Phase 63) is a one-level snapshot of the plan taken just before a re-flow, not plan state**: `MP.Plan.restore` is its only reader. A re-flow (`MP.reflowPlan`, `data.js`) only regenerates freed slots and never writes the pantry; `ranOut` keys are dropped from the generator's `have` index for that call.
 - **`mp_planPrefs` is settings, not plan state** (Phase 23): it holds only
-  `{ updatedAt, busyDays, chips, budgetTarget, freezeBatches, repeatGap }`, never a meal id or date.
+  `{ updatedAt, busyDays, chips, budgetTarget, freezeBatches, repeatGap, rolling }`, never a meal id or date.
   `budgetTarget` (Phase 27) is a plain £/week number where `0` means no
   target. Losing it degrades to today's behaviour (no busy days, no chips, no
   budget target). `MP.PlanPrefs`

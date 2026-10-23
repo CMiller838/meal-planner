@@ -375,11 +375,33 @@
     return { plan: { ...plan, days }, changes, ignored };
   }
 
+  /** Phase 68, pure: roll the 14-day window forward to todayIso. Kept days shift down and keep their slots; the
+   *  appended days come from `generate(locked, startDate)` with every kept slot locked. Shift >= 14 is a fresh plan.
+   *  Returns { plan, shift } or null when startDate is not in the past. */
+  function rollPlan(plan, todayIso, generate) {
+    if (!plan || !plan.startDate || !Array.isArray(plan.days)) return null;
+    const shift = Math.round((Date.parse(todayIso) - Date.parse(plan.startDate)) / 86400000);
+    if (!(shift > 0)) return null;
+    const stamp = { shopAnchor: plan.shopAnchor || plan.startDate, rolledFrom: plan.startDate, rolledAt: new Date().toISOString() };
+    if (shift >= 14) return { plan: { ...generate({}, todayIso), ...stamp }, shift };
+    const SLOTS = ["breakfast", "lunch", "dinner", "snack"];
+    const kept = plan.days.slice(shift).map((d, i) => ({
+      ...d, day: i + 1,
+      slots: Object.fromEntries(Object.entries(d.slots).map(([t, sl]) => [t, sl && Number.isInteger(sl.frozenFrom) ? { ...sl, frozenFrom: Math.min(sl.frozenFrom - shift, sl.frozenFrom - shift < 1 ? -1 : Infinity) } : sl])),
+    }));
+    const locked = {};
+    kept.forEach((d) => SLOTS.forEach((t) => { if (d.slots[t] && d.slots[t].mealId) (locked[d.day] = locked[d.day] || {})[t] = d.slots[t]; }));
+    const gen = generate(locked, todayIso);
+    const days = kept.concat(gen.days.slice(kept.length).map((d, i) => ({ ...d, day: kept.length + i + 1 })));
+    return { plan: { ...plan, startDate: todayIso, days, ...stamp }, shift };
+  }
+
   /** Cook day of a frozen portion's parent, or null. Trusts `frozenFrom` only while that
    *  earlier day's dinner is still the same meal (Phase 59); otherwise it is a plain slot. */
   function frozenParentDay(plan, dayNum, slot) {
     const from = slot && slot.frozenFrom;
-    if (!Number.isInteger(from) || from < 1 || from >= dayNum) return null;
+    if (!Number.isInteger(from) || from >= dayNum) return null;
+    if (from < 1) return from; // Phase 68: parent cooked before the rolled window; rollPlan keeps it <= -1 so it stays truthy
     const parent = plan && plan.days && plan.days[from - 1] && plan.days[from - 1].slots.dinner;
     return parent && parent.mealId === slot.mealId ? from : null;
   }
@@ -502,6 +524,7 @@
   MP.isBatch = isBatch;
   MP.chainDays = chainDays;
   MP.reflowPlan = reflowPlan;
+  MP.rollPlan = rollPlan;
   MP.reflowInputError = reflowInputError;
   MP.reflowFromDay = reflowFromDay;
   MP.frozenParentDay = frozenParentDay;

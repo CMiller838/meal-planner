@@ -705,7 +705,7 @@ the plan, not in `mp_planPrefs`. **Verify:** locked slots survive a full regener
 around gym and busy days. Works inside the `MP.isBatch` chain rules. **Verify:** every batch's portions land in the following
 1–2 days or are frozen (Phase 59). Requires Phase 59.
 
-## Phase 68: Rolling plan [L] — not started
+## Phase 68: Rolling plan [L] — built 2026-10-23, live checks pending
 
 **Added 2026-10-22.** The fixed 2-week block becomes a window that rolls forward daily: finished days drop off and a new day is
 appended from the current pantry. Shop days (day 1 and day 8) are replaced by a rolling shop cadence, so Phase 63 and the

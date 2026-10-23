@@ -1889,11 +1889,11 @@
     const KEY = P.KEY;
 
     localStorage.removeItem(KEY);
-    check("get() with key absent -> empty default", deepEqual(P.get(), { busyDays: [], chips: [], freezeBatches: true, repeatGap: 0, budgetTarget: 0 }));
+    check("get() with key absent -> empty default", deepEqual(P.get(), { busyDays: [], chips: [], freezeBatches: true, repeatGap: 0, rolling: true, budgetTarget: 0 }));
 
     for (const bad of ["not json", "null", "[]", "3"]) {
       localStorage.setItem(KEY, bad);
-      check(`get() with ${JSON.stringify(bad)} -> empty default, no throw`, deepEqual(P.get(), { busyDays: [], chips: [], freezeBatches: true, repeatGap: 0, budgetTarget: 0 }));
+      check(`get() with ${JSON.stringify(bad)} -> empty default, no throw`, deepEqual(P.get(), { busyDays: [], chips: [], freezeBatches: true, repeatGap: 0, rolling: true, budgetTarget: 0 }));
     }
 
     localStorage.setItem(KEY, JSON.stringify({ busyDays: [0, 3, 15, "4", 3, 14], chips: ["comfort", 5, "no-spice", null] }));
@@ -1905,10 +1905,10 @@
     const saved = P.save([11, 2], ["comfort"]);
     check("save() sorts busyDays ascending", deepEqual(saved.busyDays, [2, 11]));
     check("save() stamps a parseable ISO updatedAt", !isNaN(new Date(saved.updatedAt).getTime()));
-    check("save() round-trips through get()", deepEqual(P.get(), { busyDays: [2, 11], chips: ["comfort"], freezeBatches: true, repeatGap: 0, budgetTarget: 0 }));
+    check("save() round-trips through get()", deepEqual(P.get(), { busyDays: [2, 11], chips: ["comfort"], freezeBatches: true, repeatGap: 0, rolling: true, budgetTarget: 0 }));
 
     const savedEmpty = P.save([], []);
-    check("save([], []) round-trips to the empty shape", deepEqual(P.get(), { busyDays: [], chips: [], freezeBatches: true, repeatGap: 0, budgetTarget: 0 }));
+    check("save([], []) round-trips to the empty shape", deepEqual(P.get(), { busyDays: [], chips: [], freezeBatches: true, repeatGap: 0, rolling: true, budgetTarget: 0 }));
     check("save([], []) has no busyDays/chips leak", deepEqual(savedEmpty.busyDays, []) && deepEqual(savedEmpty.chips, []));
     localStorage.removeItem(KEY);
 
@@ -1952,7 +1952,7 @@
 
     MP.PlanPrefs.save([0, "3", 15, 7, 7], ["comfort", 3, null]);
     check("pull coercion: hostile remote body round-trips to sane shape",
-      deepEqual(MP.PlanPrefs.get(), { busyDays: [7], chips: ["comfort"], freezeBatches: true, repeatGap: 0, budgetTarget: 0 }));
+      deepEqual(MP.PlanPrefs.get(), { busyDays: [7], chips: ["comfort"], freezeBatches: true, repeatGap: 0, rolling: true, budgetTarget: 0 }));
     localStorage.removeItem(KEY);
   }
 
@@ -2287,7 +2287,7 @@
 
       const saved = P.save([2], ["comfort"], 75);
       check("PlanPrefs.save(): round-trips budgetTarget 75 with busyDays/chips intact",
-        deepEqual(P.get(), { busyDays: [2], chips: ["comfort"], freezeBatches: true, repeatGap: 0, budgetTarget: 75 }));
+        deepEqual(P.get(), { busyDays: [2], chips: ["comfort"], freezeBatches: true, repeatGap: 0, rolling: true, budgetTarget: 75 }));
       check("PlanPrefs.save(): return value carries budgetTarget", saved.budgetTarget === 75);
 
       P.save([], [], undefined);
@@ -3050,6 +3050,43 @@
     const lk = { 2: { dinner: { mealId: "chorizo-pasta", locked: true } } };
     const rl = G.generatePlan(library, tags, targets, shelfData, "2026-09-07", undefined, undefined, { busyDays: [3, 4] }, undefined, lk);
     check("batchRuns: locked dinner kept in a busy plan", rl.days[1].slots.dinner.mealId === "chorizo-pasta");
+  }
+
+  // Phase 68: rolling plan
+  {
+    const SL = MP.ShelfLife, ser = (x) => JSON.stringify(x);
+    check("roll: shopDayFor(d, 0) is the old day 1 / day 8", Array.from({ length: 14 }, (_, i) => i + 1).every((d) => SL.shopDayFor(d, 0) === (d <= 7 ? 1 : 8) && SL.shopDayFor(d) === (d <= 7 ? 1 : 8)));
+    check("roll: shopDayFor with offset 3", SL.shopDayFor(1, 3) === -2 && SL.shopDayFor(5, 3) === 5);
+    check("roll: shopOffset from shopAnchor", SL.shopOffset({ startDate: "2026-09-10", shopAnchor: "2026-09-07" }) === 3 && SL.shopOffset({ startDate: "2026-09-10" }) === 0);
+    const mk = (i) => ({ day: i, slots: { dinner: { mealId: "m" + i, ...(i === 5 ? { frozenFrom: 3, locked: true } : {}) } } });
+    const base = { startDate: "2026-09-07", generatedAt: "g", days: Array.from({ length: 14 }, (_, i) => mk(i + 1)) };
+    let seenLocked = null, seenStart = null;
+    const gen = (locked, start) => { seenLocked = locked; seenStart = start; return { startDate: start, days: Array.from({ length: 14 }, (_, i) => ({ day: i + 1, slots: { dinner: { mealId: "new" + (i + 1) } } })) }; };
+    const r2 = MP.rollPlan(base, "2026-09-09", gen);
+    check("roll: shift 2 renumbers kept days, appends two generated days", r2 && r2.shift === 2 && r2.plan.startDate === "2026-09-09" && r2.plan.days.length === 14 && r2.plan.days.every((d, i) => d.day === i + 1)
+      && r2.plan.days.slice(0, 12).every((d, i) => d.slots.dinner.mealId === "m" + (i + 3)) && r2.plan.days[12].slots.dinner.mealId === "new13" && r2.plan.days[13].slots.dinner.mealId === "new14");
+    check("roll: every kept slot passed locked; anchor and frozenFrom shift", Object.keys(seenLocked).length === 12 && seenStart === "2026-09-09" && r2.plan.shopAnchor === "2026-09-07" && r2.plan.rolledFrom === "2026-09-07" && !!r2.plan.rolledAt && r2.plan.days[2].slots.dinner.frozenFrom === 1);
+    const base2 = { ...base, shopAnchor: "2026-09-01" };
+    check("roll: existing shopAnchor never moves", MP.rollPlan(base2, "2026-09-09", gen).plan.shopAnchor === "2026-09-01");
+    check("roll: shift 0 or future start is null", MP.rollPlan(base, "2026-09-07", gen) === null && MP.rollPlan(base, "2026-09-01", gen) === null);
+    const r20 = MP.rollPlan(base, "2026-09-27", gen);
+    check("roll: shift >= 14 is a fresh plan keeping the anchor", r20.plan.days[0].slots.dinner.mealId === "new1" && r20.plan.shopAnchor === "2026-09-07" && r20.plan.startDate === "2026-09-27");
+    const r4 = MP.rollPlan(base, "2026-09-11", gen).plan; // frozenFrom 3 - 4 = -1
+    check("roll: frozenParentDay trusts a cook day before the window", r4.days[0].slots.dinner.frozenFrom === -1 && MP.frozenParentDay(r4, 1, r4.days[0].slots.dinner) === -1);
+    const r5 = MP.rollPlan(base, "2026-09-10", gen).plan; // 3 - 3 = 0, must stay truthy
+    check("roll: frozenFrom shifted to 0 is kept truthy", !!MP.frozenParentDay(r5, 2, r5.days[1].slots.dinner));
+    const fz = { startDate: "2026-09-07", days: [{ day: 1, slots: {} }, { day: 2, slots: {} }, { day: 3, slots: { dinner: { mealId: "a" } } }, { day: 4, slots: { dinner: { mealId: "b", frozenFrom: 3 } } }] };
+    check("roll: frozenParentDay unchanged when the parent meal differs", MP.frozenParentDay(fz, 4, fz.days[3].slots.dinner) === null);
+    const fixed = MP.ShoppingList.planLineId({ startDate: "2026-09-07" }, 8, "Rice") === MP.ShoppingList.lineId("2026-09-07", 8, "Rice");
+    const a = MP.ShoppingList.planLineId({ startDate: "2026-09-07", shopAnchor: "2026-09-07" }, 8, "Rice");
+    const b = MP.ShoppingList.planLineId({ startDate: "2026-09-08", shopAnchor: "2026-09-07" }, 7, "Rice");
+    check("roll: planLineId fixed equals lineId; rolling id survives a 1-day roll", fixed && a === b);
+    const sd = "2026-09-07";
+    check("roll: shopOffset 0 gives the same plan as no shopOffset", [sd, "2026-09-09"].every((d) => ser(MP.Generator.generatePlan(library, tags, targets, shelfData, d, undefined, undefined, { shopOffset: 0 }).days) === ser(MP.Generator.generatePlan(library, tags, targets, shelfData, d).days)));
+    const rolledPlan = { startDate: "2026-09-09", rolledFrom: "2026-09-07", rolledAt: "2026-09-09T06:00:00Z", days: Array.from({ length: 14 }, (_, i) => ({ day: i + 1, slots: {} })) };
+    const lib1 = [{ id: "z", name: "Z", ingredients: [] }];
+    const pr = MP.Plan.applyPlacements(rolledPlan, [{ day: 5, slot: "dinner", mealId: "z", requestedAt: "2026-09-08T10:00:00Z" }, { day: 1, slot: "dinner", mealId: "z", requestedAt: "2026-09-08T10:00:00Z" }, { day: 7, slot: "dinner", mealId: "z", requestedAt: "2026-09-09T07:00:00Z" }], lib1);
+    check("roll: older placement shifts by the roll, past one rejected, newer untouched", pr.applied.some((x) => x.day === 3) && pr.plan.days[2].slots.dinner && pr.rejected.length === 1 && pr.rejected[0].reason === "past" && !!pr.plan.days[6].slots.dinner);
   }
 
   lines.push("", `${pass} passed, ${fail} failed`);

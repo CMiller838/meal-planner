@@ -38,8 +38,16 @@
     return cache;
   }
 
-  function shopDayFor(dayNum) {
-    return dayNum <= 7 ? 1 : 8;
+  /** Shop day of dayNum's cycle: every 7 days, offset = days from shopAnchor to startDate mod 7 (Phase 68). May be <= 0. */
+  function shopDayFor(dayNum, offset) {
+    return dayNum - ((dayNum - 1 + (offset || 0)) % 7);
+  }
+
+  /** 0..6 shop-cycle offset of a plan; 0 without a shopAnchor (day 1 and day 8). */
+  function shopOffset(plan) {
+    if (!plan || !isIsoDate(plan.shopAnchor) || !isIsoDate(plan.startDate)) return 0;
+    const d = Math.round((isoMs(plan.startDate) - isoMs(plan.shopAnchor)) / DAY);
+    return ((d % 7) + 7) % 7;
   }
 
   function buildOccurrences(plan) {
@@ -84,7 +92,7 @@
     return { message, moveToDay: Math.max(1, lastSafe), category };
   }
 
-  function evaluateSlot(dayNum, meal, occ, shelfData) {
+  function evaluateSlot(dayNum, meal, occ, shelfData, offset) {
     if (meal.leftoverOf) {
       const parentDays = occ[meal.leftoverOf] || [];
       const cookedDay = findCookedDay(parentDays, dayNum);
@@ -100,7 +108,7 @@
     }
     const rawCat = worstRawCategory(meal, shelfData);
     if (!rawCat) return null;
-    return buildWarning(dayNum, shopDayFor(dayNum), rawCat, shelfData);
+    return buildWarning(dayNum, shopDayFor(dayNum, offset), rawCat, shelfData);
   }
 
   /**
@@ -108,15 +116,16 @@
    * fridge window on dayNum, counting from that week's shop day. True when
    * the meal has no tracked perishable (pantry/tinned/spices).
    */
-  function rawSafeOn(meal, dayNum, shelfData) {
+  function rawSafeOn(meal, dayNum, shelfData, offset) {
     const cat = worstRawCategory(meal, shelfData);
     if (!cat) return true;
-    return buildWarning(dayNum, shopDayFor(dayNum), cat, shelfData) === null;
+    return buildWarning(dayNum, shopDayFor(dayNum, offset), cat, shelfData) === null;
   }
 
   /** Returns { "day-slotType": {message, moveToDay, category} } for the whole plan. */
   function checkPlanWarnings(plan, mealsById, shelfData) {
     const occ = buildOccurrences(plan);
+    const offset = shopOffset(plan);
     const warnings = {};
     plan.days.forEach((day) => {
       Object.entries(day.slots).forEach(([slotType, slot]) => {
@@ -125,7 +134,7 @@
         if (!meal) return;
         if (MP.frozenParentDay(plan, day.day, slot)) return; // frozen shelf life is months (Phase 59)
         const effMeal = MP.effectiveMeal(meal, slot.variantId, slot.subs);
-        const w = evaluateSlot(day.day, effMeal, occ, shelfData);
+        const w = evaluateSlot(day.day, effMeal, occ, shelfData, offset);
         if (w) warnings[`${day.day}-${slotType}`] = w;
       });
     });
@@ -198,7 +207,8 @@
     if (!info || info.ambient) return null;
     const since = Math.floor((isoMs(todayIso) - isoMs(plan.startDate)) / DAY);
     if (since < 0) return null;
-    const shopDay = addDays(plan.startDate, since >= 7 ? 7 : 0);
+    const off = shopOffset(plan);
+    const shopDay = addDays(plan.startDate, shopDayFor(since + 1, off) - 1);
     const st = storageFor(item, shelfData);
     if (st && st.storage === "freezer") return info.frozenMonths != null ? addMonths(shopDay, info.frozenMonths) : null;
     if (info.fridgeDays == null) return null;
@@ -245,5 +255,5 @@
     return out.sort((a, b) => a.daysLeft - b.daysLeft);
   }
 
-  MP.ShelfLife = { load, checkPlanWarnings, defrostNotes, shopDayFor, rawSafeOn, INGREDIENT_CATEGORY, isIsoDate, estimateUseBy, expiringItems, storageFor, addMonths, leftoverEatBy, leftoverView, STORAGES };
+  MP.ShelfLife = { load, checkPlanWarnings, defrostNotes, shopDayFor, shopOffset, rawSafeOn, INGREDIENT_CATEGORY, isIsoDate, estimateUseBy, expiringItems, storageFor, addMonths, leftoverEatBy, leftoverView, STORAGES };
 })(typeof globalThis !== "undefined" ? globalThis : this);

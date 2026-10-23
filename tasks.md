@@ -715,6 +715,7 @@ Spec: `.claude/specs/phase67.md` (build it with `/build` or queue it for `/overn
 ## Phase 68: Rolling plan
 - Spec: `.claude/specs/phase68.md`
 - [ ] Live: next morning on the phone PWA, open Plan: yesterday is gone, a new day 14 is added, and the shopping ticks are kept
+- [ ] Live: open Shopping after a roll: headings show shop dates ("Shop 2026-MM-DD") and a line ticked before the roll is still ticked
 
 ## Phase 69: Swipe deck per slot
 - Spec: `.claude/specs/phase69.md`

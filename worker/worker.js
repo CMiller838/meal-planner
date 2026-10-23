@@ -244,6 +244,7 @@ async function planInputs(env, { useUp = false, budget = null } = {}) {
   const target = budget ?? (settings && settings.budgetTarget > 0 ? settings.budgetTarget : pp.budgetTarget);
   if (target > 0) prefs.budgetTarget = target;
   prefs.repeatGap = pp.repeatGap || 0;
+  prefs.shopOffset = ShelfLife.shopOffset(mirror); // Phase 68: shop cycles every 7 days from shopAnchor
   prefs.profile = Nutrition.profileOf(settings);
   if (useUp) {
     const items = ShoppingList.useUpItems((pantry && pantry.items) || [], mirror, Generator.isoToday(), SHELF_DATA);
@@ -601,7 +602,7 @@ async function shopping(env) {
   const byId = new Map(lines.map((l) => [l.id, l]));
   for (const list of Object.values(lists)) {
     for (const l of [...list.lines, ...list.staples, ...list.estimated]) {
-      l.id = ShoppingList.lineId(plan.startDate, list.shopDay, l.key);
+      l.id = ShoppingList.planLineId(plan, list.shopDay, l.key);
       const st = byId.get(l.id);
       l.state = st ? st.state : "needed";
       l.stateAt = st ? st.updatedAt : null;
@@ -1008,6 +1009,7 @@ function planPrefsError(parsed) {
   }
   if (!Array.isArray(parsed.chips) || !parsed.chips.every((c) => typeof c === "string")) return "chips must be an array of strings";
   if (parsed.freezeBatches !== undefined && typeof parsed.freezeBatches !== "boolean") return "freezeBatches must be a boolean";
+  if (parsed.rolling !== undefined && typeof parsed.rolling !== "boolean") return "rolling must be a boolean";
   if (parsed.repeatGap !== undefined && !(Number.isInteger(parsed.repeatGap) && parsed.repeatGap >= 0 && parsed.repeatGap <= 14)) return "repeatGap must be an integer 0-14";
   return null;
 }

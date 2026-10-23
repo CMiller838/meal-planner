@@ -144,7 +144,21 @@
       : null;
     const have = MP.ShoppingList.pantryIndex({ items: MP.Sync.localItems("pantry") });
     (ranOut || []).forEach((k) => delete have[k]); // Phase 63: ran out for this generation only; the pantry is never written
-    return MP.Generator.generatePlan(lib, tagsData.tags, tagsData.targets, shelfData, undefined, budget, have, Object.assign({}, prefs, override, { profile: MP.Nutrition.profileOf(MP.Sync.settings()) }), MP.Ratings.get(), locked);
+    const gen = MP.Generator.generatePlan(lib, tagsData.tags, tagsData.targets, shelfData, undefined, budget, have, Object.assign({}, prefs, override, { profile: MP.Nutrition.profileOf(MP.Sync.settings()) }), MP.Ratings.get(), locked);
+    if (basePrefs.rolling !== false) gen.shopAnchor = gen.startDate; // Phase 68: a fresh plan starts a new shop cadence; rolls/rerolls read only its days
+    return gen;
+  }
+
+  // Phase 68: roll the window to today. Runs on Plan open and on visible, before placements and drafts apply.
+  function rollIfDue() {
+    if (!plan || guidedActive || basePrefs.rolling === false) return false;
+    const res = MP.rollPlan(plan, new Date().toLocaleDateString("en-CA"), (locked, start) =>
+      generatePlan({ shopOffset: MP.ShelfLife.shopOffset({ startDate: start, shopAnchor: plan.shopAnchor || plan.startDate }) }, locked));
+    if (!res) return false;
+    plan = res.plan;
+    localStorage.removeItem(LS_UNDO); // its day numbers are stale
+    savePlan();
+    return true;
   }
 
   // Phase 64: three candidate fortnights. Generation only; nothing saves until "Use this plan".
@@ -249,7 +263,7 @@
     applyHints();
     const held = lockedMap();
     if (SLOT_TYPES.every((t) => plan.days.every((d) => held[d.day] && held[d.day][t]))) { toast("Nothing to fill"); return; }
-    plan = generatePlan(override, held);
+    plan = generatePlan(override, held); // fresh startDate/shopAnchor, offset 0
     savePlan();
     renderPlan(staged);
   }
@@ -257,7 +271,7 @@
   function rerollDay(day) {
     const days = MP.chainDays(plan.days, mealsById, day);
     if (days.every((d) => SLOT_TYPES.every((t) => isHeld(plan.days[d - 1].slots[t])))) { toast("All meals on this day are locked"); return; }
-    const fresh = generatePlan(undefined, lockedMap(days));
+    const fresh = generatePlan({ shopOffset: MP.ShelfLife.shopOffset(plan) }, lockedMap(days));
     days.forEach((d) => { plan.days[d - 1] = fresh.days[d - 1]; });
     if (!guidedActive) savePlan();
     renderPlan();
@@ -305,7 +319,7 @@
   }
 
   function doReflow(input) {
-    const res = reflow(plan, input, library, { fromDay: MP.reflowFromDay(plan.startDate, new Date().toLocaleDateString("sv")), generate: (locked, ranOut, avoid) => generatePlan(undefined, locked, ranOut, avoid) });
+    const res = reflow(plan, input, library, { fromDay: MP.reflowFromDay(plan.startDate, new Date().toLocaleDateString("sv")), generate: (locked, ranOut, avoid) => generatePlan({ shopOffset: MP.ShelfLife.shopOffset(plan) }, locked, ranOut, avoid) });
     if (!res.changes.length) { closeDayView(); toast(res.ignored.length ? "Eaten, locked or past meals can't be re-flowed" : "Nothing to change"); return; }
     snapshot(plan);
     plan = res.plan;
@@ -1199,7 +1213,16 @@
     const byId = new Set((library || []).map((m) => m.id));
     const applied = [];
     const rejected = [];
-    for (const p of placements) {
+    const rolled = planIn.rolledAt && planIn.rolledFrom && planIn.startDate
+      ? Math.round((Date.parse(planIn.startDate) - Date.parse(planIn.rolledFrom)) / 86400000) : 0;
+    for (let p of placements) {
+      if (rolled > 0 && p.requestedAt && p.requestedAt < planIn.rolledAt) { // Phase 68: queued before the plan rolled, so its day is in the old numbering
+        if (p.day - rolled < 1) {
+          rejected.push({ day: p.day, slot: p.slot, mealId: p.mealId, name: p.mealName, reason: "past" });
+          continue;
+        }
+        p = { ...p, day: p.day - rolled };
+      }
       const name = (byId.has(p.mealId) && library.find((m) => m.id === p.mealId).name) || p.mealName;
       const dayRec = days[p.day - 1];
       if (!dayRec || !SLOT_TYPES.includes(p.slot)) {
@@ -1225,7 +1248,7 @@
   }
 
   function placementBannerHtml(applied, rejected) {
-    const reasonText = { eaten: "already eaten", "unknown-meal": "not in your library", "bad-slot": "invalid slot" };
+    const reasonText = { eaten: "already eaten", "unknown-meal": "not in your library", "bad-slot": "invalid slot", past: "already past" };
     let html = `<button class="ghost dismiss" aria-label="Dismiss">✕</button>`;
     if (applied.length) {
       html += `<p>Hermes placed ${applied.length} meal${applied.length === 1 ? "" : "s"}:</p><ul>`;
@@ -1259,11 +1282,15 @@
   function renderPlanDraftBanner(draft) {
     const el = document.getElementById("plan-draft-banner");
     if (!el) return;
-    const rows = draft.changes.map((c) => {
+    // Phase 68: the draft's day numbers are relative to draft.startDate; rebase onto the rolled plan, drop days already past
+    const shift = draft.startDate && plan.startDate ? Math.round((Date.parse(plan.startDate) - Date.parse(draft.startDate)) / 86400000) : 0;
+    const changes = shift > 0 ? draft.changes.map((c) => ({ ...c, day: c.day - shift })).filter((c) => c.day >= 1) : draft.changes;
+    if (!changes.length) { el.hidden = true; MP.Sync.ackPlanDraft(draft); return; }
+    const rows = changes.map((c) => {
       const m = mealsById[c.after.mealId];
       return `<li>Day ${c.day} ${esc(c.slot)} — ${c.after.eatingOut ? "Eating out" : esc(m ? m.name : c.after.mealId)}</li>`;
     }).join("");
-    el.innerHTML = `<p>The assistant drafted ${draft.changes.length} change${draft.changes.length === 1 ? "" : "s"} to your plan:</p><ul>${rows}</ul>
+    el.innerHTML = `<p>The assistant drafted ${changes.length} change${changes.length === 1 ? "" : "s"} to your plan:</p><ul>${rows}</ul>
       <button class="btn" data-act="apply">Apply</button> <button class="btn" data-act="dismiss">Dismiss</button>`;
     el.hidden = false;
     el.onclick = async (e) => {
@@ -1272,8 +1299,8 @@
       el.hidden = true;
       if (act === "apply") {
         if (draft.reflow) MP.Plan.snapshot(plan); // Phase 63: Activity "Undo" on the draft restores this
-        const outs = draft.changes.filter((c) => c.after.eatingOut);
-        const placements = draft.changes.filter((c) => !c.after.eatingOut).map((c) => ({ day: c.day, slot: c.slot, mealId: c.after.mealId, variantId: c.after.variantId }));
+        const outs = changes.filter((c) => c.after.eatingOut);
+        const placements = changes.filter((c) => !c.after.eatingOut).map((c) => ({ day: c.day, slot: c.slot, mealId: c.after.mealId, variantId: c.after.variantId }));
         const res = MP.Plan.applyPlacements(plan, placements, library);
         plan = res.plan;
         outs.forEach((c) => { const sl = plan.days[c.day - 1].slots; if (!(sl[c.slot] && sl[c.slot].eatenAt)) sl[c.slot] = { eatingOut: true }; });
@@ -1471,6 +1498,7 @@
       startGuidedWalkthrough(parseGuidedSlots(location.search));
     } else {
       plan = loadPlan();
+      if (rollIfDue()) applyHints(plan.startDate);
       savePlan();
       renderPlan();
     }
@@ -1480,7 +1508,11 @@
     renderTodayCard();
     const pullToday = () => MP.Today.pull().then((changed) => { if (changed) { renderTodayCard(); renderGapStrip(); } });
     pullToday();
-    document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") pullToday(); });
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState !== "visible") return;
+      if (rollIfDue()) { applyHints(plan.startDate); renderPlan(); }
+      pullToday();
+    });
 
     document.getElementById("guided-commit-btn").addEventListener("click", () => {
       guidedActive = false;
