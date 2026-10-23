@@ -47,7 +47,8 @@ claim of the spec with evidence you produced yourself, or to say it is unproven.
    Playwright script in the scratchpad (import `playwright` from `tools/browser-check/node_modules`; run it with
    `PLAYWRIGHT_BROWSERS_PATH=<repo>/tools/browser-check/.browsers`, or launch fails), happy path, bad
    input, repeat the action twice, empty state, reload and check what persisted. State lives in `localStorage`, so
-   seed it with `page.evaluate`. Run it at 1440x900 and 390x844, in both themes (`localStorage.mp_theme`), with
+   seed it with `page.evaluate`. The plan page auto-generates a plan on load when `mp_plan` is empty, so the Generate
+   button may be hidden: seed `mp_plan` (and reload) to control the plan instead of clicking Generate. Run it at 1440x900 and 390x844, in both themes (`localStorage.mp_theme`), with
    `reducedMotion`, assert computed styles where the change is visual, and save and view screenshots.
    Linux checks need no sandbox override. There is no Windows/Edge run: the user browses with Firefox, so it proves nothing.
    TheMealDB and Hermes are blocked here, so Discover renders empty: not a defect.
