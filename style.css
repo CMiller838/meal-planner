@@ -819,3 +819,9 @@ button.ghost.danger { color: var(--danger); border-color: var(--danger); }
 .fix-card { flex: 1 1 14rem; }
 .fix-card[hidden] { display: none; }
 @media (prefers-reduced-motion: reduce) { .meter-bar { transition: none; } }
+
+/* Phase 71: what-if preview popover on a deck candidate */
+.swipe-deck { position: relative; }
+.whatif { position: absolute; left: 8px; right: 8px; bottom: 8px; z-index: 30; padding: 8px 10px; border-radius: var(--radius, 10px); background: var(--surface, #222); color: var(--text, inherit); border: 1px solid var(--border, #444); font-size: .85rem; pointer-events: none; animation: whatif-in .15s ease-out; }
+@keyframes whatif-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .whatif { animation: none; } }

@@ -192,6 +192,53 @@
     return { cost, weekCost, proteinG: [wk(weeks[0]), wk(weeks[1])], gaps: all.missing.length + all.partial.length, weekGaps: [wg(weeks[0]), wg(weeks[1])], quickDinners };
   }
 
+
+  // Phase 71: preview of taking `meal` in a slot. Same planMetrics/buildLists on a copy; writes nothing.
+  function whatIf(day, slotType, meal, ctx) {
+    const c = Object.assign({ library, packData, byId: mealsById, pantry: { items: MP.Sync.localItems("pantry") } }, ctx);
+    const base = c.plan || plan, copy = structuredClone(base);
+    copy.days[day - 1].slots[slotType] = { mealId: meal.id, locked: true };
+    const byId = Object.assign({}, c.byId, { [meal.id]: meal });
+    const a = planMetrics(base, c), b = planMetrics(copy, c);
+    const seen = new Set();
+    Object.values(MP.ShoppingList.buildLists(base, byId, c.packData, c.pantry)).forEach((l) => l.lines.forEach((x) => seen.add(x.key)));
+    const newLines = [];
+    Object.values(MP.ShoppingList.buildLists(copy, byId, c.packData, c.pantry)).forEach((l) => l.lines.forEach((x) => {
+      if (!seen.has(x.key) && !newLines.includes(x.label)) newLines.push(x.label);
+    }));
+    const mins = MP.methodOf(meal).steps.reduce((s, st) => s + (st.minutes || 0), 0);
+    const wk = day <= 7 ? 0 : 1;
+    return { dProteinG: b.proteinG[wk] - a.proteinG[wk], dCost: a.cost === null ? null : b.cost - a.cost, minutes: mins || null, effort: MP.Generator.effortOf(meal), newLines };
+  }
+
+  function whatIfHtml(w) {
+    const sg = (n) => (n > 0 ? "+" : "") + n;
+    return `<div>Protein <b>${esc(sg(w.dProteinG))} g</b> (that week)</div>`
+      + (w.dCost === null ? "" : `<div>Cost <b>${esc((w.dCost >= 0 ? "+" : "-") + "£" + Math.abs(w.dCost).toFixed(2))}</b></div>`)
+      + `<div>Cook <b>${esc(w.minutes ? w.minutes + " min" : w.effort)}</b></div>`
+      + `<div>${w.newLines.length ? "Adds: " + esc(w.newLines.slice(0, 4).join(", ")) + (w.newLines.length > 4 ? ` +${w.newLines.length - 4}` : "") : "No new shopping lines"}</div>`;
+  }
+
+  // Hover (PC) or ~450 ms long-press (phone, cancelled by movement) shows the preview; never touches mp_plan.
+  function attachWhatIf(card, meal) {
+    const show = () => {
+      if (!swapCtx || card.classList.contains("dragging")) return;
+      let pop = card.parentNode.querySelector(".whatif");
+      if (!pop) { pop = document.createElement("div"); pop.className = "whatif"; pop.setAttribute("role", "status"); card.parentNode.appendChild(pop); }
+      pop.innerHTML = whatIfHtml(whatIf(swapCtx.day, swapCtx.slotType, meal));
+    };
+    const hide = () => { const p = card.parentNode && card.parentNode.querySelector(".whatif"); if (p) p.remove(); };
+    let timer = null, x0 = 0, y0 = 0;
+    card.addEventListener("mouseenter", show);
+    card.addEventListener("mouseleave", hide);
+    card.addEventListener("pointerdown", (e) => {
+      if (e.pointerType === "mouse") return;
+      x0 = e.clientX; y0 = e.clientY; timer = setTimeout(show, 450);
+    });
+    card.addEventListener("pointermove", (e) => { if (timer && Math.hypot(e.clientX - x0, e.clientY - y0) > 8) { clearTimeout(timer); timer = null; } });
+    ["pointerup", "pointercancel"].forEach((ev) => card.addEventListener(ev, () => { clearTimeout(timer); timer = null; hide(); }));
+  }
+
   // Phase 70: the one dinner swap that closes the biggest gap of the weaker week. Suggestion only, never an edit;
   // nutrition (rankByGap) picks the meal, cost is never consulted. `ctx` lets tests inject plan/library/candidates.
   function fixGap(pl, ctx) {
@@ -915,6 +962,7 @@
           onSwipeLeft: () => passMeal(meal),
           onTap: () => openDetail(meal),
         });
+        attachWhatIf(card, meal);
       }
       deck.appendChild(card);
     });
@@ -1529,7 +1577,7 @@
     renderPlacementBanner(e.detail);
   });
 
-  MP.Plan = { reflow, snapshot, restore, planMetrics, fixGap, parseGuidedSlots, applyPlacements, logPortion, matchEatRequests, applyEatRequests };
+  MP.Plan = { reflow, snapshot, restore, planMetrics, whatIf, fixGap, parseGuidedSlots, applyPlacements, logPortion, matchEatRequests, applyEatRequests };
 
   async function init() {
     MP.initTheme();

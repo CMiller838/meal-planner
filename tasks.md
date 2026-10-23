@@ -729,13 +729,13 @@ Spec: `.claude/specs/phase67.md` (build it with `/build` or queue it for `/overn
 
 ## Phase 71: What-if preview on a candidate [S]
 Requires Phase 70 (extends `planMetrics` with `weekCost`) and Phase 69 (deck cards are the candidates). Writes nothing.
-- [ ] `plan.js`: `whatIf(day, slotType, meal)`: clone `plan` (`structuredClone`), set that slot via the same path `setSlotMeal` uses (no `savePlan`), return `{ dProteinG, dCost, effort/minutes, newLines }` by diffing `planMetrics(copy)` vs `planMetrics(plan)` and `MP.ShoppingList.buildLists(copy, ...)` vs the live lists (lines present only in the copy). No second cost/coverage code
-- [ ] Cook time: sum of the meal's step `minutes` where any exist (per-step field, only some steps have it), else `MP.Generator.effortOf(meal)` label; never invent minutes
-- [ ] Deck card (`renderDeck`): PC hover and phone long-press (~450 ms, cancelled by swipe movement) show a small preview popover from `whatIf`; textContent/`esc()` only, no new dependency
-- [ ] `style.css`: `.whatif` popover, both themes, 390 px fits, reduced-motion = no animation; bump `CACHE` in `sw.js`
-- [ ] `test.html`/`walk.mjs`: assert `whatIf` deltas equal `planMetrics` after actually calling `setSlotMeal` with the same meal, and `mp_plan` is byte-identical after a preview
-- [ ] `docs/roadmap.md`: mark Phase 71 done with what was verified (roadmap-gating)
-- [ ] Live: on the phone PWA, long-press a swap candidate and confirm the numbers match after taking it
+- [x] `plan.js`: `whatIf(day, slotType, meal)`: clone `plan` (`structuredClone`), set that slot via the same path `setSlotMeal` uses (no `savePlan`), return `{ dProteinG, dCost, effort/minutes, newLines }` by diffing `planMetrics(copy)` vs `planMetrics(plan)` and `MP.ShoppingList.buildLists(copy, ...)` vs the live lists (lines present only in the copy). No second cost/coverage code
+- [x] Cook time: sum of the meal's step `minutes` where any exist (per-step field, only some steps have it), else `MP.Generator.effortOf(meal)` label; never invent minutes
+- [x] Deck card (`renderDeck`): PC hover and phone long-press (~450 ms, cancelled by swipe movement) show a small preview popover from `whatIf`; textContent/`esc()` only, no new dependency
+- [x] `style.css`: `.whatif` popover, both themes, 390 px fits, reduced-motion = no animation; bump `CACHE` in `sw.js`
+- [x] `test.html`/`walk.mjs`: assert `whatIf` deltas equal `planMetrics` after actually calling `setSlotMeal` with the same meal, and `mp_plan` is byte-identical after a preview
+- [x] `docs/roadmap.md`: mark Phase 71 done with what was verified (roadmap-gating)
+- [ ] Live: on the phone PWA, long-press a swap candidate and confirm the numbers match after taking it, the popover stays while held, and dragging cancels it (check Android doesn't fire pointercancel at ~450 ms)
 
 ## Phase 72: Planning chat with Hermes (guided, animated)
 - Spec: `.claude/specs/phase72.md`

@@ -140,6 +140,19 @@ for (const [vp, size] of Object.entries({ pc: { width: 1440, height: 900 }, phon
     await page.waitForFunction(() => document.querySelectorAll('.leftover-row').length === 2 && /freezer/.test(document.body.innerText));
     await shot('leftovers');
   });
+  await step('what-if: hovering the top deck card shows a preview and leaves mp_plan byte-identical', async () => {
+    await page.goto(`${base}/plan.html`);
+    await page.waitForSelector('#plan-root .slot-card');
+    await page.click('#plan-root .slot-card');
+    await page.click('.day-swap-btn[data-slot="dinner"]');
+    await page.waitForSelector('#swap-deck .swipe-card');
+    const before = await page.evaluate(() => localStorage.getItem('mp_plan'));
+    await page.hover('#swap-deck .swipe-card');
+    await page.waitForSelector('#swap-deck .whatif');
+    if (!/Protein/.test(await page.textContent('.whatif'))) throw new Error('preview has no protein line');
+    if (before !== await page.evaluate(() => localStorage.getItem('mp_plan'))) throw new Error('preview changed mp_plan');
+    await page.click('#swap-sheet .close-btn');
+  });
   await step('swap deck: Pass x3 walks the ranked order, counter drops, Take changes the plan, arrow keys work', async () => {
     await page.goto(`${base}/plan.html`);
     await page.waitForSelector('#plan-root .slot-card');

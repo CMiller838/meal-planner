@@ -2945,6 +2945,25 @@
     localStorage.removeItem("mp_planPrefs");
   }
 
+  // Phase 71: whatIf deltas equal planMetrics of the plan after the swap; the live plan is untouched
+  {
+    const L = [
+      { id: "a", name: "A", mealTypes: ["dinner"], ingredients: [{ key: "chicken", label: "chicken", qty: "1" }] },
+      { id: "b", name: "B", mealTypes: ["dinner"], ingredients: [] },
+    ];
+    const pl = { days: Array.from({ length: 14 }, (_, i) => ({ day: i + 1, slots: { dinner: { mealId: "b" } } })) };
+    const before = JSON.stringify(pl);
+    const X = { library: L, tags, targets, packData: realPackData, byId: { a: L[0], b: L[1] }, pantry: { items: [] }, plan: pl };
+    const w = MP.Plan.whatIf(3, "dinner", L[0], X);
+    const after = JSON.parse(before); after.days[2].slots.dinner = { mealId: "a", locked: true };
+    const m0 = MP.Plan.planMetrics(pl, X), m1 = MP.Plan.planMetrics(after, X);
+    check("whatIf: dProteinG equals planMetrics delta", w.dProteinG === m1.proteinG[0] - m0.proteinG[0]);
+    check("whatIf: dCost equals planMetrics delta", Math.abs(w.dCost - (m1.cost - m0.cost)) < 1e-9);
+    check("whatIf: new meal's ingredient shows as a new line", w.newLines.length === 1);
+    check("whatIf: no step minutes -> effort label, never invented", w.minutes === null && typeof w.effort === "string");
+    check("whatIf: plan not mutated", JSON.stringify(pl) === before);
+  }
+
   // Phase 70: planMetrics week arrays + fixGap
   {
     const lib3 = [

@@ -729,12 +729,14 @@ button offers the swap that closes the biggest gap, taken from `rankByGap`. Cove
 (Phase 29's rule); this adds a delta render on edit only, not on the staged generate reveal. **Verify:** swapping one dinner
 changes only the affected bars; "fix this gap" never offers an excluded meal. Requires Phase 35.
 
-## Phase 71: What-if preview on a candidate [S] — not started
+## Phase 71: What-if preview on a candidate [S] — built 2026-10-23, live checks pending
 
 **Added 2026-10-22.** Long-press (PC: hover) a candidate meal to see, before committing, its effect on protein, weekly cost, cook
 minutes and the shopping lines it adds. Computed by running the same `rankSlot`, `buildLists` and cost code on a copy of the
 plan, never a second implementation. Writes nothing. **Verify:** the preview matches the numbers after actually taking the meal.
 Requires Phase 70.
+
+**Verified 2026-10-23:** `MP.Plan.whatIf` (planMetrics + buildLists on a clone) deltas equal planMetrics after the swap, plan unmutated (test.html); hover preview leaves `mp_plan` byte-identical (walk.mjs); check.py 9/9. Phone long-press untested (live).
 
 ## Phase 72: Planning chat with Hermes (guided, animated) [L] — not started
 
