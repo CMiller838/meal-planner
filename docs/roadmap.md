@@ -780,9 +780,11 @@ again. Reorders only; `never` remains the sole filter. **Verify:** reject a meal
 undo removes the reason. Requires Phases 51, 72 (was "75", a stale renumber).
 **Verified 2026-10-23:** worker_test (X-Actor PUT logged, undo restamps `at`/neutral record, bare PUT unlogged); walk.mjs (Skip writes nothing, reason chip writes `mp_ratings` down+note); test.html (rejected meal ranks last); `check.py` passes. Live: phone check in tasks.md.
 
-## Phase 75: Tomorrow lock-in on Today [M] — not started
+## Phase 75: Tomorrow lock-in on Today [M] — built 2026-10-23, live checks pending
 
 **Added 2026-10-22.** The Today screen (Phase 54) shows tomorrow's meal with three ranked alternatives for one tap, and "keep"
 locks it (Phase 66). Tonight's cook-or-skip stays with the assistant (`notion_assistant` Phase 47); this adds tomorrow, which it
 does not cover. No Telegram push in this phase. **Verify:** picking an alternative changes tomorrow's slot only and re-checks
 exclusions. Requires Phases 54, 66.
+
+**Verified 2026-10-23:** `check.py` 10/10; walk (PC + phone): alternatives equal `candidatesFor` top 3, Keep locks without changing the meal, a pick changes only day 2 and locks, a refused exclusion leaves `mp_plan` byte-identical, a leftover tomorrow shows no alternatives, last plan day (rolling off) shows no card.

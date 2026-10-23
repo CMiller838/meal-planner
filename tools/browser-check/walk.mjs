@@ -318,6 +318,56 @@ for (const [vp, size] of Object.entries({ pc: { width: 1440, height: 900 }, phon
     await page.waitForURL(/plan-with-me\.html/, { timeout: 8000 });
     chatMock.bridgeAgeMs = 0;
   });
+  await step('tomorrow card: alternatives, pick changes only day+1, Keep locks, excluded pick refused, last day has no card', async () => {
+    await page.goto(`${base}/plan.html`);
+    await page.waitForSelector('#plan-root .slot-card');
+    const seed = async (start, leftover) => {
+      await page.evaluate(async ([off, lo]) => {
+        const lib = await fetch('meals.json').then(r => r.json());
+        const one = (Array.isArray(lib) ? lib : lib.meals).find(m => m.mealTypes.includes('dinner') && !m.leftoverOf && !((m.servings || 1) >= 2));
+        const p = JSON.parse(localStorage.getItem('mp_plan'));
+        const d = new Date(); d.setDate(d.getDate() - off);
+        p.startDate = d.toLocaleDateString('en-CA');
+        p.days.forEach(x => { if (x.slots.dinner) { x.slots.dinner = { mealId: x.slots.dinner.mealId }; } });
+        p.days[1].slots.dinner = { mealId: lo ? 'chicken-fajitas' : one.id };
+        localStorage.setItem('mp_plan', JSON.stringify(p));
+      }, [start, !!leftover]);
+      await page.reload(); await page.waitForSelector('#plan-root .slot-card');
+    };
+    await seed(0);
+    await page.waitForSelector('#tomorrow-card:not([hidden]) .tomorrow-alt');
+    const n = await page.locator('.tomorrow-alt').count();
+    if (n < 1 || n > 3) throw new Error('expected 1-3 alternatives, got ' + n);
+    const want = await page.evaluate(() => window.candidatesFor(2, 'dinner').slice(0, 3).map(m => m.id));
+    const got = await page.$$eval('.tomorrow-alt', bs => bs.map(b => b.dataset.alt));
+    if (JSON.stringify(want) !== JSON.stringify(got)) throw new Error('alternatives differ from candidatesFor order');
+    await shot('tomorrow');
+    const before = await planLS();
+    await page.click('#tomorrow-keep');
+    let p = JSON.parse(await planLS()), b = JSON.parse(before);
+    if (!p.days[1].slots.dinner.locked || p.days[1].slots.dinner.mealId !== b.days[1].slots.dinner.mealId) throw new Error('Keep must lock without changing the meal');
+    const altId = await page.getAttribute('.tomorrow-alt', 'data-alt');
+    await page.click('.tomorrow-alt');
+    p = JSON.parse(await planLS());
+    if (p.days[1].slots.dinner.mealId !== altId || !p.days[1].slots.dinner.locked) throw new Error('pick did not set + lock tomorrow');
+    p.days.forEach((d, i) => { if (i !== 1 && JSON.stringify(d) !== JSON.stringify(b.days[i])) throw new Error('pick changed day ' + (i + 1)); });
+    const snap = await planLS();
+    const refused = await page.evaluate(() => {
+      const orig = window.MP.Exclusions.check;
+      window.MP.Exclusions.check = () => ({ ok: false, reasons: ['test'] });
+      const r = window.pickTomorrow(2, window.candidatesFor(2, 'dinner')[0].id);
+      window.MP.Exclusions.check = orig;
+      return r;
+    });
+    if (refused === true) throw new Error('excluded meal was picked');
+    if (await planLS() !== snap) throw new Error('refused pick changed mp_plan');
+    await seed(0, true);
+    await page.waitForSelector('#tomorrow-card:not([hidden])');
+    if (await page.locator('.tomorrow-alt').count() || !/Leftovers/.test(await page.innerText('#tomorrow-card'))) throw new Error('leftover tomorrow should show no alternatives');
+    await page.evaluate(() => localStorage.setItem('mp_planPrefs', JSON.stringify({ rolling: false })));
+    await seed(13);
+    if (!(await page.evaluate(() => document.getElementById('tomorrow-card').hidden))) throw new Error('card shown on last plan day');
+  });
   await step('no uncaught page errors during the walk', async () => { if (errs.length) throw new Error(errs[0]); });
   await ctx.close();
 }

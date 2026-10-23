@@ -849,7 +849,42 @@
       el.dataset.cup = ev.target.value;
       renderTodayCard();
     });
+    renderTomorrowCard();
   }
+
+  // Phase 75: tomorrow's dinner with the top 3 swap-deck candidates. Pick = setSlotMeal (locks), Keep = toggleLock.
+  function renderTomorrowCard() {
+    const el = document.getElementById("tomorrow-card");
+    if (!el) return;
+    el.hidden = true;
+    if (!plan || !plan.startDate || guidedActive) return;
+    const next = new Date(); next.setDate(next.getDate() + 1);
+    const day = planDayOf(plan.startDate, next.toLocaleDateString("en-CA"), plan.days.length);
+    const slot = day && plan.days[day - 1].slots.dinner;
+    const em = slot && slot.mealId ? effectiveMealAt(day, "dinner") : null;
+    if (!em) return;
+    const reason = slot.eatenAt ? "Already eaten" : em.leftoverOf ? "Leftovers" : MP.isBatch(em) ? "Batch cook: change it in the day view" : "";
+    const alts = reason ? [] : candidatesFor(day, "dinner").slice(0, 3);
+    el.hidden = false;
+    el.innerHTML = `<div class="gap-head"><strong>Tomorrow's dinner</strong></div>
+      <div class="tomorrow-meal">${esc(em.name)}${slot.locked ? ` <span class="lock-icon">Kept 🔒</span>` : ""}${reason ? ` <small>· ${esc(reason)}</small>` : ""}</div>
+      ${!slot.eatenAt && !slot.locked ? `<button class="btn" id="tomorrow-keep">Keep</button>` : ""}
+      ${alts.length ? `<div class="tomorrow-alts">${alts.map((m) => `<button class="btn tomorrow-alt" data-alt="${esc(m.id)}">${esc(m.name)}</button>`).join("")}</div>` : ""}`;
+    const keep = el.querySelector("#tomorrow-keep");
+    if (keep) keep.addEventListener("click", () => toggleLock(day, "dinner"));
+    el.querySelectorAll("[data-alt]").forEach((b) => b.addEventListener("click", () => pickTomorrow(day, b.dataset.alt)));
+  }
+
+  function pickTomorrow(day, mealId) {
+    const meal = mealsById[mealId];
+    if (!meal) return false;
+    const { ok, reasons } = MP.Exclusions.check(MP.effectiveMeal(meal), MP.Sync.hardTerms());
+    if (!ok) { toast("Excluded: " + reasons.join(", ")); return false; }
+    setSlotMeal(day, "dinner", mealId);
+    renderPlan();
+    return true;
+  }
+  window.pickTomorrow = pickTomorrow; window.candidatesFor = candidatesFor; // walk.mjs drives the refusal path and checks the order
 
   function renderPlan(staged) {
     mealsById = Object.fromEntries(library.map((m) => [m.id, m]));
@@ -920,6 +955,7 @@
     }
     if (dayCtx) renderDayView();
     if (chat) renderChatDay();
+    renderTomorrowCard();
   }
 
   function moveSlot(day, slotType, moveToDay) {

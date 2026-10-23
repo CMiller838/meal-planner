@@ -873,3 +873,12 @@ body.chat-open { overflow: hidden; }
   .plan-chat, .chat-bubble, .chat-card, .diff-row { animation: none; }
   .chat-typing span { animation: none; opacity: .7; }
 }
+
+/* Phase 75: tomorrow lock-in on Today */
+.tomorrow-card { animation: today-in .25s ease-out; }
+.tomorrow-meal { margin: .25rem 0 .4rem; }
+.tomorrow-alts { display: flex; flex-wrap: wrap; gap: .4rem; margin-top: .5rem; }
+.tomorrow-alt { text-align: left; max-width: 100%; transition: transform .15s; }
+.tomorrow-alt:active { transform: scale(.97); }
+@media (prefers-reduced-motion: reduce) { .tomorrow-card { animation: none; } .tomorrow-alt { transition: none; } }
+.tomorrow-card[hidden] { display: none; }
