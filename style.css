@@ -675,6 +675,7 @@ button.ghost.danger { color: var(--danger); border-color: var(--danger); }
 .shop-line.ticked .shop-name { text-decoration: line-through; color: var(--text-dim); }
 .shop-line .have { color: var(--text-dim); font-size: .78rem; font-style: italic; }
 .shop-line.covered label { opacity: .55; }
+.shop-aisle { margin: .9rem 0 .3rem; font-size: .78rem; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--text-dim); }
 .shop-extra { margin-top: .6rem; }
 .shop-extra summary { cursor: pointer; color: var(--text-dim); font-size: .88rem; }
 .shop-extra .shop-list { margin-top: .5rem; }

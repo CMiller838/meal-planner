@@ -614,7 +614,7 @@ user to approve; a newly mapped ingredient stops showing "not tracked yet". Requ
 
 **Built 2026-10-22:** `tools/cofid_derive.py` + `tools/cofid-levels.json` + `tools/test_cofid_derive.py` (in `check.py`). Verified: self-check passes; `diff` on the 29 shared keys (28 disagree somewhere, expected: tags are serving-sized judgments) lists 160 differences: 120 nutrients derived but untagged, 8 tagged but not derived (e.g. protein for beans), 32 level mismatches. Run `python3 tools/cofid_derive.py diff` for the list; no existing tag was changed. Live: map one new ingredient with the xlsx.
 
-## Phase 58: Aisle-ordered shopping list [S] — not started
+## Phase 58: Aisle-ordered shopping list [S] — done
 
 **Added 2026-10-22.** Shopping lines are grouped and ordered by Asda store layout (produce, bakery, meat and fish, chilled,
 frozen, cupboard, household) so one walk covers the list. The aisle comes from a category table kept as data (extend
@@ -622,6 +622,8 @@ frozen, cupboard, household) so one walk covers the list. The aisle comes from a
 only: `MP.ShoppingList.buildLists` stays the one implementation and its quantities and totals are untouched. **Verify:** every
 line of a generated list appears exactly once in some aisle; ticking a line keeps its aisle; phone and PC, both themes.
 Requires Phase 55. Not in `notion_assistant` (checked 2026-10-22).
+
+**Verified 2026-10-23:** check.py 9/9; tester PASS (every line once across aisles, tick keeps aisle, PC + 390px, both themes).
 
 ## Phase 59: Freezer-aware batch planning [L] — not started
 

@@ -142,6 +142,19 @@
     check("filterMeals blank query returns full array", MP.filterMeals(library, "  ").length === library.length);
   }
 
+  // 9a. aisleFor / groupByAisle
+  {
+    const SL = MP.ShoppingList;
+    check('aisleFor chicken_breast = meat-fish', SL.aisleFor("chicken_breast", realPackData) === "meat-fish");
+    check('aisleFor frozen_veg = frozen (longest match beats veg)', SL.aisleFor("frozen_veg", realPackData) === "frozen");
+    check('aisleFor unknown = other', SL.aisleFor("zzz_widget", realPackData) === "other");
+    check('aisleFor without aisles = other, no throw', SL.aisleFor("milk", { items: {} }) === "other");
+    const lines = ["milk", "zzz_widget", "banana", "rice", "milk2"].map((key) => ({ key }));
+    const groups = SL.groupByAisle(lines, realPackData);
+    check('groupByAisle keeps every line once', groups.reduce((n, g) => n + g.lines.length, 0) === lines.length);
+    check('groupByAisle store order, Other last', groups.map((g) => g.id).join() === "produce,chilled,cupboard,other");
+  }
+
   // 9. MP.ShoppingList.parseQty
   {
     check('parseQty("500g") == {500,"g"}', deepEqual(MP.ShoppingList.parseQty("500g"), { value: 500, unit: "g" }));

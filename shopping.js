@@ -50,17 +50,23 @@
     </li>`;
   }
 
+  // lines grouped by aisle (store order), each group under a .shop-aisle sub-heading
+  function aisleHtml(plan, shopDay, lines, states, canSkip) {
+    return MP.ShoppingList.groupByAisle(lines, packData).map((g) => `<h4 class="shop-aisle">${esc(g.label)}</h4>
+        <ul class="shop-list">${g.lines.map((l) => lineHtml(plan, shopDay, l, states, canSkip)).join("")}</ul>`).join("");
+  }
+
   function blockHtml(plan, list, states) {
     return `<section class="shop-block">
       <h3>Shop day ${list.shopDay} <span class="shop-total">£${list.total.toFixed(2)}</span></h3>
-      <ul class="shop-list">${list.lines.map((l) => lineHtml(plan, list.shopDay, l, states, true)).join("")}</ul>
+      ${aisleHtml(plan, list.shopDay, list.lines, states, true)}
       ${list.staples.length ? `<details class="shop-extra">
         <summary>Check you have these (${list.staples.length})</summary>
-        <ul class="shop-list">${list.staples.map((l) => lineHtml(plan, list.shopDay, l, states, false)).join("")}</ul>
+        ${aisleHtml(plan, list.shopDay, list.staples, states, false)}
       </details>` : ""}
       ${list.estimated.length ? `<details class="shop-extra">
         <summary>Estimated — category price, not exact (${list.estimated.length})</summary>
-        <ul class="shop-list">${list.estimated.map((l) => lineHtml(plan, list.shopDay, l, states, true)).join("")}</ul>
+        ${aisleHtml(plan, list.shopDay, list.estimated, states, true)}
       </details>` : ""}
     </section>`;
   }
@@ -534,9 +540,10 @@
       root.innerHTML = `<p class="empty">No plan yet — <a href="plan.html">generate a 2-week plan</a> first.</p>`;
       return;
     }
-    const [library, packData, pantry] = await Promise.all([MP.getLibrary(), MP.ShoppingList.load(), MP.Sync.fetchPantry()]);
+    const [library, pack, pantry] = await Promise.all([MP.getLibrary(), MP.ShoppingList.load(), MP.Sync.fetchPantry()]);
+    packData = pack;
     const mealsById = Object.fromEntries(library.map((m) => [m.id, m]));
-    const lists = MP.ShoppingList.buildLists(plan, mealsById, packData, pantry);
+    const lists = MP.ShoppingList.buildLists(plan, mealsById, pack, pantry);
     migrateTicked(plan);
     render(plan, lists);
     MP.Sync.fetchShoppingLines().then(() => render(plan, lists));

@@ -652,12 +652,12 @@ Requires Phase 43 (storage/`frozenMonths` helpers) built first. Decided: scale a
 - [ ] Live: in the installed phone PWA lock a dinner, tap Generate and see it stay; Reroll one day and check the other days do not change; Unlock all
 
 ## Phase 58: Aisle-ordered shopping list [S]
-- [ ] Data: add `aisles` to `pack-sizes.json` — ordered `[{ id, label, keywords[] }]` (produce, bakery, meat & fish, chilled, frozen, cupboard, household); reuse the existing `keywords` list's coverage, no inline constants in JS
-- [ ] Logic (TDD): `MP.ShoppingList.aisleFor(key, packData)` in `shopping-list.js` — longest-keyword match on `normalizeKey`, items-level `aisle` override allowed, unmatched/absent `aisles` → `"other"` (never throws, never drops); export it. Pure, no `window` ref (Worker imports this file). `buildLists` untouched
-- [ ] Logic: `MP.ShoppingList.groupByAisle(lines, packData)` → ordered `[{ id, label, lines }]`, "Other" last, every input line exactly once; add both to `test.html` assertions
-- [ ] UI (`ui-build`): `shopping.js` `blockHtml` renders `lines`, `staples`, `estimated` each via `groupByAisle` with an aisle sub-heading (`.shop-aisle`, tokens from `style.css`); ticking/skipping re-renders in the same aisle; skip empty aisles
-- [ ] Bump `CACHE` in `sw.js` (`pack-sizes.json`/`shopping.js` are cached); load order unchanged (no new cross-file dep)
-- [ ] Verify: `python3 check.py` passes; generated list has every line exactly once across aisles, unmatched in "Other", tick keeps aisle; PC + 390px, both themes
+- [x] Data: add `aisles` to `pack-sizes.json` — ordered `[{ id, label, keywords[] }]` (produce, bakery, meat & fish, chilled, frozen, cupboard, household); reuse the existing `keywords` list's coverage, no inline constants in JS
+- [x] Logic (TDD): `MP.ShoppingList.aisleFor(key, packData)` in `shopping-list.js` — longest-keyword match on `normalizeKey`, items-level `aisle` override allowed, unmatched/absent `aisles` → `"other"` (never throws, never drops); export it. Pure, no `window` ref (Worker imports this file). `buildLists` untouched
+- [x] Logic: `MP.ShoppingList.groupByAisle(lines, packData)` → ordered `[{ id, label, lines }]`, "Other" last, every input line exactly once; add both to `test.html` assertions
+- [x] UI (`ui-build`): `shopping.js` `blockHtml` renders `lines`, `staples`, `estimated` each via `groupByAisle` with an aisle sub-heading (`.shop-aisle`, tokens from `style.css`); ticking/skipping re-renders in the same aisle; skip empty aisles
+- [x] Bump `CACHE` in `sw.js` (`pack-sizes.json`/`shopping.js` are cached); load order unchanged (no new cross-file dep)
+- [x] Verify: `python3 check.py` passes; generated list has every line exactly once across aisles, unmatched in "Other", tick keeps aisle; PC + 390px, both themes
 
 ## Phase 59: Freezer-aware batch planning
 - Spec: `.claude/specs/phase59.md`

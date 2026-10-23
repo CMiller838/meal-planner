@@ -203,6 +203,28 @@
     return { packSize: cat.packSize, unit: cat.unit, price: cat.price, estimated: true };
   }
 
+  /** aisleFor: items[].aisle override -> longest aisle keyword in the normalized key -> "other".
+   * Display grouping only; never throws, never null. */
+  function aisleFor(key, packData) {
+    const norm = normalizeKey(key);
+    const item = packData && packData.items && (packData.items[key] || packData.items[norm]);
+    if (item && item.aisle) return item.aisle;
+    let best = "other", bestLen = 0;
+    ((packData && packData.aisles) || []).forEach((a) => (a.keywords || []).forEach((kw) => {
+      if (norm.includes(kw) && kw.length > bestLen) { best = a.id; bestLen = kw.length; }
+    }));
+    return best;
+  }
+
+  /** groupByAisle: lines -> [{ id, label, lines }] in store order, "Other" last, empty aisles skipped. */
+  function groupByAisle(lines, packData) {
+    const order = ((packData && packData.aisles) || []).map((a) => ({ id: a.id, label: a.label, lines: [] }));
+    order.push({ id: "other", label: "Other", lines: [] });
+    const byId = Object.fromEntries(order.map((g) => [g.id, g]));
+    (lines || []).forEach((l) => (byId[aisleFor(l.key, packData)] || byId.other).lines.push(l));
+    return order.filter((g) => g.lines.length);
+  }
+
   function mealCost(meal, packData) {
     let total = 0, estimated = false;
     const keys = [];
@@ -509,5 +531,5 @@
     return out;
   }
 
-  MP.ShoppingList = { scaleMeal, scaleShortfall, mealsUsing, load, loadGroups, groupIndex, buildLists, parseQty, packsFor, normalizeKey, lineId, mergeLines, adhocView, adhocToLines, LINE_STATES, LINE_SOURCES, pantryIndex, pantryOverlap, hasEnough, cookable, quickPicks, remainingQty, eatPlan, priceFor, mealCost, costIndex, costTier, costBadgeHtml };
+  MP.ShoppingList = { scaleMeal, scaleShortfall, mealsUsing, load, loadGroups, groupIndex, buildLists, parseQty, packsFor, normalizeKey, aisleFor, groupByAisle, lineId, mergeLines, adhocView, adhocToLines, LINE_STATES, LINE_SOURCES, pantryIndex, pantryOverlap, hasEnough, cookable, quickPicks, remainingQty, eatPlan, priceFor, mealCost, costIndex, costTier, costBadgeHtml };
 })(typeof globalThis !== "undefined" ? globalThis : this);
