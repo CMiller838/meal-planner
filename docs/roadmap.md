@@ -613,3 +613,172 @@ step). **Verify:** re-deriving the existing 33 ingredients reproduces their curr
 user to approve; a newly mapped ingredient stops showing "not tracked yet". Requires Phase 50.
 
 **Built 2026-10-22:** `tools/cofid_derive.py` + `tools/cofid-levels.json` + `tools/test_cofid_derive.py` (in `check.py`). Verified: self-check passes; `diff` on the 29 shared keys (28 disagree somewhere, expected: tags are serving-sized judgments) lists 160 differences: 120 nutrients derived but untagged, 8 tagged but not derived (e.g. protein for beans), 32 level mismatches. Run `python3 tools/cofid_derive.py diff` for the list; no existing tag was changed. Live: map one new ingredient with the xlsx.
+
+## Phase 58: Aisle-ordered shopping list [S] — not started
+
+**Added 2026-10-22.** Shopping lines are grouped and ordered by Asda store layout (produce, bakery, meat and fish, chilled,
+frozen, cupboard, household) so one walk covers the list. The aisle comes from a category table kept as data (extend
+`pack-sizes.json` categories, no inline constants); an unmatched line falls into "Other", never dropped. Ordering is display
+only: `MP.ShoppingList.buildLists` stays the one implementation and its quantities and totals are untouched. **Verify:** every
+line of a generated list appears exactly once in some aisle; ticking a line keeps its aisle; phone and PC, both themes.
+Requires Phase 55. Not in `notion_assistant` (checked 2026-10-22).
+
+## Phase 59: Freezer-aware batch planning [L] — not started
+
+**Added 2026-10-22** (promotes the `docs/FUTURE.md` entry). The generator may cook a batch meal, freeze the spare portions
+and schedule them later in the 2-week plan, using Phase 43's `storage` and `frozenMonths` helpers and the existing
+`MP.isBatch` chain rules. Frozen portions are a new leftover kind with a defrost lead time (a "defrost tonight" note the evening
+before); the pantry is still deducted once, at the cook (`commitCook`). Nutrition ranking still decides which meal; freezing
+only changes where its portions land. **Verify:** a plan with a 4-portion batch freezes two and places them 5+ days later;
+shelf-life warnings do not fire on frozen portions; eating a frozen portion never touches the pantry. Requires Phase 43.
+Assistant side already covers storage guidance (`notion_assistant` Phase 46); scheduling is not there.
+
+## Phase 60: Choice screens for breakfast, lunch and snacks [M] — not started
+
+**Added 2026-10-22** (promotes the `docs/FUTURE.md` entry). The guided "Plan with me" walkthrough offers the top three ranked
+meals for non-dinner slots, as it does for dinner, with "pick for me" as the default. Choices only reorder `rankByGap`'s output
+and go through `guidedActive`, so abandoning the walkthrough leaves `mp_plan` untouched. **Verify:** each slot shows three
+distinct meals; skipping all gives the same plan as one-tap Generate; exclusions never appear as an option. Requires Phase 24.
+
+## Phase 61: Repeat-rate control [S] — not started
+
+**Added 2026-10-22.** A setting for how soon the same meal may reappear (for example at most twice in 14 days, or a minimum gap
+in days) and a "rotate favourites" switch. It lives in `mp_planPrefs`/profile settings as a plain number, is applied in
+`rankSlot` as a reorder layer after ratings (never a filter, so a small pool can still repeat), and degrades to today's behaviour
+when unset. **Verify:** a 14-day plan from a 12-meal library respects the cap; with a 3-meal library it still fills every slot.
+Requires Phase 51. Not in `notion_assistant` (checked 2026-10-22).
+
+## Phase 62: Taste profile from ratings [M] — not started
+
+**Added 2026-10-22.** Ratings, notes and "never again" flags (Phase 51) build a profile of cuisines, main ingredients and cook
+styles you favour, stored as data derived from `mp_ratings`, never hand-typed. It reorders Discover's TheMealDB suggestions and
+breaks ties in `rankSlot` after the ratings layer; it never re-scores nutrition and never filters (`never` stays the one filter).
+**Verify:** after 10 ratings, Discover's top five shift toward liked cuisines; deleting ratings restores today's order. Requires
+Phase 51. Not in `notion_assistant` (checked 2026-10-22).
+
+## Phase 63: Mid-week re-flow [L] — not started
+
+**Added 2026-10-22.** Skipping a cook, eating out or running out of an ingredient re-plans only the remaining days. Eaten and
+cooked days are frozen, the user's manual edits are kept, and leftover chains, pantry stock and use-by dates are recomputed for
+the rest of the plan. Exposed as an app button and a Worker route for Hermes through the Phase 48 activity log (so it is
+undoable). The assistant today only offers a one-evening fallback (`notion_assistant` Phase 47). **Verify:** skipping Tuesday's
+batch cook moves its dependent leftover slots; edited slots do not change; undo restores the plan. Requires Phases 43, 48, 49.
+
+## Phase 64: Three candidate weeks [M] — not started
+
+**Added 2026-10-22.** Generate cheapest, highest-protein and quickest versions of the fortnight and show them side by side
+(cost, protein, cook minutes, coverage); the user picks one. Uses the existing `budget`, pressure and busy-effort knobs in
+`generator.js` with different settings, no new scoring. **Verify:** the three plans differ on their headline metric and all
+respect exclusions. Requires Phases 27, 35.
+
+## Phase 65: Use-it-up week [M] — not started
+
+**Added 2026-10-22.** A generation mode that seeds the plan from expiring and in-stock items (Phases 34, 39, 43) first, then
+fills the rest by nutrition. Nutrition still decides which meal; stock only orders the shortlist. **Verify:** with three items
+expiring, the first week uses them before their use-by dates. Requires Phases 34, 43.
+
+## Phase 66: Lock and fill [M] — not started
+
+**Added 2026-10-22.** Pin meals or slots (the Sunday batch, the gym-day shake); the generator fills around them. "Reroll
+Wednesday" regenerates one day with locks respected, replacing today's whole-plan `regenerate` as the only option. Locks live in
+the plan, not in `mp_planPrefs`. **Verify:** locked slots survive a full regenerate; a one-day reroll leaves other days alone.
+
+## Phase 67: Batch-cycle design [M] — not started
+
+**Added 2026-10-22.** The generator picks two or three batch cooks for the fortnight first, then places their leftover chains
+around gym and busy days. Works inside the `MP.isBatch` chain rules. **Verify:** every batch's portions land in the following
+1–2 days or are frozen (Phase 59). Requires Phase 59.
+
+## Phase 68: Rolling plan [L] — not started
+
+**Added 2026-10-22.** The fixed 2-week block becomes a window that rolls forward daily: finished days drop off and a new day is
+appended from the current pantry. Shop days (day 1 and day 8) are replaced by a rolling shop cadence, so Phase 63 and the
+shelf-life pass must be reconciled first. **Open decision:** keep the 2-week view as an option? Requires Phase 63.
+
+## Phase 69: Goal mode (cut, maintain, bulk) [L] — not started
+
+**Added 2026-10-22.** A goal and weekly rate in profile settings (Phase 52), plus an optional weekly weight and energy
+check-in. Each week the protein and calorie targets adjust from the weight trend, shown for approval and never applied
+silently; targets stay in `nutrition-targets.json`/settings, not inline constants. **Open decision:** where weight comes from
+(app check-in, or wger via the assistant). **Verify:** a falling trend on a cut holds targets; a stall proposes a change.
+Requires Phases 35, 52.
+
+## Phase 70: Equipment and time budget [M] — not started
+
+**Added 2026-10-22.** Meals gain appliance tags (air fryer, slow cooker, one-pot) and each day a cook-minutes cap, derived from
+`meals.json` step `minutes`; busy-day bias works from real minutes. A reorder layer, never a filter. **Verify:** a 20-minute
+day never receives a 60-minute meal when the pool has an alternative.
+
+## Phase 71: Seasonal and price-aware ranking [S] — not started
+
+**Added 2026-10-22.** A data table of UK seasonal produce nudges in-season meals up and out-of-season ones down, beside the
+cost layers; reorder only. **Verify:** a summer plan favours seasonal salads over root-veg stews at equal nutrition.
+
+## Phase 72: Swipe deck per slot [M] — not started
+
+**Added 2026-10-22.** Tapping a slot opens a deck of its ranked candidates; swipe right to take, left to pass. Reuses `swipe.js`
+(Discover's gesture code) rather than a second gesture implementation. The deck only walks `rankSlot`'s existing order. Likes and
+passes feed the taste profile (Phase 62) when it exists, and are stateless otherwise. **Verify:** passing three meals shows the
+next three ranked; taking one sets the slot through `setSlotMeal` (so `guidedActive` still gates saving); phone and PC, both
+themes. Requires Phase 24.
+
+## Phase 73: Live nutrient and cost meter while editing [M] — not started
+
+**Added 2026-10-22.** As meals are swapped, the coverage bars and weekly cost animate to the new values, and a "fix this gap"
+button offers the swap that closes the biggest gap, taken from `rankByGap`. Coverage and warnings currently render once per plan
+(Phase 29's rule); this adds a delta render on edit only, not on the staged generate reveal. **Verify:** swapping one dinner
+changes only the affected bars; "fix this gap" never offers an excluded meal. Requires Phase 35.
+
+## Phase 74: What-if preview on a candidate [S] — not started
+
+**Added 2026-10-22.** Long-press (PC: hover) a candidate meal to see, before committing, its effect on protein, weekly cost, cook
+minutes and the shopping lines it adds. Computed by running the same `rankSlot`, `buildLists` and cost code on a copy of the
+plan, never a second implementation. Writes nothing. **Verify:** the preview matches the numbers after actually taking the meal.
+Requires Phase 73.
+
+## Phase 75: Planning chat with Hermes (guided, animated) [L] — not started
+
+**Added 2026-10-22** (decided with the user: Hermes interprets, full-screen guided flow, one message at a time). A full-screen
+flow in the app steps through the plan one day at a time, a chat bar under each day card. The user types ("busy Monday, cheap
+Thursday, no cooking Sunday"); the message goes to Hermes through the Worker, which returns **structured constraints and edits,
+never meals** (busy/free days, chips, budget, locks). The app applies them to the generator, which picks the meals through
+`rankSlot`, and the affected slots re-pick with the Phase 29 staged animation so every choice is visible. Where several meals fit,
+the day card shows the top three as selectable cards (the Phase 72 deck is the same component); "pick for me" is the default.
+Every Hermes edit shows as a highlighted diff with per-slot accept or reject (Phase 49 draft/apply is the transport). Stateless
+exit through `guidedActive`: abandoning leaves `mp_plan` untouched. If Hermes is offline the flow degrades to today's Plan with me
+screen. **Decided 2026-10-23:** offline falls back to the Plan with me screen; Phase 66 is built first.
+**Transport (decided 2026-10-23):** KV relay like `hermes-generate` (app posts the message, Hermes replies via a
+draft route), polled about once a second while the chat is open, so no inbound path to the PC is needed. A Worker call out to
+Hermes is deferred: it would need a public endpoint on the PC, a shared secret, rate limiting and a narrow translate-only
+service so Hermes' own tools are never exposed. **Conversational (decided 2026-10-23):** free wording, no fixed
+phrases ("I'm wrecked Monday, and money's tight this week" is valid). Hermes keeps the thread of the session, so "make that one
+quicker" or "what about Friday?" resolve against what was just said. It leads the walkthrough: it opens with a short question,
+suggests ideas unprompted from the plan's real gaps (a protein shortfall, something expiring, an over-budget week), asks one
+question at a time and says when it is unsure instead of guessing. Whatever it understands is echoed back as a plain-English line
+under its reply ("Monday: quick meals, Thursday: under £3") so a misreading is visible before slots move. Hermes' reply is
+always validated against a fixed set of edit types; an unrecognised one is dropped and Hermes is asked to rephrase. Exclusions,
+allergies and `never` stay enforced in code whatever is typed. A typing indicator covers relay latency. **Verify:** typing
+"no cooking Sunday" re-picks Sunday only,
+within exclusions; a vague message ("something nicer on Friday") gets a clarifying question, not a guess; a rejected edit leaves
+the slot unchanged; PC and phone, both themes. Requires Phases 24, 29, 49, 66.
+
+## Phase 76: Tie questions and trade-off cards [M] — not started
+
+**Added 2026-10-22.** In the Phase 75 chat, when the top two candidates score within a margin kept as data, Hermes asks one
+question card ("chicken curry or chilli?"); ignoring it applies the default. When a plan is over budget, a card offers meal-level
+swaps with the numbers ("swap Wed and Fri saves £9, costs 12 g protein"), computed by the generator, never by Hermes, and applied
+only on accept. **Verify:** a tie produces exactly one card; accepting a swap changes the totals shown. Requires Phases 27, 75.
+
+## Phase 77: Learn from rejections [S] — not started
+
+**Added 2026-10-22.** A rejected edit or declined suggestion in the chat can carry a reason; it is saved as a Phase 51 rating
+or reason (`PUT /meal/:id/rating`, the only writer) and logged through Phase 48, so the next draft re-ranks without being told
+again. Reorders only; `never` remains the sole filter. **Verify:** reject a meal with "too fiddly", regenerate, and it ranks lower;
+undo removes the reason. Requires Phases 51, 75.
+
+## Phase 78: Tomorrow lock-in on Today [M] — not started
+
+**Added 2026-10-22.** The Today screen (Phase 54) shows tomorrow's meal with three ranked alternatives for one tap, and "keep"
+locks it (Phase 66). Tonight's cook-or-skip stays with the assistant (`notion_assistant` Phase 47); this adds tomorrow, which it
+does not cover. No Telegram push in this phase. **Verify:** picking an alternative changes tomorrow's slot only and re-checks
+exclusions. Requires Phases 54, 66.

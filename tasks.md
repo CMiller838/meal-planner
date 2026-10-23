@@ -646,3 +646,43 @@ Requires Phase 43 (storage/`frozenMonths` helpers) built first. Decided: scale a
 ## Phase 57: Measured nutrient levels for new ingredients (CoFID)
 - Spec: `.claude/specs/phase57.md`
 - [ ] Live: with the CoFID 2021 xlsx, map one new ingredient and confirm "not tracked yet" disappears (see spec)
+
+## Phase 66: Lock and fill
+- Spec: `.claude/specs/phase66.md`
+- [ ] Live: in the installed phone PWA lock a dinner, tap Generate and see it stay; Reroll one day and check the other days do not change; Unlock all
+
+## Phase 58: Aisle-ordered shopping list [S]
+- [ ] Data: add `aisles` to `pack-sizes.json` — ordered `[{ id, label, keywords[] }]` (produce, bakery, meat & fish, chilled, frozen, cupboard, household); reuse the existing `keywords` list's coverage, no inline constants in JS
+- [ ] Logic (TDD): `MP.ShoppingList.aisleFor(key, packData)` in `shopping-list.js` — longest-keyword match on `normalizeKey`, items-level `aisle` override allowed, unmatched/absent `aisles` → `"other"` (never throws, never drops); export it. Pure, no `window` ref (Worker imports this file). `buildLists` untouched
+- [ ] Logic: `MP.ShoppingList.groupByAisle(lines, packData)` → ordered `[{ id, label, lines }]`, "Other" last, every input line exactly once; add both to `test.html` assertions
+- [ ] UI (`ui-build`): `shopping.js` `blockHtml` renders `lines`, `staples`, `estimated` each via `groupByAisle` with an aisle sub-heading (`.shop-aisle`, tokens from `style.css`); ticking/skipping re-renders in the same aisle; skip empty aisles
+- [ ] Bump `CACHE` in `sw.js` (`pack-sizes.json`/`shopping.js` are cached); load order unchanged (no new cross-file dep)
+- [ ] Verify: `python3 check.py` passes; generated list has every line exactly once across aisles, unmatched in "Other", tick keeps aisle; PC + 390px, both themes
+
+## Phase 59: Freezer-aware batch planning
+- Spec: `.claude/specs/phase59.md`
+- [ ] Live: in the installed phone PWA generate a plan containing chilli; confirm a frozen dinner 5+ days after the cook and the "Defrost tonight" note on Today the evening before
+
+## Phase 60: Choice screens for breakfast, lunch and snacks
+- Spec: `.claude/specs/phase60.md`
+
+## Phase 61: Repeat-rate control [S]
+Requires Phase 51 (built). Decision (own call): one plain number `repeatGap` (min days between the same meal; 0 = off) in `mp_planPrefs`; "rotate favourites" is not a separate switch, it is `repeatGap` plus the existing 👍 layer (a 👍 meal inside its gap drops behind neutral ones). Not in `notion_assistant` (roadmap 2026-10-22).
+- [ ] Logic (TDD): `generator.js` `rankSlot` — new layer after ratings (3c): stable-move meals with `dayNum - lastUsedDay[id] < opts.prefs.repeatGap` to the tail; reorder only, never a filter (a 3-meal library still fills every slot); `repeatGap` absent/0 = today's order. Add to `test.html`: 12-meal library 14-day plan has no meal inside the gap; 3-meal library fills every slot
+- [ ] Logic: `plan-with-me.js` `MP.PlanPrefs.get/save` carry `repeatGap` (int 0–14, junk → 0); `save` takes it as a 4th arg, update both callers (`hermes-sync.js:370` pull, `plan-with-me.js` save) and the `CLAUDE.md` `mp_planPrefs` invariant line (`{ updatedAt, busyDays, chips, budgetTarget, repeatGap }`)
+- [ ] Worker: `worker/worker.js` lines ~210 and ~252 build `prefs` from `planPrefs` — pass `repeatGap: pp.repeatGap || 0` so `/ranking` and the draft route match the app (`rankSlot` stays the one implementation); no new route or KV key
+- [ ] UI (`ui-build`): `plan-with-me.html`/`.js` — a "Repeat a meal no sooner than" stepper/select (Off, 3, 5, 7 days) beside the budget slider; saved with the other prefs
+- [ ] Bump `CACHE` in `sw.js`
+- [ ] Verify: `python3 check.py` passes; fresh profile, gap 7 → plan shows no repeat within 7 days; gap unset → plan identical to before; PC + 390px, both themes
+
+## Phase 62: Taste profile from ratings
+Spec: `.claude/specs/phase62.md` [M] (no cuisine, ingredient + cook-style profile derived from `mp_ratings`, reorder-only).
+
+## Phase 63: Mid-week re-flow
+- Spec: `.claude/specs/phase63.md`
+
+## Phase 64: Three candidate weeks
+- Spec: `.claude/specs/phase64.md` [M] (cheapest / highest-protein / quickest fortnights side by side; adds `prefs.noBatch`).
+
+## Phase 65: Use-it-up week
+- Spec: `.claude/specs/phase65.md` [M] (one-tap fortnight that cooks expiring pantry items first; `prefs.useUp`, reorders the shortlist only).

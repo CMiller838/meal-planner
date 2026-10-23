@@ -8,6 +8,13 @@ description: Plan one roadmap phase (or the roadmap itself) in the main session 
 Runs in the main session. No subagent: a subagent can't ask the user, so gating there
 cost a transcript replay per round and garbled answers. Budget: ~100k tokens total.
 
+## No phase number given
+
+`/plan-phase` with nothing after it plans the **lowest unplanned phase**: the first `## Phase N: ... — not started`
+heading in `docs/roadmap.md` (in file order) with no `.claude/specs/phaseN.md` and no `## Phase N` section in
+`tasks.md` (an [S] phase counts as planned once that section exists). Say which phase you picked in one line, then
+continue. None found: say so and stop.
+
 ## Tier first — read it from the heading, never ask the user
 
 Each heading in `docs/roadmap.md` ends `[S]`, `[M]` or `[L]`. "Plan Phase N" is enough.
@@ -33,6 +40,11 @@ wrong, say so in one line and update the heading.
    Also, for any phase that writes state (a route, a KV key), grep where that state lives: the app's `localStorage` is
    the authority and the Worker's KV copy is a derived mirror (e.g. `plan`), so a "write the plan" roadmap line may need
    a pending-queue + app-apply path, which is a gate.
+   For a phase that adds a field to a stored object (a slot, a record), grep for the mirror/serialiser that copies that object
+   to KV or another store (e.g. `planMirror` in `hermes-sync.js`): one that whitelists fields silently strips the new one, so
+   list it under Files touched.
+   If that field lives in a stored object `CLAUDE.md` pins by shape (e.g. `mp_planPrefs`), list the invariant line under
+   Files touched so the builder updates it.
    For every existing function/module the spec names, grep its defining file and write that path in the spec; if the
    Worker imports or will import that file, say whether it needs the `window` → `root` shim.
    For a phase that adds a Worker route, also grep `worker/worker.js` for that route name: an existing route with the
@@ -59,6 +71,8 @@ wrong, say so in one line and update the heading.
    Found only in an unbuilt spec means the phase depends on that spec's phase: state "Requires Phase Na" in the spec.
    When a phase exposes existing logic (reasons, scores, fields), grep that each item the roadmap lists is a real input
    in the code; drop the ones that are not and say so in the spec.
+   When the roadmap names a data attribute a feature learns from or filters on (a cuisine, a category, a tag), grep that the
+   meal shape (`meals.json`) and the importer (`mealdb.js` `toMeal`) actually carry it; absent means a gate (capture it or drop it).
    Check whether the roadmap's "no UI to do X" assumption holds (e.g. the app may have no editor for the field).
    If most of a phase's dependencies are unbuilt, that is the first gate (split, fallbacks or wait), asked before any code reading.
 3. **Gates.** Gate only a fork that changes user-facing behaviour or is expensive to undo
