@@ -115,7 +115,7 @@ Installable as a PWA on Android Chrome via `manifest.json` + `sw.js`.
   (`eatPlan`, `applyOps`, `writeLocalItems`, `queueOp`). Don't add a
   convenience path that lets a portion-eat touch the pantry.
 - **`mp_planPrefs` is settings, not plan state** (Phase 23): it holds only
-  `{ updatedAt, busyDays, chips, budgetTarget, freezeBatches }`, never a meal id or date.
+  `{ updatedAt, busyDays, chips, budgetTarget, freezeBatches, repeatGap }`, never a meal id or date.
   `budgetTarget` (Phase 27) is a plain £/week number where `0` means no
   target. Losing it degrades to today's behaviour (no busy days, no chips, no
   budget target). `MP.PlanPrefs`

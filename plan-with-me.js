@@ -20,7 +20,7 @@ window.MP = window.MP || {};
       : [];
     const chips = Array.isArray(parsed.chips) ? parsed.chips.filter((c) => typeof c === "string") : [];
     const budgetTarget = Number(parsed.budgetTarget);
-    return { busyDays, chips, freezeBatches: parsed.freezeBatches !== false, budgetTarget: (!raw && profileBudget()) || (isFinite(budgetTarget) && budgetTarget >= 0 ? budgetTarget : 0) };
+    return { busyDays, chips, freezeBatches: parsed.freezeBatches !== false, repeatGap: cleanGap(parsed.repeatGap), budgetTarget: (!raw && profileBudget()) || (isFinite(budgetTarget) && budgetTarget >= 0 ? budgetTarget : 0) };
   }
 
   /** Profile.md's budget (Phase 52) wins over the local slider while it is > 0. */
@@ -29,7 +29,12 @@ window.MP = window.MP || {};
     return s && s.budgetTarget > 0 ? s.budgetTarget : 0;
   }
 
-  function save(busyDays, chips, budgetTarget, freezeBatches) {
+  function cleanGap(v) {
+    const n = Number(v);
+    return Number.isInteger(n) && n >= 0 && n <= 14 ? n : 0;
+  }
+
+  function save(busyDays, chips, budgetTarget, freezeBatches, repeatGap) {
     const n = Number(budgetTarget);
     const record = {
       updatedAt: new Date().toISOString(),
@@ -37,6 +42,7 @@ window.MP = window.MP || {};
       chips: [...chips],
       budgetTarget: isFinite(n) && n >= 0 ? n : 0,
       freezeBatches: freezeBatches !== false,
+      repeatGap: cleanGap(repeatGap),
     };
     localStorage.setItem(KEY, JSON.stringify(record));
     return record;
@@ -144,6 +150,7 @@ window.MP = window.MP || {};
     prefs.busyDays.forEach((d) => busyDays.add(d));
     budgetTarget = prefs.budgetTarget || 0;
     document.getElementById("freeze-batches").checked = prefs.freezeBatches !== false;
+    document.getElementById("repeat-gap").value = String(prefs.repeatGap || 0);
     renderBusyGrid();
 
     MP.ShoppingList.load()
@@ -188,7 +195,7 @@ window.MP = window.MP || {};
     });
 
     document.getElementById("pwm-generate-btn").addEventListener("click", () => {
-      MP.PlanPrefs.save([...busyDays], [...chips], profileBudget() ? MP.PlanPrefs.get(true).budgetTarget : budgetTarget, document.getElementById("freeze-batches").checked);
+      MP.PlanPrefs.save([...busyDays], [...chips], profileBudget() ? MP.PlanPrefs.get(true).budgetTarget : budgetTarget, document.getElementById("freeze-batches").checked, document.getElementById("repeat-gap").value);
       if (MP.Sync) MP.Sync.pushPlanPrefs();
       const extras = [...document.querySelectorAll("#also-row button.active")].map((b) => b.dataset.slot);
       location.href = "plan.html?guided=1" + (extras.length ? "&slots=" + extras.join(",") : "");

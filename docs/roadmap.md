@@ -646,13 +646,15 @@ distinct meals; skipping all gives the same plan as one-tap Generate; exclusions
 
 **Verified 2026-10-23:** `check.py` 9/9, tester PASS (all-skip plan equals plain guided plan; one lunch pick changes only that slot; close leaves `mp_plan` unsaved; PC + phone).
 
-## Phase 61: Repeat-rate control [S] — not started
+## Phase 61: Repeat-rate control [S] — built 2026-10-23, live checks pending
 
 **Added 2026-10-22.** A setting for how soon the same meal may reappear (for example at most twice in 14 days, or a minimum gap
 in days) and a "rotate favourites" switch. It lives in `mp_planPrefs`/profile settings as a plain number, is applied in
 `rankSlot` as a reorder layer after ratings (never a filter, so a small pool can still repeat), and degrades to today's behaviour
 when unset. **Verify:** a 14-day plan from a 12-meal library respects the cap; with a 3-meal library it still fills every slot.
 Requires Phase 51. Not in `notion_assistant` (checked 2026-10-22).
+
+**Built 2026-10-23.** `repeatGap` (0–14) in `mp_planPrefs`, `rankSlot` layer 3c, Worker pass-through; check.py 9/9 and tester PASS (unit assertions for 12-meal gap and 3-meal fill).
 
 ## Phase 62: Taste profile from ratings [M] — not started
 

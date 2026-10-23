@@ -1824,11 +1824,11 @@
     const KEY = P.KEY;
 
     localStorage.removeItem(KEY);
-    check("get() with key absent -> empty default", deepEqual(P.get(), { busyDays: [], chips: [], freezeBatches: true, budgetTarget: 0 }));
+    check("get() with key absent -> empty default", deepEqual(P.get(), { busyDays: [], chips: [], freezeBatches: true, repeatGap: 0, budgetTarget: 0 }));
 
     for (const bad of ["not json", "null", "[]", "3"]) {
       localStorage.setItem(KEY, bad);
-      check(`get() with ${JSON.stringify(bad)} -> empty default, no throw`, deepEqual(P.get(), { busyDays: [], chips: [], freezeBatches: true, budgetTarget: 0 }));
+      check(`get() with ${JSON.stringify(bad)} -> empty default, no throw`, deepEqual(P.get(), { busyDays: [], chips: [], freezeBatches: true, repeatGap: 0, budgetTarget: 0 }));
     }
 
     localStorage.setItem(KEY, JSON.stringify({ busyDays: [0, 3, 15, "4", 3, 14], chips: ["comfort", 5, "no-spice", null] }));
@@ -1840,10 +1840,10 @@
     const saved = P.save([11, 2], ["comfort"]);
     check("save() sorts busyDays ascending", deepEqual(saved.busyDays, [2, 11]));
     check("save() stamps a parseable ISO updatedAt", !isNaN(new Date(saved.updatedAt).getTime()));
-    check("save() round-trips through get()", deepEqual(P.get(), { busyDays: [2, 11], chips: ["comfort"], freezeBatches: true, budgetTarget: 0 }));
+    check("save() round-trips through get()", deepEqual(P.get(), { busyDays: [2, 11], chips: ["comfort"], freezeBatches: true, repeatGap: 0, budgetTarget: 0 }));
 
     const savedEmpty = P.save([], []);
-    check("save([], []) round-trips to the empty shape", deepEqual(P.get(), { busyDays: [], chips: [], freezeBatches: true, budgetTarget: 0 }));
+    check("save([], []) round-trips to the empty shape", deepEqual(P.get(), { busyDays: [], chips: [], freezeBatches: true, repeatGap: 0, budgetTarget: 0 }));
     check("save([], []) has no busyDays/chips leak", deepEqual(savedEmpty.busyDays, []) && deepEqual(savedEmpty.chips, []));
     localStorage.removeItem(KEY);
 
@@ -1887,7 +1887,7 @@
 
     MP.PlanPrefs.save([0, "3", 15, 7, 7], ["comfort", 3, null]);
     check("pull coercion: hostile remote body round-trips to sane shape",
-      deepEqual(MP.PlanPrefs.get(), { busyDays: [7], chips: ["comfort"], freezeBatches: true, budgetTarget: 0 }));
+      deepEqual(MP.PlanPrefs.get(), { busyDays: [7], chips: ["comfort"], freezeBatches: true, repeatGap: 0, budgetTarget: 0 }));
     localStorage.removeItem(KEY);
   }
 
@@ -2199,7 +2199,7 @@
 
       const saved = P.save([2], ["comfort"], 75);
       check("PlanPrefs.save(): round-trips budgetTarget 75 with busyDays/chips intact",
-        deepEqual(P.get(), { busyDays: [2], chips: ["comfort"], freezeBatches: true, budgetTarget: 75 }));
+        deepEqual(P.get(), { busyDays: [2], chips: ["comfort"], freezeBatches: true, repeatGap: 0, budgetTarget: 75 }));
       check("PlanPrefs.save(): return value carries budgetTarget", saved.budgetTarget === 75);
 
       P.save([], [], undefined);
@@ -2836,6 +2836,25 @@
       sv.forEach((v, i) => { const k = ["mp_shopping", "mp_shopping_pending"][i]; if (v === null) localStorage.removeItem(k); else localStorage.setItem(k, v); });
     }
     check("adhocToLines: item source honoured", SL.adhocToLines([], [{ name: "Tea", source: "ranout" }], "manual", N0)[0].source === "ranout");
+  }
+
+  // Phase 61: repeatGap is a reorder layer, never a filter
+  {
+    const mkD = (n) => Array.from({ length: n }, (_, i) => ({ id: "rg" + i, mealTypes: ["dinner"], batchCook: false, prepEffort: "quick", ingredients: [] }));
+    const mkAll = (n) => mkD(n).concat(["breakfast", "lunch", "snack"].map((t) => ({ id: "x" + t, mealTypes: [t], batchCook: false, prepEffort: "quick", ingredients: [] })));
+    const dinners = (pl) => pl.days.map((d) => d.slots.dinner.mealId);
+    const minGap = (ids) => { const last = {}; let g = 99; ids.forEach((id, i) => { if (id in last) g = Math.min(g, i - last[id]); last[id] = i; }); return g; };
+    const p12 = MP.Generator.generatePlan(mkAll(12), tags, targets, shelfData, "2026-09-07", undefined, {}, { repeatGap: 7 });
+    check("repeatGap 7: 12-meal library has no dinner repeat inside 7 days", minGap(dinners(p12)) >= 7);
+    const p3 = MP.Generator.generatePlan(mkAll(3), tags, targets, shelfData, "2026-09-07", undefined, {}, { repeatGap: 7 });
+    check("repeatGap 7: 3-meal library still fills every dinner slot", dinners(p3).every(Boolean));
+    const off = (pr) => JSON.stringify(dinners(MP.Generator.generatePlan(mkAll(12), tags, targets, shelfData, "2026-09-07", undefined, {}, pr)));
+    check("repeatGap 0/absent equals today's order", off({ repeatGap: 0 }) === off({}));
+    localStorage.setItem("mp_planPrefs", JSON.stringify({ repeatGap: 99 }));
+    check("PlanPrefs.get: junk repeatGap -> 0", MP.PlanPrefs.get(true).repeatGap === 0);
+    localStorage.setItem("mp_planPrefs", JSON.stringify({ repeatGap: 5 }));
+    check("PlanPrefs.get: repeatGap 5 kept", MP.PlanPrefs.get(true).repeatGap === 5);
+    localStorage.removeItem("mp_planPrefs");
   }
 
   lines.push("", `${pass} passed, ${fail} failed`);

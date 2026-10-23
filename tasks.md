@@ -670,12 +670,13 @@ Requires Phase 43 (storage/`frozenMonths` helpers) built first. Decided: scale a
 
 ## Phase 61: Repeat-rate control [S]
 Requires Phase 51 (built). Decision (own call): one plain number `repeatGap` (min days between the same meal; 0 = off) in `mp_planPrefs`; "rotate favourites" is not a separate switch, it is `repeatGap` plus the existing 👍 layer (a 👍 meal inside its gap drops behind neutral ones). Not in `notion_assistant` (roadmap 2026-10-22).
-- [ ] Logic (TDD): `generator.js` `rankSlot` — new layer after ratings (3c): stable-move meals with `dayNum - lastUsedDay[id] < opts.prefs.repeatGap` to the tail; reorder only, never a filter (a 3-meal library still fills every slot); `repeatGap` absent/0 = today's order. Add to `test.html`: 12-meal library 14-day plan has no meal inside the gap; 3-meal library fills every slot
-- [ ] Logic: `plan-with-me.js` `MP.PlanPrefs.get/save` carry `repeatGap` (int 0–14, junk → 0); `save` takes it as a 4th arg, update both callers (`hermes-sync.js:370` pull, `plan-with-me.js` save) and the `CLAUDE.md` `mp_planPrefs` invariant line (`{ updatedAt, busyDays, chips, budgetTarget, repeatGap }`)
-- [ ] Worker: `worker/worker.js` lines ~210 and ~252 build `prefs` from `planPrefs` — pass `repeatGap: pp.repeatGap || 0` so `/ranking` and the draft route match the app (`rankSlot` stays the one implementation); no new route or KV key
-- [ ] UI (`ui-build`): `plan-with-me.html`/`.js` — a "Repeat a meal no sooner than" stepper/select (Off, 3, 5, 7 days) beside the budget slider; saved with the other prefs
-- [ ] Bump `CACHE` in `sw.js`
-- [ ] Verify: `python3 check.py` passes; fresh profile, gap 7 → plan shows no repeat within 7 days; gap unset → plan identical to before; PC + 390px, both themes
+- [x] Logic (TDD): `generator.js` `rankSlot` — new layer after ratings (3c): stable-move meals with `dayNum - lastUsedDay[id] < opts.prefs.repeatGap` to the tail; reorder only, never a filter (a 3-meal library still fills every slot); `repeatGap` absent/0 = today's order. Add to `test.html`: 12-meal library 14-day plan has no meal inside the gap; 3-meal library fills every slot
+- [x] Logic: `plan-with-me.js` `MP.PlanPrefs.get/save` carry `repeatGap` (int 0–14, junk → 0); `save` takes it as a 4th arg, update both callers (`hermes-sync.js:370` pull, `plan-with-me.js` save) and the `CLAUDE.md` `mp_planPrefs` invariant line (`{ updatedAt, busyDays, chips, budgetTarget, repeatGap }`)
+- [x] Worker: `worker/worker.js` lines ~210 and ~252 build `prefs` from `planPrefs` — pass `repeatGap: pp.repeatGap || 0` so `/ranking` and the draft route match the app (`rankSlot` stays the one implementation); no new route or KV key
+- [x] UI (`ui-build`): `plan-with-me.html`/`.js` — a "Repeat a meal no sooner than" stepper/select (Off, 3, 5, 7 days) beside the budget slider; saved with the other prefs
+- [x] Bump `CACHE` in `sw.js`
+- [x] Verify: `python3 check.py` passes (9/9).
+- [ ] Live: fresh profile, gap 7 → plan shows no repeat within 7 days; gap unset → plan identical to before; PC + 390px, both themes
 
 ## Phase 62: Taste profile from ratings
 Spec: `.claude/specs/phase62.md` [M] (no cuisine, ingredient + cook-style profile derived from `mp_ratings`, reorder-only).
@@ -688,3 +689,4 @@ Spec: `.claude/specs/phase62.md` [M] (no cuisine, ingredient + cook-style profil
 
 ## Phase 65: Use-it-up week
 - Spec: `.claude/specs/phase65.md` [M] (one-tap fortnight that cooks expiring pantry items first; `prefs.useUp`, reorders the shortlist only).
+- [ ] Live: Phase 61 — Worker accepts `PUT /planPrefs` with `repeatGap` via real Hermes and it syncs back on pull.

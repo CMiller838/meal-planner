@@ -118,7 +118,7 @@
   /**
    * Ordered candidates for one slot, best first. Layers, in order:
    *   1 nutrition (rankByGap)  2 chips  3 effort/busy
-   *   3b ratings (Phase 51: up/neutral/down; `never` filtered above)  4 budget shortlist (cost, pack reuse + group substitutions; width scales with budget pressure)  5 recency
+   *   3b ratings (Phase 51: up/neutral/down; `never` filtered above)  3c repeat gap (Phase 61)  4 budget shortlist (cost, pack reuse + group substitutions; width scales with budget pressure)  5 recency
    * Layers 2-5 are stable reorders of layer 1 - none of them re-score nutrition.
    * Returns every meal in `pool` (minus exclusions); chips never filter.
    */
@@ -174,6 +174,12 @@
     if (Object.keys(ratings).length) { // Phase 51: 👍 ahead of neutral ahead of 👎, order inside each group kept
       const r = (m) => (ratings[m.id] && ratings[m.id].rating) || "";
       ranked = ranked.filter((m) => r(m) === "up").concat(ranked.filter((m) => r(m) !== "up" && r(m) !== "down"), ranked.filter((m) => r(m) === "down"));
+    }
+
+    const repeatGap = Number(prefs && prefs.repeatGap) || 0;
+    if (repeatGap > 0) { // Phase 61: meals used inside the gap go to the tail (reorder only, a small pool still fills)
+      const inGap = (m) => m.id in lastUsedDay && dayNum - lastUsedDay[m.id] < repeatGap;
+      ranked = ranked.filter((m) => !inGap(m)).concat(ranked.filter(inGap));
     }
 
     if (budget) {

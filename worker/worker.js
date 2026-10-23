@@ -207,7 +207,7 @@ async function slotContext(day, slot, env) {
     hints = JSON.parse(hintsRaw);
   } catch (e) {}
   const resolved = DayHints.resolve(hints, plan.startDate, Generator.isoToday(), {});
-  const prefs = DayHints.merge({ vocab: PLAN_VOCAB, busyDays: planPrefs.busyDays || [], chips: planPrefs.chips || [] }, resolved);
+  const prefs = DayHints.merge({ vocab: PLAN_VOCAB, busyDays: planPrefs.busyDays || [], chips: planPrefs.chips || [], repeatGap: planPrefs.repeatGap || 0 }, resolved);
   const hint = resolved.byDay[day] ? { effort: resolved.byDay[day].effort, why: resolved.byDay[day].why } : null;
   const pool = library.filter((m) => (m.mealTypes || []).includes(slot));
   const settings = await readSettings(env);
@@ -254,6 +254,7 @@ async function draftPlan(body, env) {
   const prefs = DayHints.merge({ vocab: PLAN_VOCAB, busyDays: pp.busyDays || [], chips: pp.chips || [] }, resolved);
   const target = budget ?? (settings && settings.budgetTarget > 0 ? settings.budgetTarget : pp.budgetTarget);
   if (target > 0) prefs.budgetTarget = target;
+  prefs.repeatGap = pp.repeatGap || 0;
   prefs.profile = Nutrition.profileOf(settings);
   const pool = library.filter((m) => !avoidSet.has(m.id));
   const budgetObj = { costIndex: ShoppingList.costIndex(pool, PACK_DATA), groups: ShoppingList.groupIndex(SUB_GROUPS), ...PACK_DATA.planning };
@@ -954,6 +955,7 @@ function planPrefsError(parsed) {
   }
   if (!Array.isArray(parsed.chips) || !parsed.chips.every((c) => typeof c === "string")) return "chips must be an array of strings";
   if (parsed.freezeBatches !== undefined && typeof parsed.freezeBatches !== "boolean") return "freezeBatches must be a boolean";
+  if (parsed.repeatGap !== undefined && !(Number.isInteger(parsed.repeatGap) && parsed.repeatGap >= 0 && parsed.repeatGap <= 14)) return "repeatGap must be an integer 0-14";
   return null;
 }
 

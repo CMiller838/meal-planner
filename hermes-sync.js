@@ -368,7 +368,7 @@ window.MP = window.MP || {};
     }
     if (!remote || typeof remote !== "object" || Array.isArray(remote)) return MP.PlanPrefs.get();
     const decision = decide(localPlanPrefsStamp(), remote);
-    if (decision === "pull") return MP.PlanPrefs.save(remote.busyDays, remote.chips, remote.budgetTarget, remote.freezeBatches);
+    if (decision === "pull") return MP.PlanPrefs.save(remote.busyDays, remote.chips, remote.budgetTarget, remote.freezeBatches, remote.repeatGap);
     if (decision === "push") pushPlanPrefs();
     return MP.PlanPrefs.get();
   }
