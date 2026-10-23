@@ -39,7 +39,8 @@ python3 check.py              # every self-check, one line each (non-zero exit o
 python3 check.py --changed    # only what the uncommitted changes need (the Stop hook); `python3 check.py ui` = browser checks
 python3 data_check.py         # the data/PWA-shell check alone
 cd tools/browser-check && npm ci && PLAYWRIGHT_BROWSERS_PATH=$PWD/.browsers npx playwright install chromium   # once
-node tools/browser-check/ui-check.mjs --theme-key mp_theme --shots out/   # pages check with screenshots (run from tools/browser-check)
+node tools/browser-check/ui-check.mjs --theme-key mp_theme --shots out/   # pages check with screenshots (run from tools/browser-check;
+                              # prefix PLAYWRIGHT_BROWSERS_PATH=$PWD/.browsers, as check.py does; use it to see a failing test.html error `check.py ui` hides)
 ```
 
 Adding or changing a Worker route (`ROUTES` in `worker/worker.js`)? Rerun `node tools/routes_build.mjs` and commit `worker/routes.json`: `worker_test.mjs` fails on a stale one.

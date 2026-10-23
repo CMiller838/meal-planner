@@ -23,7 +23,9 @@ last-committed content mid-edit this way.
    HEAD, use `git diff <ref> -- <path>` or pipe: `git show HEAD:<path> | diff
    - <path>`. Nothing touches the filesystem.
 2. **If a scratch file is genuinely needed, use `$TMPDIR`, not `/tmp`** (see
-   the user's machine notes), and confirm the directory exists as its own
+   the user's machine notes). `echo "[$TMPDIR]"` first: it can be unset in the
+   sandbox, and `"$TMPDIR/scratch"` would then be `/scratch`; if empty, use
+   option 1 instead. Confirm the directory exists as its own
    checked command *before* anything that writes into it:
    `mkdir -p "$TMPDIR/scratch" || exit 1` — run that alone, see it succeed,
    then proceed.
