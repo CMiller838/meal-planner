@@ -219,6 +219,76 @@ kv.set("settings", JSON.stringify({ budgetTarget: 75 }));
 assert.equal((await call("GET", "/spend", "a")).body.budgetTarget, 75);
 kv.delete("settings");
 kv.delete("activity");
+// Phase 78: pantry audit
+{
+  const T = "2026-10-24", ago = (n) => new Date(Date.parse(T) - n * 86400000).toISOString().slice(0, 10);
+  const pantry = JSON.stringify({ updatedAt: "2026-10-01T00:00:00.000Z", items: [
+    { name: "chicken breast", qty: "500g" }, // fridge, no useBy -> no-use-by
+    { name: "milk", useBy: "2026-10-30" }, // fridge, never confirmed
+    { name: "butter", useBy: "2026-11-30", storage: "fridge" }, // confirmed 3 days ago
+    { name: "yoghurt", useBy: "2026-11-30", storage: "fridge", out: true },
+    { name: "cheese", useBy: "2026-11-30", storage: "fridge" }, // stale (90 days)
+    { name: "carrot", qty: { value: -1, unit: "each", raw: "-1" }, useBy: "2026-11-30", storage: "fridge" },
+    { name: "carrots", useBy: "2026-11-30", storage: "fridge" },
+    { name: "flour", qty: { value: 50000, unit: "g", raw: "50kg" }, storage: "cupboard" },
+    { name: "zzzunknownthing" },
+  ] });
+  kv.set("pantry", pantry);
+  kv.set("pantryAudit", JSON.stringify({ updatedAt: "x", confirmed: { butter: ago(3), cheese: ago(90) }, snoozes: {} }));
+  const san = async () => (await call("GET", `/pantry/sanity?today=${T}`, "a")).body.findings;
+  const ids = async () => (await san()).map((f) => f.id);
+  let f = await ids();
+  for (const id of ["negative-qty:carrot", "implausible-qty:flour", "stale:cheese", "no-use-by:chicken_breast", "duplicate:carrot"]) assert.ok(f.includes(id), id + " in " + f);
+  assert.ok(!f.some((x) => x.startsWith("stale:milk")), "never-confirmed is not stale");
+  const nu = (await san()).find((x) => x.class === "no-use-by" && x.name === "chicken breast");
+  assert.ok(nu, "no-use-by fires");
+  const snz = (days, today = T) => call("POST", `/pantry/audit?today=${today}`, "a", { snooze: [{ id: nu.id, days }] }, { "X-Actor": "assistant" });
+  assert.equal((await snz(7)).status, 200);
+  assert.ok(!(await ids()).includes(nu.id), "snoozed");
+  assert.ok((await call("GET", `/pantry/sanity?today=${ago(-8)}`, "a")).body.findings.some((x) => x.id === nu.id), "back after snooze");
+  await snz(0);
+  assert.ok((await ids()).includes(nu.id), "days 0 clears");
+
+  let a = (await call("GET", `/pantry/audit?location=fridge&today=${T}`, "a")).body;
+  const names = a.items.map((i) => i.name);
+  assert.ok(!names.includes("butter") && !names.includes("yoghurt"), "recent and out skipped: " + names);
+  assert.equal(names[names.length - 1], "cheese"); // confirmed items last
+  assert.ok(names.indexOf("milk") < names.indexOf("cheese"));
+  assert.ok(a.unsorted >= 1);
+  assert.equal(a.items.find((i) => i.name === "cheese").lastConfirmed, ago(90));
+  const total = names.length;
+  a = (await call("GET", `/pantry/audit?location=fridge&limit=2&today=${T}`, "a")).body;
+  assert.deepEqual([a.items.length, a.remaining], [2, total - 2]);
+
+  const before = kv.get("pantry"), auditBefore = kv.get("pantryAudit");
+  const pa = (b, h = {}) => call("POST", `/pantry/audit?today=${T}`, "a", b, h);
+  r = await pa({ confirmed: ["milk", "nope"] });
+  assert.equal(r.status, 400);
+  assert.equal(kv.get("pantryAudit"), auditBefore);
+  assert.equal((await pa({ confirmed: ["Milk"] }, { "X-Actor": "assistant" })).status, 200);
+  assert.equal(JSON.parse(kv.get("pantryAudit")).confirmed.milk, T);
+  const entry = acts()[0];
+  assert.equal(entry.key, "pantryAudit");
+  assert.equal((await call("POST", "/activity/undo", "a", { id: entry.id })).status, 200);
+  assert.equal(JSON.parse(kv.get("pantryAudit")).confirmed.milk, undefined);
+  assert.equal(JSON.parse(kv.get("pantryAudit")).confirmed.butter, ago(3));
+  assert.equal(kv.get("pantry"), before, "pantry untouched");
+
+  for (const p of ["location=garage", "location=fridge&limit=0", "location=fridge&limit=21", "location=fridge&today=bad", "limit=3"])
+    assert.equal((await call("GET", `/pantry/audit?${p}`, "a")).status, 400, p);
+  assert.equal((await call("GET", "/pantry/sanity?today=bad", "a")).status, 400);
+  for (const b of [{ snooze: [{ id: "x", days: 91 }] }, { snooze: [{ id: "", days: 1 }] }, { snooze: [{ id: "x", days: 1.5 }] }, {}, [], { confirmed: [""] }, { other: 1 }])
+    assert.equal((await pa(b)).status, 400, JSON.stringify(b));
+  for (const [m, p] of [["GET", "/pantry/audit?location=fridge"], ["GET", "/pantry/sanity"], ["POST", "/pantry/audit"]]) {
+    assert.equal((await call(m, p, "", m === "POST" ? { confirmed: ["milk"] } : undefined)).status, 401, p);
+    assert.equal((await call(m, p, "a", m === "POST" ? { confirmed: ["milk"] } : undefined)).status, 200, p);
+  }
+  assert.equal(kv.get("pantry"), before, "pantry byte-identical after all calls");
+  kv.delete("pantry"); kv.delete("pantryAudit");
+  assert.deepEqual((await call("GET", "/pantry/sanity", "a")).body.findings, []);
+  assert.deepEqual((await call("GET", "/pantry/audit?location=fridge", "a")).body.items, []);
+  kv.delete("activity");
+}
 // /why: each code flips off when its input goes
 const { readFileSync } = await import("node:fs");
 const tags = JSON.parse(readFileSync(new URL("../ingredient-nutrient-tags.json", import.meta.url), "utf8"));

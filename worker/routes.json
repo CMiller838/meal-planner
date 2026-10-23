@@ -377,6 +377,26 @@
     "note": "logged only with an X-Actor header; one row per week, a repeat overwrites"
   },
   {
+    "method": "GET",
+    "path": "/pantry/audit",
+    "assistant": true,
+    "kind": "read"
+  },
+  {
+    "method": "GET",
+    "path": "/pantry/sanity",
+    "assistant": true,
+    "kind": "read"
+  },
+  {
+    "method": "POST",
+    "path": "/pantry/audit",
+    "assistant": true,
+    "kind": "write",
+    "log": "logged",
+    "note": "writes only pantryAudit (confirmations, snoozes), never pantry; logged only with an X-Actor header"
+  },
+  {
     "method": "PUT",
     "path": "/meal-method",
     "assistant": true,

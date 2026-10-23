@@ -50,7 +50,7 @@ const ASSISTANT_ALLOWED = new Set([
   "GET /dayHints", "PUT /dayHints", "PUT /meal-method", "GET /today", "PUT /today", "GET /products", "PUT /products",
   "GET /expiring", "GET /day", "GET /product-ranking", "GET /ratings", "GET /why", "GET /scale", "GET /cookable", "GET /substitutions", "GET /leftovers", "GET /quick",
   "GET /drafts", "POST /drafts", "GET /settings", "PUT /settings", "GET /activity", "POST /activity/undo",
-  "GET /spend", "POST /spend",
+  "GET /spend", "POST /spend", "GET /pantry/audit", "GET /pantry/sanity", "POST /pantry/audit",
   "POST /plan/draft", "POST /plan/apply", "GET /planDraft", "POST /plan/reflow",
 ]);
 const METHOD_PATH = /^\/meal\/([^/]+)\/method$/;
@@ -963,6 +963,100 @@ async function postSpend(request, env, who) {
   return json(200, after.weeks[body.week]);
 }
 
+// Phase 78: pantry audit. Advisory state in KV `pantryAudit`; never writes `pantry`.
+const AUDIT_RECENT_DAYS = 14; // an item confirmed this recently is not asked about again
+const AUDIT_STALE_DAYS = 60; // a confirmation older than this is a `stale` finding
+const AUDIT_MAX_QTY = { g: 20000, ml: 20000, each: 200 }; // implausible-qty ceiling per parsed unit (mass/volume, count)
+const AUDIT_LOCATIONS = ["fridge", "freezer", "cupboard"];
+const dayMs = (iso) => Date.parse(iso + "T00:00:00Z");
+const addIsoDays = (iso, n) => new Date(dayMs(iso) + n * 86400000).toISOString().slice(0, 10);
+
+/** Shared read for the audit routes: validated today, pantry items, stored audit (malformed -> empty). */
+async function readAudit(params, env) {
+  const today = params.get("today") || new Date().toISOString().slice(0, 10);
+  if (!ShelfLife.isIsoDate(today)) return { error: json(400, "today must be YYYY-MM-DD") };
+  const pantry = parseKV(await env.MP_KV.get("pantry"));
+  const a = parseKV(await env.MP_KV.get("pantryAudit"));
+  const obj = (o) => (o && typeof o === "object" && !Array.isArray(o) ? o : {});
+  return { today, items: pantry && Array.isArray(pantry.items) ? pantry.items.filter((i) => i && typeof i.name === "string") : [], confirmed: obj(a && a.confirmed), snoozes: obj(a && a.snoozes) };
+}
+
+/** GET /pantry/audit?location=&limit=&today= — the next batch of items worth a "still there?" check. */
+async function pantryAudit(params, env) {
+  const location = params.get("location");
+  if (!AUDIT_LOCATIONS.includes(location)) return json(400, "location must be fridge, freezer or cupboard");
+  const lRaw = params.get("limit");
+  const limit = lRaw == null ? 8 : /^\d+$/.test(lRaw) ? Number(lRaw) : 0;
+  if (limit < 1 || limit > 20) return json(400, "limit must be 1-20");
+  const a = await readAudit(params, env);
+  if (a.error) return a.error;
+  let unsorted = 0;
+  const eligible = [];
+  for (const it of a.items) {
+    if (it.out === true) continue;
+    const s = ShelfLife.storageFor(it, SHELF_DATA);
+    if (!s) { unsorted++; continue; }
+    if (s.storage !== location) continue;
+    const last = a.confirmed[ShoppingList.normalizeKey(it.name)] || null;
+    if (last && dayMs(a.today) - dayMs(last) < AUDIT_RECENT_DAYS * 86400000) continue;
+    eligible.push({ name: it.name, qty: it.qty ?? null, useBy: it.useBy ?? null, lastConfirmed: last });
+  }
+  // never-confirmed first (pantry order; sort is stable), then oldest confirmation first
+  eligible.sort((x, y) => (x.lastConfirmed ? 1 : 0) - (y.lastConfirmed ? 1 : 0) || ((x.lastConfirmed || "") < (y.lastConfirmed || "") ? -1 : (x.lastConfirmed || "") > (y.lastConfirmed || "") ? 1 : 0));
+  return json(200, { location, today: a.today, items: eligible.slice(0, limit), remaining: Math.max(0, eligible.length - limit), unsorted });
+}
+
+/** GET /pantry/sanity?today= — things that look wrong in the pantry, minus snoozed findings. */
+async function pantrySanity(params, env) {
+  const a = await readAudit(params, env);
+  if (a.error) return a.error;
+  const findings = [];
+  const add = (cls, name, detail) => findings.push({ id: `${cls}:${ShoppingList.normalizeKey(name)}`, class: cls, name, detail });
+  const seen = new Map();
+  for (const it of a.items) {
+    const key = ShoppingList.normalizeKey(it.name);
+    if (!seen.has(key)) seen.set(key, new Set());
+    seen.get(key).add(it.name);
+    if (it.qty && typeof it.qty === "object") { // free-text qty is never judged
+      const q = ShoppingList.parseQty(it.qty);
+      if (q && q.value < 0) add("negative-qty", it.name, `quantity is ${q.value}`);
+      else if (q && q.value > (AUDIT_MAX_QTY[q.unit] ?? AUDIT_MAX_QTY.each)) add("implausible-qty", it.name, `${q.value} ${q.unit} looks too large`);
+    }
+    const last = a.confirmed[key];
+    if (ShelfLife.isIsoDate(last) && dayMs(a.today) - dayMs(last) > AUDIT_STALE_DAYS * 86400000) add("stale", it.name, `last confirmed ${last}`);
+    if (it.out !== true && !it.useBy) {
+      const s = ShelfLife.storageFor(it, SHELF_DATA);
+      if (s && s.storage === "fridge") add("no-use-by", it.name, "fridge item with no use-by date");
+    }
+  }
+  for (const names of seen.values()) if (names.size > 1) add("duplicate", [...names][0], `listed as ${[...names].join(" and ")}`);
+  return json(200, { today: a.today, findings: findings.filter((f) => !(a.snoozes[f.id] >= a.today)) });
+}
+
+/** POST /pantry/audit { confirmed?: [name], snooze?: [{ id, days }] } — records answers in `pantryAudit` only. */
+async function postPantryAudit(request, env, who, params) {
+  let body;
+  try { body = JSON.parse(await request.text()); } catch (e) { return json(400, "invalid JSON"); }
+  if (typeof body !== "object" || body === null || Array.isArray(body)) return json(400, "expected a JSON object");
+  if (Object.keys(body).some((k) => !["confirmed", "snooze"].includes(k))) return json(400, "unknown key");
+  const { confirmed, snooze } = body;
+  if (confirmed === undefined && snooze === undefined) return json(400, "need confirmed or snooze");
+  if (confirmed !== undefined && (!Array.isArray(confirmed) || confirmed.some((n) => typeof n !== "string" || !n.trim()))) return json(400, "confirmed must be a list of names");
+  if (snooze !== undefined && (!Array.isArray(snooze) || snooze.some((s) => !s || typeof s.id !== "string" || !s.id || !Number.isInteger(s.days) || s.days < 0 || s.days > 90))) return json(400, "snooze must be [{ id, days 0-90 }]");
+  const a = await readAudit(params, env);
+  if (a.error) return a.error;
+  const have = new Set(a.items.map((i) => ShoppingList.normalizeKey(i.name)));
+  const unknown = (confirmed || []).filter((n) => !have.has(ShoppingList.normalizeKey(n)));
+  if (unknown.length) return json(400, `not in the pantry: ${unknown.join(", ")}`);
+  const before = parseKV(await env.MP_KV.get("pantryAudit"));
+  const after = { updatedAt: new Date().toISOString(), confirmed: { ...a.confirmed }, snoozes: { ...a.snoozes } };
+  for (const n of confirmed || []) after.confirmed[ShoppingList.normalizeKey(n)] = a.today;
+  for (const s of snooze || []) { if (s.days === 0) delete after.snoozes[s.id]; else after.snoozes[s.id] = addIsoDays(a.today, s.days); }
+  await env.MP_KV.put("pantryAudit", JSON.stringify(after));
+  if (who) await logWrite(env, { who, key: "pantryAudit", why: reasonOf(request), changes: diffItems("pantryAudit", before, after) });
+  return json(200, after);
+}
+
 /** GET /meal/:id/method — steps for cooking mode; ingredients always, so a meal with no method falls back to them. */
 async function mealMethod(env, mealId) {
   const lib = await readLibrary(env);
@@ -1255,7 +1349,7 @@ const ITEMS = {
   dayHints: ["days", null], // object map: item id = date key
   ratings: ["meals", null], // object map: item id = meal id
   spend: ["weeks", null], // object map: item id = shop-day ISO date
-  today: [null], planFlag: [null], planDraft: [null], // whole value is one item, id = key name
+  pantryAudit: [null], today: [null], planFlag: [null], planDraft: [null], // whole value is one item, id = key name
 };
 const ACTIVITY_CAP = 200;
 
@@ -1281,6 +1375,9 @@ export const ROUTES = [
   row("POST", "/shopping/lines", "write", { log: "logged" }),
   row("GET", "/spend", "read"),
   row("POST", "/spend", "write", { log: "logged", note: "logged only with an X-Actor header; one row per week, a repeat overwrites" }),
+  row("GET", "/pantry/audit", "read"),
+  row("GET", "/pantry/sanity", "read"),
+  row("POST", "/pantry/audit", "write", { log: "logged", note: "writes only pantryAudit (confirmations, snoozes), never pantry; logged only with an X-Actor header" }),
   row("PUT", "/meal-method", "write", { dryRun: true, log: "logged" }),
   row("PUT", "/meal/:id/rating", "write", { assistant: true, log: "logged", note: "logged only with an X-Actor header; the app token's own PUT is not" }),
   row("POST", "/drafts", "write", quiet("inert until the app accepts")),
@@ -1492,6 +1589,15 @@ export default {
     if (ratingMatch) {
       if (request.method !== "PUT") return json(405, "method not allowed");
       return putMealRating(request, env, decodeURIComponent(ratingMatch[1]), actor);
+    }
+    if (url.pathname === "/pantry/audit") {
+      if (request.method === "POST") return postPantryAudit(request, env, actor, url.searchParams);
+      if (request.method !== "GET") return json(405, "method not allowed");
+      return pantryAudit(url.searchParams, env);
+    }
+    if (url.pathname === "/pantry/sanity") {
+      if (request.method !== "GET") return json(405, "method not allowed");
+      return pantrySanity(url.searchParams, env);
     }
     if (url.pathname === "/spend") {
       if (request.method === "POST") return postSpend(request, env, actor);

@@ -783,6 +783,13 @@ Spec: `.claude/specs/phase76.md`
 
 ## Phase 78: Pantry audit route
 Spec: `.claude/specs/phase78.md`
+- [x] `pantrySanity()` finding classes + named thresholds + snooze filter
+- [x] `pantryAudit()` batch selection and ordering
+- [x] `postPantryAudit()`: validation, store write, `logWrite`, `ITEMS.pantryAudit = [null]`, undo works
+- [x] Route branches, `ROUTES` rows, `ASSISTANT_ALLOWED`, `node tools/routes_build.mjs`
+- [x] `worker_test.mjs` cases (incl. pantry byte-identical)
+- [x] `CLAUDE.md` invariant line, HERMES.md route row; Phase 78 marked in `docs/roadmap.md`
+- [ ] Live: with the assistant, run a fridge audit against the deployed Worker, confirm two items and snooze one finding, confirm `GET /pantry/sanity` withholds it
 
 ## Phase 79: Cooking mode
 - [ ] Spec [M]: not yet written (roadmap `## Phase 79`)

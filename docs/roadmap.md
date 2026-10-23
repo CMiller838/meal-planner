@@ -588,13 +588,15 @@ returned; a tag change is listed; no group, no swap. Requires Phases 28, 55.
 cost meter (Phase 70) may show planned against actual. **Verify:** a repeat POST for the same key does not double; undo restores.
 Assistant side: Phase 44.
 
-## Phase 78: Pantry audit route [M] — not started
+## Phase 78: Pantry audit route [M] — built 2026-10-24, live checks pending
 
 **Added 2026-10-23.** `GET /pantry/audit?location=` returns the next batch to confirm for a location (fridge, freezer, cupboard) and
 `GET /pantry/sanity` the monthly findings (negative or implausible quantities, long-untouched items, perishables with no use-by,
 duplicates). Read-only; answers go back through the existing pantry write, never a delete on its own. Snoozes are stored per
 finding. **Verify:** each finding class fires on a fixture pantry; a snoozed finding is withheld. Requires Phases 34, 48.
 Assistant side: Phase 43a.
+
+**Built 2026-10-24.** `GET /pantry/audit`, `GET /pantry/sanity`, `POST /pantry/audit` (side store KV `pantryAudit`, never writes `pantry`; logged and undoable). Verified: `node tools/worker_test.mjs` covers all five finding classes, snooze/clear/expiry, batch ordering and `remaining`, unknown-name 400 with nothing stored, undo, pantry byte-identical, 400s and auth. Live check pending.
 
 ## Phase 79: Cooking mode [M] — not started
 
