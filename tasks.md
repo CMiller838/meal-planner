@@ -706,3 +706,54 @@ Spec: `.claude/specs/phase62.md` [M] (no cuisine, ingredient + cook-style profil
 - [x] Bump `CACHE`; `CLAUDE.md` invariant line
 - [ ] Live: Phase 65 — with real pantry use-by dates, press Use it up and confirm the expiring items show in the first meals
 - [ ] Live: Phase 61 — Worker accepts `PUT /planPrefs` with `repeatGap` via real Hermes and it syncs back on pull.
+
+## Phase 67: Batch-cycle design
+
+Spec: `.claude/specs/phase67.md` (build it with `/build` or queue it for `/overnight`).
+
+## Phase 68: Rolling plan
+- Spec: `.claude/specs/phase68.md`
+- [ ] Live: next morning on the phone PWA, open Plan: yesterday is gone, a new day 14 is added, and the shopping ticks are kept
+
+## Phase 69: Swipe deck per slot
+- Spec: `.claude/specs/phase69.md`
+- [ ] Live: on the phone PWA, open Swap on a dinner, swipe and use Take/Pass; the slot changes and the counter drops
+
+## Phase 70: Live nutrient and cost meter while editing
+- Spec: `.claude/specs/phase70.md`
+- [ ] Live: on the phone PWA, swap a dinner from the plan page and watch the bars and £ move; tap "Fix this gap" and take the swap
+
+## Phase 71: What-if preview on a candidate [S]
+Requires Phase 70 (extends `planMetrics` with `weekCost`) and Phase 69 (deck cards are the candidates). Writes nothing.
+- [ ] `plan.js`: `whatIf(day, slotType, meal)`: clone `plan` (`structuredClone`), set that slot via the same path `setSlotMeal` uses (no `savePlan`), return `{ dProteinG, dCost, effort/minutes, newLines }` by diffing `planMetrics(copy)` vs `planMetrics(plan)` and `MP.ShoppingList.buildLists(copy, ...)` vs the live lists (lines present only in the copy). No second cost/coverage code
+- [ ] Cook time: sum of the meal's step `minutes` where any exist (per-step field, only some steps have it), else `MP.Generator.effortOf(meal)` label; never invent minutes
+- [ ] Deck card (`renderDeck`): PC hover and phone long-press (~450 ms, cancelled by swipe movement) show a small preview popover from `whatIf`; textContent/`esc()` only, no new dependency
+- [ ] `style.css`: `.whatif` popover, both themes, 390 px fits, reduced-motion = no animation; bump `CACHE` in `sw.js`
+- [ ] `test.html`/`walk.mjs`: assert `whatIf` deltas equal `planMetrics` after actually calling `setSlotMeal` with the same meal, and `mp_plan` is byte-identical after a preview
+- [ ] `docs/roadmap.md`: mark Phase 71 done with what was verified (roadmap-gating)
+- [ ] Live: on the phone PWA, long-press a swap candidate and confirm the numbers match after taking it
+
+## Phase 72: Planning chat with Hermes (guided, animated)
+- Spec: `.claude/specs/phase72.md`
+- [ ] Live: after the deploy, the Telegram report says the Worker redeployed (first Durable Object migration)
+- [ ] Live: put `MP_WORKER_URL` and `MP_AUTH_TOKEN` in `.env`, start `python3 tools/hermes_chat_bridge.py` on the PC, open "Plan with Hermes": Hermes opens with a question about a real gap
+- [ ] Live: type "no cooking Sunday": only Sunday re-picks, animated; "something nicer on Friday" gets a clarifying question, not a guess
+- [ ] Live: on the phone PWA, reject one changed slot, Save, and check the plan kept the rest; stop the bridge and confirm the button falls back to Plan with me
+
+## Phase 73: Tie questions and trade-off cards
+- Spec: `.claude/specs/phase73.md`
+
+## Phase 74: Learn from rejections [S]
+Requires Phase 72 (the chat's per-slot Reject, `plan-chat.js`, unbuilt: build after it). Reuses Phase 51 ratings and Phase 48's log; no new route or KV key.
+- [ ] `worker/worker.js`: add `ratings: ["meals", null]` to `ITEMS` (object map, like `dayHints`); `putMealRating(request, env, mealId, who)` diffs before/after with `diffItems("ratings", …)` and calls `logWrite({ who, key: "ratings", why: reasonOf(request), changes })` when `who` is set; pass `actor` at the call site (~l.1317). `restore` for `ratings`: a `before` of null becomes `{ rating: null, note: "", never: false, at: now }` and any restored record is restamped `at: now`, else the app's newest-`at` merge (`MP.Ratings.merge`) keeps the rejected note and undo never reaches the phone
+- [ ] `hermes-sync.js`: `pushRating(id, patch, reason)` sends `X-Actor: hermes` + `X-Reason` only when `reason` is given (the chat reject); the rating-row sheet calls stay unlogged as today
+- [ ] `plan-chat.js` Reject: after Reject, show an optional one-line reason (quick chips "too fiddly", "too pricey", "not in the mood", "had it lately" + free text, `maxlength` = `NOTE_MAX`, skippable); on submit `MP.Ratings.set(afterMealId, { rating: "down", note })` then `MP.Sync.pushRating`. Skip writes nothing (a reject is not a dislike unless a reason is given). `textContent` only
+- [ ] `docs/roadmap.md` Phase 74 + `worker/routes.json`: `PUT /meal/:id/rating` row becomes `log: "logged"`; rerun `node tools/routes_build.mjs`; update `CLAUDE.md` Ratings invariant (ratings now in `ITEMS`, undoable)
+- [ ] `tools/worker_test.mjs`: a rating PUT with `X-Actor: hermes` appends one activity entry; `POST /activity/undo` restores the prior record (or the neutral one) with a fresh `at`; the app-token PUT without a header logs nothing
+- [ ] `test.html`/`walk.mjs`: reject with reason "too fiddly" writes `mp_ratings[id]` `{ rating: "down", note }`; the same meal then ranks lower in `rankSlot` than before (no-reason reject writes nothing); `python3 check.py` passes
+- [ ] Bump `CACHE` in `sw.js` if `plan-chat.js`/`hermes-sync.js` change; mark Phase 74 done with what was verified (roadmap-gating)
+- [ ] Live: on the phone PWA, reject a chat change with "too fiddly", regenerate, confirm it ranks lower; undo it from Activity and confirm the note is gone
+
+## Phase 75: Tomorrow lock-in on Today
+- Spec: `.claude/specs/phase75.md`
+- [ ] Live: on the phone PWA, swap tomorrow's dinner from the Today card in one tap, then Keep it and confirm the lock shows in the day view

@@ -711,26 +711,7 @@ around gym and busy days. Works inside the `MP.isBatch` chain rules. **Verify:**
 appended from the current pantry. Shop days (day 1 and day 8) are replaced by a rolling shop cadence, so Phase 63 and the
 shelf-life pass must be reconciled first. **Open decision:** keep the 2-week view as an option? Requires Phase 63.
 
-## Phase 69: Goal mode (cut, maintain, bulk) [L] — not started
-
-**Added 2026-10-22.** A goal and weekly rate in profile settings (Phase 52), plus an optional weekly weight and energy
-check-in. Each week the protein and calorie targets adjust from the weight trend, shown for approval and never applied
-silently; targets stay in `nutrition-targets.json`/settings, not inline constants. **Open decision:** where weight comes from
-(app check-in, or wger via the assistant). **Verify:** a falling trend on a cut holds targets; a stall proposes a change.
-Requires Phases 35, 52.
-
-## Phase 70: Equipment and time budget [M] — not started
-
-**Added 2026-10-22.** Meals gain appliance tags (air fryer, slow cooker, one-pot) and each day a cook-minutes cap, derived from
-`meals.json` step `minutes`; busy-day bias works from real minutes. A reorder layer, never a filter. **Verify:** a 20-minute
-day never receives a 60-minute meal when the pool has an alternative.
-
-## Phase 71: Seasonal and price-aware ranking [S] — not started
-
-**Added 2026-10-22.** A data table of UK seasonal produce nudges in-season meals up and out-of-season ones down, beside the
-cost layers; reorder only. **Verify:** a summer plan favours seasonal salads over root-veg stews at equal nutrition.
-
-## Phase 72: Swipe deck per slot [M] — not started
+## Phase 69: Swipe deck per slot [M] — not started
 
 **Added 2026-10-22.** Tapping a slot opens a deck of its ranked candidates; swipe right to take, left to pass. Reuses `swipe.js`
 (Discover's gesture code) rather than a second gesture implementation. The deck only walks `rankSlot`'s existing order. Likes and
@@ -738,28 +719,28 @@ passes feed the taste profile (Phase 62) when it exists, and are stateless other
 next three ranked; taking one sets the slot through `setSlotMeal` (so `guidedActive` still gates saving); phone and PC, both
 themes. Requires Phase 24.
 
-## Phase 73: Live nutrient and cost meter while editing [M] — not started
+## Phase 70: Live nutrient and cost meter while editing [M] — not started
 
 **Added 2026-10-22.** As meals are swapped, the coverage bars and weekly cost animate to the new values, and a "fix this gap"
 button offers the swap that closes the biggest gap, taken from `rankByGap`. Coverage and warnings currently render once per plan
 (Phase 29's rule); this adds a delta render on edit only, not on the staged generate reveal. **Verify:** swapping one dinner
 changes only the affected bars; "fix this gap" never offers an excluded meal. Requires Phase 35.
 
-## Phase 74: What-if preview on a candidate [S] — not started
+## Phase 71: What-if preview on a candidate [S] — not started
 
 **Added 2026-10-22.** Long-press (PC: hover) a candidate meal to see, before committing, its effect on protein, weekly cost, cook
 minutes and the shopping lines it adds. Computed by running the same `rankSlot`, `buildLists` and cost code on a copy of the
 plan, never a second implementation. Writes nothing. **Verify:** the preview matches the numbers after actually taking the meal.
-Requires Phase 73.
+Requires Phase 70.
 
-## Phase 75: Planning chat with Hermes (guided, animated) [L] — not started
+## Phase 72: Planning chat with Hermes (guided, animated) [L] — not started
 
 **Added 2026-10-22** (decided with the user: Hermes interprets, full-screen guided flow, one message at a time). A full-screen
 flow in the app steps through the plan one day at a time, a chat bar under each day card. The user types ("busy Monday, cheap
 Thursday, no cooking Sunday"); the message goes to Hermes through the Worker, which returns **structured constraints and edits,
 never meals** (busy/free days, chips, budget, locks). The app applies them to the generator, which picks the meals through
 `rankSlot`, and the affected slots re-pick with the Phase 29 staged animation so every choice is visible. Where several meals fit,
-the day card shows the top three as selectable cards (the Phase 72 deck is the same component); "pick for me" is the default.
+the day card shows the top three as selectable cards (the Phase 69 deck is the same component); "pick for me" is the default.
 Every Hermes edit shows as a highlighted diff with per-slot accept or reject (Phase 49 draft/apply is the transport). Stateless
 exit through `guidedActive`: abandoning leaves `mp_plan` untouched. If Hermes is offline the flow degrades to today's Plan with me
 screen. **Decided 2026-10-23:** offline falls back to the Plan with me screen; Phase 66 is built first.
@@ -778,21 +759,21 @@ allergies and `never` stay enforced in code whatever is typed. A typing indicato
 within exclusions; a vague message ("something nicer on Friday") gets a clarifying question, not a guess; a rejected edit leaves
 the slot unchanged; PC and phone, both themes. Requires Phases 24, 29, 49, 66.
 
-## Phase 76: Tie questions and trade-off cards [M] — not started
+## Phase 73: Tie questions and trade-off cards [M] — not started
 
-**Added 2026-10-22.** In the Phase 75 chat, when the top two candidates score within a margin kept as data, Hermes asks one
+**Added 2026-10-22.** In the Phase 72 chat, when the top two candidates score within a margin kept as data, Hermes asks one
 question card ("chicken curry or chilli?"); ignoring it applies the default. When a plan is over budget, a card offers meal-level
 swaps with the numbers ("swap Wed and Fri saves £9, costs 12 g protein"), computed by the generator, never by Hermes, and applied
-only on accept. **Verify:** a tie produces exactly one card; accepting a swap changes the totals shown. Requires Phases 27, 75.
+only on accept. **Verify:** a tie produces exactly one card; accepting a swap changes the totals shown. Requires Phases 27, 72 (was "75", a stale renumber).
 
-## Phase 77: Learn from rejections [S] — not started
+## Phase 74: Learn from rejections [S] — not started
 
 **Added 2026-10-22.** A rejected edit or declined suggestion in the chat can carry a reason; it is saved as a Phase 51 rating
 or reason (`PUT /meal/:id/rating`, the only writer) and logged through Phase 48, so the next draft re-ranks without being told
 again. Reorders only; `never` remains the sole filter. **Verify:** reject a meal with "too fiddly", regenerate, and it ranks lower;
-undo removes the reason. Requires Phases 51, 75.
+undo removes the reason. Requires Phases 51, 72 (was "75", a stale renumber).
 
-## Phase 78: Tomorrow lock-in on Today [M] — not started
+## Phase 75: Tomorrow lock-in on Today [M] — not started
 
 **Added 2026-10-22.** The Today screen (Phase 54) shows tomorrow's meal with three ranked alternatives for one tap, and "keep"
 locks it (Phase 66). Tonight's cook-or-skip stays with the assistant (`notion_assistant` Phase 47); this adds tomorrow, which it

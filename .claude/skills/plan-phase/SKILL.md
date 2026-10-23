@@ -35,7 +35,9 @@ wrong, say so in one line and update the heading.
 
 ## Phase mode (M/L)
 
-1. **Read narrowly.** First, right after the roadmap section, grep the code for every named UI surface
+1. **Read narrowly.** First, grep the code for the roadmap line's headline feature itself (its nouns, e.g. "swipe deck",
+   "swap"): it may already be built, which makes the contradiction a gate before any other reading.
+   Then, right after the roadmap section, grep the code for every named UI surface
    (a "Today view", strip, sheet) so a missing one is found before any other reading (step 2's check, run early).
    Also, for any phase that writes state (a route, a KV key), grep where that state lives: the app's `localStorage` is
    the authority and the Worker's KV copy is a derived mirror (e.g. `plan`), so a "write the plan" roadmap line may need
