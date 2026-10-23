@@ -972,6 +972,36 @@
         deepEqual(MP.Sync.newPlacements(remote, "2026-09-04T00:00:00Z"), []));
     }
 
+    // Phase 66: lock and fill
+    {
+      const G = MP.Generator, byId = Object.fromEntries(library.map((m) => [m.id, m]));
+      const starts = ["2026-09-07", "2026-09-08", "2026-09-09", "2026-09-10", "2026-09-11"];
+      const ser = (x) => JSON.stringify(x);
+      check("lock: locked undefined equals today's output", starts.every((sd) => ser(G.generatePlan(library, tags, targets, shelfData, sd).days) === ser(G.generatePlan(library, tags, targets, shelfData, sd, undefined, undefined, undefined, undefined, undefined).days)));
+      let keptAll = true, changedAny = false, noExcluded = true;
+      for (const sd of starts) {
+        const base = G.generatePlan(library, tags, targets, shelfData, sd);
+        const lk = { 2: { dinner: { ...base.days[1].slots.dinner, locked: true } }, 5: { lunch: { ...base.days[4].slots.lunch, locked: true } }, 9: { breakfast: { ...base.days[8].slots.breakfast, locked: true } } };
+        const re = G.generatePlan(library, tags, targets, shelfData, sd, undefined, undefined, { noBatch: true }, undefined, lk);
+        keptAll = keptAll && ser(re.days[1].slots.dinner) === ser(lk[2].dinner) && ser(re.days[4].slots.lunch) === ser(lk[5].lunch) && ser(re.days[8].slots.breakfast) === ser(lk[9].breakfast);
+        changedAny = changedAny || re.days.some((d, i) => ser(d.slots) !== ser(base.days[i].slots));
+        noExcluded = noExcluded && re.days.every((d) => Object.values(d.slots).every((s) => !s.mealId || !/mushroom/i.test(byId[s.mealId].name)));
+      }
+      check("lock: locked slots identical after fill", keptAll);
+      check("lock: other slots change at least once over 5 seeds", changedAny);
+      check("lock: filled slots hold no excluded meal", noExcluded);
+      const base = G.generatePlan(library, tags, targets, shelfData, "2026-09-07");
+      const day5 = Object.fromEntries(base.days.filter((d) => d.day !== 5).map((d) => [d.day, d.slots]));
+      const rr = G.generatePlan(library, tags, targets, shelfData, "2026-09-07", undefined, undefined, undefined, undefined, day5);
+      check("lock: reroll-style fill leaves other days identical", base.days.every((d, i) => d.day === 5 || ser(d.slots) === ser(rr.days[i].slots)));
+      const mk = (id, extra) => ({ id, name: id, mealTypes: ["dinner"], ingredients: [], ...extra });
+      const cm = { P: mk("P", { servings: 3 }), C: mk("C", { leftoverOf: "P" }), X: mk("X") };
+      const cd = ["P", "C", "C", "X"].map((id, i) => ({ day: i + 1, slots: { dinner: { mealId: id } } }));
+      check("chainDays: chain from any day", ser(MP.chainDays(cd, cm, 2)) === "[1,2,3]" && ser(MP.chainDays(cd, cm, 1)) === "[1,2,3]");
+      check("chainDays: non-chain is [day]", ser(MP.chainDays(cd, cm, 4)) === "[4]");
+      check("planMirror: carries locked", MP.Sync.planMirror({ days: [{ day: 1, slots: { dinner: { mealId: "m1", locked: true } } }] }).days[0].slots.dinner.locked === true);
+    }
+
     // planMirror
     {
       const p = { startDate: "2026-09-07", days: [

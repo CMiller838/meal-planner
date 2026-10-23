@@ -690,8 +690,9 @@ fills the rest by nutrition. Nutrition still decides which meal; stock only orde
 expiring, the first week uses them before their use-by dates. Requires Phases 34, 43.
 Verified 2026-10-23: check.py 9/9, test.html group 65 (item meals placed by use-by day, consume-once, window, baseline equality), worker_test useUp 400/200, tester PASS (button + toast PC/390 px, both themes).
 
-## Phase 66: Lock and fill [M] — not started
+## Phase 66: Lock and fill [M] — built 2026-10-23, live checks pending
 
+**Verified 2026-10-23:** check.py 9/9, worker_test ok (locked slot survives /plan/draft), tester PASS (browser: lock kept on Generate, Reroll leaves other days, Unlock all, PC and 390px). Known nit: Generate shows "Plan regenerated" over "Nothing to fill" when all locked.
 **Added 2026-10-22.** Pin meals or slots (the Sunday batch, the gym-day shake); the generator fills around them. "Reroll
 Wednesday" regenerates one day with locks respected, replacing today's whole-plan `regenerate` as the only option. Locks live in
 the plan, not in `mp_planPrefs`. **Verify:** locked slots survive a full regenerate; a one-day reroll leaves other days alone.

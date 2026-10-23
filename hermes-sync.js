@@ -314,6 +314,7 @@ window.MP = window.MP || {};
           if (slot.variantId) slots[slotType].variantId = slot.variantId;
           if (Number.isInteger(slot.frozenFrom)) slots[slotType].frozenFrom = slot.frozenFrom;
           if (slot.subs && slot.subs.length) slots[slotType].subs = slot.subs;
+          if (slot.locked) slots[slotType].locked = true;
         }
       }
       return { day: d.day, slots };

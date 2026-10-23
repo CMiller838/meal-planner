@@ -261,10 +261,19 @@ async function draftPlan(body, env) {
     const items = ShoppingList.useUpItems((pantry && pantry.items) || [], mirror, Generator.isoToday(), SHELF_DATA);
     if (items.length) prefs.useUp = { items, window: PACK_DATA.planning.useUpWindow || 6 };
   }
+  // Phase 66: slots the merge below keeps are passed as locked, so the draft fills around them.
+  const locked = {};
+  if (hasMirror) for (let day = 1; day <= 14; day++) {
+    const old = (mirror.days[day - 1] && mirror.days[day - 1].slots) || {};
+    for (const slot of SLOT_TYPES) {
+      const cur = old[slot];
+      if (cur && cur.mealId && (cur.locked || cur.eatenAt || kept.has(`${day}:${slot}`) || !want.has(day))) (locked[day] = locked[day] || {})[slot] = cur;
+    }
+  }
   const pool = library.filter((m) => !avoidSet.has(m.id));
   const budgetObj = { costIndex: ShoppingList.costIndex(pool, PACK_DATA), groups: ShoppingList.groupIndex(SUB_GROUPS), ...PACK_DATA.planning };
   const gen = Generator.generatePlan(pool, TAGS, Nutrition.withProfile(TARGETS, settings), SHELF_DATA, startDate, budgetObj,
-    ShoppingList.pantryIndex(pantry || { items: [] }), prefs, (ratingsRaw && ratingsRaw.meals) || {});
+    ShoppingList.pantryIndex(pantry || { items: [] }), prefs, (ratingsRaw && ratingsRaw.meals) || {}, locked);
   // ponytail: a merge can split a batch/leftover chain at a kept/eaten boundary; the user sees the draft before applying.
 
   const merged = [];

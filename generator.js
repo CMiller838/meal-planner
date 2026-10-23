@@ -257,7 +257,7 @@
     return bestId;
   }
 
-  function generatePlan(library, tags, targets, shelfData, startDate, budget, have, prefs, ratings) {
+  function generatePlan(library, tags, targets, shelfData, startDate, budget, have, prefs, ratings, locked) {
     startDate = startDate || isoToday();
     have = have || {};
     prefs = prefs || {};
@@ -291,6 +291,32 @@
           spent[day <= 7 ? "first" : "second"] += entry.cost;
         }
       }
+    }
+
+    // Phase 66: locked/eaten slots go in untouched; they still count toward cost, halfKeys and recency.
+    const isLocked = (day, slotType) => !!(locked && locked[day] && locked[day][slotType] && locked[day][slotType].mealId);
+    for (let day = 1; day <= 14; day++) {
+      for (const slotType of ["dinner"].concat(OTHER_SLOTS)) {
+        if (!isLocked(day, slotType)) continue;
+        const slot = { ...locked[day][slotType] };
+        days[day - 1].slots[slotType] = slot;
+        lastUsedDay[slot.mealId] = day;
+        const entry = budget && budget.costIndex && budget.costIndex[slot.mealId];
+        if (entry) {
+          const half = day <= 7 ? halfKeys.first : halfKeys.second;
+          const sub = slot.subs && slot.subs[0];
+          const subFrom = sub ? MP.ShoppingList.normalizeKey(sub.from) : null;
+          const subTo = sub ? MP.ShoppingList.normalizeKey(sub.to) : null;
+          entry.keys.forEach((k) => half.add(k === subFrom ? subTo : k));
+          spent[day <= 7 ? "first" : "second"] += entry.cost;
+        }
+      }
+    }
+    // ponytail: lock-aware recency only looks one day ahead; a locked meal 3 days later can still repeat nearby. Upgrade path is a window.
+    function nextMealId(day, slotType) {
+      if (day >= 14) return null;
+      const slot = days[day].slots[slotType];
+      return slot && isLocked(day + 1, slotType) ? slot.mealId : null;
     }
 
     function prevMealId(day, slotType) {
@@ -328,15 +354,20 @@
     // cooks on day 2 and covers day 3; splitting to also cover day 1 needs a
     // second parent and isn't worth it until someone complains.
     const filled = new Set();
+    for (let day = 1; day <= 14; day++) if (isLocked(day, "dinner")) filled.add(day);
     const spares = []; // { meal, cookDay, count } — portions the fridge run could not cover (Phase 59)
 
     // ponytail: noBatch trades leftovers for daily cooking; no cook-time model (Phase 64).
-    for (const run of prefs.noBatch ? [] : runs) {
+    for (let run of prefs.noBatch ? [] : runs) {
+      const firstLocked = run.findIndex((d) => filled.has(d));
+      if (firstLocked >= 0) run = run.slice(0, firstLocked); // coverage stops at a locked day
       if (run.length < 2) continue;
       const d0 = run[0];
       const excludeIds = new Set();
       const prevId = prevMealId(d0, "dinner");
       if (prevId) excludeIds.add(prevId);
+      const nextId = nextMealId(run[run.length - 1], "dinner");
+      if (nextId) excludeIds.add(nextId);
       const batchCandidates = dinnerPool.filter(MP.isBatch);
       // ponytail: shelf-life-safe batch candidates assume a fixed Mon/Sat shop day
       // and no freezer state — with the seed library and a Monday start only
@@ -375,16 +406,21 @@
       const excludeIds = new Set();
       const prevId = prevMealId(day, "dinner");
       if (prevId) excludeIds.add(prevId);
+      const nextId = nextMealId(day, "dinner");
+      if (nextId) excludeIds.add(nextId);
       const meal = pickMeal(dinnerPool, day, [], { prefer: "quick", excludeIds });
       place(day, "dinner", meal);
     }
 
     for (let day = 1; day <= 14; day++) {
       for (const slotType of OTHER_SLOTS) {
+        if (isLocked(day, slotType)) continue;
         const pool = library.filter((m) => (m.mealTypes || []).includes(slotType));
         const excludeIds = new Set();
         const prevId = prevMealId(day, slotType);
         if (prevId) excludeIds.add(prevId);
+        const nextId = nextMealId(day, slotType);
+        if (nextId) excludeIds.add(nextId);
         const dayMealsSoFar = Object.values(days[day - 1].slots)
           .map((s) => (s && s.mealId ? mealsById[s.mealId] : null))
           .filter(Boolean);

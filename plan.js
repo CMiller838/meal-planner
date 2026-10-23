@@ -131,12 +131,12 @@
 
   MP.Cooks = { all: cooksAll, openFor: cooksOpenFor, open: cooksOpen, take: cooksTake, discard: cooksDiscard, freezeOne: cooksFreezeOne };
 
-  function generatePlan(override) {
+  function generatePlan(override, locked) {
     const budget = packData
       ? { costIndex: MP.ShoppingList.costIndex(library, packData), groups: MP.ShoppingList.groupIndex(groupsData), ...packData.planning }
       : null;
     const have = MP.ShoppingList.pantryIndex({ items: MP.Sync.localItems("pantry") });
-    return MP.Generator.generatePlan(library, tagsData.tags, tagsData.targets, shelfData, undefined, budget, have, Object.assign({}, prefs, override, { profile: MP.Nutrition.profileOf(MP.Sync.settings()) }), MP.Ratings.get());
+    return MP.Generator.generatePlan(library, tagsData.tags, tagsData.targets, shelfData, undefined, budget, have, Object.assign({}, prefs, override, { profile: MP.Nutrition.profileOf(MP.Sync.settings()) }), MP.Ratings.get(), locked);
   }
 
   // Phase 64: three candidate fortnights. Generation only; nothing saves until "Use this plan".
@@ -220,11 +220,61 @@
     window.dispatchEvent(new CustomEvent("mp:plan-saved", { detail: plan }));
   }
 
+  // Phase 66: a slot is held when the user locked it or it was eaten. With `exceptDay` (a day or an array of
+  // days), every slot on the other days is held too, so only those days are filled.
+  const isHeld = (slot) => !!(slot && slot.mealId && (slot.locked || slot.eatenAt));
+  function lockedMap(exceptDay) {
+    const free = exceptDay == null ? [] : [].concat(exceptDay);
+    const out = {};
+    plan.days.forEach((d) => {
+      for (const t of SLOT_TYPES) {
+        const slot = d.slots[t];
+        if (!slot || !slot.mealId) continue;
+        if (isHeld(slot) || (free.length && !free.includes(d.day))) (out[d.day] = out[d.day] || {})[t] = slot;
+      }
+    });
+    return out;
+  }
+  const lockCount = () => plan.days.reduce((n, d) => n + SLOT_TYPES.filter((t) => d.slots[t] && d.slots[t].locked && !d.slots[t].eatenAt).length, 0);
+
   function regenerate(staged, override) {
     applyHints();
-    plan = generatePlan(override);
+    const held = lockedMap();
+    if (SLOT_TYPES.every((t) => plan.days.every((d) => held[d.day] && held[d.day][t]))) { toast("Nothing to fill"); return; }
+    plan = generatePlan(override, held);
     savePlan();
     renderPlan(staged);
+  }
+
+  function rerollDay(day) {
+    const days = MP.chainDays(plan.days, mealsById, day);
+    if (days.every((d) => SLOT_TYPES.every((t) => isHeld(plan.days[d - 1].slots[t])))) { toast("All meals on this day are locked"); return; }
+    const fresh = generatePlan(undefined, lockedMap(days));
+    days.forEach((d) => { plan.days[d - 1] = fresh.days[d - 1]; });
+    if (!guidedActive) savePlan();
+    renderPlan();
+    toast(days.length > 1 ? `Rerolled ${days.length} days (batch chain)` : `Rerolled day ${day}`);
+  }
+
+  function toggleLock(day, slotType) {
+    const slot = plan.days[day - 1].slots[slotType];
+    if (!slot || !slot.mealId || slot.eatenAt) return;
+    const on = !slot.locked;
+    const days = slotType === "dinner" ? MP.chainDays(plan.days, mealsById, day) : [day];
+    days.forEach((d) => {
+      const sl = { ...plan.days[d - 1].slots[slotType] };
+      if (on) sl.locked = true; else delete sl.locked;
+      plan.days[d - 1].slots[slotType] = sl;
+    });
+    if (!guidedActive) savePlan();
+    renderPlan();
+    if (days.length > 1) toast(`${on ? "Locked" : "Unlocked"} ${days.length} days (batch chain)`);
+  }
+
+  function unlockAll() {
+    plan.days.forEach((d) => SLOT_TYPES.forEach((t) => { if (d.slots[t] && d.slots[t].locked) { d.slots[t] = { ...d.slots[t] }; delete d.slots[t].locked; } }));
+    if (!guidedActive) savePlan();
+    renderPlan();
   }
 
   function mealAt(day, slotType) {
@@ -248,7 +298,8 @@
    *  (no stale variantId from the meal it replaced); a variant change never
    *  touches the meal. */
   function setSlotMeal(day, slotType, mealId) {
-    plan.days[day - 1].slots[slotType] = { mealId };
+    const keep = plan.days[day - 1].slots[slotType];
+    plan.days[day - 1].slots[slotType] = keep && keep.locked ? { mealId, locked: true } : { mealId };
     if (!guidedActive) savePlan();
   }
 
@@ -464,13 +515,14 @@
       for (const d of weekDays) {
         const heading = dayHeading(d.day);
         html += `<div class="day-row" data-day="${d.day}">
-          <h3>${heading}${hintChipHtml(d.day)}</h3>
+          <h3>${heading}${hintChipHtml(d.day)}<button class="reroll-btn" data-day="${d.day}" aria-label="Reroll day ${d.day}" title="Reroll this day">🎲 Reroll</button></h3>
           <div class="slot-grid">
             ${SLOT_TYPES.map((slotType) => {
               const meal = mealAt(d.day, slotType);
               const warn = warnings[`${d.day}-${slotType}`];
-              return `<div class="slot-card ${meal ? "" : "empty"}" data-day="${d.day}" data-slot="${slotType}">
-                <div class="slot-type">${slotType}</div>
+              const locked = meal && plan.days[d.day - 1].slots[slotType].locked;
+              return `<div class="slot-card ${meal ? "" : "empty"}${locked ? " locked" : ""}" data-day="${d.day}" data-slot="${slotType}">
+                <div class="slot-type">${slotType}${locked ? ` <span class="lock-icon" aria-label="Locked">🔒</span>` : ""}</div>
                 <div class="slot-meal">${meal ? esc(meal.name) : "tap to add"}</div>
                 ${ratingHintHtml(meal)}
                 ${warningHtml(d.day, slotType, warn)}
@@ -494,6 +546,8 @@
         renderPlan();
       });
     });
+    root.querySelectorAll(".reroll-btn").forEach((b) => b.addEventListener("click", () => rerollDay(Number(b.dataset.day))));
+    document.getElementById("unlock-btn").hidden = !lockCount();
     root.querySelectorAll(".slot-card").forEach((el) => {
       el.addEventListener("click", (e) => {
         if (e.target.closest(".move-btn")) return;
@@ -852,6 +906,7 @@
         <button class="ghost day-swap-btn" data-slot="${slotType}">Swap</button>
         ${meal.variants && meal.variants.length ? `<button class="ghost day-variant-btn" data-slot="${slotType}">Variant</button>` : ""}
         <button class="ghost day-recipe-btn" data-slot="${slotType}">Recipe</button>
+        ${slot.eatenAt ? "" : `<button class="ghost day-lock-btn" data-slot="${slotType}">${slot.locked ? "Unlock" : "Lock"}</button>`}
         ${eatBtnHtml(day, slotType)}
       </div>
       ${slotEaten(day, slotType) ? `<p class="day-slot-note">Eaten ${esc(new Date(slotEaten(day, slotType)).toLocaleDateString())}</p>` : ""}
@@ -881,6 +936,8 @@
     wireMoveBtns(sheet);
     sheet.querySelectorAll(".day-swap-btn").forEach((b) =>
       b.addEventListener("click", () => openSwapPicker(day, b.dataset.slot)));
+    sheet.querySelectorAll(".day-lock-btn").forEach((b) =>
+      b.addEventListener("click", () => toggleLock(day, b.dataset.slot)));
     sheet.querySelectorAll(".day-variant-btn").forEach((b) =>
       b.addEventListener("click", () => openVariantPicker(day, b.dataset.slot)));
     sheet.querySelectorAll(".day-recipe-btn").forEach((b) => {
@@ -1312,11 +1369,13 @@
       if (e.target.id === "eat-overlay") closeEatSheet();
     });
     document.getElementById("generate-btn").addEventListener("click", () => {
-      if (confirm("Regenerate the 2-week plan? This replaces your current edits.")) {
+      const n = lockCount();
+      if (confirm(n ? `Regenerate the unlocked meals? ${n} locked meal${n === 1 ? " is" : "s are"} kept.` : "Regenerate the 2-week plan? This replaces your current edits.")) {
         regenerate();
         toast("Plan regenerated");
       }
     });
+    document.getElementById("unlock-btn").addEventListener("click", unlockAll);
     document.getElementById("useup-btn").addEventListener("click", () => {
       const today = new Date().toLocaleDateString("en-CA");
       const items = MP.ShoppingList.useUpItems(MP.Sync.localItems("pantry"), plan, today, shelfData);

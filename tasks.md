@@ -649,6 +649,7 @@ Requires Phase 43 (storage/`frozenMonths` helpers) built first. Decided: scale a
 
 ## Phase 66: Lock and fill
 - Spec: `.claude/specs/phase66.md`
+- [x] Logic, worker, UI, CACHE bump (built 2026-10-23); check.py 9/9, worker_test ok
 - [ ] Live: in the installed phone PWA lock a dinner, tap Generate and see it stay; Reroll one day and check the other days do not change; Unlock all
 
 ## Phase 58: Aisle-ordered shopping list [S]

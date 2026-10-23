@@ -297,6 +297,21 @@
     return (meal.servings || 1) >= 2 && !meal.leftoverOf;
   }
 
+  /** Days of the leftover chain the dinner on `day` belongs to (Phase 66), sorted; [day] when not in one.
+   *  Linked = consecutive dinners sharing a batch root (the parent, or a child's `leftoverOf`). */
+  function chainDays(days, mealsById, day) {
+    const dinner = (d) => {
+      const s = days[d - 1] && days[d - 1].slots && days[d - 1].slots.dinner;
+      return s && s.mealId && !s.frozenFrom ? mealsById[s.mealId] : null;
+    };
+    const root = (m) => (m.leftoverOf || m.id);
+    const linked = (a, b) => a && b && root(a) === root(b) && (a.leftoverOf ? mealsById[a.leftoverOf] : a) && isBatch(mealsById[root(a)] || a);
+    const out = [day];
+    for (let d = day - 1; d >= 1 && linked(dinner(d), dinner(d + 1)); d--) out.unshift(d);
+    for (let d = day + 1; d <= days.length && linked(dinner(d - 1), dinner(d)); d++) out.push(d);
+    return out;
+  }
+
   /** Cook day of a frozen portion's parent, or null. Trusts `frozenFrom` only while that
    *  earlier day's dinner is still the same meal (Phase 59); otherwise it is a plain slot. */
   function frozenParentDay(plan, dayNum, slot) {
@@ -422,6 +437,7 @@
       .sort((a, b) => a.routine.time.localeCompare(b.routine.time));
   };
   MP.isBatch = isBatch;
+  MP.chainDays = chainDays;
   MP.frozenParentDay = frozenParentDay;
   MP.methodOf = methodOf;
   MP.methodHtml = methodHtml;

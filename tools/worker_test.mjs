@@ -434,6 +434,13 @@ assert.equal((await call("GET", "/today", "a")).body.water, 3); // /today untouc
   assert.equal(d.body.draft.startDate, "2026-10-22");
   const c3 = d.body.draft.changes.find((c) => c.day === 3 && c.slot === "breakfast");
   assert.deepEqual(c3 && c3.before, { mealId: "m1" });
+  // Phase 66: a locked mirror slot survives and the draft fills the rest
+  mirror[4].slots.dinner = { mealId: "m3", locked: true };
+  kv.set("plan", JSON.stringify({ startDate: "2026-10-22", days: mirror }));
+  d = await call("POST", "/plan/draft", "a", {});
+  assert.deepEqual(d.body.plan.days[4].slots.dinner, { mealId: "m3", locked: true });
+  assert.ok(!d.body.draft.changes.some((c) => c.day === 5 && c.slot === "dinner"));
+  assert.ok(d.body.draft.changes.some((c) => c.day === 6 && c.slot === "dinner"));
   // bad bodies
   for (const bad of [{ days: [0] }, { days: [15] }, { days: "1" }, { keep: [{ day: 1, slot: "brunch" }] }, { keep: {} }, { avoid: [1] }, { budget: 0 }, { budget: -3 }, { budget: "5" }, []])
     assert.equal((await call("POST", "/plan/draft", "a", bad)).status, 400, JSON.stringify(bad));

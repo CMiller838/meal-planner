@@ -50,7 +50,7 @@ Not logged (`log: "unlogged"` in `routes.json`, each with a `why`): the app-owne
 | `GET /settings` | A | Profile settings (`{}` until written). |
 | `GET /activity` | A | See above. |
 | `GET /planDraft` | A | The parked plan draft (`null` when none). |
-| `POST /plan/draft` | A | Read-like: `{ days?, keep?, avoid?, budget? }` → `{ draft, plan }` computed by the generator; stores nothing. `409` until the library is synced; `400` on a bad field. |
+| `POST /plan/draft` | A | Read-like: `{ days?, keep?, avoid?, budget? }` → `{ draft, plan }` computed by the generator; stores nothing. `409` until the library is synced; `400` on a bad field. Fills around locked slots (the mirror may carry `locked: true`), eaten and `keep` slots. |
 
 ### Writes
 
