@@ -50,6 +50,7 @@ const ASSISTANT_ALLOWED = new Set([
   "GET /dayHints", "PUT /dayHints", "PUT /meal-method", "GET /today", "PUT /today", "GET /products", "PUT /products",
   "GET /expiring", "GET /day", "GET /product-ranking", "GET /ratings", "GET /why", "GET /scale", "GET /cookable", "GET /substitutions", "GET /leftovers", "GET /quick",
   "GET /drafts", "POST /drafts", "GET /settings", "PUT /settings", "GET /activity", "POST /activity/undo",
+  "GET /spend", "POST /spend",
   "POST /plan/draft", "POST /plan/apply", "GET /planDraft", "POST /plan/reflow",
 ]);
 const METHOD_PATH = /^\/meal\/([^/]+)\/method$/;
@@ -935,6 +936,33 @@ async function putMealRating(request, env, mealId, who) {
   return json(200, all[mealId]);
 }
 
+const SPEND_SOURCES = ["asda", "manual", "estimate"];
+const isoDate = (s) => typeof s === "string" && /^\d{4}-\d{2}-\d{2}$/.test(s) && new Date(s + "T00:00:00Z").toISOString().startsWith(s);
+
+/** GET /spend — { weeks, budgetTarget } */
+async function getSpend(env) {
+  const v = parseKV(await env.MP_KV.get("spend"));
+  const s = await readSettings(env);
+  return json(200, { weeks: (v && v.weeks) || {}, budgetTarget: (s && s.budgetTarget > 0 && s.budgetTarget) || 0 });
+}
+
+/** POST /spend { week, total, source } — one row per week (shop-day ISO); a repeat overwrites. */
+async function postSpend(request, env, who) {
+  let body;
+  try { body = JSON.parse(await request.text()); } catch (e) { return json(400, "invalid JSON"); }
+  if (typeof body !== "object" || body === null || Array.isArray(body)) return json(400, "expected a JSON object");
+  if (Object.keys(body).some((k) => !["week", "total", "source"].includes(k))) return json(400, "unknown key");
+  if (!isoDate(body.week)) return json(400, "week must be an ISO date");
+  if (typeof body.total !== "number" || !Number.isFinite(body.total) || body.total < 0) return json(400, "total must be a number >= 0");
+  if (!SPEND_SOURCES.includes(body.source)) return json(400, "source must be asda, manual or estimate");
+  const before = parseKV(await env.MP_KV.get("spend"));
+  const now = new Date().toISOString();
+  const after = { updatedAt: now, weeks: { ...((before && before.weeks) || {}), [body.week]: { total: body.total, source: body.source, at: now } } };
+  await env.MP_KV.put("spend", JSON.stringify(after));
+  if (who) await logWrite(env, { who, key: "spend", why: reasonOf(request), changes: diffItems("spend", before, after) });
+  return json(200, after.weeks[body.week]);
+}
+
 /** GET /meal/:id/method — steps for cooking mode; ingredients always, so a meal with no method falls back to them. */
 async function mealMethod(env, mealId) {
   const lib = await readLibrary(env);
@@ -1226,6 +1254,7 @@ const ITEMS = {
   placements: ["placements", (p) => `${p.day}:${p.slot}:${p.mealId}`],
   dayHints: ["days", null], // object map: item id = date key
   ratings: ["meals", null], // object map: item id = meal id
+  spend: ["weeks", null], // object map: item id = shop-day ISO date
   today: [null], planFlag: [null], planDraft: [null], // whole value is one item, id = key name
 };
 const ACTIVITY_CAP = 200;
@@ -1250,6 +1279,8 @@ export const ROUTES = [
   }),
   row("PUT", "/adhoc", "write", { dryRun: true, log: "logged" }),
   row("POST", "/shopping/lines", "write", { log: "logged" }),
+  row("GET", "/spend", "read"),
+  row("POST", "/spend", "write", { log: "logged", note: "logged only with an X-Actor header; one row per week, a repeat overwrites" }),
   row("PUT", "/meal-method", "write", { dryRun: true, log: "logged" }),
   row("PUT", "/meal/:id/rating", "write", { assistant: true, log: "logged", note: "logged only with an X-Actor header; the app token's own PUT is not" }),
   row("POST", "/drafts", "write", quiet("inert until the app accepts")),
@@ -1461,6 +1492,11 @@ export default {
     if (ratingMatch) {
       if (request.method !== "PUT") return json(405, "method not allowed");
       return putMealRating(request, env, decodeURIComponent(ratingMatch[1]), actor);
+    }
+    if (url.pathname === "/spend") {
+      if (request.method === "POST") return postSpend(request, env, actor);
+      if (request.method !== "GET") return json(405, "method not allowed");
+      return getSpend(env);
     }
     if (url.pathname === "/settings") {
       if (request.method === "PUT") return putSettings(request, env);

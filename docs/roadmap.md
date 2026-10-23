@@ -580,7 +580,8 @@ returned; a tag change is listed; no group, no swap. Requires Phases 28, 55.
 
 **Verified 2026-10-24:** `worker_test.mjs` covers a priced swap (`estimated`, `tagChanges`), `never` on the mate, a mushroom mate, no-group line, skipped line, 400s, assistant/app/no token. Live: the assistant's answer against the deployed Worker.
 
-## Phase 77: Weekly spend log [S] — not started
+## Phase 77: Weekly spend log [S] — built 2026-10-24, live checks pending
+**Verified 2026-10-24:** `node tools/worker_test.mjs` (repeat POST keeps one row, undo restores, bad week/total/source 400, `budgetTarget` on GET) and `check.py --changed`; tester PASS.
 
 **Added 2026-10-23.** `POST /spend { week, total, source: asda|manual|estimate }` (logged, undoable via Phase 48) and `GET /spend`
 (weeks, plus `budgetTarget` from `/settings`), one row per week and shop day so a re-preview overwrites rather than adds. The

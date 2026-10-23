@@ -772,13 +772,13 @@ Spec: `.claude/specs/phase76.md`
 - [ ] Live: ask the assistant "any cheaper swaps this week?" against the deployed Worker and confirm the answer matches `GET /swaps`
 
 ## Phase 77: Weekly spend log [S]
-- [ ] `spend` KV key `{ updatedAt, weeks: { "<shop-day ISO>": { total, source, at } } }`; add `spend: ["weeks", null]` to `ITEMS` (`worker/worker.js` ~1157) so it is logged and undoable (Phase 48); model the handler on `putMealRating`
-- [ ] `POST /spend { week, total, source }`: validate `week` is an ISO date, `total` a finite number >= 0, `source` in asda|manual|estimate (else 400); the key is `week`, so a repeat overwrites, never adds
-- [ ] `GET /spend` returns `{ weeks, budgetTarget }` (`budgetTarget` from `readSettings`, `0` when unset); empty store returns `{ weeks: {}, budgetTarget }`
-- [ ] Register both in `ROUTES` + `ASSISTANT_ALLOWED` (assistant reads and writes), rerun `node tools/routes_build.mjs`, commit `worker/routes.json`
-- [ ] `tools/worker_test.mjs`: repeat POST same week leaves one row; `POST /activity/undo` restores the prior total; bad week/total/source rejected; GET shows `budgetTarget`
-- [ ] Skipped: planned-vs-actual on the cost meter (roadmap says "may"); add when the user asks. No `data_check`/`sw.js` change (Worker only)
-- [ ] Verify: `node tools/worker_test.mjs` and `python3 check.py --changed`
+- [x] `spend` KV key `{ updatedAt, weeks: { "<shop-day ISO>": { total, source, at } } }`; add `spend: ["weeks", null]` to `ITEMS` (`worker/worker.js` ~1157) so it is logged and undoable (Phase 48); model the handler on `putMealRating`
+- [x] `POST /spend { week, total, source }`: validate `week` is an ISO date, `total` a finite number >= 0, `source` in asda|manual|estimate (else 400); the key is `week`, so a repeat overwrites, never adds
+- [x] `GET /spend` returns `{ weeks, budgetTarget }` (`budgetTarget` from `readSettings`, `0` when unset); empty store returns `{ weeks: {}, budgetTarget }`
+- [x] Register both in `ROUTES` + `ASSISTANT_ALLOWED` (assistant reads and writes), rerun `node tools/routes_build.mjs`, commit `worker/routes.json`
+- [x] `tools/worker_test.mjs`: repeat POST same week leaves one row; `POST /activity/undo` restores the prior total; bad week/total/source rejected; GET shows `budgetTarget`
+- [x] Skipped: planned-vs-actual on the cost meter (roadmap says "may"); add when the user asks. No `data_check`/`sw.js` change (Worker only)
+- [x] Verify: `node tools/worker_test.mjs` and `python3 check.py --changed`
 - [ ] Live: with the assistant, log a week's Asda total, repeat it with a new figure, confirm one row and that undo restores
 
 ## Phase 78: Pantry audit route

@@ -363,6 +363,20 @@
     "log": "logged"
   },
   {
+    "method": "GET",
+    "path": "/spend",
+    "assistant": true,
+    "kind": "read"
+  },
+  {
+    "method": "POST",
+    "path": "/spend",
+    "assistant": true,
+    "kind": "write",
+    "log": "logged",
+    "note": "logged only with an X-Actor header; one row per week, a repeat overwrites"
+  },
+  {
     "method": "PUT",
     "path": "/meal-method",
     "assistant": true,

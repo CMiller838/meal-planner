@@ -198,6 +198,26 @@ await call("PUT", "/meal/b/rating", "h", { note: "x" }, { "X-Actor": "hermes" })
 await call("POST", "/activity/undo", "h", { id: acts()[0].id }, { "X-Actor": "hermes" });
 rb = JSON.parse(kv.get("ratings")).meals.b;
 assert.deepEqual([rb.rating, rb.note, rb.never], [null, "", false]);
+// Phase 77: weekly spend log
+kv.delete("activity"); kv.delete("spend");
+const sp = (b) => call("POST", "/spend", "a", b);
+assert.deepEqual((await call("GET", "/spend", "a")).body, { weeks: {}, budgetTarget: 0 });
+assert.equal((await sp({ week: "2026-10-24", total: 80.5, source: "asda" })).status, 200);
+assert.equal((await sp({ week: "2026-10-24", total: 92, source: "manual" })).status, 200);
+r = (await call("GET", "/spend", "a")).body;
+assert.deepEqual(Object.keys(r.weeks), ["2026-10-24"]);
+assert.deepEqual([r.weeks["2026-10-24"].total, r.weeks["2026-10-24"].source], [92, "manual"]);
+assert.equal(acts().length, 2);
+r = await call("POST", "/activity/undo", "a", { id: acts()[0].id });
+assert.equal(r.status, 200);
+assert.equal((await call("GET", "/spend", "a")).body.weeks["2026-10-24"].total, 80.5);
+for (const bad of [{ week: "24/10", total: 1, source: "asda" }, { week: "2026-02-31", total: 1, source: "asda" }, { week: "2026-10-24", total: -1, source: "asda" },
+  { week: "2026-10-24", total: "9", source: "asda" }, { week: "2026-10-24", total: 1, source: "tesco" }, { week: "2026-10-24", total: 1, source: "asda", x: 1 }, []]) {
+  assert.equal((await sp(bad)).status, 400, JSON.stringify(bad));
+}
+kv.set("settings", JSON.stringify({ budgetTarget: 75 }));
+assert.equal((await call("GET", "/spend", "a")).body.budgetTarget, 75);
+kv.delete("settings");
 kv.delete("activity");
 // /why: each code flips off when its input goes
 const { readFileSync } = await import("node:fs");
