@@ -272,4 +272,11 @@ is `403`), and `force` on undo is ignored. `403` elsewhere (e.g. `PUT /prefs`, `
 
 ## Planning chat
 
+`/chat` is a short-lived relay between the app's "Plan with Hermes" screen and Hermes. The thread lives in the `ChatRoom` Durable Object (not KV: a ~1 s poll can't live with KV's cache). Hermes token only; the assistant token gets 403. `tools/hermes_chat_bridge.py` runs on the PC, polls `GET /chat`, calls `hermes -z` once per user message and posts the reply.
+
+- `POST /chat` `{ session, open: true, context }` resets the thread; `{ session, text, day, context }` appends a user message; `{ session, close: true }` ends it. `GET /chat?session=&since=` returns newer messages. `POST /chat/reply` `{ session, replyTo, text, edits, ask }` (needs `X-Actor: hermes`, else 403) posts Hermes's reply.
+- Reply shape: `{ text, edits, ask }`. Edit types are a fixed set: `busy`, `free`, `noCook`, `chip`, `budget`, `lock`, `unlock`, `reroll`. **Hermes returns constraints and edits, never meals**; the app's generator picks the meals. `MP.PlanChat.validateReply` (Worker and app) drops anything else and `/chat/reply` answers `{ id, dropped }`; the bridge re-asks once when `dropped > 0`.
+- To ask rather than guess, reply with `ask: true` and no edits.
+- Max 40 messages per thread, 300 characters per user message. Stale session gets 409.
+
 `context.cards` (on `POST /chat`) lists the tie or trade-off cards currently on screen in the app (e.g. `tie Tue: Chicken curry or Chilli`). The app wrote them; Hermes must not pick between them or contradict them.

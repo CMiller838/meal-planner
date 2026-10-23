@@ -156,4 +156,4 @@ message prompts an opener: one short question, using the context's gaps, expirin
 - [x] `walk.mjs` chat walk; screenshots checked at PC and 390 px in both themes
 
 ### Docs
-- [ ] `docs/HERMES.md` chat section; ARCHITECTURE v11 ADR; CLAUDE.md invariant line; roadmap heading (roadmap-gating)
+- [x] `docs/HERMES.md` chat section; ARCHITECTURE v11 ADR; CLAUDE.md invariant line; roadmap heading (roadmap-gating)

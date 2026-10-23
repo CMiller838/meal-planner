@@ -237,7 +237,9 @@ for (const [vp, size] of Object.entries({ pc: { width: 1440, height: 900 }, phon
     if (!/quick meals/.test(await page.textContent('.chat-understood'))) throw new Error('understood line: ' + await page.textContent('.chat-understood'));
     await page.waitForSelector('#chat-input:not([disabled])');
     const rows = await page.locator('#chat-diff .diff-row span').allTextContents();
-    if (rows.some(r => !/^Day 7 /.test(r))) throw new Error('diff touches another day: ' + rows.join(' | '));
+    // day 7 plus its batch chain (a re-pick widens to the chain, like rerollDay); which days that is depends on today's generated plan
+    const chain = await page.evaluate(async b => { const lib = await MP.getLibrary(); return MP.chainDays(JSON.parse(b).days, Object.fromEntries(lib.map(m => [m.id, m])), 7); }, before);
+    if (rows.some(r => !chain.some(d => r.startsWith(`Day ${d} `)))) throw new Error('diff touches a day outside the day-7 chain ' + chain + ': ' + rows.join(' | '));
     await shot('chat'); await page.evaluate(() => { document.documentElement.dataset.theme = 'light'; }); await shot('chat-light');
     await page.evaluate(() => { document.documentElement.dataset.theme = 'dark'; });
     if (await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)) throw new Error('horizontal scroll');

@@ -63,7 +63,7 @@ wrong, say so in one line and update the heading.
    A new dependency is always a gate (project rule).
    **Preflight before naming anything:** `ls`/Glob every new file or module name the spec
    will create (a clash means pick another name), and check every "Requires Phase N" is
-   marked `— done` in the roadmap. An unbuilt dependency goes in the spec as a stated
+   marked `— done` in the roadmap (or listed under "Done phases" there: those sections moved to `.claude/archive/roadmap-done.md`). An unbuilt dependency goes in the spec as a stated
    fallback, never as an assumed existing function. If a required phase has no heading (merged or renumbered),
    grep for the symbols the spec depends on: found means met, not found means a stated fallback.
    For a dependency on a sibling repo's phase (e.g. "<other app> Phase N"; CLAUDE.md names the repo path), grep
