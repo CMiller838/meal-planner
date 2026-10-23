@@ -64,6 +64,7 @@
     "subCredit": 0.30,
     "tasteWindow": 4,
     "tasteMinRated": 3,
+    "useUpWindow": 6,
     "budgetTarget": { "max": 120, "step": 5, "default": 0, "maxShortlist": 10 }
   },
   "aisles": [

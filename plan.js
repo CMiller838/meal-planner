@@ -220,9 +220,9 @@
     window.dispatchEvent(new CustomEvent("mp:plan-saved", { detail: plan }));
   }
 
-  function regenerate(staged) {
+  function regenerate(staged, override) {
     applyHints();
-    plan = generatePlan();
+    plan = generatePlan(override);
     savePlan();
     renderPlan(staged);
   }
@@ -1316,6 +1316,14 @@
         regenerate();
         toast("Plan regenerated");
       }
+    });
+    document.getElementById("useup-btn").addEventListener("click", () => {
+      const today = new Date().toLocaleDateString("en-CA");
+      const items = MP.ShoppingList.useUpItems(MP.Sync.localItems("pantry"), plan, today, shelfData);
+      if (!items.length) { toast("Nothing is expiring"); return; }
+      if (!confirm("Build a plan that cooks your soon-to-expire items first? This replaces your current edits.")) return;
+      regenerate(false, { useUp: { items, window: (packData && packData.planning.useUpWindow) || 6 } }); // per call, never stored in mp_planPrefs
+      toast("Plan built around what's expiring");
     });
     document.getElementById("compare-btn").addEventListener("click", () => { if (!guidedActive) renderCompareSheet(); });
     document.getElementById("hermes-generate").addEventListener("click", async () => {

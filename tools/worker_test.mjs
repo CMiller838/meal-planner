@@ -412,6 +412,10 @@ assert.equal((await call("GET", "/today", "a")).body.water, 3); // /today untouc
   const G = globalThis.MP.Generator;
   const direct = G.generatePlan(lib49, (await import("../ingredient-nutrient-tags.json", { with: { type: "json" } })).default, globalThis.MP.Nutrition.withProfile((await import("../nutrition-targets.json", { with: { type: "json" } })).default, null), (await import("../shelf-life.json", { with: { type: "json" } })).default, d.body.draft.startDate, null, {}, { vocab: (await import("../plan-preferences.json", { with: { type: "json" } })).default, busyDays: [], chips: [], profile: globalThis.MP.Nutrition.profileOf(null) }, {});
   assert.deepEqual(d.body.plan.days.map((x) => x.slots), direct.days.map((x) => x.slots));
+  assert.equal((await call("POST", "/plan/draft", "a", { useUp: "yes" })).status, 400);
+  kv.set("pantry", JSON.stringify({ items: [{ name: "rice", useBy: "2999-01-01" }] }));
+  assert.equal((await call("POST", "/plan/draft", "a", { useUp: true })).status, 200);
+  kv.delete("pantry");
   // avoid
   d = await call("POST", "/plan/draft", "a", { avoid: ["m1", "m2"] });
   assert.ok(d.body.draft.changes.every((c) => !["m1", "m2"].includes(c.after.mealId)));

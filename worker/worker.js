@@ -233,11 +233,12 @@ const slotRef = (v) => (v && v.mealId ? { mealId: v.mealId, ...(v.variantId ? { 
 /** POST /plan/draft: Generator.generatePlan around the synced inputs, merged over the plan mirror. Stores nothing. */
 async function draftPlan(body, env) {
   if (typeof body !== "object" || body === null || Array.isArray(body)) return json(400, "expected an object");
-  const { days = null, keep = [], avoid = [], budget = null } = body;
+  const { days = null, keep = [], avoid = [], budget = null, useUp = false } = body;
   if (days !== null && (!Array.isArray(days) || !days.every((d) => Number.isInteger(d) && d >= 1 && d <= 14))) return json(400, "days must be integers 1-14");
   if (!Array.isArray(keep) || !keep.every((k) => k && Number.isInteger(k.day) && k.day >= 1 && k.day <= 14 && SLOT_TYPES.includes(k.slot))) return json(400, "keep must be [{ day 1-14, slot }]");
   if (!Array.isArray(avoid) || !avoid.every((a) => typeof a === "string")) return json(400, "avoid must be meal id strings");
   if (budget !== null && !(typeof budget === "number" && isFinite(budget) && budget > 0)) return json(400, "budget must be a number > 0");
+  if (typeof useUp !== "boolean") return json(400, "useUp must be a boolean");
 
   const [libRaw, mirror, planPrefs, hints, ratingsRaw, pantry, settings] = await Promise.all(
     ["library", "plan", "planPrefs", "dayHints", "ratings", "pantry"].map((k) => readJSON(env, k)).concat(readSettings(env)));
@@ -256,6 +257,10 @@ async function draftPlan(body, env) {
   if (target > 0) prefs.budgetTarget = target;
   prefs.repeatGap = pp.repeatGap || 0;
   prefs.profile = Nutrition.profileOf(settings);
+  if (useUp) {
+    const items = ShoppingList.useUpItems((pantry && pantry.items) || [], mirror, Generator.isoToday(), SHELF_DATA);
+    if (items.length) prefs.useUp = { items, window: PACK_DATA.planning.useUpWindow || 6 };
+  }
   const pool = library.filter((m) => !avoidSet.has(m.id));
   const budgetObj = { costIndex: ShoppingList.costIndex(pool, PACK_DATA), groups: ShoppingList.groupIndex(SUB_GROUPS), ...PACK_DATA.planning };
   const gen = Generator.generatePlan(pool, TAGS, Nutrition.withProfile(TARGETS, settings), SHELF_DATA, startDate, budgetObj,
@@ -1130,7 +1135,7 @@ export const ROUTES = [
   row("PUT", "/meal/:id/rating", "write", { assistant: true, ...quiet("informational nudge, not planning data") }),
   row("POST", "/drafts", "write", quiet("inert until the app accepts")),
   row("DELETE", "/drafts/:id", "write", { assistant: true, ...quiet("inert until the app accepts") }),
-  row("POST", "/plan/draft", "read", { note: "computes a draft, stores nothing" }),
+  row("POST", "/plan/draft", "read", { note: "computes a draft, stores nothing; useUp:true cooks expiring pantry items first" }),
   row("POST", "/plan/apply", "write", { log: "logged", note: "parks the draft in planDraft" }),
   row("POST", "/activity/undo", "write", { log: "logged" }),
 ];

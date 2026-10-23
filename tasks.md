@@ -693,4 +693,11 @@ Spec: `.claude/specs/phase62.md` [M] (no cuisine, ingredient + cook-style profil
 
 ## Phase 65: Use-it-up week
 - Spec: `.claude/specs/phase65.md` [M] (one-tap fortnight that cooks expiring pantry items first; `prefs.useUp`, reorders the shortlist only).
+- [x] `ShoppingList.useUpItems` + test.html asserts
+- [x] `rankSlot` layer 3e + `generatePlan` consume set + asserts
+- [x] `pack-sizes.json` `planning.useUpWindow`; `plan.js` passes `useUp`
+- [x] Worker `draftPlan` `useUp` flag + `worker_test.mjs` case
+- [x] "Use it up" button + empty-state toast
+- [x] Bump `CACHE`; `CLAUDE.md` invariant line
+- [ ] Live: Phase 65 — with real pantry use-by dates, press Use it up and confirm the expiring items show in the first meals
 - [ ] Live: Phase 61 — Worker accepts `PUT /planPrefs` with `repeatGap` via real Hermes and it syncs back on pull.

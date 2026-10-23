@@ -683,11 +683,12 @@ respect exclusions. Requires Phases 27, 35.
 
 **Verified 2026-10-23:** check.py 9/9 (test.html 702 pass incl. noBatch, planMetrics, cheapest/protein/quickest vs default, exclusions); walk covers Compare/close/Use at PC and phone; tester PASS.
 
-## Phase 65: Use-it-up week [M] — not started
+## Phase 65: Use-it-up week [M] — built 2026-10-23, live checks pending
 
 **Added 2026-10-22.** A generation mode that seeds the plan from expiring and in-stock items (Phases 34, 39, 43) first, then
 fills the rest by nutrition. Nutrition still decides which meal; stock only orders the shortlist. **Verify:** with three items
 expiring, the first week uses them before their use-by dates. Requires Phases 34, 43.
+Verified 2026-10-23: check.py 9/9, test.html group 65 (item meals placed by use-by day, consume-once, window, baseline equality), worker_test useUp 400/200, tester PASS (button + toast PC/390 px, both themes).
 
 ## Phase 66: Lock and fill [M] — not started
 

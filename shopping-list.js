@@ -444,6 +444,12 @@
       .map(({ meal, hits }) => ({ meal, hits }));
   }
 
+  /** Phase 65: pantry items to cook first - expiring within the fortnight, soonest first; ran-out and freezer items dropped. */
+  function useUpItems(pantryItems, plan, todayIso, shelfData) {
+    const live = (Array.isArray(pantryItems) ? pantryItems : []).filter((i) => i && !i.out && i.storage !== "freezer");
+    return MP.ShelfLife.expiringItems(live, plan, todayIso, 14, shelfData).map((x) => ({ name: x.name, useBy: x.useBy }));
+  }
+
   /** Phase 53: scale a meal's lines to `portions`. Only a leading number is scaled (replaced in the original text);
    * anything parseQty can't read is returned unchanged with check:true. Structured qty scales `value`. */
   function scaleMeal(meal, portions) {
@@ -532,5 +538,5 @@
     return out;
   }
 
-  MP.ShoppingList = { scaleMeal, scaleShortfall, mealsUsing, load, loadGroups, groupIndex, buildLists, parseQty, packsFor, normalizeKey, aisleFor, groupByAisle, lineId, mergeLines, adhocView, adhocToLines, LINE_STATES, LINE_SOURCES, pantryIndex, pantryOverlap, hasEnough, cookable, quickPicks, remainingQty, eatPlan, priceFor, mealCost, costIndex, costTier, costBadgeHtml };
+  MP.ShoppingList = { useUpItems, scaleMeal, scaleShortfall, mealsUsing, load, loadGroups, groupIndex, buildLists, parseQty, packsFor, normalizeKey, aisleFor, groupByAisle, lineId, mergeLines, adhocView, adhocToLines, LINE_STATES, LINE_SOURCES, pantryIndex, pantryOverlap, hasEnough, cookable, quickPicks, remainingQty, eatPlan, priceFor, mealCost, costIndex, costTier, costBadgeHtml };
 })(typeof globalThis !== "undefined" ? globalThis : this);

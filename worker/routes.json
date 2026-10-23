@@ -393,7 +393,7 @@
     "path": "/plan/draft",
     "assistant": true,
     "kind": "read",
-    "note": "computes a draft, stores nothing"
+    "note": "computes a draft, stores nothing; useUp:true cooks expiring pantry items first"
   },
   {
     "method": "POST",

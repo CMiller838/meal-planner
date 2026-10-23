@@ -118,7 +118,7 @@
   /**
    * Ordered candidates for one slot, best first. Layers, in order:
    *   1 nutrition (rankByGap)  2 chips  3 effort/busy
-   *   3b ratings (Phase 51: up/neutral/down; `never` filtered above)  3c taste window (Phase 62)  3d repeat gap (Phase 61)  4 budget shortlist (cost, pack reuse + group substitutions; width scales with budget pressure)  5 recency
+   *   3b ratings (Phase 51: up/neutral/down; `never` filtered above)  3c taste window (Phase 62)  3d repeat gap (Phase 61)  3e use-it-up (Phase 65: expiring pantry items' meals to the head of the first `window`)  4 budget shortlist (cost, pack reuse + group substitutions; width scales with budget pressure)  5 recency
    * Layers 2-5 are stable reorders of layer 1 - none of them re-score nutrition.
    * Returns every meal in `pool` (minus exclusions); chips never filter.
    */
@@ -193,6 +193,21 @@
       ranked = ranked.filter((m) => !inGap(m)).concat(ranked.filter(inGap));
     }
 
+    const useUp = prefs && prefs.useUp;
+    if (useUp && Array.isArray(useUp.items) && opts.useUpLeft && opts.useUpLeft.size) { // Phase 65: reorder inside the first `window` only
+      const dayIso = new Date(Date.parse(opts.startDate) + (dayNum - 1) * 864e5).toISOString().slice(0, 10);
+      const norm = MP.ShoppingList.normalizeKey;
+      const live = useUp.items.filter((it) => opts.useUpLeft.has(norm(it.name)) && (!it.useBy || it.useBy >= dayIso));
+      if (live.length) {
+        const hits = (m) => { const keys = new Set(m.ingredients.map((i) => norm(i.key))); return live.filter((it) => keys.has(norm(it.name))); };
+        const soonest = (h) => h.map((x) => x.useBy || "").sort()[0];
+        const win = ranked.slice(0, Number(useUp.window) || 6).map((m, i) => ({ m, i, h: hits(m) })).filter((x) => x.h.length);
+        win.sort((a, b) => b.h.length - a.h.length || (soonest(a.h) < soonest(b.h) ? -1 : soonest(a.h) > soonest(b.h) ? 1 : 0) || a.i - b.i);
+        const ids = new Set(win.map((x) => x.m.id));
+        ranked = win.map((x) => x.m).concat(ranked.filter((m) => !ids.has(m.id)));
+      }
+    }
+
     if (budget) {
       const half = dayNum <= 7 ? halfKeys.first : halfKeys.second;
       const shortlist = ranked.slice(0, shortlistSizeFor(budget, pressure)).filter((m) => budget.costIndex[m.id]);
@@ -252,6 +267,7 @@
     const dinnerPool = library.filter((m) => (m.mealTypes || []).includes("dinner") && !(prefs.noBatch && m.leftoverOf)); // noBatch cooks no parent, so no leftover meal either
     const days = Array.from({ length: 14 }, (_, i) => ({ day: i + 1, slots: {} }));
     const lastUsedDay = {};
+    const useUpLeft = new Set(((prefs.useUp && prefs.useUp.items) || []).map((it) => MP.ShoppingList.normalizeKey(it.name)));
     const halfKeys = { first: new Set(), second: new Set() };
     const spent = { first: 0, second: 0 };
 
@@ -265,6 +281,7 @@
         ? { mealId: meal.id, ...(frozenFrom ? { frozenFrom } : {}), ...(variantId ? { variantId } : {}), ...(subs.length ? { subs } : {}) }
         : { mealId: null };
       if (meal) lastUsedDay[meal.id] = day;
+      if (meal && useUpLeft.size) for (const i of meal.ingredients || []) useUpLeft.delete(MP.ShoppingList.normalizeKey(i.key)); // Phase 65: each expiring item is used once
       if (meal && budget && countsTowardBudget !== false) {
         const entry = budget.costIndex[meal.id];
         if (entry) {
@@ -298,7 +315,7 @@
 
     const pickMeal = (pool, dayNum, dayMealsSoFar, opts) =>
       rankSlot(pool, dayNum, dayMealsSoFar,
-        { ...opts, tags, targets, prefs, budget, halfKeys, lastUsedDay, ratings, taste, profile: prefs.profile, pressure: pressureFor(dayNum) })[0] || null;
+        { ...opts, tags, targets, prefs, budget, halfKeys, lastUsedDay, ratings, taste, useUpLeft, startDate, profile: prefs.profile, pressure: pressureFor(dayNum) })[0] || null;
 
     const runs = weekendRuns(startDate).map((run) => {
       if (run.some((d) => !(prefs.busyDays || []).includes(d))) {

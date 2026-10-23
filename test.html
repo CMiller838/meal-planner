@@ -2927,6 +2927,32 @@
     check("no candidate has an excluded meal", [cand.cheapest, cand.protein, nb].every((p) => p.days.every((d) => Object.values(d.slots).every((s) => !s.mealId || MP.Exclusions.check(mealsById[s.mealId]).ok))));
   }
 
+  // ---- Group 65: Phase 65 (use-it-up week) ----
+  {
+    const G = MP.Generator;
+    const mk = (n) => Array.from({ length: n }, (_, i) => ({ id: `u${i + 1}`, name: `U${i + 1}`, mealTypes: ["dinner"], ingredients: [{ key: `zz${i + 1}` }] }));
+    const lib = mk(12);
+    const dayOf = (pl, id) => pl.days.findIndex((d) => d.slots.dinner && d.slots.dinner.mealId === id) + 1;
+    const run = (l, useUp) => G.generatePlan(l, {}, {}, shelfData, "2026-09-07", undefined, {}, useUp ? { useUp } : {});
+    const items = [{ name: "zz5", useBy: "2026-09-08" }, { name: "zz4", useBy: "2026-09-10" }, { name: "zz3", useBy: "2026-09-12" }];
+    const base = run(lib), up = run(lib, { items, window: 6 });
+    check("useUp absent/empty equals baseline", JSON.stringify(run(lib, { items: [], window: 6 }).days) === JSON.stringify(base.days));
+    check("useUp places each expiring item's meal by its use-by day", dayOf(up, "u5") === 1 && dayOf(up, "u5") <= 2 && dayOf(up, "u4") <= 4 && dayOf(up, "u3") <= 6);
+    check("a consumed item does not lift a second meal", dayOf(up, "u1") > 3 && up.days.slice(0, 3).map((d) => d.slots.dinner.mealId).join() === "u5,u4,u3");
+    const far = run(lib, { items: [{ name: "zz10", useBy: "2026-09-20" }], window: 6 });
+    check("a meal outside the window is not lifted", JSON.stringify(far.days) === JSON.stringify(base.days));
+    const three = mk(3);
+    const small = run(three, { items: [{ name: "zz2", useBy: "2026-09-20" }], window: 6 });
+    check("useUp + 3-meal library still fills every slot", small.days.every((d) => d.slots.dinner && d.slots.dinner.mealId));
+    const one = [{ id: "multi", name: "Multi", mealTypes: ["dinner"], ingredients: [{ key: "a1" }, { key: "a2" }, { key: "a3" }] }, ...mk(3)];
+    const mp = run(one, { items: [{ name: "a1", useBy: "2026-09-20" }, { name: "a2", useBy: "2026-09-20" }, { name: "a3", useBy: "2026-09-20" }], window: 6 });
+    check("three items in one meal: it wins once", mp.days[0].slots.dinner.mealId === "multi" && mp.days[1].slots.dinner.mealId !== "multi");
+    const ui = MP.ShoppingList.useUpItems([
+      { name: "milk", useBy: "2026-09-10" }, { name: "kale", useBy: "2026-09-08" }, { name: "peas", useBy: "2026-09-09", out: true },
+      { name: "fish", useBy: "2026-09-09", storage: "freezer" }, { name: "rice", useBy: "2027-09-09" }], null, "2026-09-07", shelfData);
+    check("useUpItems: soonest first, drops out/freezer/far", deepEqual(ui.map((x) => x.name), ["kale", "milk"]));
+  }
+
   lines.push("", `${pass} passed, ${fail} failed`);
   document.getElementById("out").textContent = lines.join("\n");
 })();
