@@ -772,12 +772,13 @@ swaps with the numbers ("swap Wed and Fri saves £9, costs 12 g protein"), compu
 only on accept. **Verify:** a tie produces exactly one card; accepting a swap changes the totals shown. Requires Phases 27, 72 (was "75", a stale renumber).
 Verified 2026-10-23: check.py 10/10 (test.html gapScore/tieFor/budgetSwaps cases, walk tie + trade-off cards at PC and phone, Exit leaves mp_plan identical); tester PASS.
 
-## Phase 74: Learn from rejections [S] — not started
+## Phase 74: Learn from rejections [S] — built 2026-10-23, live checks pending
 
 **Added 2026-10-22.** A rejected edit or declined suggestion in the chat can carry a reason; it is saved as a Phase 51 rating
 or reason (`PUT /meal/:id/rating`, the only writer) and logged through Phase 48, so the next draft re-ranks without being told
 again. Reorders only; `never` remains the sole filter. **Verify:** reject a meal with "too fiddly", regenerate, and it ranks lower;
 undo removes the reason. Requires Phases 51, 72 (was "75", a stale renumber).
+**Verified 2026-10-23:** worker_test (X-Actor PUT logged, undo restamps `at`/neutral record, bare PUT unlogged); walk.mjs (Skip writes nothing, reason chip writes `mp_ratings` down+note); test.html (rejected meal ranks last); `check.py` passes. Live: phone check in tasks.md.
 
 ## Phase 75: Tomorrow lock-in on Today [M] — not started
 

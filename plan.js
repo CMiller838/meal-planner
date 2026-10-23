@@ -1870,6 +1870,39 @@
     }
   }
 
+  /** Phase 74: a reject is a dislike only when a reason is given; skip writes nothing. */
+  function reasonForm(c) {
+    const f = document.createElement("div");
+    f.className = "chat-reason";
+    const done = (note) => {
+      c.askReason = false;
+      note = (note || "").trim();
+      if (note) {
+        MP.Ratings.set(c.after.mealId, { rating: "down", note });
+        MP.Sync.pushRating(c.after.mealId, { rating: "down", note }, "rejected in chat: " + note.slice(0, 80));
+      }
+      renderChatDiff();
+    };
+    ["too fiddly", "too pricey", "not in the mood", "had it lately"].forEach((t) => {
+      const b = document.createElement("button");
+      b.type = "button"; b.className = "btn-secondary"; b.textContent = t;
+      b.addEventListener("click", () => done(t));
+      f.appendChild(b);
+    });
+    const inp = document.createElement("input");
+    inp.type = "text"; inp.className = "chat-reason-input"; inp.maxLength = MP.Ratings.NOTE_MAX;
+    inp.placeholder = "Why? (optional)"; inp.setAttribute("aria-label", "Why reject this meal");
+    inp.addEventListener("keydown", (e) => { if (e.key === "Enter") done(inp.value); });
+    const ok = document.createElement("button");
+    ok.type = "button"; ok.className = "btn-secondary"; ok.textContent = "Save";
+    ok.addEventListener("click", () => done(inp.value));
+    const skip = document.createElement("button");
+    skip.type = "button"; skip.className = "btn-secondary"; skip.textContent = "Skip";
+    skip.addEventListener("click", () => done(""));
+    f.append(inp, ok, skip);
+    return f;
+  }
+
   function renderChatDiff() {
     const ul = $("chat-diff");
     ul.innerHTML = "";
@@ -1885,12 +1918,14 @@
       rej.className = "btn-secondary"; rej.textContent = "Reject"; rej.disabled = !!c.rejected;
       const set = (r) => {
         c.rejected = r;
+        c.askReason = r && !!(c.after && c.after.mealId); // Phase 74: optional one-line reason after a reject
         plan.days[c.day - 1].slots[c.slot] = (r ? c.before : c.after) || {};
         renderChatDiff(); renderChatDay(); renderPlan();
       };
       acc.addEventListener("click", () => set(false));
       rej.addEventListener("click", () => set(true));
       li.append(txt, acc, rej);
+      if (c.askReason) li.appendChild(reasonForm(c));
       ul.appendChild(li);
     });
   }

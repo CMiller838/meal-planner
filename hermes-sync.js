@@ -50,11 +50,11 @@ window.MP = window.MP || {};
     localStorage.setItem(LS_TOKEN, (token || "").trim());
   }
 
-  async function req(method, path, body) {
+  async function req(method, path, body, extra) {
     const { url, token } = config();
     const res = await fetch(url + path, {
       method,
-      headers: { "X-Auth-Token": token, "Content-Type": "application/json" },
+      headers: { "X-Auth-Token": token, "Content-Type": "application/json", ...extra },
       body: body === undefined ? undefined : JSON.stringify(body),
     });
     if (!res.ok) throw new Error(`${method} ${path} -> ${res.status}`);
@@ -435,10 +435,10 @@ window.MP = window.MP || {};
   }
 
   /** Best-effort PUT /meal/:id/rating; the server's stamped record is merged back. Never throws. */
-  async function pushRating(id, patch) {
+  async function pushRating(id, patch, reason) {
     if (!config().enabled) return "off";
     try {
-      const rec = await req("PUT", "/meal/" + encodeURIComponent(id) + "/rating", patch);
+      const rec = await req("PUT", "/meal/" + encodeURIComponent(id) + "/rating", patch, reason ? { "X-Actor": "hermes", "X-Reason": reason } : undefined);
       MP.Ratings.merge({ [id]: rec });
       return "ok";
     } catch (e) {

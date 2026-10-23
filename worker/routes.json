@@ -369,8 +369,8 @@
     "path": "/meal/:id/rating",
     "assistant": true,
     "kind": "write",
-    "log": "unlogged",
-    "why": "informational nudge, not planning data"
+    "log": "logged",
+    "note": "logged only with an X-Actor header; the app token's own PUT is not"
   },
   {
     "method": "POST",

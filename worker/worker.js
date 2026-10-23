@@ -853,7 +853,7 @@ async function getRatings(env) {
 }
 
 /** PUT /meal/:id/rating — merges any of {rating, note, never} into that meal's record, server stamps `at`. */
-async function putMealRating(request, env, mealId) {
+async function putMealRating(request, env, mealId, who) {
   let body;
   try { body = JSON.parse(await request.text()); } catch (e) { return json(400, "invalid JSON"); }
   const bad = Ratings.patchError(body);
@@ -864,8 +864,11 @@ async function putMealRating(request, env, mealId) {
   let r = null;
   try { r = JSON.parse(await env.MP_KV.get("ratings")); } catch (e) {}
   const all = (r && r.meals) || {};
+  const before = JSON.parse(JSON.stringify(r));
   all[mealId] = Ratings.applyPatch(all[mealId], body, new Date().toISOString());
-  await env.MP_KV.put("ratings", JSON.stringify({ meals: all }));
+  const after = { meals: all };
+  await env.MP_KV.put("ratings", JSON.stringify(after));
+  if (who) await logWrite(env, { who, key: "ratings", why: reasonOf(request), changes: diffItems("ratings", before, after) });
   return json(200, all[mealId]);
 }
 
@@ -1159,6 +1162,7 @@ const ITEMS = {
   eatRequests: ["requests", (r) => r.id],
   placements: ["placements", (p) => `${p.day}:${p.slot}:${p.mealId}`],
   dayHints: ["days", null], // object map: item id = date key
+  ratings: ["meals", null], // object map: item id = meal id
   today: [null], planFlag: [null], planDraft: [null], // whole value is one item, id = key name
 };
 const ACTIVITY_CAP = 200;
@@ -1184,7 +1188,7 @@ export const ROUTES = [
   row("PUT", "/adhoc", "write", { dryRun: true, log: "logged" }),
   row("POST", "/shopping/lines", "write", { log: "logged" }),
   row("PUT", "/meal-method", "write", { dryRun: true, log: "logged" }),
-  row("PUT", "/meal/:id/rating", "write", { assistant: true, ...quiet("informational nudge, not planning data") }),
+  row("PUT", "/meal/:id/rating", "write", { assistant: true, log: "logged", note: "logged only with an X-Actor header; the app token's own PUT is not" }),
   row("POST", "/drafts", "write", quiet("inert until the app accepts")),
   row("DELETE", "/drafts/:id", "write", { assistant: true, ...quiet("inert until the app accepts") }),
   row("POST", "/plan/draft", "read", { note: "computes a draft, stores nothing; useUp:true cooks expiring pantry items first" }),
@@ -1255,6 +1259,13 @@ function restore(key, current, changes) {
     const byId = new Map(((current && current.lines) || []).map((l) => [l.id, l]));
     for (const c of changes) byId.set(c.id, c.before ? { ...c.before, updatedAt: nowIso } : { ...c.after, state: "deleted", updatedAt: nowIso });
     return { updatedAt: nowIso, lines: [...byId.values()] };
+  }
+  if (key === "ratings") {
+    // Restamp `at` to now, else the app's newest-`at` merge keeps the rejected note; no prior record = the neutral one.
+    const nowIso = new Date().toISOString();
+    const meals = { ...((current && current.meals) || {}) };
+    for (const c of changes) meals[c.id] = { ...(c.before || { rating: null, note: "", never: false }), at: nowIso };
+    return { meals };
   }
   const out = Array.isArray(current) ? [...current] : { ...(current || {}) };
   if (idOf) {
@@ -1386,7 +1397,7 @@ export default {
     const ratingMatch = RATING_PATH.exec(url.pathname);
     if (ratingMatch) {
       if (request.method !== "PUT") return json(405, "method not allowed");
-      return putMealRating(request, env, decodeURIComponent(ratingMatch[1]));
+      return putMealRating(request, env, decodeURIComponent(ratingMatch[1]), actor);
     }
     if (url.pathname === "/settings") {
       if (request.method === "PUT") return putSettings(request, env);

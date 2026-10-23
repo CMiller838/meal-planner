@@ -244,6 +244,14 @@ for (const [vp, size] of Object.entries({ pc: { width: 1440, height: 900 }, phon
     if (rows.length) {
       await page.click('#chat-diff .diff-row button:text("Reject")');
       if (!await page.locator('#chat-diff .diff-row.rejected').count()) throw new Error('Reject did not mark the row');
+      // Phase 74: Skip writes no rating; a reason chip writes a down rating with the note
+      const rated = () => page.evaluate(() => Object.values(JSON.parse(localStorage.getItem('mp_ratings') || '{}')).filter(r => r.rating === 'down' && r.note === 'too fiddly').length);
+      await page.click('#chat-diff .chat-reason button:text("Skip")');
+      if (await rated()) throw new Error('Skip wrote a rating');
+      await page.click('#chat-diff .diff-row button:text("Accept")');
+      await page.click('#chat-diff .diff-row button:text("Reject")');
+      await page.click('#chat-diff .chat-reason button:text("too fiddly")');
+      if (await rated() !== 1) throw new Error('reason did not write mp_ratings');
     }
     await page.click('#chat-exit');
     await page.waitForSelector('#plan-chat', { state: 'hidden' });

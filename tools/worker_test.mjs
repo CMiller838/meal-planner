@@ -181,6 +181,24 @@ for (const bad of [{ rating: "meh" }, { note: 1 }, { never: "yes" }, { other: 1 
 assert.equal((await call("PUT", "/ratings", "a", { meals: {} })).status, 403);
 assert.equal((await call("GET", "/meal/a/rating", "h")).status, 405);
 assert.equal((await call("GET", "/ratings", "")).status, 401);
+// Phase 74: a rating PUT with X-Actor is logged and undoable; without it (hermes token, no header) nothing is logged
+kv.delete("activity"); kv.delete("ratings");
+await call("PUT", "/meal/b/rating", "h", { rating: "up" });
+assert.equal(acts().length, 0);
+r = await call("PUT", "/meal/b/rating", "h", { rating: "down", note: "too fiddly" }, { "X-Actor": "hermes", "X-Reason": "rejected in chat" });
+assert.equal(acts().length, 1);
+const upAt = JSON.parse(kv.get("ratings")).meals.b.at;
+r = await call("POST", "/activity/undo", "h", { id: acts()[0].id }, { "X-Actor": "hermes" });
+assert.equal(r.status, 200);
+let rb = JSON.parse(kv.get("ratings")).meals.b;
+assert.deepEqual([rb.rating, rb.note], ["up", ""]);
+assert.ok(rb.at >= upAt);
+kv.delete("ratings");
+await call("PUT", "/meal/b/rating", "h", { note: "x" }, { "X-Actor": "hermes" });
+await call("POST", "/activity/undo", "h", { id: acts()[0].id }, { "X-Actor": "hermes" });
+rb = JSON.parse(kv.get("ratings")).meals.b;
+assert.deepEqual([rb.rating, rb.note, rb.never], [null, "", false]);
+kv.delete("activity");
 // /why: each code flips off when its input goes
 const { readFileSync } = await import("node:fs");
 const tags = JSON.parse(readFileSync(new URL("../ingredient-nutrient-tags.json", import.meta.url), "utf8"));
