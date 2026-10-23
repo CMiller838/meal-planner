@@ -42,6 +42,8 @@ cd tools/browser-check && npm ci && PLAYWRIGHT_BROWSERS_PATH=$PWD/.browsers npx 
 node tools/browser-check/ui-check.mjs --theme-key mp_theme --shots out/   # pages check with screenshots (run from tools/browser-check)
 ```
 
+Adding or changing a Worker route (`ROUTES` in `worker/worker.js`)? Rerun `node tools/routes_build.mjs` and commit `worker/routes.json`: `worker_test.mjs` fails on a stale one.
+
 No lint/build/formatter: don't invent one unless asked. `tools/browser-check` is test tooling kept apart from the app;
 the app itself stays zero-dependency. Secrets live in the gitignored `.env` (Telegram: `NOTIFY_BOT_TOKEN`,
 `NOTIFY_CHAT_ID`, `NOTIFY_PROJECT`: the same bot as the assistant, every message starts `[Meal Planner]`).
