@@ -452,7 +452,7 @@
 
   // ---- Guided walkthrough ----
   let guidedActive = false; // true from ?guided=1 entry until "Looks good" commit
-  let guided = null;        // { days: number[], idx: number } — active only during the swipe loop, null during review
+  let guided = null;        // { passes, pass, days: number[], idx, total } — active only during the swipe loop, null during review
 
   // ---- Swap picker ----
   let swapCtx = null; // { day, slotType, candidates }
@@ -502,20 +502,35 @@
     variantCtx = null;
   }
 
-  function startGuidedWalkthrough() {
-    guided = { days: plan.days.map((d) => d.day), idx: 0 };
+  const GUIDED_EXTRAS = ["breakfast", "lunch", "snack"];
+  // "?slots=lunch,junk,lunch" -> ["dinner","lunch"]; dinner always first, extras in fixed order.
+  function parseGuidedSlots(search) {
+    const asked = new Set(String(new URLSearchParams(search).get("slots") || "").split(","));
+    return ["dinner", ...GUIDED_EXTRAS.filter((s) => asked.has(s))];
+  }
+
+  function startGuidedWalkthrough(passes) {
+    const days = plan.days.map((d) => d.day);
+    guided = { passes: passes || ["dinner"], pass: 0, days, idx: 0, total: days.length * (passes || ["dinner"]).length };
     renderGuidedStep();
   }
 
   function renderGuidedStep() {
-    if (!guided || guided.idx >= guided.days.length) return finishWalkthroughLoop();
+    if (!guided) return;
+    if (guided.idx >= guided.days.length) {
+      guided.pass++;
+      guided.idx = 0;
+    }
+    if (guided.pass >= guided.passes.length) return finishWalkthroughLoop();
     const day = guided.days[guided.idx];
-    const candidates = candidatesFor(day, "dinner");
+    const slotType = guided.passes[guided.pass];
+    const em = effectiveMealAt(day, slotType);
+    const candidates = em && em.leftoverOf ? [] : candidatesFor(day, slotType);
     if (!candidates.length) {
       guided.idx++;
       return renderGuidedStep();
     }
-    swapCtx = { day, slotType: "dinner", candidates };
+    swapCtx = { day, slotType, candidates };
     renderGuidedDeck();
     document.getElementById("swap-overlay").classList.remove("hidden");
   }
@@ -535,10 +550,11 @@
 
   function renderGuidedDeck() {
     const sheet = document.getElementById("swap-sheet");
-    const { day } = swapCtx;
+    const { day, slotType } = swapCtx;
+    const step = guided.pass * guided.days.length + guided.idx + 1;
     sheet.innerHTML = `<button class="close-btn" aria-label="Skip to review">✕</button>
-      <h2>Day ${day} of ${plan.days.length} — Dinner</h2>
-      <p class="swipe-hint" style="margin-top:0;">Step ${guided.idx + 1} of ${guided.days.length} ·
+      <h2>Day ${day} of ${plan.days.length} — ${esc(slotType[0].toUpperCase() + slotType.slice(1))}</h2>
+      <p class="swipe-hint" style="margin-top:0;">Step ${step} of ${guided.total} ·
       Swipe right to pick · swipe left for another option · tap to view recipe</p>
       <div id="swap-deck" class="swipe-deck" style="height:340px;"></div>`;
     sheet.querySelector(".close-btn").addEventListener("click", closeSwapPicker);
@@ -548,7 +564,7 @@
   function renderGuidedCards() {
     const deck = document.getElementById("swap-deck");
     deck.innerHTML = "";
-    swapCtx.candidates.slice(0, 5).forEach((meal, idx) => {
+    swapCtx.candidates.slice(0, swapCtx.slotType === "dinner" ? 5 : 3).forEach((meal, idx) => {
       const card = document.createElement("div");
       card.className = "swipe-card";
       card.style.zIndex = String(10 - idx);
@@ -563,7 +579,7 @@
       if (idx === 0) {
         MP.makeSwipeable(card, {
           onSwipeRight: () => {
-            setSlotMeal(swapCtx.day, "dinner", meal.id);
+            setSlotMeal(swapCtx.day, swapCtx.slotType, meal.id);
             toast(`Day ${swapCtx.day}: using "${meal.name}"`);
             advanceGuided();
           },
@@ -1206,7 +1222,7 @@
     renderPlacementBanner(e.detail);
   });
 
-  MP.Plan = { applyPlacements, logPortion, matchEatRequests, applyEatRequests };
+  MP.Plan = { parseGuidedSlots, applyPlacements, logPortion, matchEatRequests, applyEatRequests };
 
   async function init() {
     MP.initTheme();
@@ -1263,7 +1279,7 @@
     if (guidedParam) {
       guidedActive = true;
       plan = generatePlan();
-      startGuidedWalkthrough();
+      startGuidedWalkthrough(parseGuidedSlots(location.search));
     } else {
       plan = loadPlan();
       savePlan();

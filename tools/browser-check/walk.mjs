@@ -122,6 +122,29 @@ for (const [vp, size] of Object.entries({ pc: { width: 1440, height: 900 }, phon
     await page.waitForFunction(() => document.querySelectorAll('.leftover-row').length === 2 && /freezer/.test(document.body.innerText));
     await shot('leftovers');
   });
+  await step('guided: slots=lunch adds a 3-card Lunch pass after dinners; closing leaves mp_plan untouched', async () => {
+    await page.goto(`${base}/plan.html`);
+    await page.evaluate(() => localStorage.removeItem('mp_plan'));
+    await page.goto(`${base}/plan.html?guided=1&slots=lunch,junk`);
+    await page.waitForSelector('#swap-sheet h2');
+    let h = await page.textContent('#swap-sheet h2');
+    if (!/Dinner/.test(h)) throw new Error('first pass should be Dinner: ' + h);
+    for (let i = 0; i < 30 && /Dinner/.test(h); i++) {   // pick the top dinner card (right) each day
+      await page.evaluate(() => {   // synthetic drag (a toast can sit over the card)
+        const c = document.querySelector('#swap-deck .swipe-card');
+        const ev = (t, x, el) => el.dispatchEvent(new MouseEvent(t, { clientX: x, clientY: 100, bubbles: true }));
+        ev('mousedown', 100, c); ev('mousemove', 400, window); ev('mouseup', 400, window);
+      });
+      await page.waitForTimeout(450);
+      h = (await page.textContent('#swap-sheet h2').catch(() => '')) || '';
+    }
+    if (!/Lunch/.test(h)) throw new Error('expected a Lunch pass, got: ' + h);
+    if (await page.locator('#swap-deck .swipe-card').count() > 3) throw new Error('lunch deck over 3 cards');
+    await shot('guided-lunch');
+    await page.click('#swap-sheet .close-btn');
+    await page.waitForSelector('#guided-review-banner:not(.hidden)');
+    if (await page.evaluate(() => localStorage.getItem('mp_plan'))) throw new Error('mp_plan saved before Looks good');
+  });
   await step('no uncaught page errors during the walk', async () => { if (errs.length) throw new Error(errs[0]); });
   await ctx.close();
 }

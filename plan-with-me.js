@@ -181,10 +181,17 @@ window.MP = window.MP || {};
 
     renderSummary();
 
+    document.getElementById("also-row").addEventListener("click", (e) => {
+      const btn = e.target.closest("button[data-slot]");
+      if (!btn) return;
+      btn.setAttribute("aria-pressed", String(btn.classList.toggle("active")));
+    });
+
     document.getElementById("pwm-generate-btn").addEventListener("click", () => {
       MP.PlanPrefs.save([...busyDays], [...chips], profileBudget() ? MP.PlanPrefs.get(true).budgetTarget : budgetTarget, document.getElementById("freeze-batches").checked);
       if (MP.Sync) MP.Sync.pushPlanPrefs();
-      location.href = "plan.html?guided=1";
+      const extras = [...document.querySelectorAll("#also-row button.active")].map((b) => b.dataset.slot);
+      location.href = "plan.html?guided=1" + (extras.length ? "&slots=" + extras.join(",") : "");
     });
   }
 

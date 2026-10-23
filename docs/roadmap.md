@@ -637,12 +637,14 @@ only changes where its portions land. **Verify:** a plan with a 4-portion batch 
 shelf-life warnings do not fire on frozen portions; eating a frozen portion never touches the pantry. Requires Phase 43.
 Assistant side already covers storage guidance (`notion_assistant` Phase 46); scheduling is not there.
 
-## Phase 60: Choice screens for breakfast, lunch and snacks [M] — not started
+## Phase 60: Choice screens for breakfast, lunch and snacks [M] — built 2026-10-23, live checks pending
 
 **Added 2026-10-22** (promotes the `docs/FUTURE.md` entry). The guided "Plan with me" walkthrough offers the top three ranked
 meals for non-dinner slots, as it does for dinner, with "pick for me" as the default. Choices only reorder `rankByGap`'s output
 and go through `guidedActive`, so abandoning the walkthrough leaves `mp_plan` untouched. **Verify:** each slot shows three
 distinct meals; skipping all gives the same plan as one-tap Generate; exclusions never appear as an option. Requires Phase 24.
+
+**Verified 2026-10-23:** `check.py` 9/9, tester PASS (all-skip plan equals plain guided plan; one lunch pick changes only that slot; close leaves `mp_plan` unsaved; PC + phone).
 
 ## Phase 61: Repeat-rate control [S] — not started
 

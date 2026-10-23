@@ -949,6 +949,13 @@
   {
     const applyPlacements = MP.Plan.applyPlacements;
 
+    {
+      const g = (q) => MP.Plan.parseGuidedSlots(q).join();
+      check("parseGuidedSlots: none -> dinner only", g("?guided=1") === "dinner" && g("?slots=") === "dinner");
+      check("parseGuidedSlots: junk/dinner ignored", g("?slots=dinner,foo") === "dinner");
+      check("parseGuidedSlots: dedupe + fixed order", g("?slots=snack,lunch,lunch,breakfast") === "dinner,breakfast,lunch,snack");
+    }
+
     // newPlacements
     check("newPlacements: [] for null remote", deepEqual(MP.Sync.newPlacements(null, null), []));
     check("newPlacements: [] for malformed remote", deepEqual(MP.Sync.newPlacements({}, null), []));

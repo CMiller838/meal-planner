@@ -665,7 +665,8 @@ Requires Phase 43 (storage/`frozenMonths` helpers) built first. Decided: scale a
 - [ ] Live: in the installed phone PWA generate a plan containing chilli; confirm a frozen dinner 5+ days after the cook and the "Defrost tonight" note on Today the evening before
 
 ## Phase 60: Choice screens for breakfast, lunch and snacks
-- Spec: `.claude/specs/phase60.md`
+- Spec: `.claude/specs/phase60.md` — all spec tasks built 2026-10-23 (parseGuidedSlots, multi-pass guided, toggle row, deck per slot type, CACHE v49, walk.mjs step).
+- [ ] Live: on the phone PWA, Plan with me, tick Breakfast and Lunch, Generate: dinner pass, then Breakfast, then Lunch, up to 3 cards each, counter spans all passes.
 
 ## Phase 61: Repeat-rate control [S]
 Requires Phase 51 (built). Decision (own call): one plain number `repeatGap` (min days between the same meal; 0 = off) in `mp_planPrefs`; "rotate favourites" is not a separate switch, it is `repeatGap` plus the existing 👍 layer (a 👍 meal inside its gap drops behind neutral ones). Not in `notion_assistant` (roadmap 2026-10-22).
