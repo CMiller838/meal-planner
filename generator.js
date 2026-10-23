@@ -249,7 +249,7 @@
     const mealsById = Object.fromEntries(library.map((m) => [m.id, m]));
     const taste = MP.Ratings.tasteProfile(ratings, library, budget);
     library = library.filter((m) => !m.routine); // routine items are logged, never scheduled (Phase 41)
-    const dinnerPool = library.filter((m) => (m.mealTypes || []).includes("dinner"));
+    const dinnerPool = library.filter((m) => (m.mealTypes || []).includes("dinner") && !(prefs.noBatch && m.leftoverOf)); // noBatch cooks no parent, so no leftover meal either
     const days = Array.from({ length: 14 }, (_, i) => ({ day: i + 1, slots: {} }));
     const lastUsedDay = {};
     const halfKeys = { first: new Set(), second: new Set() };
@@ -313,7 +313,8 @@
     const filled = new Set();
     const spares = []; // { meal, cookDay, count } — portions the fridge run could not cover (Phase 59)
 
-    for (const run of runs) {
+    // ponytail: noBatch trades leftovers for daily cooking; no cook-time model (Phase 64).
+    for (const run of prefs.noBatch ? [] : runs) {
       if (run.length < 2) continue;
       const d0 = run[0];
       const excludeIds = new Set();

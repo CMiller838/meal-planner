@@ -2880,6 +2880,53 @@
     localStorage.removeItem("mp_planPrefs");
   }
 
+  // Phase 64: noBatch + planMetrics
+  {
+    const gp = (pr, lib) => MP.Generator.generatePlan(lib || library, tags, targets, shelfData, "2026-09-07", undefined, {}, pr);
+    const dn = (pl) => pl.days.map((d) => d.slots.dinner.mealId);
+    check("noBatch unset equals explicit false", JSON.stringify(dn(gp({}))) === JSON.stringify(dn(gp({ noBatch: false }))));
+    const nb = gp({ noBatch: true });
+    const flat = nb.days.map((d) => d.slots.dinner);
+    check("noBatch: no leftover/frozen dinner slots", flat.every((s) => !s.frozenFrom && !(mealsById[s.mealId] || {}).leftoverOf));
+    check("noBatch: no dinner repeated on consecutive days", dn(nb).every((id, i, a) => i === 0 || id !== a[i - 1]));
+    const lib2 = [
+      { id: "a", name: "A", mealTypes: ["dinner"], prepEffort: "quick", ingredients: [{ key: "chicken", label: "chicken", qty: "1" }] },
+      { id: "b", name: "B", mealTypes: ["dinner"], prepEffort: "batch", ingredients: [] },
+      { id: "c", name: "C", mealTypes: ["dinner"], prepEffort: "quick", leftoverOf: "b", ingredients: [] },
+    ];
+    const mkp = (ids) => ({ days: ids.map((id) => ({ slots: { dinner: { mealId: id } } })) });
+    const m = MP.Plan.planMetrics(mkp(["a", "b", "c", "c", null]), { library: lib2, tags, targets, packData: null });
+    check("planMetrics: quick dinners skip leftovers, repeats and nulls", m.quickDinners === 1);
+    check("planMetrics: no packData -> cost null", m.cost === null);
+    check("planMetrics: protein is two numbers", m.proteinG.length === 2 && m.proteinG.every(Number.isFinite));
+    const full = MP.Plan.planMetrics(mkp(["a"]), { library: lib2, tags, targets, packData: realPackData });
+    check("planMetrics: cost is a number with packData", typeof full.cost === "number");
+    const base = MP.Plan.planMetrics(gp({}), { library, tags, targets, packData: realPackData });
+    const qk = MP.Plan.planMetrics(nb, { library, tags, targets, packData: realPackData });
+    check("quickest: quick dinners >= default", qk.quickDinners >= base.quickDinners);
+    const cv = await fetch("plan-preferences.json").then((r) => r.json());
+    const pc = cv.candidates.protein.chip;
+    const cand = {
+      cheapest: gp({ budgetTarget: cv.candidates.cheapest.budgetTarget }, library),
+      protein: gp({ chips: [pc.id], vocab: { chips: [pc] } }, library),
+      quickest: nb,
+    };
+    const X = { library, tags, targets, packData: realPackData };
+    // gp passes no budget, so cheapest/protein need the packData-driven budget for the cost layer
+    const bud = { costIndex: MP.ShoppingList.costIndex(library, realPackData), groups: MP.ShoppingList.groupIndex({}), ...realPackData.planning };
+    const gb = (pr) => MP.Generator.generatePlan(library, tags, targets, shelfData, "2026-09-07", bud, {}, pr);
+    cand.cheapest = gb({ budgetTarget: cv.candidates.cheapest.budgetTarget });
+    const defB = gb({});
+    const mc = MP.Plan.planMetrics(cand.cheapest, X), md = MP.Plan.planMetrics(defB, X);
+    check("cheapest cost <= default", mc.cost <= md.cost);
+    const sum = (p) => p.proteinG[0] + p.proteinG[1];
+    check("protein plan protein >= default", sum(MP.Plan.planMetrics(gb({ chips: [pc.id], vocab: { chips: [pc] } }), X)) >= sum(md));
+    const sig = (p) => JSON.stringify(dn(p));
+    const differ = [cand.cheapest, gb({ chips: [pc.id], vocab: { chips: [pc] } }), nb].filter((p) => sig(p) !== sig(defB)).length;
+    check("at least two candidates differ from default", differ >= 2);
+    check("no candidate has an excluded meal", [cand.cheapest, cand.protein, nb].every((p) => p.days.every((d) => Object.values(d.slots).every((s) => !s.mealId || MP.Exclusions.check(mealsById[s.mealId]).ok))));
+  }
+
   lines.push("", `${pass} passed, ${fail} failed`);
   document.getElementById("out").textContent = lines.join("\n");
 })();

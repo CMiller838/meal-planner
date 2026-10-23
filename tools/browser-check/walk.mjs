@@ -64,6 +64,24 @@ for (const [vp, size] of Object.entries({ pc: { width: 1440, height: 900 }, phon
     if (await page.locator('#plan-root .slot-card').count() < 7) throw new Error('fewer than 7 plan slots');
     await shot('plan');
   });
+  await step('plan: Compare 3 weeks shows three cards; close keeps the plan, Use replaces it', async () => {
+    await page.goto(`${base}/plan.html`);
+    await page.waitForSelector('#plan-root .slot-card');
+    const before = await page.evaluate(() => localStorage.getItem('mp_plan'));
+    await page.click('#compare-btn');
+    await page.waitForSelector('.compare-card');
+    if (await page.locator('.compare-card').count() !== 3) throw new Error('expected 3 candidate cards');
+    const txt = await page.textContent('.compare-grid');
+    if (!/Cost/.test(txt) || !/Protein/.test(txt) || !/of 14/.test(txt)) throw new Error('missing a metric');
+    await shot('compare');
+    await page.click('#swap-sheet .close-btn');
+    if (await page.evaluate(() => localStorage.getItem('mp_plan')) !== before) throw new Error('close changed mp_plan');
+    await page.click('#compare-btn');
+    page.once('dialog', (d) => d.accept());
+    await page.click('.use-candidate >> nth=2');
+    await page.waitForSelector('#plan-root .slot-card');
+    if (await page.evaluate(() => localStorage.getItem('mp_plan')) === before) throw new Error('Use did not replace the plan');
+  });
   await step('shopping: list is built from the plan', async () => {
     await page.goto(`${base}/shopping.html`);
     await page.waitForSelector('#shopping-root .shop-line', { timeout: 10000 });
@@ -124,6 +142,7 @@ for (const [vp, size] of Object.entries({ pc: { width: 1440, height: 900 }, phon
   });
   await step('guided: slots=lunch adds a 3-card Lunch pass after dinners; closing leaves mp_plan untouched', async () => {
     await page.goto(`${base}/plan.html`);
+    await page.waitForSelector('#plan-root .slot-card'); // init saves mp_plan after its awaits; clearing earlier races it
     await page.evaluate(() => localStorage.removeItem('mp_plan'));
     await page.goto(`${base}/plan.html?guided=1&slots=lunch,junk`);
     await page.waitForSelector('#swap-sheet h2');

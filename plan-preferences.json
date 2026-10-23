@@ -7,5 +7,10 @@
     { "id": "no-spice", "label": "Less spice", "kind": "avoid", "keywords": ["chilli", "curry", "harissa", "jalapeno", "cayenne", "sriracha"] },
     { "id": "less-red-meat", "label": "Less red meat", "kind": "avoid", "keywords": ["beef", "lamb", "mince", "steak", "pork"] },
     { "id": "no-pasta", "label": "Less pasta", "kind": "avoid", "keywords": ["pasta", "spaghetti", "penne", "macaroni", "lasagne", "tagliatelle"] }
-  ]
+  ],
+  "candidates": {
+    "cheapest": { "budgetTarget": 1 },
+    "protein": { "chip": { "id": "protein-boost", "label": "More protein", "kind": "prefer", "tags": ["protein"] } },
+    "quickest": { "noBatch": true }
+  }
 }

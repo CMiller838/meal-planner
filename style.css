@@ -785,3 +785,12 @@ button.ghost.danger { color: var(--danger); border-color: var(--danger); }
 @media (prefers-reduced-motion: reduce) { .draft-card { animation: none; } }
 
 .frozen-note, .defrost-note { color: var(--butter); font-weight: 600; }
+
+/* Phase 64: compare-3-weeks sheet */
+.compare-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: .75rem; clear: both; }
+.compare-card { background: var(--surface-alt); border: 1px solid var(--border); border-radius: .8rem; padding: .8rem; display: flex; flex-direction: column; gap: .2rem; }
+.compare-card h3 { margin: 0 0 .3rem; }
+.compare-card p { margin: 0; }
+.compare-card .use-candidate { margin-top: auto; }
+.btn-secondary:disabled { opacity: .5; cursor: not-allowed; }
+@media (max-width: 600px) { .compare-grid { grid-template-columns: 1fr; } }

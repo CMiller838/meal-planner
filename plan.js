@@ -22,6 +22,7 @@
   let basePrefs = {}; // user prefs without assistant day hints
   let dayHints = null; // raw blob from GET /dayHints
   let hintByDay = {}; // day number -> { effort, why, date }, from MP.DayHints.resolve
+  let vocabAll = null; // whole plan-preferences.json (chips + candidates)
   let prefs = {}; // { vocab, busyDays, chips } from MP.PlanPrefs, set once at init
 
   function toast(msg) {
@@ -130,12 +131,83 @@
 
   MP.Cooks = { all: cooksAll, openFor: cooksOpenFor, open: cooksOpen, take: cooksTake, discard: cooksDiscard, freezeOne: cooksFreezeOne };
 
-  function generatePlan() {
+  function generatePlan(override) {
     const budget = packData
       ? { costIndex: MP.ShoppingList.costIndex(library, packData), groups: MP.ShoppingList.groupIndex(groupsData), ...packData.planning }
       : null;
     const have = MP.ShoppingList.pantryIndex({ items: MP.Sync.localItems("pantry") });
-    return MP.Generator.generatePlan(library, tagsData.tags, tagsData.targets, shelfData, undefined, budget, have, Object.assign({}, prefs, { profile: MP.Nutrition.profileOf(MP.Sync.settings()) }), MP.Ratings.get());
+    return MP.Generator.generatePlan(library, tagsData.tags, tagsData.targets, shelfData, undefined, budget, have, Object.assign({}, prefs, override, { profile: MP.Nutrition.profileOf(MP.Sync.settings()) }), MP.Ratings.get());
+  }
+
+  // Phase 64: three candidate fortnights. Generation only; nothing saves until "Use this plan".
+  const CANDIDATE_LABELS = { cheapest: "Cheapest", protein: "Highest protein", quickest: "Quickest" };
+
+  /** { cost, proteinG:[wk1,wk2], gaps, quickDinners } for a plan; ctx defaults to the page's loaded data. */
+  function planMetrics(pl, ctx) {
+    const c = Object.assign({ library, tags: tagsData && tagsData.tags, targets: tagsData && tagsData.targets, packData }, ctx);
+    const byId = Object.fromEntries(c.library.map((m) => [m.id, m]));
+    const costs = c.packData ? MP.ShoppingList.costIndex(c.library, c.packData) : null;
+    let cost = costs ? 0 : null;
+    let quickDinners = 0;
+    const weeks = [[], []];
+    pl.days.forEach((d, i) => {
+      SLOT_TYPES.forEach((t) => {
+        const slot = d.slots[t];
+        const meal = slot && slot.mealId ? byId[slot.mealId] : null;
+        if (!meal) return;
+        weeks[i < 7 ? 0 : 1].push(meal);
+        const prev = i > 0 && pl.days[i - 1].slots[t];
+        const repeat = t === "dinner" && prev && prev.mealId === slot.mealId;
+        if (meal.leftoverOf || slot.frozenFrom || repeat) return;
+        if (costs && costs[meal.id]) cost += costs[meal.id].cost;
+        if (t === "dinner" && MP.Generator.effortOf(meal) === "quick") quickDinners++;
+      });
+    });
+    const wk = (m) => Math.round(MP.Nutrition.dayCoverage(m, c.tags, c.targets).proteinGramsApprox || 0);
+    const all = MP.Nutrition.weekCoverage(weeks, c.tags, c.targets);
+    return { cost, proteinG: [wk(weeks[0]), wk(weeks[1])], gaps: all.missing.length + all.partial.length, quickDinners };
+  }
+
+  function candidateWeeks() {
+    const cand = (vocabAll && vocabAll.candidates) || {};
+    const chip = cand.protein && cand.protein.chip;
+    const overrides = {
+      cheapest: { budgetTarget: (cand.cheapest || {}).budgetTarget || 1 },
+      protein: chip ? { chips: (prefs.chips || []).concat(chip.id), vocab: Object.assign({}, prefs.vocab, { chips: ((prefs.vocab || {}).chips || []).concat(chip) }) } : {},
+      quickest: { noBatch: true },
+    };
+    return Object.keys(overrides).map((key) => {
+      const p = generatePlan(overrides[key]);
+      return Object.assign({ key, label: CANDIDATE_LABELS[key], plan: p }, planMetrics(p));
+    });
+  }
+
+  const planSig = (pl) => pl.days.map((d) => SLOT_TYPES.map((t) => (d.slots[t] || {}).mealId || "").join(",")).join("|");
+
+  function renderCompareSheet() {
+    const cands = candidateWeeks();
+    const sheet = document.getElementById("swap-sheet");
+    const sigs = cands.map((c) => planSig(c.plan));
+    const sameAs = (i) => { const j = sigs.findIndex((s) => s === sigs[i]); return j < i ? cands[j].label : null; };
+    sheet.innerHTML = `<button class="close-btn" aria-label="Close">✕</button><h2>Compare 3 weeks</h2>
+      <div class="compare-grid">${cands.map((c, i) => `<div class="compare-card" data-key="${c.key}">
+        <h3>${esc(c.label)}</h3>
+        <p>Cost <b>${c.cost === null ? "n/a" : "~£" + c.cost.toFixed(0)}</b></p>
+        <p>Protein <b>~${c.proteinG[0]} / ${c.proteinG[1]} g</b> <small>(approx, wk 1 / wk 2)</small></p>
+        <p>Quick dinners <b>${c.quickDinners} of 14</b></p>
+        <p><small>${c.gaps} nutrient gaps</small></p>
+        ${sameAs(i) ? `<p class="muted"><small>same as ${esc(sameAs(i))}</small></p>` : ""}
+        <button class="primary use-candidate" data-i="${i}">Use this plan</button></div>`).join("")}</div>`;
+    sheet.querySelector(".close-btn").addEventListener("click", closeSwapPicker);
+    sheet.querySelectorAll(".use-candidate").forEach((b) => b.addEventListener("click", () => {
+      if (!confirm("Replace the 2-week plan? This replaces your current edits.")) return;
+      plan = cands[Number(b.dataset.i)].plan;
+      savePlan();
+      closeSwapPicker();
+      renderPlan();
+      toast("Plan replaced");
+    }));
+    document.getElementById("swap-overlay").classList.remove("hidden");
   }
 
   function loadPlan() {
@@ -1223,7 +1295,7 @@
     renderPlacementBanner(e.detail);
   });
 
-  MP.Plan = { parseGuidedSlots, applyPlacements, logPortion, matchEatRequests, applyEatRequests };
+  MP.Plan = { planMetrics, parseGuidedSlots, applyPlacements, logPortion, matchEatRequests, applyEatRequests };
 
   async function init() {
     MP.initTheme();
@@ -1245,6 +1317,7 @@
         toast("Plan regenerated");
       }
     });
+    document.getElementById("compare-btn").addEventListener("click", () => { if (!guidedActive) renderCompareSheet(); });
     document.getElementById("hermes-generate").addEventListener("click", async () => {
       regenerate(true);
       await MP.Sync.ackPlanFlag(pendingRequestedAt);
@@ -1273,12 +1346,14 @@
       MP.PlanPrefs.loadVocab(),
     ]);
     basePrefs = Object.assign({ vocab }, MP.PlanPrefs.get());
+    vocabAll = vocab;
     dayHints = await MP.Sync.fetchDayHints();
     await MP.Sync.fetchRatings();
     applyHints((JSON.parse(localStorage.getItem(LS_PLAN) || "null") || {}).startDate);
     const guidedParam = new URLSearchParams(location.search).get("guided") === "1";
     if (guidedParam) {
       guidedActive = true;
+      document.getElementById("compare-btn").disabled = true;
       plan = generatePlan();
       startGuidedWalkthrough(parseGuidedSlots(location.search));
     } else {

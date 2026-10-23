@@ -688,6 +688,8 @@ Spec: `.claude/specs/phase62.md` [M] (no cuisine, ingredient + cook-style profil
 
 ## Phase 64: Three candidate weeks
 - Spec: `.claude/specs/phase64.md` [M] (cheapest / highest-protein / quickest fortnights side by side; adds `prefs.noBatch`).
+- [x] noBatch, candidates block, planMetrics/candidateWeeks, Compare sheet, sw.js bump, walk step
+- [ ] Live: on the phone PWA, open Compare on your real library and confirm the three weeks look meaningfully different and "Use this plan" lands on the plan page.
 
 ## Phase 65: Use-it-up week
 - Spec: `.claude/specs/phase65.md` [M] (one-tap fortnight that cooks expiring pantry items first; `prefs.useUp`, reorders the shortlist only).

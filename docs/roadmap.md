@@ -674,12 +674,14 @@ the rest of the plan. Exposed as an app button and a Worker route for Hermes thr
 undoable). The assistant today only offers a one-evening fallback (`notion_assistant` Phase 47). **Verify:** skipping Tuesday's
 batch cook moves its dependent leftover slots; edited slots do not change; undo restores the plan. Requires Phases 43, 48, 49.
 
-## Phase 64: Three candidate weeks [M] — not started
+## Phase 64: Three candidate weeks [M] — built 2026-10-23, live checks pending
 
 **Added 2026-10-22.** Generate cheapest, highest-protein and quickest versions of the fortnight and show them side by side
 (cost, protein, cook minutes, coverage); the user picks one. Uses the existing `budget`, pressure and busy-effort knobs in
 `generator.js` with different settings, no new scoring. **Verify:** the three plans differ on their headline metric and all
 respect exclusions. Requires Phases 27, 35.
+
+**Verified 2026-10-23:** check.py 9/9 (test.html 702 pass incl. noBatch, planMetrics, cheapest/protein/quickest vs default, exclusions); walk covers Compare/close/Use at PC and phone; tester PASS.
 
 ## Phase 65: Use-it-up week [M] — not started
 
