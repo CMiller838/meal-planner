@@ -44,7 +44,7 @@ const KEYS = {
 // "I ate X" requests, everyday edits (lists, plan flag, placements), and append-
 // only library adds (see the PUT /library check). Everything else answers 403.
 const ASSISTANT_ALLOWED = new Set([
-  "GET /library", "GET /plan", "GET /eaten-log", "GET /shopping", "GET /eat-requests", "PUT /eat-requests",
+  "GET /library", "GET /plan", "GET /eaten-log", "GET /shopping", "GET /swaps", "GET /eat-requests", "PUT /eat-requests",
   "GET /discover", "GET /pantry", "PUT /pantry", "GET /adhoc", "PUT /adhoc", "GET /shopping/lines", "POST /shopping/lines", "PUT /planFlag",
   "GET /placements", "PUT /placements", "GET /prefs", "PUT /library", "GET /nutrition",
   "GET /dayHints", "PUT /dayHints", "PUT /meal-method", "GET /today", "PUT /today", "GET /products", "PUT /products",
@@ -582,7 +582,8 @@ async function productRanking(env) {
   return json(200, { ranked });
 }
 
-async function shopping(env) {
+/** Shared by /shopping and /swaps: the synced library + plan turned into per-shop-day lists with each line's id/state. */
+async function loadShopLists(env) {
   const [libraryRaw, planRaw, pantryRaw] = await Promise.all([
     env.MP_KV.get("library"), env.MP_KV.get("plan"), env.MP_KV.get("pantry"),
   ]);
@@ -596,7 +597,7 @@ async function shopping(env) {
   const lib = parse(libraryRaw);
   const meals = Array.isArray(lib) ? lib : lib && Array.isArray(lib.meals) ? lib.meals : null;
   const plan = parse(planRaw);
-  if (!meals || !plan || !Array.isArray(plan.days)) return json(409, "library and plan must be synced first");
+  if (!meals || !plan || !Array.isArray(plan.days)) return { error: json(409, "library and plan must be synced first") };
   const pantry = parse(pantryRaw);
   const mealsById = Object.fromEntries(meals.map((m) => [m.id, m]));
   const lists = ShoppingList.buildLists(plan, mealsById, PACK_DATA, pantry && Array.isArray(pantry.items) ? pantry : null);
@@ -610,6 +611,12 @@ async function shopping(env) {
       l.stateAt = st ? st.updatedAt : null;
     }
   }
+  return { plan, meals, lists, lines };
+}
+
+async function shopping(env) {
+  const { error, plan, lists, lines } = await loadShopLists(env);
+  if (error) return error;
   const extras = lines.filter((l) => l.id.startsWith("x:") && l.state !== "deleted");
   return json(200, {
     updatedAt: plan.updatedAt || null,
@@ -618,6 +625,62 @@ async function shopping(env) {
     adhoc: ShoppingList.adhocView(lines),
     extras,
   });
+}
+
+/** GET /swaps?day=N&limit=K (Phase 76): cheaper like-for-like swaps for the priciest grouped lines of one shop list. Read-only. */
+async function swaps(params, env) {
+  const limitRaw = params.get("limit"), dayRaw = params.get("day");
+  const limit = limitRaw === null ? 5 : Number(limitRaw);
+  if (!Number.isInteger(limit) || limit < 1 || limit > 10) return json(400, "limit must be an integer 1-10");
+  const day = dayRaw === null ? null : Number(dayRaw);
+  if (day !== null && !Number.isInteger(day)) return json(400, "day must be a plan day");
+  const { error, plan, meals, lists } = await loadShopLists(env);
+  if (error) return error;
+  if (day !== null && (day < 1 || day > plan.days.length)) return json(400, "day must be a plan day");
+  const shopDay = ShelfLife.shopDayFor(day === null ? 1 : day, ShelfLife.shopOffset(plan));
+  const list = lists[shopDay];
+  const settings = await readSettings(env);
+  const hardTerms = [...new Set([...((settings && settings.allergies) || []), ...((settings && settings.never) || [])])];
+  const idx = ShoppingList.groupIndex(SUB_GROUPS);
+  const pence = (n) => Math.round(n * 100);
+  const out = [];
+  const top = list.lines.filter((l) => l.state === "needed" && l.lineCost > 0).sort((a, b) => b.lineCost - a.lineCost);
+  for (const line of top) {
+    if (out.length >= limit) break;
+    const g = idx[ShoppingList.normalizeKey(line.key)];
+    if (!g) continue;
+    const using = meals.filter((m) => line.meals.includes(m.name));
+    let best = null;
+    for (const mate of g.members) {
+      if (ShoppingList.normalizeKey(mate.key) === ShoppingList.normalizeKey(line.key)) continue;
+      const item = ShoppingList.priceFor(mate.key, PACK_DATA);
+      if (!item) continue;
+      const packs = ShoppingList.packsFor(line.needed, item);
+      const cost = packs * item.price;
+      if (pence(cost) > pence(line.lineCost) - 1) continue;
+      const sub = [{ from: line.key, to: mate.key, label: mate.label }];
+      if (using.some((m) => !Exclusions.check(globalThis.MP.applySubs(m, sub), hardTerms).ok)) continue;
+      if (best && cost >= best.now.cost) continue;
+      const tagFrom = TAGS[line.key] || {}, tagTo = TAGS[mate.key] || {};
+      const tagChanges = [...new Set([...Object.keys(tagFrom), ...Object.keys(tagTo)])]
+        .filter((n) => (tagFrom[n] || null) !== (tagTo[n] || null))
+        .map((nutrient) => ({ nutrient, from: tagFrom[nutrient] || null, to: tagTo[nutrient] || null }));
+      const sameUnit = line.needed && line.needed.unit === item.unit;
+      const qtyVal = packs * item.packSize;
+      best = {
+        lineId: line.id, key: line.key, label: line.label, meals: line.meals,
+        to: { key: mate.key, label: mate.label, qty: { value: qtyVal, unit: item.unit, raw: `${qtyVal}${item.unit === "each" ? "" : item.unit}` } },
+        was: { packs: line.packs, cost: line.lineCost },
+        now: { packs, cost: Math.round(cost * 100) / 100 },
+        saving: Math.round((line.lineCost - cost) * 100) / 100,
+        estimated: !sameUnit || item.estimated,
+        tagChanges,
+      };
+    }
+    if (best) out.push(best);
+  }
+  out.sort((a, b) => b.saving - a.saving);
+  return json(200, { updatedAt: plan.updatedAt || null, shopDay, swaps: out });
 }
 
 // Phase 55: KV `shopping` is every shopping line's state (plan ticks and extras). KV `adhoc` is read once, to migrate.
@@ -1178,7 +1241,7 @@ const UNLOGGED = {
 const row = (method, path, kind, o = {}) => ({ method, path, assistant: ASSISTANT_ALLOWED.has(`${method} ${path}`), kind, ...o, ...(APP_SIDE.has(path) ? { appSide: true } : {}) });
 const quiet = (why) => ({ log: "unlogged", why });
 export const ROUTES = [
-  ...["/discover", "/ranking", "/nutrition", "/day", "/expiring", "/cookable", "/leftovers", "/quick", "/substitutions", "/product-ranking", "/ratings", "/why", "/scale", "/shopping", "/shopping/lines", "/adhoc", "/drafts", "/activity"]
+  ...["/discover", "/ranking", "/nutrition", "/day", "/expiring", "/cookable", "/leftovers", "/quick", "/substitutions", "/product-ranking", "/ratings", "/why", "/scale", "/shopping", "/swaps", "/shopping/lines", "/adhoc", "/drafts", "/activity"]
     .map((path) => row("GET", path, "read")),
   row("GET", "/meal/:id/method", "read", { assistant: true }),
   ...Object.entries(KEYS).flatMap(([path, key]) => {
@@ -1504,6 +1567,10 @@ export default {
     if (url.pathname === "/shopping") {
       if (request.method !== "GET") return json(405, "method not allowed");
       return shopping(env);
+    }
+    if (url.pathname === "/swaps") {
+      if (request.method !== "GET") return json(405, "method not allowed");
+      return swaps(url.searchParams, env);
     }
 
     const kvKey = KEYS[url.pathname];

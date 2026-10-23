@@ -85,6 +85,12 @@
   },
   {
     "method": "GET",
+    "path": "/swaps",
+    "assistant": true,
+    "kind": "read"
+  },
+  {
+    "method": "GET",
     "path": "/shopping/lines",
     "assistant": true,
     "kind": "read"

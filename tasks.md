@@ -764,6 +764,12 @@ Requires Phase 72 (the chat's per-slot Reject, `plan-chat.js`, unbuilt: build af
 
 ## Phase 76: Cheaper swaps route
 Spec: `.claude/specs/phase76.md`
+- [x] Extract the `shopping()` list-building helper (`loadShopLists`); `/shopping` tests unchanged
+- [x] `swaps()`: shop-list select, priciest grouped lines, `packsFor`/`priceFor` cost compare, exclusion re-check per using meal (allergies+never), `tagChanges`, sort/limit
+- [x] Route branch, `ROUTES` row, `ASSISTANT_ALLOWED`, `node tools/routes_build.mjs`
+- [x] `worker_test.mjs` cases
+- [x] Mark Phase 76 in `docs/roadmap.md`
+- [ ] Live: ask the assistant "any cheaper swaps this week?" against the deployed Worker and confirm the answer matches `GET /swaps`
 
 ## Phase 77: Weekly spend log [S]
 - [ ] `spend` KV key `{ updatedAt, weeks: { "<shop-day ISO>": { total, source, at } } }`; add `spend: ["weeks", null]` to `ITEMS` (`worker/worker.js` ~1157) so it is logged and undoable (Phase 48); model the handler on `putMealRating`

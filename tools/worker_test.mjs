@@ -704,4 +704,42 @@ assert.equal((await call("GET", "/today", "a")).body.water, 3); // /today untouc
   const gen = readFileSync(new URL("../worker/routes.json", import.meta.url), "utf8");
   assert.equal(gen, JSON.stringify(ROUTES, null, 2) + "\n", "routes.json is stale: node tools/routes_build.mjs");
 }
+// Phase 76: GET /swaps
+{
+  const SG = (await import(new URL("../substitution-groups.json", import.meta.url), { with: { type: "json" } })).default;
+  const meal = (id, ings) => ({ id, name: id.toUpperCase(), servings: 1, mealTypes: ["dinner"], ingredients: ings });
+  kv.delete("shopping"); kv.delete("settings"); kv.delete("pantry");
+  kv.set("library", JSON.stringify({ meals: [meal("p1", [{ key: "peppers", qty: "2" }, { key: "rice", qty: "100g" }]), meal("p2", [{ key: "peppers", qty: "2" }])] }));
+  kv.set("plan", JSON.stringify({ startDate: "2026-10-26", days: [{ day: 1, slots: { dinner: { mealId: "p1" } } }, { day: 2, slots: { dinner: { mealId: "p2" } } }] }));
+  let r = await call("GET", "/swaps", "a");
+  assert.equal(r.status, 200);
+  assert.equal(r.body.swaps.length, 1); // rice has no group
+  const sw = r.body.swaps[0];
+  assert.deepEqual([sw.key, sw.to.key, sw.lineId, sw.estimated, sw.saving > 0, sw.now.cost < sw.was.cost], ["peppers", "onion", "p:2026-10-26:1:pepper", true, true, true]);
+  assert.deepEqual(sw.tagChanges.map((t) => t.nutrient).sort(), ["vitC"]);
+  assert.deepEqual(sw.tagChanges.find((t) => t.nutrient === "vitC"), { nutrient: "vitC", from: "high", to: null });
+  assert.equal((await call("GET", "/swaps", "h")).status, 200);
+  assert.equal((await call("GET", "/swaps", "")).status, 401);
+  assert.equal((await call("GET", "/swaps?day=2&limit=1", "a")).status, 200);
+  for (const q of ["limit=0", "limit=11", "limit=x", "day=99", "day=0", "day=1.5"]) assert.equal((await call("GET", "/swaps?" + q, "a")).status, 400, q);
+  // a line already skipped is not offered
+  await call("POST", "/shopping/lines", "h", { lines: [{ id: sw.lineId, state: "skipped", updatedAt: new Date().toISOString() }] });
+  assert.deepEqual((await call("GET", "/swaps", "a")).body.swaps, []);
+  kv.delete("shopping");
+  // never/allergy on the mate drops the swap
+  kv.set("settings", JSON.stringify({ updatedAt: "2026-10-24T00:00:00.000Z", never: ["onion"] }));
+  assert.deepEqual((await call("GET", "/swaps", "a")).body.swaps, []);
+  kv.delete("settings");
+  // a mushroom mate is never returned
+  SG.groups.push({ id: "t", label: "t", members: [{ key: "peppers", label: "Peppers" }, { key: "mushroom", label: "Mushroom" }] });
+  kv.set("library", JSON.stringify({ meals: [meal("p1", [{ key: "peppers", qty: "4" }])] }));
+  const aromatic = SG.groups.shift(); // aromatic_veg out, so only the mushroom mate is on offer
+  const mush = SG.groups.pop();
+  SG.groups.push({ id: "t2", label: "t2", members: [{ key: "peppers", label: "Peppers" }, { key: "chard", label: "Chard" }] });
+  assert.equal((await call("GET", "/swaps", "a")).body.swaps.length, 1, "control: a non-mushroom cheaper mate is offered");
+  SG.groups.pop(); SG.groups.push(mush);
+  kv.set("plan", JSON.stringify({ startDate: "2026-10-26", days: [{ day: 1, slots: { dinner: { mealId: "p1" } } }] }));
+  assert.deepEqual((await call("GET", "/swaps", "a")).body.swaps, []);
+  SG.groups.pop(); SG.groups.unshift(aromatic);
+}
 console.log("worker_test: ok");

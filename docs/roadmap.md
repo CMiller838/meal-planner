@@ -570,13 +570,15 @@ exclusions. Requires Phases 54, 66.
 **Verified 2026-10-23:** `check.py` 10/10; walk (PC + phone): alternatives equal `candidatesFor` top 3, Keep locks without changing the meal, a pick changes only day 2 and locks, a refused exclusion leaves `mp_plan` byte-identical, a leftover tomorrow shows no alternatives, last plan day (rolling off) shows no card.
 
 
-## Phase 76: Cheaper swaps route [M] — not started
+## Phase 76: Cheaper swaps route [M] — built 2026-10-24, live checks pending
 
 **Added 2026-10-23** (from `notion_assistant` Phase 44; the planner is the meal specialist). `GET /swaps?day=` returns, for the priciest
 shopping lines, in-group alternatives from `substitution-groups.json` that cost less by `pack-sizes.json`, each with
 `tagChanges` (nutrient levels that differ via `ingredient-nutrient-tags.json`) and a re-check against the hard exclusions. Read-only
 suggestions; the assistant applies an accepted one through `POST /shopping/lines`. **Verify:** a swap onto an excluded food is never
 returned; a tag change is listed; no group, no swap. Requires Phases 28, 55.
+
+**Verified 2026-10-24:** `worker_test.mjs` covers a priced swap (`estimated`, `tagChanges`), `never` on the mate, a mushroom mate, no-group line, skipped line, 400s, assistant/app/no token. Live: the assistant's answer against the deployed Worker.
 
 ## Phase 77: Weekly spend log [S] — not started
 
