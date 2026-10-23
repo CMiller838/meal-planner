@@ -50,6 +50,7 @@ when next touched, do not add more.
 - Sheets: bottom `.modal-sheet` over a dark overlay; confirmations and undo via `.toast`.
 - Status: colour plus text (`--danger`, `--accent-2`, `--butter`), `.banner` / `.hermes-banner` for notices; empty states use `.empty`.
 - Plan screens: `.week-block`, `.day-row`, `.slot-card`; shopping uses `.shop-block` / `.shop-line`.
+- Meter: sticky `.meter-strip` under the nav, built once and updated in place; `.meter-bar` width eases via CSS transition, numbers count up ~400 ms on edit only (instant on first paint, staged reveal, reduced motion).
 
 ## Component sources
 Swipe deck, fan and filmstrip are original to this project (prototypes `cork-kitchen-swipe-*.html`). Nothing is adapted from a library.

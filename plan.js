@@ -170,6 +170,7 @@
     const byId = Object.fromEntries(c.library.map((m) => [m.id, m]));
     const costs = c.packData ? MP.ShoppingList.costIndex(c.library, c.packData) : null;
     let cost = costs ? 0 : null;
+    const weekCost = [costs ? 0 : null, costs ? 0 : null];
     let quickDinners = 0;
     const weeks = [[], []];
     pl.days.forEach((d, i) => {
@@ -181,13 +182,113 @@
         const prev = i > 0 && pl.days[i - 1].slots[t];
         const repeat = t === "dinner" && prev && prev.mealId === slot.mealId;
         if (meal.leftoverOf || slot.frozenFrom || repeat) return;
-        if (costs && costs[meal.id]) cost += costs[meal.id].cost;
+        if (costs && costs[meal.id]) { cost += costs[meal.id].cost; weekCost[i < 7 ? 0 : 1] += costs[meal.id].cost; }
         if (t === "dinner" && MP.Generator.effortOf(meal) === "quick") quickDinners++;
       });
     });
     const wk = (m) => Math.round(MP.Nutrition.dayCoverage(m, c.tags, c.targets).proteinGramsApprox || 0);
     const all = MP.Nutrition.weekCoverage(weeks, c.tags, c.targets);
-    return { cost, proteinG: [wk(weeks[0]), wk(weeks[1])], gaps: all.missing.length + all.partial.length, quickDinners };
+    const wg = (m) => { const w = MP.Nutrition.weekCoverage([m], c.tags, c.targets); return [...w.missing, ...w.partial]; };
+    return { cost, weekCost, proteinG: [wk(weeks[0]), wk(weeks[1])], gaps: all.missing.length + all.partial.length, weekGaps: [wg(weeks[0]), wg(weeks[1])], quickDinners };
+  }
+
+  // Phase 70: the one dinner swap that closes the biggest gap of the weaker week. Suggestion only, never an edit;
+  // nutrition (rankByGap) picks the meal, cost is never consulted. `ctx` lets tests inject plan/library/candidates.
+  function fixGap(pl, ctx) {
+    const c = Object.assign({ plan, library, tags: tagsData && tagsData.tags, targets: tagsData && tagsData.targets, cands: candidatesFor }, ctx);
+    pl = pl || c.plan;
+    if (!pl || !c.tags) return null;
+    const byId = Object.fromEntries(c.library.map((m) => [m.id, m]));
+    const mealOf = (slot) => (slot && slot.mealId ? byId[slot.mealId] : null);
+    const weekMeals = (w) => pl.days.slice(w * 7, w * 7 + 7).flatMap((d) => SLOT_TYPES.map((t) => mealOf(d.slots[t])).filter(Boolean));
+    const short = (meals) => { const w = MP.Nutrition.weekCoverage([meals], c.tags, c.targets); return [...w.missing, ...w.partial]; };
+    const gaps = [short(weekMeals(0)), short(weekMeals(1))];
+    const w = gaps[1].length > gaps[0].length ? 1 : 0;
+    const nutrient = gaps[w][0];
+    if (!nutrient) return null;
+    for (const d of pl.days.slice(w * 7, w * 7 + 7)) {
+      const slot = d.slots.dinner;
+      const cur = mealOf(slot);
+      if (!slot || !cur || slot.locked || slot.eatenAt || slot.eatingOut || slot.frozenFrom || cur.leftoverOf) continue;
+      const ranked = MP.Nutrition.rankByGap(c.cands(d.day, "dinner"), [nutrient], c.tags);
+      for (const to of ranked) {
+        const meals = weekMeals(w).slice();
+        meals.splice(meals.indexOf(cur), 1, to);
+        if (!short(meals).includes(nutrient)) return { day: d.day, from: cur.id, to: to.id, nutrient };
+      }
+    }
+    return null;
+  }
+
+  // Phase 70: sticky Wk1|Wk2 meter. Display-only; built once, updated in place, animates only what an edit changed.
+  let lastMeter = null, meterFrame = 0, fixDismissed = { sig: "", days: new Set() };
+  const reducedMotion = () => window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  function renderMeter(staged) {
+    const el = document.getElementById("meter-strip");
+    if (!el || !tagsData || !plan) return;
+    if (!el.firstChild) {
+      el.innerHTML = [1, 2].map((n, i) => `<div class="meter-week" data-w="${i}"><b>Wk ${n}</b>
+        <div class="meter-track"><div class="meter-bar"></div></div>
+        <div class="meter-line"><span class="m-prot"></span> · <span class="m-cost"></span></div>
+        <div class="meter-gaps"></div></div>`).join("") + `<div class="meter-fix"><button class="btn-secondary" id="fix-gap-btn" type="button"></button><div id="fix-card" class="fix-card" hidden></div></div>`;
+      el.querySelector("#fix-gap-btn").addEventListener("click", () => { fixDismissed.days.delete(-1); renderFixCard(true); });
+    }
+    const m = planMetrics(plan);
+    const target = (tagsData.targets.protein_g || 0) * 7;
+    const next = [0, 1].map((i) => ({
+      pct: target ? Math.max(0, Math.min(100, (m.proteinG[i] / target) * 100)) : 0,
+      prot: m.proteinG[i], cost: m.weekCost[i],
+      gaps: m.weekGaps[i],
+    }));
+    const instant = !lastMeter || staged === true || reducedMotion();
+    cancelAnimationFrame(meterFrame);
+    const t0 = performance.now();
+    el.querySelectorAll(".meter-week").forEach((w, i) => {
+      const n = next[i], o = lastMeter && lastMeter[i];
+      w.querySelector(".meter-bar").style.width = n.pct.toFixed(1) + "%";
+      w.querySelector(".meter-gaps").textContent = n.gaps.length ? `${n.gaps.length} gap${n.gaps.length === 1 ? "" : "s"}: ${n.gaps.slice(0, 3).map(labelize).join(", ")}` : "No gaps";
+      const paint = (f) => {
+        w.querySelector(".m-prot").textContent = `~${Math.round(o.prot + (n.prot - o.prot) * f)}g protein (approx)`;
+        w.querySelector(".m-cost").textContent = n.cost === null ? "n/a" : `~£${(o.cost + (n.cost - o.cost) * f).toFixed(0)}`;
+      };
+      if (instant || (o.prot === n.prot && o.cost === n.cost)) {
+        w.querySelector(".m-prot").textContent = `~${n.prot}g protein (approx)`;
+        w.querySelector(".m-cost").textContent = n.cost === null ? "n/a" : `~£${n.cost.toFixed(0)}`;
+      } else {
+        w._paint = paint;
+      }
+    });
+    const animated = [...el.querySelectorAll(".meter-week")].filter((w) => w._paint);
+    if (animated.length) {
+      const step = (now) => {
+        const f = Math.min(1, (now - t0) / 400);
+        animated.forEach((w) => w._paint(f));
+        if (f < 1) meterFrame = requestAnimationFrame(step);
+        else animated.forEach((w) => { w._paint = null; });
+      };
+      meterFrame = requestAnimationFrame(step);
+    }
+    lastMeter = next;
+    renderFixCard(false);
+  }
+
+  /** Fix-this-gap button label + card. `open` = user just pressed the button. */
+  function renderFixCard(open) {
+    const btn = document.getElementById("fix-gap-btn"), card = document.getElementById("fix-card");
+    if (!btn) return;
+    const sig = planSig(plan);
+    if (fixDismissed.sig !== sig) fixDismissed = { sig, days: new Set() };
+    const fix = fixGap();
+    btn.disabled = !fix;
+    btn.textContent = fix ? "Fix this gap" : (planMetrics(plan).gaps ? "No single swap closes the gap" : "No gaps to fix");
+    card.hidden = !(open && fix && !fixDismissed.days.has(fix.day));
+    if (card.hidden) return;
+    const name = (id) => (mealsById[id] || {}).name || id;
+    card.innerHTML = `<div>Day ${fix.day} dinner: ${esc(name(fix.from))} → ${esc(name(fix.to))}, closes ${esc(labelize(fix.nutrient))}</div>
+      <button class="btn-secondary" data-act="swap" type="button">Swap</button> <button class="btn-secondary" data-act="skip" type="button">Not this</button>`;
+    card.querySelector('[data-act="swap"]').addEventListener("click", () => { setSlotMeal(fix.day, "dinner", fix.to); renderPlan(); });
+    card.querySelector('[data-act="skip"]').addEventListener("click", () => { fixDismissed.days.add(fix.day); card.hidden = true; });
   }
 
   function candidateWeeks() {
@@ -587,6 +688,7 @@
     }
     root.innerHTML = html;
     renderGapStrip();
+    renderMeter(staged);
 
     root.querySelectorAll(".hint-chip").forEach((el) => {
       el.addEventListener("click", () => {
@@ -1427,7 +1529,7 @@
     renderPlacementBanner(e.detail);
   });
 
-  MP.Plan = { reflow, snapshot, restore, planMetrics, parseGuidedSlots, applyPlacements, logPortion, matchEatRequests, applyEatRequests };
+  MP.Plan = { reflow, snapshot, restore, planMetrics, fixGap, parseGuidedSlots, applyPlacements, logPortion, matchEatRequests, applyEatRequests };
 
   async function init() {
     MP.initTheme();

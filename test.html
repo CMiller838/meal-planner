@@ -2945,6 +2945,37 @@
     localStorage.removeItem("mp_planPrefs");
   }
 
+  // Phase 70: planMetrics week arrays + fixGap
+  {
+    const lib3 = [
+      { id: "a", name: "A", mealTypes: ["dinner"], ingredients: [{ key: "chicken", label: "chicken", qty: "1" }] },
+      { id: "b", name: "B", mealTypes: ["dinner"], ingredients: [] },
+      { id: "r", name: "R", mealTypes: ["dinner"], ingredients: Object.keys(tags).map((k) => ({ key: k, label: k, qty: "1" })) },
+    ];
+    const mk = (ids, extra) => ({ days: ids.map((id, i) => ({ day: i + 1, slots: { dinner: Object.assign({ mealId: id }, i === 0 ? extra : {}) } })) });
+    const ids = ["a", "b", "a", "b", "a", "b", "a", "b", "a", "b", "a", "b", "a", "b"];
+    const X = { library: lib3, tags, targets, packData: realPackData };
+    const m = MP.Plan.planMetrics(mk(ids), X);
+    check("planMetrics: weekCost sums to cost", Math.abs(m.weekCost[0] + m.weekCost[1] - m.cost) < 1e-6);
+    check("planMetrics: weekGaps sum to gaps only when weeks agree, arrays present", Array.isArray(m.weekGaps[0]) && Array.isArray(m.weekGaps[1]));
+    check("planMetrics: no packData -> weekCost nulls", MP.Plan.planMetrics(mk(ids), { library: lib3, tags, targets, packData: null }).weekCost.every((c) => c === null));
+    const fixCtx = (pl, cands) => ({ library: lib3, tags, targets, cands: cands || ((d) => lib3.filter((x) => x.id !== pl.days[d - 1].slots.dinner.mealId)) });
+    const bOnly = [lib3[1]];
+    const allB = mk(ids.map(() => "b"));
+    const fx = MP.Plan.fixGap(allB, fixCtx(allB));
+    check("fixGap: empty-ish week proposes the rich-meal swap", fx && fx.to === "r" && fx.from === "b" && typeof fx.nutrient === "string");
+    if (fx) {
+      const swapped = mk(ids.map(() => "b")); swapped.days[fx.day - 1].slots.dinner.mealId = fx.to;
+      const wc = MP.Nutrition.weekCoverage([swapped.days.slice(0, 7).map((d) => lib3.find((x) => x.id === d.slots.dinner.mealId))], tags, targets);
+      check("fixGap: swap removes the nutrient from missing/partial", ![...wc.missing, ...wc.partial].includes(fx.nutrient));
+    }
+    const locked = mk(ids.map(() => "b"));
+    locked.days.forEach((d) => { d.slots.dinner.locked = true; });
+    check("fixGap: locked slots never swapped", MP.Plan.fixGap(locked, fixCtx(locked)) === null);
+    const none = mk(ids.map(() => "b"));
+    check("fixGap: no closing candidate -> null", MP.Plan.fixGap(none, fixCtx(none, () => bOnly)) === null);
+  }
+
   // Phase 64: noBatch + planMetrics
   {
     const gp = (pr, lib) => MP.Generator.generatePlan(lib || library, tags, targets, shelfData, "2026-09-07", undefined, {}, pr);

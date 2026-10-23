@@ -808,3 +808,14 @@ button.ghost.danger { color: var(--danger); border-color: var(--danger); }
 .swipe-card.fly-right { transform: translate(120%, 0) rotate(20deg) !important; }
 .swipe-card.fly-left { transform: translate(-120%, 0) rotate(-20deg) !important; }
 @media (prefers-reduced-motion: reduce) { .swipe-card.fly-right, .swipe-card.fly-left { transition: none; } }
+
+/* ---- Phase 70: sticky plan meter (display-only; animates on edit) ---- */
+.meter-strip { position: sticky; top: 3.1rem; z-index: 15; display: grid; grid-template-columns: 1fr 1fr; gap: .5rem .75rem; padding: .5rem .75rem; margin-bottom: .75rem; background: var(--bg-2); border: 1px solid rgba(255, 255, 255, .12); border-radius: 10px; font-size: .78rem; }
+.meter-week { min-width: 0; }
+.meter-track { height: 8px; margin: .25rem 0; border-radius: 4px; background: rgba(255, 255, 255, .14); overflow: hidden; }
+.meter-bar { height: 100%; width: 0; background: var(--accent-2); border-radius: 4px; transition: width .4s ease; }
+.meter-gaps { color: var(--text); overflow-wrap: anywhere; }
+.meter-fix { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; }
+.fix-card { flex: 1 1 14rem; }
+.fix-card[hidden] { display: none; }
+@media (prefers-reduced-motion: reduce) { .meter-bar { transition: none; } }

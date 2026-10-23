@@ -723,6 +723,8 @@ Spec: `.claude/specs/phase67.md` (build it with `/build` or queue it for `/overn
 
 ## Phase 70: Live nutrient and cost meter while editing
 - Spec: `.claude/specs/phase70.md`
+- [x] `planMetrics` weekCost/weekGaps; `fixGap` (tests in test.html)
+- [x] `#meter-strip` markup, CSS, `renderMeter` delta/count-up, Fix-this-gap card, `sw.js` CACHE, UI_STYLE + CLAUDE.md lines
 - [ ] Live: on the phone PWA, swap a dinner from the plan page and watch the bars and £ move; tap "Fix this gap" and take the swap
 
 ## Phase 71: What-if preview on a candidate [S]

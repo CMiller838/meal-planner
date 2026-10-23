@@ -721,7 +721,8 @@ themes. Requires Phase 24.
 
 **Built 2026-10-23:** one `renderDeck` (swap + guided) with Take/Pass buttons, arrow keys and an "n left" counter; takes and passes are stateless, so the taste-feed line was dropped. Verified: check.py 9/9, walk.mjs pass x3 / ArrowLeft / ArrowRight take, guided take stays unsaved, double click fires once, reduced motion, PC and 390 px.
 
-## Phase 70: Live nutrient and cost meter while editing [M] — not started
+## Phase 70: Live nutrient and cost meter while editing [M] — built 2026-10-23, live checks pending
+**Verified 2026-10-23:** check.py 9/9; tester PASS (swap changes only that week's meter, fixGap closes the gap, 390 px no overflow). Live: phone PWA check in tasks.md.
 
 **Added 2026-10-22.** As meals are swapped, the coverage bars and weekly cost animate to the new values, and a "fix this gap"
 button offers the swap that closes the biggest gap, taken from `rankByGap`. Coverage and warnings currently render once per plan
