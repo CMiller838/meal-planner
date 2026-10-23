@@ -276,6 +276,32 @@ for (const [vp, size] of Object.entries({ pc: { width: 1440, height: 900 }, phon
     await page.waitForSelector('#swap-overlay.hidden', { state: 'attached' });
     await page.click('#chat-exit');
   });
+  // Phase 73: tie and trade-off cards (tieMargin widened so the generated plan has a tie; a £5 budget forces a trade-off)
+  await step('chat: tie card (one, ignorable, alt swaps the working copy only) and trade-off card (Accept adds diff rows, Exit restores)', async () => {
+    chatMock.reply = { text: 'ok', edits: [] };
+    await openChat();
+    await page.evaluate(() => localStorage.setItem('mp_planPrefs', JSON.stringify({ updatedAt: new Date().toISOString(), budgetTarget: 5 })));
+    await page.click('#chat-exit');
+    await openChat();
+    await page.evaluate(async () => { (await MP.ShoppingList.load()).planning.tieMargin = 1000; });
+    for (let i = 0; i < 13 && !await page.locator('#chat-cards .chat-tie').count(); i++) await page.click('#chat-next');
+    if (!await page.locator('#chat-cards .chat-tie').count()) throw new Error('no tie card on any day with tieMargin 1000');
+    if (await page.locator('#chat-cards .chat-tie').count() !== 1) throw new Error('expected exactly one tie card');
+    await shot('chat-cards'); await page.evaluate(() => { document.documentElement.dataset.theme = 'light'; }); await shot('chat-cards-light');
+    const planBefore = await planLS();
+    await page.locator('#chat-cards .chat-tie button').nth(1).click();
+    await page.waitForSelector('#chat-diff .diff-row');
+    if (await page.locator('#chat-cards .chat-tie').count()) throw new Error('tie card re-asked for the same day');
+    if (await planLS() !== planBefore) throw new Error('tie pick saved mp_plan');
+    if (await page.locator('#chat-cards .chat-trade').count()) {
+      const rows = await page.locator('#chat-diff .diff-row').count();
+      await page.click('#chat-cards .chat-trade button.primary');
+      await page.waitForFunction(n => document.querySelectorAll('#chat-diff .diff-row').length > n, rows, { timeout: 8000 });
+      if (!(await page.locator('.chat-understood').allTextContents()).some(t => /Week 1: £\d+ → £\d+ · protein/.test(t))) throw new Error('no totals line after Accept');
+    } else throw new Error('no trade-off card with a £5 budget');
+    await page.click('#chat-exit');
+    if (await planLS() !== planBefore) throw new Error('Exit changed mp_plan');
+  });
   await step('chat: a stale bridge lands on plan-with-me.html', async () => {
     chatMock.bridgeAgeMs = 120000;
     await page.goto(`${base}/plan.html`);

@@ -131,24 +131,27 @@
     return { days, nutrients, notLogged: days.filter((d) => !d.logged).map((d) => d.date) };
   }
 
+  /** How well one meal fills the given gap nutrients (sum of tag weights). */
+  function gapScore(meal, gapNutrients, tags) {
+    let score = 0;
+    for (const ing of meal.ingredients || []) {
+      const tag = tags[ing.key];
+      if (!tag) continue;
+      for (const [nutrient, level] of Object.entries(tag)) {
+        if (gapNutrients.includes(nutrient)) score += LEVEL_WEIGHT[level] || 0;
+      }
+    }
+    return score;
+  }
+
   /** Sort candidate meals by how well they fill the given gap nutrients. */
   function rankByGap(candidates, gapNutrients, tags) {
     if (!gapNutrients.length) return candidates.slice();
     return candidates
-      .map((meal) => {
-        let score = 0;
-        for (const ing of meal.ingredients || []) {
-          const tag = tags[ing.key];
-          if (!tag) continue;
-          for (const [nutrient, level] of Object.entries(tag)) {
-            if (gapNutrients.includes(nutrient)) score += LEVEL_WEIGHT[level] || 0;
-          }
-        }
-        return { meal, score };
-      })
+      .map((meal) => ({ meal, score: gapScore(meal, gapNutrients, tags) }))
       .sort((a, b) => b.score - a.score)
       .map((x) => x.meal);
   }
 
-  MP.Nutrition = { load, tagsForMeal, dayCoverage, weekCoverage, rankByGap, TRACKED_NUTRIENTS, withGymDay, withProfile, profileOf, eatenDayCoverage, weekGaps };
+  MP.Nutrition = { load, tagsForMeal, dayCoverage, weekCoverage, rankByGap, gapScore, TRACKED_NUTRIENTS, withGymDay, withProfile, profileOf, eatenDayCoverage, weekGaps };
 })(typeof globalThis !== "undefined" ? globalThis : this);

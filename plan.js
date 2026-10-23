@@ -499,6 +499,72 @@
     return changes;
   }
 
+  // Phase 73: tie questions and trade-off cards. Both are session UI over the chat's working copy; nothing is stored.
+  const planningKnob = (k, d) => { const v = packData && packData.planning && packData.planning[k]; return typeof v === "number" ? v : d; };
+  // A dinner the cards may touch: not held (locked/eaten), eaten out, frozen, a leftover or a batch head.
+  const cardSkip = (slot, meal) => !slot || !meal || isHeld(slot) || slot.eatingOut || slot.frozenFrom || meal.leftoverOf || MP.isBatch(meal);
+
+  /** { day, slot, current, alt } when the current dinner and the top candidate fill that day's gaps equally, else null. */
+  function tieFor(day, ctx) {
+    const c = Object.assign({ plan, library, tags: tagsData && tagsData.tags, targets: tagsData && tagsData.targets, cands: candidatesFor, margin: planningKnob("tieMargin", 0) }, ctx);
+    const byId = Object.fromEntries(c.library.map((m) => [m.id, m]));
+    const slots = c.plan.days[day - 1].slots, cur = slots.dinner && byId[slots.dinner.mealId];
+    if (!c.tags || cardSkip(slots.dinner, cur)) return null;
+    const alt = c.cands(day, "dinner")[0];
+    if (!alt || alt.id === cur.id) return null;
+    const others = SLOT_TYPES.filter((t) => t !== "dinner").map((t) => slots[t] && byId[slots[t].mealId]).filter(Boolean);
+    const cov = MP.Nutrition.dayCoverage(others, c.tags, c.targets);
+    const gaps = [...cov.missing, ...cov.partial];
+    if (!gaps.length) return null; // nothing left to fill, so "equal" means nothing
+    const sc = (m) => MP.Nutrition.gapScore(m, gaps, c.tags);
+    return Math.abs(sc(cur) - sc(alt)) <= c.margin ? { day, slot: "dinner", current: cur, alt } : null;
+  }
+
+  /** £/week the chat is held to: this session's budget edit, else profile settings, else plan prefs; 0 = none. */
+  function effectiveBudget() {
+    const cb = chatPrefs && Object.values(chatPrefs.budget || {});
+    if (cb && cb.length) return Number(cb[cb.length - 1]) || 0;
+    return Number((MP.Sync.settings() || {}).budgetTarget) > 0 ? Number(MP.Sync.settings().budgetTarget) : Number(prefs.budgetTarget) || 0;
+  }
+
+  /** Up to tradeMaxSwaps dinner swaps in `week` that save money, with before/after numbers from planMetrics; null if none. */
+  function budgetSwaps(week, overBy, ctx) {
+    const c = Object.assign({ plan, library, tags: tagsData && tagsData.tags, targets: tagsData && tagsData.targets, packData, cands: candidatesFor,
+      shortlist: planningKnob("shortlistSize", 4), maxSwaps: planningKnob("tradeMaxSwaps", 2) }, ctx);
+    const base = planMetrics(c.plan, c);
+    if (base.weekCost[week] === null) return null;
+    const byId = Object.fromEntries(c.library.map((m) => [m.id, m]));
+    const options = [];
+    for (const d of c.plan.days.slice(week * 7, week * 7 + 7)) {
+      const from = byId[(d.slots.dinner || {}).mealId];
+      if (cardSkip(d.slots.dinner, from)) continue;
+      let best = null;
+      for (const to of c.cands(d.day, "dinner").slice(0, c.shortlist)) {
+        const copy = structuredClone(c.plan);
+        copy.days[d.day - 1].slots.dinner = { mealId: to.id, locked: true };
+        const m = planMetrics(copy, c);
+        const saving = base.weekCost[week] - m.weekCost[week], loss = base.proteinG[week] - m.proteinG[week];
+        if (saving > 0 && (!best || saving > best.saving || (saving === best.saving && loss < best.loss))) best = { day: d.day, from, to, saving, loss };
+      }
+      if (best) options.push(best);
+    }
+    options.sort((a, b) => b.saving - a.saving);
+    const swaps = [];
+    let saved = 0;
+    for (const o of options) {
+      if (swaps.length >= c.maxSwaps || saved >= overBy) break;
+      swaps.push(o); saved += o.saving;
+    }
+    if (!swaps.length) return null;
+    const after = structuredClone(c.plan);
+    swaps.forEach((o) => { after.days[o.day - 1].slots.dinner = { mealId: o.to.id, locked: true }; });
+    const m = planMetrics(after, c);
+    return {
+      week, swaps: swaps.map((o) => ({ day: o.day, from: o.from, to: o.to })),
+      before: { cost: base.weekCost[week], proteinG: base.proteinG[week] }, after: { cost: m.weekCost[week], proteinG: m.proteinG[week] },
+    };
+  }
+
   /** Names-only context sent with each chat message; day is the card in focus. */
   function chatContext(day) {
     const m = planMetrics(plan), wk = day > 7 ? 1 : 0;
@@ -510,6 +576,7 @@
       day, startDate: plan.startDate, dayMeals,
       gaps: m.weekGaps[wk].slice(0, 3), proteinG: m.proteinG[wk], weekCost: m.weekCost[wk],
       budgetTarget: Number(prefs.budgetTarget) || 0,
+      cards: chatCardLines(),
       expiring: MP.ShoppingList.useUpItems(MP.Sync.localItems("pantry"), plan, today, shelfData).slice(0, 5).map((x) => x.name),
     };
   }
@@ -1668,7 +1735,7 @@
     renderPlacementBanner(e.detail);
   });
 
-  MP.Plan = { applyChatEdits, chatContext, resetChatPrefs, reflow, snapshot, restore, planMetrics, whatIf, fixGap, parseGuidedSlots, applyPlacements, logPortion, matchEatRequests, applyEatRequests };
+  MP.Plan = { applyChatEdits, chatContext, tieFor, effectiveBudget, budgetSwaps, resetChatPrefs, reflow, snapshot, restore, planMetrics, whatIf, fixGap, parseGuidedSlots, applyPlacements, logPortion, matchEatRequests, applyEatRequests };
 
   // ---- Planning chat with Hermes (Phase 72) ----
   // The working plan is `plan` itself with guidedActive on (no savePlan runs); Exit restores the snapshot, Save commits.
@@ -1715,6 +1782,92 @@
       el.addEventListener("click", open);
       el.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); open(); } });
     });
+    renderChatCards();
+  }
+
+  // Phase 73 cards. chat.cards = { tie, trade } is what is on screen now (also sent to Hermes as context.cards).
+  const dayShort = (day) => (plan.startDate ? WEEKDAY[MP.Generator.weekdayOf(plan.startDate, day)] : "Day " + day);
+  const gbp = (n) => "£" + Math.round(n);
+
+  function tradeText(t) {
+    const swaps = t.swaps.map((x) => `${dayShort(x.day)} (${x.from.name} → ${x.to.name})`).join(" and ");
+    const dp = t.after.proteinG - t.before.proteinG;
+    return `Swap ${swaps}: saves ${gbp(t.before.cost - t.after.cost)}, ${dp < 0 ? `costs ${-dp} g protein` : `adds ${dp} g protein`}`;
+  }
+  const tradeTotals = (t) => `Week ${t.week + 1}: ${gbp(t.before.cost)} → ${gbp(t.after.cost)} · protein ${t.before.proteinG} g → ${t.after.proteinG} g`;
+
+  function chatCardLines() {
+    const cards = (chat && chat.cards) || {};
+    return [
+      cards.tie ? `tie ${dayShort(cards.tie.day)}: ${cards.tie.current.name} or ${cards.tie.alt.name}` : null,
+      cards.trade ? `trade-off: ${tradeText(cards.trade)}` : null,
+    ].filter(Boolean);
+  }
+
+  // A swap made from a card goes through setSlotMeal (working copy only) and shows up as a diff row.
+  function cardSwap(day, mealId) {
+    const before = plan.days[day - 1].slots.dinner;
+    setSlotMeal(day, "dinner", mealId);
+    chat.changes.push({ day, slot: "dinner", before, after: plan.days[day - 1].slots.dinner });
+  }
+
+  function cardShell(cls) {
+    const el = document.createElement("div");
+    el.className = "chat-card " + cls;
+    return el;
+  }
+
+  function renderChatCards() {
+    const host = $("chat-cards");
+    host.textContent = "";
+    const cards = (chat.cards = { tie: null, trade: null });
+    const tie = !chat.ask && !chat.tieDone.has(chat.day) ? tieFor(chat.day) : null;
+    if (tie) {
+      cards.tie = tie;
+      const el = cardShell("chat-tie");
+      const q = document.createElement("div");
+      q.textContent = `${dayShort(tie.day)} dinner: this or that?`;
+      el.appendChild(q);
+      [tie.current, tie.alt].forEach((m, i) => {
+        const b = document.createElement("button");
+        b.type = "button"; b.className = "btn-secondary"; b.textContent = m.name;
+        b.addEventListener("click", () => {
+          chat.tieDone.add(tie.day);
+          if (i === 1) { cardSwap(tie.day, m.id); renderChatDiff(); renderPlan(); }
+          renderChatDay();
+        });
+        el.appendChild(b);
+      });
+      host.appendChild(el);
+    }
+    const target = effectiveBudget();
+    if (target > 0) {
+      const wc = planMetrics(plan).weekCost;
+      for (const w of [0, 1]) {
+        if (wc[w] === null || wc[w] <= target || chat.tradeOff[w] === wc[w]) continue;
+        const t = budgetSwaps(w, wc[w] - target);
+        if (!t) continue;
+        cards.trade = t;
+        const el = cardShell("chat-trade");
+        const txt = document.createElement("div");
+        txt.className = "chat-trade-text"; txt.textContent = tradeText(t);
+        const tot = document.createElement("div");
+        tot.className = "chat-trade-totals"; tot.textContent = tradeTotals(t);
+        const ok = document.createElement("button");
+        ok.type = "button"; ok.className = "primary"; ok.textContent = "Accept";
+        ok.addEventListener("click", () => {
+          t.swaps.forEach((x) => cardSwap(x.day, x.to.id));
+          chatBubble("understood", tradeTotals(t)).classList.add("chat-understood");
+          renderChatDiff(); renderPlan(); renderChatDay();
+        });
+        const no = document.createElement("button");
+        no.type = "button"; no.className = "btn-secondary"; no.textContent = "Not now";
+        no.addEventListener("click", () => { chat.tradeOff[w] = wc[w]; renderChatCards(); });
+        el.append(txt, tot, ok, no);
+        host.appendChild(el);
+        break;
+      }
+    }
   }
 
   function renderChatDiff() {
@@ -1745,6 +1898,8 @@
   function onChatReply(m) {
     const { reply } = MP.PlanChat.validateReply(m, vocabAll); // the app re-validates before applying anything
     if (reply.text) chatBubble("hermes", reply.text);
+    chat.ask = !!reply.ask;
+    if (chat.ask) chat.tieDone.add(chat.day); // a question from Hermes closes any open tie card for good
     chat.changes = [];
     if (!reply.ask && reply.edits.length) {
       const changes = applyChatEdits(reply.edits, { focusDay: chat.day });
@@ -1814,7 +1969,7 @@
       MP.PlanChat.call("POST", "/chat", { session, close: true }).catch(() => {});
       return goFallback("Hermes is offline");
     }
-    chat = { session, snapshot: JSON.stringify(plan), day: 1, since: 0, mine: new Set(), pending: 0, deadline: 0, timer: null, changes: [] };
+    chat = { session, snapshot: JSON.stringify(plan), day: 1, since: 0, mine: new Set(), pending: 0, deadline: 0, timer: null, changes: [], ask: true, tieDone: new Set(), tradeOff: {}, cards: {} };
     guidedActive = true; // working copy: no savePlan until Save
     $("chat-log").innerHTML = "";
     $("chat-diff").innerHTML = "";
@@ -1860,7 +2015,7 @@
     $("chat-exit").addEventListener("click", exitChat);
     $("chat-save").addEventListener("click", saveChat);
     $("chat-fallback").addEventListener("click", () => { exitChat(); location.href = "plan-with-me.html"; });
-    const step = (n) => { chat.day = Math.min(plan.days.length, Math.max(1, chat.day + n)); renderChatDay(); };
+    const step = (n) => { if (chat.cards && chat.cards.tie) chat.tieDone.add(chat.day); chat.day = Math.min(plan.days.length, Math.max(1, chat.day + n)); renderChatDay(); };
     $("chat-prev").addEventListener("click", () => chat && step(-1));
     $("chat-next").addEventListener("click", () => chat && step(1));
     $("chat-form").addEventListener("submit", (e) => {

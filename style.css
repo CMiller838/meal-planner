@@ -852,6 +852,13 @@ body.chat-open { overflow: hidden; }
 .chat-bubble.user { align-self: flex-end; background: var(--accent); color: #fff; border-bottom-right-radius: .3rem; }
 .chat-bubble.hermes { align-self: flex-start; background: var(--surface); border: 1px solid var(--border); border-bottom-left-radius: .3rem; }
 .chat-bubble.chat-understood { align-self: flex-start; background: transparent; border: 1px dashed var(--accent-2); color: var(--text-dim); font-size: .8rem; }
+.chat-cards { display: flex; flex-direction: column; gap: .4rem; }
+.chat-cards:empty { display: none; }
+.chat-card { align-self: flex-start; max-width: 100%; display: flex; flex-wrap: wrap; align-items: center; gap: .4rem; padding: .5rem .8rem; border-radius: 1rem; border-bottom-left-radius: .3rem; background: var(--surface); border: 1px solid var(--accent-2); font-size: .9rem; line-height: 1.35; animation: mp-slot-in 220ms ease-out both; overflow-wrap: anywhere; }
+.chat-card > div { flex: 1 1 100%; }
+.chat-card .chat-trade-totals { color: var(--text-dim); font-size: .8rem; }
+.chat-card button { flex: 1 1 auto; min-height: 2.2rem; cursor: pointer; transition: transform 150ms; }
+.chat-card button:active { transform: scale(.97); }
 .chat-typing { align-self: flex-start; display: flex; gap: .3rem; padding: .4rem .8rem; background: var(--surface); border: 1px solid var(--border); border-radius: 1rem; }
 .chat-typing span { width: .45rem; height: .45rem; border-radius: 50%; background: var(--text-dim); animation: mp-chat-dot 1s ease-in-out infinite; }
 .chat-typing span:nth-child(2) { animation-delay: .15s; }
@@ -861,6 +868,6 @@ body.chat-open { overflow: hidden; }
 .chat-form input { flex: 1; min-width: 0; padding: .6rem .8rem; border-radius: .8rem; border: 1px solid var(--border); background: var(--surface); color: var(--text); font: inherit; }
 .chat-form input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 @media (prefers-reduced-motion: reduce) {
-  .plan-chat, .chat-bubble, .diff-row { animation: none; }
+  .plan-chat, .chat-bubble, .chat-card, .diff-row { animation: none; }
   .chat-typing span { animation: none; opacity: .7; }
 }

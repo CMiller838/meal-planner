@@ -65,6 +65,8 @@
     "tasteWindow": 4,
     "tasteMinRated": 3,
     "useUpWindow": 6,
+    "tieMargin": 0,
+    "tradeMaxSwaps": 2,
     "budgetTarget": { "max": 120, "step": 5, "default": 0, "maxShortlist": 10 }
   },
   "aisles": [

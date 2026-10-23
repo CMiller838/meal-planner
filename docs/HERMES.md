@@ -269,3 +269,7 @@ Two tokens, one per consumer: Hermes's `AUTH_TOKEN` (every route), and the perso
 reaches only the rows marked `A` above (`assistant: true` in `routes.json`; `ASSISTANT_ALLOWED` in the Worker). Its
 `PUT /library` is **append only** (a body that changes an existing meal, or drops one the assistant didn't add itself,
 is `403`), and `force` on undo is ignored. `403` elsewhere (e.g. `PUT /prefs`, `PUT /plan`). Never commit either token.
+
+## Planning chat
+
+`context.cards` (on `POST /chat`) lists the tie or trade-off cards currently on screen in the app (e.g. `tie Tue: Chicken curry or Chilli`). The app wrote them; Hermes must not pick between them or contradict them.

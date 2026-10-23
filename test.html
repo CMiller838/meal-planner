@@ -3028,6 +3028,46 @@
     check("fixGap: no closing candidate -> null", MP.Plan.fixGap(none, fixCtx(none, () => bOnly)) === null);
   }
 
+  // Phase 73: gapScore, tieFor, budgetSwaps
+  {
+    const ironC = [
+      { id: "x", ingredients: [{ key: "white_bread" }] },
+      { id: "y", ingredients: [{ key: "beef_mince" }] },
+      { id: "z", ingredients: [] },
+    ];
+    const gaps = ["iron", "zinc"];
+    const bySc = ironC.slice().sort((p, q) => MP.Nutrition.gapScore(q, gaps, tags) - MP.Nutrition.gapScore(p, gaps, tags)).map((m) => m.id);
+    check("gapScore: sorted-by-gapScore order equals rankByGap", deepEqual(bySc, MP.Nutrition.rankByGap(ironC, gaps, tags).map((m) => m.id)));
+    const chk = Object.keys(tags)[0];
+    const A = { id: "a", name: "A", mealTypes: ["dinner"], ingredients: [{ key: "chicken", label: "chicken", qty: "1" }] };
+    const B = { id: "b", name: "B", mealTypes: ["dinner"], ingredients: [] };
+    const Bt = { id: "bt", name: "Bt", mealTypes: ["dinner"], ingredients: [] };
+    const LF = { id: "lf", name: "LF", mealTypes: ["dinner"], leftoverOf: "a", ingredients: [] };
+    const lib4 = [A, B, Bt, LF];
+    const mkp = (ids, extra) => ({ days: ids.map((id, i) => ({ day: i + 1, slots: { dinner: Object.assign({ mealId: id }, extra && extra[i]) } })) });
+    const X = (pl, cands, more) => Object.assign({ plan: pl, library: lib4, tags, targets, packData: realPackData, cands }, more);
+    const tp = mkp(["b", "a"]);
+    const t1 = MP.Plan.tieFor(1, X(tp, () => [Bt]));
+    check("tieFor: equal gapScore is a tie, alt differs from current", t1 && t1.alt.id === "bt" && t1.current.id === "b" && t1.alt.id !== t1.current.id);
+    const rich = { id: "r", name: "R", mealTypes: ["dinner"], ingredients: Object.keys(tags).map((k) => ({ key: k, label: k, qty: "1" })) };
+    check("tieFor: different scores are not a tie", MP.Plan.tieFor(1, X(tp, () => [rich], { library: [...lib4, rich] })) === null);
+    check("tieFor: locked slot is skipped", MP.Plan.tieFor(1, X(mkp(["b"], [{ locked: true }]), () => [Bt])) === null);
+    check("tieFor: leftover slot is skipped", MP.Plan.tieFor(1, X(mkp(["lf"]), () => [Bt])) === null);
+    const ids14 = ["a", "b", "a", "b", "a", "b", "a", "b", "a", "b", "a", "b", "a", "b"];
+    const sp = mkp(ids14, { 0: { locked: true } });
+    const before = JSON.stringify(sp);
+    const bs = MP.Plan.budgetSwaps(0, 1000, X(sp, () => [B]));
+    check("budgetSwaps: at most 2 swaps, none on the locked slot, only offered candidates", bs && bs.swaps.length <= 2 && bs.swaps.every((w) => w.day !== 1 && w.to.id === "b" && w.from.id === "a"));
+    const sw = JSON.parse(before); bs.swaps.forEach((w) => { sw.days[w.day - 1].slots.dinner = { mealId: w.to.id, locked: true }; });
+    check("budgetSwaps: after.cost equals planMetrics of the swapped plan", Math.abs(bs.after.cost - MP.Plan.planMetrics(sw, X(sw)).weekCost[0]) < 1e-9 && bs.after.cost < bs.before.cost);
+    check("budgetSwaps: plan not mutated", JSON.stringify(sp) === before);
+    const bp = mkp(ids14.map(() => "a"), ids14.map((_, i) => ({ locked: true })));
+    check("budgetSwaps: every dinner held -> null", MP.Plan.budgetSwaps(0, 5, X(bp, () => [B])) === null);
+    check("budgetSwaps: no packData -> null", MP.Plan.budgetSwaps(0, 5, X(sp, () => [B], { packData: null })) === null);
+    const bh = { id: "bh", name: "BH", mealTypes: ["dinner"], servings: 4, ingredients: [] };
+    check("budgetSwaps: batch head is never swapped", MP.Plan.budgetSwaps(0, 5, X(mkp(ids14.map(() => "bh")), () => [B], { library: [...lib4, bh] })) === null);
+  }
+
   // Phase 64: noBatch + planMetrics
   {
     const gp = (pr, lib) => MP.Generator.generatePlan(lib || library, tags, targets, shelfData, "2026-09-07", undefined, {}, pr);

@@ -764,12 +764,13 @@ allergies and `never` stay enforced in code whatever is typed. A typing indicato
 within exclusions; a vague message ("something nicer on Friday") gets a clarifying question, not a guess; a rejected edit leaves
 the slot unchanged; PC and phone, both themes. Requires Phases 24, 29, 49, 66.
 
-## Phase 73: Tie questions and trade-off cards [M] — not started
+## Phase 73: Tie questions and trade-off cards [M] — done
 
 **Added 2026-10-22.** In the Phase 72 chat, when the top two candidates score within a margin kept as data, Hermes asks one
 question card ("chicken curry or chilli?"); ignoring it applies the default. When a plan is over budget, a card offers meal-level
 swaps with the numbers ("swap Wed and Fri saves £9, costs 12 g protein"), computed by the generator, never by Hermes, and applied
 only on accept. **Verify:** a tie produces exactly one card; accepting a swap changes the totals shown. Requires Phases 27, 72 (was "75", a stale renumber).
+Verified 2026-10-23: check.py 10/10 (test.html gapScore/tieFor/budgetSwaps cases, walk tie + trade-off cards at PC and phone, Exit leaves mp_plan identical); tester PASS.
 
 ## Phase 74: Learn from rejections [S] — not started
 
