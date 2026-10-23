@@ -67,6 +67,7 @@ def all_checks():
     yield "worker", ["node", "tools/worker_test.mjs"]  # the real Worker against an in-memory KV
     yield "test guard", [sys.executable, "tools/test_guard.py"]  # staged diff must not loosen the test files
     yield "spec lint", [sys.executable, "tools/spec_lint.py", "--selftest"]
+    yield "chat bridge", [sys.executable, "tools/test_hermes_chat_bridge.py"]
     yield "cofid derive", [sys.executable, "tools/test_cofid_derive.py"]
     if (BROWSER / "ui-check.mjs").exists():
         # real-browser checks: test.html + every page at PC and phone width in both themes; then the click-through

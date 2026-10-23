@@ -20,6 +20,7 @@
 <script src="plan-with-me.js"></script>
 <script src="day-hints.js"></script>
 <script src="ratings.js"></script>
+<script src="plan-chat.js"></script>
 <script src="plan.js"></script>
 <script>
 (async function () {
@@ -2943,6 +2944,38 @@
     localStorage.setItem("mp_planPrefs", JSON.stringify({ repeatGap: 5 }));
     check("PlanPrefs.get: repeatGap 5 kept", MP.PlanPrefs.get(true).repeatGap === 5);
     localStorage.removeItem("mp_planPrefs");
+  }
+
+  // Phase 72: planning chat validator, override mapping, describe, applyChatEdits
+  {
+    const PC = MP.PlanChat;
+    const vocab = { chips: [{ id: "comfort" }], candidates: { protein: { chip: { id: "protein-boost" } } } };
+    const v = PC.validateReply({ text: "  " + "x".repeat(600) + " ", ask: true, edits: [
+      { type: "busy", day: 3 }, { type: "bogus", day: 1 }, { type: "busy", day: 15 }, { type: "lock", day: 2, slot: "brunch" },
+      { type: "chip", id: "nope" }, { type: "chip", id: "protein-boost", days: [2, 3] }, { type: "chip", id: "comfort", days: [99] },
+      { type: "budget", perWeek: -5 }, { type: "budget", perWeek: 40 }, { type: "reroll", day: 4, slot: "dinner" }, "junk", null, { type: "toString" },
+    ] }, vocab);
+    check("validateReply: keeps only valid edits", v.reply.edits.map((e) => e.type).join() === "busy,chip,budget,reroll" && v.dropped === 9);
+    check("validateReply: text trimmed and capped at 500, ask kept", v.reply.text.length === 500 && v.reply.ask === true);
+    check("validateReply: garbage input -> empty reply", deepEqual(PC.validateReply("x", vocab), { reply: { text: "", edits: [], ask: false }, dropped: 0 }));
+    const o = PC.toOverride([{ type: "noCook", day: 7 }, { type: "chip", id: "comfort" }, { type: "budget", perWeek: 30, days: [2] }, { type: "reroll", day: 9, slot: "dinner" }, { type: "lock", day: 1, slot: "lunch" }], null, 5);
+    check("toOverride: noCook -> busy day, chip defaults to focus day", deepEqual(o.chatPrefs.busyDays, [7]) && deepEqual(o.chatPrefs.chips, { 5: ["comfort"] }) && deepEqual(o.chatPrefs.budget, { 2: 30 }));
+    check("toOverride: days, slot-only reroll and locks", deepEqual(o.days, [2, 5, 7, 9]) && o.slotOnly[9] === "dinner" && o.locks.length === 1);
+    check("toOverride: free after busy flips the day", deepEqual(PC.toOverride([{ type: "free", day: 7 }], o.chatPrefs, 1).chatPrefs.busyDays, []));
+    check("describe: weekday names from startDate", PC.describe([{ type: "busy", day: 1 }, { type: "budget", perWeek: 30, days: [4] }], "2026-09-07") === "Monday: quick meals, Thursday: under £30/week");
+    check("describe: second week is marked", PC.describe([{ type: "free", day: 8 }], "2026-09-07").startsWith("Monday (wk 2)"));
+    // noCook changes only that day; held slots stay
+    const cvocab = { busy: { preferEffort: "quick", demoteEffort: "batch" }, chips: [] };
+    const gen = (ov, lk) => MP.Generator.generatePlan(library, tags, targets, shelfData, "2026-09-07", undefined, {}, Object.assign({ vocab: cvocab }, ov), {}, lk);
+    const pl0 = gen({});
+    const lockedSlot = pl0.days[6].slots.dinner; lockedSlot.locked = true;
+    const snap = JSON.stringify(pl0);
+    MP.Plan.resetChatPrefs();
+    const ch = MP.Plan.applyChatEdits([{ type: "noCook", day: 7 }], { plan: pl0, byId: mealsById, prefs: { vocab: cvocab }, focusDay: 1, generate: gen });
+    const was = JSON.parse(snap);
+    check("applyChatEdits: only day 7 changes", ch.every((x) => x.day === 7) && pl0.days.every((d, i) => i === 6 || JSON.stringify(d) === JSON.stringify(was.days[i])));
+    check("applyChatEdits: a locked slot is kept and diffs carry before/after", JSON.stringify(pl0.days[6].slots.dinner) === JSON.stringify(was.days[6].slots.dinner) && ch.every((x) => x.before !== x.after));
+    MP.Plan.resetChatPrefs();
   }
 
   // Phase 71: whatIf deltas equal planMetrics of the plan after the swap; the live plan is untouched

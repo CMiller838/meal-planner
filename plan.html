@@ -44,6 +44,7 @@
     <button id="unlock-btn" class="btn-secondary" hidden>Unlock all</button>
     <button id="useup-btn" class="btn-secondary">Use it up</button>
     <button id="compare-btn" class="btn-secondary">Compare 3 weeks</button>
+    <button id="plan-chat-btn" class="btn-secondary">Plan with Hermes</button>
     <a id="plan-with-me-btn" class="btn-secondary" href="plan-with-me.html">Plan with me</a>
   </div>
   <div id="today-card" class="week-summary gap-strip today-card"></div>
@@ -64,6 +65,28 @@
 <div id="eat-overlay" class="modal-overlay hidden" style="z-index:70;">
   <div id="eat-sheet" class="modal-sheet"></div>
 </div>
+<section id="plan-chat" class="plan-chat" hidden aria-label="Planning chat with Hermes">
+  <header class="chat-head">
+    <h2>Plan with Hermes</h2>
+    <button id="chat-exit" class="btn-secondary">Exit</button>
+    <button id="chat-save" class="primary">Save</button>
+  </header>
+  <div class="chat-day-nav">
+    <button id="chat-prev" class="icon-btn" aria-label="Previous day">‹</button>
+    <h3 id="chat-day-title"></h3>
+    <button id="chat-next" class="icon-btn" aria-label="Next day">›</button>
+  </div>
+  <div id="chat-day" class="chat-day"></div>
+  <ul id="chat-diff" class="chat-diff"></ul>
+  <div id="chat-log" class="chat-log" aria-live="polite"></div>
+  <div id="chat-typing" class="chat-typing" hidden aria-label="Hermes is typing"><span></span><span></span><span></span></div>
+  <button id="chat-fallback" class="btn-secondary" hidden>Continue without Hermes</button>
+  <form id="chat-form" class="chat-form">
+    <label class="sr-only" for="chat-input">Message Hermes</label>
+    <input id="chat-input" maxlength="300" autocomplete="off" placeholder="e.g. I'm wrecked on Monday, money's tight" />
+    <button class="primary" type="submit" id="chat-send">Send</button>
+  </form>
+</section>
 <div id="toast-root"></div>
 
 <script src="data.js"></script>
@@ -79,6 +102,7 @@
 <script src="ratings.js"></script>
 <script src="hermes-sync.js"></script>
 <script src="shopping-list.js"></script>
+<script src="plan-chat.js"></script>
 <script src="plan.js"></script>
 <script>if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js");</script>
 </body>

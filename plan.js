@@ -426,6 +426,94 @@
     toast(days.length > 1 ? `Rerolled ${days.length} days (batch chain)` : `Rerolled day ${day}`);
   }
 
+  // Phase 72: planning-chat edits. Session-scoped constraints (never stored) are re-applied to target days only, by
+  // re-picking them with every other slot held (the rerollDay path); no ranking code here, rankSlot stays the one ranker.
+  let chatPrefs = null;
+  const resetChatPrefs = () => { chatPrefs = null; };
+
+  /** Per-day generator override: base prefs + this session's chatPrefs for `d`. */
+  function chatOverrideFor(base, cp, d) {
+    const u = (a, b) => [...new Set([...(a || []), ...(b || [])])];
+    const o = {
+      busyDays: u(base.busyDays, cp.busyDays).filter((x) => !cp.freeDays.includes(x)),
+      freeDays: u(base.freeDays, cp.freeDays).filter((x) => !cp.busyDays.includes(x)),
+      chips: u(base.chips, cp.chips[d]),
+    };
+    if (cp.budget[d]) o.budgetTarget = cp.budget[d];
+    return o;
+  }
+
+  /** Apply validated edits to the working plan (no savePlan). Returns changes [{ day, slot, before, after }]; `.notes` has skip reasons.
+   *  ctx (tests): { plan, byId, prefs, focusDay, generate(override, locked), chatPrefs }. */
+  function applyChatEdits(edits, ctx) {
+    const c = Object.assign({ plan, byId: mealsById, prefs, focusDay: 1, generate: generatePlan }, ctx);
+    const pl = c.plan;
+    const r = MP.PlanChat.toOverride(edits, (ctx && ctx.chatPrefs) || chatPrefs, c.focusDay);
+    chatPrefs = r.chatPrefs;
+    const changes = [];
+    changes.notes = [];
+    const held = (s) => !!(s && s.mealId && (s.locked || s.eatenAt));
+    r.unlocks.forEach(({ day, slot }) => {
+      const s = pl.days[day - 1].slots[slot];
+      if (s && s.locked) { const n = { ...s }; delete n.locked; pl.days[day - 1].slots[slot] = n; }
+    });
+    r.locks.forEach(({ day, slot }) => {
+      const s = pl.days[day - 1].slots[slot];
+      if (s && s.mealId && !s.eatenAt) pl.days[day - 1].slots[slot] = { ...s, locked: true };
+    });
+    const lockedFor = (days) => {
+      const free = new Set(days), out = {};
+      pl.days.forEach((d) => SLOT_TYPES.forEach((t) => {
+        const s = d.slots[t];
+        if (s && s.mealId && (held(s) || !free.has(d.day))) (out[d.day] = out[d.day] || {})[t] = s;
+      }));
+      return out;
+    };
+    // target days, widened to their batch chain like rerollDay; a day keeps its own override, equal overrides share one generate
+    const groups = new Map();
+    const targets = new Set();
+    r.days.forEach((d) => (r.slotOnly[d] ? [d] : MP.chainDays(pl.days, c.byId, d)).forEach((x) => targets.add(x)));
+    [...targets].sort((a, b) => a - b).forEach((d) => {
+      const o = chatOverrideFor(c.prefs, chatPrefs, d);
+      const key = JSON.stringify([o.chips, o.budgetTarget || 0]);
+      if (!groups.has(key)) groups.set(key, { o, days: [] });
+      groups.get(key).days.push(d);
+    });
+    groups.forEach(({ o, days }) => {
+      if (days.every((d) => SLOT_TYPES.every((t) => !pl.days[d - 1].slots[t] || held(pl.days[d - 1].slots[t])))) {
+        changes.notes.push("That one's locked");
+        return;
+      }
+      const fresh = c.generate(Object.assign({ shopOffset: MP.ShelfLife.shopOffset(pl) }, o), lockedFor(days));
+      days.forEach((d) => {
+        const only = r.slotOnly[d];
+        for (const t of only ? [only] : SLOT_TYPES) {
+          const before = pl.days[d - 1].slots[t], after = fresh.days[d - 1].slots[t];
+          if (held(before)) continue;
+          if ((before || {}).mealId === (after || {}).mealId && (before || {}).variantId === (after || {}).variantId) continue;
+          pl.days[d - 1].slots[t] = after;
+          changes.push({ day: d, slot: t, before: before || null, after: after || null });
+        }
+      });
+    });
+    return changes;
+  }
+
+  /** Names-only context sent with each chat message; day is the card in focus. */
+  function chatContext(day) {
+    const m = planMetrics(plan), wk = day > 7 ? 1 : 0;
+    const d = plan.days[day - 1] || { slots: {} };
+    const dayMeals = {};
+    SLOT_TYPES.forEach((t) => { const s = d.slots[t]; if (s && s.mealId) dayMeals[t] = (mealsById[s.mealId] || {}).name || s.mealId; });
+    const today = MP.Generator.isoToday();
+    return {
+      day, startDate: plan.startDate, dayMeals,
+      gaps: m.weekGaps[wk].slice(0, 3), proteinG: m.proteinG[wk], weekCost: m.weekCost[wk],
+      budgetTarget: Number(prefs.budgetTarget) || 0,
+      expiring: MP.ShoppingList.useUpItems(MP.Sync.localItems("pantry"), plan, today, shelfData).slice(0, 5).map((x) => x.name),
+    };
+  }
+
   function toggleLock(day, slotType) {
     const slot = plan.days[day - 1].slots[slotType];
     if (!slot || !slot.mealId || slot.eatenAt) return;
@@ -764,6 +852,7 @@
       root.classList.remove("staging");
     }
     if (dayCtx) renderDayView();
+    if (chat) renderChatDay();
   }
 
   function moveSlot(day, slotType, moveToDay) {
@@ -924,11 +1013,13 @@
       Swipe right to confirm · swipe left to skip · tap to view recipe</p>`;
     sheet.innerHTML = `${head}
       <div id="swap-deck" class="swipe-deck" style="height:340px;"></div>
-      <div class="deck-actions"><button class="ghost deck-pass">Pass</button>
+      <div class="deck-actions"><button class="ghost deck-pass">Pass</button>${chat ? `<button class="ghost deck-pick">Pick for me</button>` : ""}
       <span class="deck-left" aria-live="polite"></span><button class="deck-take">Take</button></div>`;
     sheet.querySelector(".close-btn").addEventListener("click", closeSwapPicker);
     sheet.querySelector(".deck-take").addEventListener("click", () => flyOff(1));
     sheet.querySelector(".deck-pass").addEventListener("click", () => flyOff(-1));
+    const pick = sheet.querySelector(".deck-pick");
+    if (pick) pick.addEventListener("click", () => flyOff(1)); // candidatesFor is already ranked: the top card is the pick
     renderDeckCards();
   }
 
@@ -1577,7 +1668,213 @@
     renderPlacementBanner(e.detail);
   });
 
-  MP.Plan = { reflow, snapshot, restore, planMetrics, whatIf, fixGap, parseGuidedSlots, applyPlacements, logPortion, matchEatRequests, applyEatRequests };
+  MP.Plan = { applyChatEdits, chatContext, resetChatPrefs, reflow, snapshot, restore, planMetrics, whatIf, fixGap, parseGuidedSlots, applyPlacements, logPortion, matchEatRequests, applyEatRequests };
+
+  // ---- Planning chat with Hermes (Phase 72) ----
+  // The working plan is `plan` itself with guidedActive on (no savePlan runs); Exit restores the snapshot, Save commits.
+  const CHAT_POLL_MS = 1000, CHAT_GIVE_UP_MS = 90000, CHAT_BRIDGE_FRESH_MS = 30000;
+  let chat = null; // { session, snapshot, day, since, mine:Set, pending, deadline, timer, changes }
+  const $ = (id) => document.getElementById(id);
+
+  function chatBubble(from, text) {
+    const b = document.createElement("div");
+    b.className = "chat-bubble " + from;
+    b.textContent = text; // untrusted: textContent only
+    $("chat-log").appendChild(b);
+    b.scrollIntoView({ block: "end" });
+    return b;
+  }
+
+  function setChatWaiting(on) {
+    $("chat-typing").hidden = !on;
+    $("chat-send").disabled = on;
+    $("chat-input").disabled = on;
+    if (!on) $("chat-input").focus();
+  }
+
+  function renderChatDay(staged) {
+    if (!chat) return;
+    const day = chat.day, d = plan.days[day - 1];
+    $("chat-day-title").textContent = dayHeading(day);
+    const changed = new Set(chat.changes.filter((c) => c.day === day && !c.rejected).map((c) => c.slot));
+    const host = $("chat-day");
+    host.innerHTML = SLOT_TYPES.map((t) => {
+      const meal = mealAt(day, t), s = d.slots[t];
+      return `<div class="slot-card ${meal ? "" : "empty"}${s && s.locked ? " locked" : ""}${changed.has(t) ? " slot-diff" : ""}" data-slot="${t}" tabindex="0" role="button">
+        <div class="slot-type">${t}${s && s.locked ? ` <span class="lock-icon" aria-label="Locked">🔒</span>` : ""}</div>
+        <div class="slot-meal">${meal ? esc(meal.name) : s && s.eatingOut ? "Eating out" : "tap to add"}</div></div>`;
+    }).join("");
+    host.classList.toggle("staging", !!staged);
+    if (staged) host.querySelectorAll(".slot-card").forEach((el, i) => { el.style.animationDelay = Math.min(i * STAGE_STEP_MS, STAGE_MAX_MS) + "ms"; });
+    host.querySelectorAll(".slot-card").forEach((el) => {
+      const open = () => {
+        swapCtx = { day, slotType: el.dataset.slot, candidates: candidatesFor(day, el.dataset.slot), mode: "swap" };
+        renderDeck();
+        $("swap-overlay").classList.remove("hidden");
+      };
+      el.addEventListener("click", open);
+      el.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); open(); } });
+    });
+  }
+
+  function renderChatDiff() {
+    const ul = $("chat-diff");
+    ul.innerHTML = "";
+    chat.changes.forEach((c) => {
+      const li = document.createElement("li");
+      li.className = "diff-row" + (c.rejected ? " rejected" : "");
+      const name = (s) => (s && s.mealId ? (mealsById[s.mealId] || {}).name || s.mealId : "nothing");
+      const txt = document.createElement("span");
+      txt.textContent = `${dayHeading(c.day)} ${c.slot}: ${name(c.before)} → ${name(c.after)}`;
+      const acc = document.createElement("button");
+      acc.className = "btn-secondary"; acc.textContent = "Accept"; acc.disabled = !c.rejected;
+      const rej = document.createElement("button");
+      rej.className = "btn-secondary"; rej.textContent = "Reject"; rej.disabled = !!c.rejected;
+      const set = (r) => {
+        c.rejected = r;
+        plan.days[c.day - 1].slots[c.slot] = (r ? c.before : c.after) || {};
+        renderChatDiff(); renderChatDay(); renderPlan();
+      };
+      acc.addEventListener("click", () => set(false));
+      rej.addEventListener("click", () => set(true));
+      li.append(txt, acc, rej);
+      ul.appendChild(li);
+    });
+  }
+
+  function onChatReply(m) {
+    const { reply } = MP.PlanChat.validateReply(m, vocabAll); // the app re-validates before applying anything
+    if (reply.text) chatBubble("hermes", reply.text);
+    chat.changes = [];
+    if (!reply.ask && reply.edits.length) {
+      const changes = applyChatEdits(reply.edits, { focusDay: chat.day });
+      const line = MP.PlanChat.describe(reply.edits, plan.startDate, chat.day);
+      if (line) { const u = chatBubble("understood", "Understood: " + line); u.classList.add("chat-understood"); }
+      changes.notes.forEach((n) => toast(n));
+      chat.changes = changes;
+      if (changes.length && !changes.some((c) => c.day === chat.day)) chat.day = changes[0].day;
+      renderPlan();
+    }
+    renderChatDiff();
+    renderChatDay(chat.changes.length > 0);
+  }
+
+  async function pollChat() {
+    if (!chat) return;
+    const me = chat;
+    try {
+      const r = await MP.PlanChat.call("GET", `/chat?session=${encodeURIComponent(me.session)}&since=${me.since}`);
+      if (chat !== me) return;
+      for (const m of r.messages) {
+        me.since = Math.max(me.since, m.id);
+        if (m.open) me.mine.add(m.id);
+        if (m.from === "hermes" && me.mine.has(m.replyTo) && me.pending > 0) { me.pending--; onChatReply(m); }
+      }
+    } catch (e) {
+      if (e.status === 409) { toast("Chat session ended"); return exitChat(); }
+    }
+    if (chat !== me) return;
+    if (me.pending <= 0) return setChatWaiting(false);
+    if (Date.now() > me.deadline) {
+      setChatWaiting(false);
+      $("chat-fallback").hidden = false;
+      return;
+    }
+    me.timer = setTimeout(pollChat, CHAT_POLL_MS);
+  }
+
+  function waitForReply() {
+    chat.pending++;
+    chat.deadline = Date.now() + CHAT_GIVE_UP_MS;
+    $("chat-fallback").hidden = true;
+    setChatWaiting(true);
+    clearTimeout(chat.timer);
+    chat.timer = setTimeout(pollChat, CHAT_POLL_MS);
+  }
+
+  async function sendChat(text) {
+    chatBubble("user", text);
+    try {
+      const r = await MP.PlanChat.call("POST", "/chat", { session: chat.session, text, day: chat.day, context: chatContext(chat.day) });
+      chat.mine.add(r.id);
+      waitForReply();
+    } catch (e) {
+      toast("Couldn't reach Hermes");
+    }
+  }
+
+  async function openChat() {
+    if (chat || guidedActive || !plan) return;
+    const goFallback = (msg) => { toast(msg); setTimeout(() => { location.href = "plan-with-me.html"; }, 1200); };
+    if (!MP.Sync.config().enabled) { location.href = "plan-with-me.html"; return; }
+    const session = "c" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+    let r;
+    try { r = await MP.PlanChat.call("POST", "/chat", { session, open: true, context: chatContext(1) }); } catch (e) { return goFallback("Hermes is offline"); }
+    if (!r.bridgeSeenAt || Date.now() - Date.parse(r.bridgeSeenAt) > CHAT_BRIDGE_FRESH_MS) {
+      MP.PlanChat.call("POST", "/chat", { session, close: true }).catch(() => {});
+      return goFallback("Hermes is offline");
+    }
+    chat = { session, snapshot: JSON.stringify(plan), day: 1, since: 0, mine: new Set(), pending: 0, deadline: 0, timer: null, changes: [] };
+    guidedActive = true; // working copy: no savePlan until Save
+    $("chat-log").innerHTML = "";
+    $("chat-diff").innerHTML = "";
+    $("plan-chat").hidden = false;
+    document.body.classList.add("chat-open");
+    renderChatDay();
+    chat.pending = 1; // the opener reply to the open message
+    chat.deadline = Date.now() + CHAT_GIVE_UP_MS;
+    setChatWaiting(true);
+    chat.timer = setTimeout(pollChat, CHAT_POLL_MS);
+  }
+
+  function closeChat() {
+    clearTimeout(chat.timer);
+    MP.PlanChat.call("POST", "/chat", { session: chat.session, close: true }).catch(() => {});
+    $("plan-chat").hidden = true;
+    document.body.classList.remove("chat-open");
+    $("swap-overlay").classList.add("hidden");
+    swapCtx = null;
+    guidedActive = false;
+    resetChatPrefs();
+    history.replaceState(null, "", "plan.html");
+  }
+
+  function exitChat() {
+    if (!chat) return;
+    plan = JSON.parse(chat.snapshot);
+    closeChat();
+    chat = null;
+    renderPlan();
+  }
+
+  function saveChat() {
+    closeChat();
+    chat = null;
+    savePlan();
+    renderPlan();
+    toast("Plan saved");
+  }
+
+  function initChat() {
+    $("plan-chat-btn").addEventListener("click", openChat);
+    $("chat-exit").addEventListener("click", exitChat);
+    $("chat-save").addEventListener("click", saveChat);
+    $("chat-fallback").addEventListener("click", () => { exitChat(); location.href = "plan-with-me.html"; });
+    const step = (n) => { chat.day = Math.min(plan.days.length, Math.max(1, chat.day + n)); renderChatDay(); };
+    $("chat-prev").addEventListener("click", () => chat && step(-1));
+    $("chat-next").addEventListener("click", () => chat && step(1));
+    $("chat-form").addEventListener("submit", (e) => {
+      e.preventDefault();
+      const text = $("chat-input").value.trim();
+      if (!chat || !text) return;
+      $("chat-input").value = "";
+      sendChat(text);
+    });
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && chat && $("swap-overlay").classList.contains("hidden")) exitChat();
+    });
+    if (new URLSearchParams(location.search).get("chat") === "1") openChat();
+  }
 
   async function init() {
     MP.initTheme();
@@ -1673,6 +1970,7 @@
       document.getElementById("guided-review-banner").classList.add("hidden");
       toast("Plan saved");
     });
+    initChat();
   }
 
   // Guarded so this file can be included in test.html for pure-function

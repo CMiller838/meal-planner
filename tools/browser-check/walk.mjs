@@ -199,6 +199,91 @@ for (const [vp, size] of Object.entries({ pc: { width: 1440, height: 900 }, phon
     await page.waitForSelector('#guided-review-banner:not(.hidden)');
     if (await page.evaluate(() => localStorage.getItem('mp_plan'))) throw new Error('mp_plan saved before Looks good');
   });
+  // Phase 72: planning chat, /chat mocked by page.route (no Worker, no credential)
+  const chatMock = { msgs: [], seq: 0, session: null, reply: null, bridgeAgeMs: 0 };
+  await page.route('https://fake.test/**', route => {
+    const req = route.request(), u = new URL(req.url()), m = chatMock;
+    const ok = body => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
+    if (u.pathname !== '/chat') return route.fulfill({ status: 404, body: '{}' });
+    if (req.method() === 'GET') return ok({ session: m.session, openAt: 'x', bridgeSeenAt: null, messages: m.msgs.filter(x => x.id > Number(u.searchParams.get('since') || 0)) });
+    const b = req.postDataJSON();
+    if (b.open) {
+      m.session = b.session; m.msgs = []; const id = ++m.seq;
+      m.msgs.push({ id, from: 'user', open: true, text: '' }, { id: ++m.seq, from: 'hermes', replyTo: id, text: 'What does the week look like?', edits: [], ask: false });
+      return ok({ session: b.session, bridgeSeenAt: new Date(Date.now() - m.bridgeAgeMs).toISOString() });
+    }
+    if (b.close) return ok({});
+    const id = ++m.seq; m.msgs.push({ id, from: 'user', text: b.text });
+    m.msgs.push(Object.assign({ id: ++m.seq, from: 'hermes', replyTo: id, ask: false, edits: [] }, m.reply));
+    return ok({ id });
+  });
+  const planLS = () => page.evaluate(() => localStorage.getItem('mp_plan'));
+  const openChat = async () => {
+    await page.goto(`${base}/plan.html`);
+    await page.waitForSelector('#plan-root .slot-card');
+    await page.evaluate(() => { localStorage.setItem('mp_hermes_url', 'https://fake.test'); localStorage.setItem('mp_hermes_token', 't'); });
+    await page.reload();
+    await page.waitForSelector('#plan-root .slot-card');
+    await page.click('#plan-chat-btn');
+    await page.waitForSelector('#plan-chat:not([hidden]) .chat-bubble.hermes', { timeout: 8000 });
+  };
+  const say = async text => { await page.waitForSelector('#chat-input:not([disabled])', { timeout: 8000 }); await page.fill('#chat-input', text); await page.click('#chat-send'); };
+  await step('chat: noCook Sunday changes only day 7, diff rows, Reject restores, Exit leaves mp_plan identical', async () => {
+    chatMock.bridgeAgeMs = 0; chatMock.reply = { text: 'Done, Sunday is easy.', edits: [{ type: 'noCook', day: 7 }, { type: 'bogus', day: 2 }] };
+    await openChat();
+    const before = await planLS();
+    await say('no cooking Sunday');
+    await page.waitForSelector('.chat-understood', { timeout: 8000 });
+    if (!/quick meals/.test(await page.textContent('.chat-understood'))) throw new Error('understood line: ' + await page.textContent('.chat-understood'));
+    await page.waitForSelector('#chat-input:not([disabled])');
+    const rows = await page.locator('#chat-diff .diff-row span').allTextContents();
+    if (rows.some(r => !/^Day 7 /.test(r))) throw new Error('diff touches another day: ' + rows.join(' | '));
+    await shot('chat'); await page.evaluate(() => { document.documentElement.dataset.theme = 'light'; }); await shot('chat-light');
+    await page.evaluate(() => { document.documentElement.dataset.theme = 'dark'; });
+    if (await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)) throw new Error('horizontal scroll');
+    if (rows.length) {
+      await page.click('#chat-diff .diff-row button:text("Reject")');
+      if (!await page.locator('#chat-diff .diff-row.rejected').count()) throw new Error('Reject did not mark the row');
+    }
+    await page.click('#chat-exit');
+    await page.waitForSelector('#plan-chat', { state: 'hidden' });
+    if (await planLS() !== before) throw new Error('Exit changed mp_plan');
+  });
+  await step('chat: Save commits the working copy', async () => {
+    await openChat();
+    const before = await planLS();
+    await say('no cooking Sunday');
+    await page.waitForSelector('.chat-understood', { timeout: 8000 });
+    const n = await page.locator('#chat-diff .diff-row').count();
+    await page.click('#chat-save');
+    await page.waitForSelector('#plan-chat', { state: 'hidden' });
+    if (n && await planLS() === before) throw new Error('Save did not change mp_plan');
+  });
+  await step('chat: ask:true shows the question and changes nothing', async () => {
+    chatMock.reply = { text: 'Which day do you mean?', ask: true, edits: [{ type: 'noCook', day: 7 }] };
+    await openChat();
+    await say('make it quick');
+    await page.waitForFunction(() => [...document.querySelectorAll('.chat-bubble.hermes')].some(b => /Which day/.test(b.textContent)), null, { timeout: 8000 });
+    if (await page.locator('#chat-diff .diff-row, .chat-understood').count()) throw new Error('ask applied something');
+    await page.click('#chat-exit');
+  });
+  await step('chat: slot tap opens the deck with Pick for me', async () => {
+    chatMock.reply = { text: 'ok', edits: [] };
+    await openChat();
+    await page.click('#chat-day .slot-card[data-slot="dinner"]');
+    await page.waitForSelector('#swap-deck .swipe-card');
+    await page.click('.deck-pick');
+    await page.waitForSelector('#swap-overlay.hidden', { state: 'attached' });
+    await page.click('#chat-exit');
+  });
+  await step('chat: a stale bridge lands on plan-with-me.html', async () => {
+    chatMock.bridgeAgeMs = 120000;
+    await page.goto(`${base}/plan.html`);
+    await page.waitForSelector('#plan-root .slot-card');
+    await page.click('#plan-chat-btn');
+    await page.waitForURL(/plan-with-me\.html/, { timeout: 8000 });
+    chatMock.bridgeAgeMs = 0;
+  });
   await step('no uncaught page errors during the walk', async () => { if (errs.length) throw new Error(errs[0]); });
   await ctx.close();
 }

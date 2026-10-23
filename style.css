@@ -614,12 +614,12 @@ button.ghost.danger { color: var(--danger); border-color: var(--danger); }
 .slot-card.empty { color: var(--text-dim); font-style: italic; }
 
 @keyframes mp-slot-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
-#plan-root.staging .slot-card {
+#plan-root.staging .slot-card, #chat-day.staging .slot-card {
   opacity: 0;
   animation: mp-slot-in 220ms ease-out forwards;
 }
 @media (prefers-reduced-motion: reduce) {
-  #plan-root.staging .slot-card { opacity: 1; animation: none; }
+  #plan-root.staging .slot-card, #chat-day.staging .slot-card { opacity: 1; animation: none; }
 }
 
 .coverage-list { display: flex; flex-wrap: wrap; gap: .3rem; margin-top: .4rem; }
@@ -825,3 +825,42 @@ button.ghost.danger { color: var(--danger); border-color: var(--danger); }
 .whatif { position: absolute; left: 8px; right: 8px; bottom: 8px; z-index: 30; padding: 8px 10px; border-radius: var(--radius, 10px); background: var(--surface, #222); color: var(--text, inherit); border: 1px solid var(--border, #444); font-size: .85rem; pointer-events: none; animation: whatif-in .15s ease-out; }
 @keyframes whatif-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
 @media (prefers-reduced-motion: reduce) { .whatif { animation: none; } }
+
+/* ---- Planning chat with Hermes (Phase 72) ---- */
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+body.chat-open { overflow: hidden; }
+.plan-chat { position: fixed; inset: 0; z-index: 45; background: var(--surface-alt); color: var(--text); display: flex; flex-direction: column; gap: .6rem; padding: .8rem max(1rem, calc((100vw - 720px) / 2)) calc(.8rem + env(safe-area-inset-bottom)); animation: mp-slot-in 220ms ease-out both; }
+.plan-chat[hidden], .chat-typing[hidden], #chat-fallback[hidden] { display: none; }
+.chat-head { display: flex; align-items: center; gap: .5rem; }
+.chat-head h2 { flex: 1; margin: 0; font-size: 1.1rem; }
+.chat-day-nav { display: flex; align-items: center; justify-content: space-between; gap: .5rem; }
+.chat-day-nav h3 { margin: 0; font-size: .95rem; }
+.chat-day-nav .icon-btn { background: var(--surface); color: var(--text); border: 1px solid var(--border); border-radius: 999px; width: 2.2rem; height: 2.2rem; font-size: 1.2rem; cursor: pointer; transition: transform 150ms; }
+.chat-day-nav .icon-btn:active { transform: scale(.95); }
+.chat-day { display: grid; grid-template-columns: repeat(2, 1fr); gap: .5rem; }
+@media (min-width: 640px) { .chat-day { grid-template-columns: repeat(4, 1fr); } }
+.chat-day .slot-card { background: var(--surface); transition: border-color 200ms, box-shadow 200ms; }
+.slot-card.slot-diff { border-color: var(--butter); box-shadow: 0 0 0 2px var(--butter); }
+.chat-diff { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: .3rem; max-height: 22vh; overflow-y: auto; }
+.chat-diff:empty { display: none; }
+.diff-row { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem; font-size: .8rem; background: var(--surface-alt); border: 1px solid var(--border); border-radius: .6rem; padding: .35rem .5rem; animation: mp-slot-in 220ms ease-out both; }
+.diff-row span { flex: 1 1 12rem; }
+.diff-row.rejected span { text-decoration: line-through; color: var(--text-dim); }
+.diff-row button { padding: .2rem .6rem; font-size: .75rem; }
+.chat-log { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: .4rem; padding: .2rem 0; }
+.chat-bubble { max-width: 85%; padding: .5rem .8rem; border-radius: 1rem; font-size: .9rem; line-height: 1.35; animation: mp-slot-in 220ms ease-out both; overflow-wrap: anywhere; }
+.chat-bubble.user { align-self: flex-end; background: var(--accent); color: #fff; border-bottom-right-radius: .3rem; }
+.chat-bubble.hermes { align-self: flex-start; background: var(--surface); border: 1px solid var(--border); border-bottom-left-radius: .3rem; }
+.chat-bubble.chat-understood { align-self: flex-start; background: transparent; border: 1px dashed var(--accent-2); color: var(--text-dim); font-size: .8rem; }
+.chat-typing { align-self: flex-start; display: flex; gap: .3rem; padding: .4rem .8rem; background: var(--surface); border: 1px solid var(--border); border-radius: 1rem; }
+.chat-typing span { width: .45rem; height: .45rem; border-radius: 50%; background: var(--text-dim); animation: mp-chat-dot 1s ease-in-out infinite; }
+.chat-typing span:nth-child(2) { animation-delay: .15s; }
+.chat-typing span:nth-child(3) { animation-delay: .3s; }
+@keyframes mp-chat-dot { 0%, 100% { opacity: .3; transform: translateY(0); } 50% { opacity: 1; transform: translateY(-3px); } }
+.chat-form { display: flex; gap: .5rem; }
+.chat-form input { flex: 1; min-width: 0; padding: .6rem .8rem; border-radius: .8rem; border: 1px solid var(--border); background: var(--surface); color: var(--text); font: inherit; }
+.chat-form input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+@media (prefers-reduced-motion: reduce) {
+  .plan-chat, .chat-bubble, .diff-row { animation: none; }
+  .chat-typing span { animation: none; opacity: .7; }
+}

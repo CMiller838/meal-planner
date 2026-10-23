@@ -5,3 +5,11 @@ compatibility_date = "2026-09-01"
 [[kv_namespaces]]
 binding = "MP_KV"
 id = "07bcad0a10dd415b9df800b44d706539"
+
+[[durable_objects.bindings]]
+name = "CHAT"
+class_name = "ChatRoom"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["ChatRoom"]

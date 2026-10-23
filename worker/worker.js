@@ -11,6 +11,7 @@ import "../generator.js";
 import "../day-hints.js";
 import "../products.js";
 import "../ratings.js";
+import "../plan-chat.js";
 import SHELF_DATA from "../shelf-life.json";
 import SUBS from "../substitutions.json";
 import SUB_GROUPS from "../substitution-groups.json";
@@ -28,6 +29,7 @@ const ShoppingList = globalThis.MP.ShoppingList;
 const ShelfLife = globalThis.MP.ShelfLife;
 const Products = globalThis.MP.Products;
 const Ratings = globalThis.MP.Ratings;
+const PlanChat = globalThis.MP.PlanChat;
 const MPData = globalThis.MP;
 
 const KEYS = {
@@ -1189,6 +1191,9 @@ export const ROUTES = [
   row("POST", "/plan/apply", "write", { log: "logged", note: "parks the draft in planDraft" }),
   row("POST", "/plan/reflow", "write", { log: "logged", note: "re-plans only skipped / eatingOut / ranOut slots and parks the result in planDraft" }),
   row("POST", "/activity/undo", "write", { log: "logged" }),
+  row("POST", "/chat", "write", quiet("ephemeral planning-chat thread (ChatRoom DO), not planning data")),
+  row("GET", "/chat", "read", { note: "polls the thread; X-Actor: hermes stamps bridgeSeenAt" }),
+  row("POST", "/chat/reply", "write", quiet("ephemeral planning-chat thread (ChatRoom DO), not planning data")),
 ];
 
 function parseKV(raw) { try { return JSON.parse(raw); } catch (e) { return null; } }
@@ -1287,6 +1292,71 @@ async function undoActivity(env, who, { id, force }) {
   return json(200, { undone: id, entry: logged.id });
 }
 
+// ---- Planning chat (Phase 72) ----
+// One SQLite-backed Durable Object ("plan") holds the current chat session only; KV's ~60 s read cache can't serve a 1 s
+// poll. State "s": { session, seq, openAt, bridgeSeenAt, messages } (messages capped at CHAT_CAP, oldest dropped).
+const CHAT_CAP = 40, CHAT_TEXT_MAX = 300, CHAT_CTX_MAX = 4000, BRIDGE_STAMP_MS = 5000;
+
+export class ChatRoom {
+  constructor(ctx) { this.ctx = ctx; }
+
+  async fetch(request) {
+    const url = new URL(request.url);
+    const hermes = request.headers.get("X-Actor") === "hermes";
+    const st = (await this.ctx.storage.get("s")) || { session: null, seq: 0, openAt: null, bridgeSeenAt: null, messages: [] };
+    const save = () => this.ctx.storage.put("s", st);
+    const push = (m) => {
+      m.id = ++st.seq; m.at = new Date().toISOString();
+      st.messages.push(m);
+      if (st.messages.length > CHAT_CAP) st.messages.splice(0, st.messages.length - CHAT_CAP);
+      return m.id;
+    };
+    if (request.method === "GET" && url.pathname === "/chat") {
+      const want = url.searchParams.get("session");
+      if (!hermes && want !== st.session) return json(409, { error: "stale session" });
+      if (hermes && (!st.bridgeSeenAt || Date.now() - Date.parse(st.bridgeSeenAt) > BRIDGE_STAMP_MS)) { st.bridgeSeenAt = new Date().toISOString(); await save(); }
+      const since = Number(url.searchParams.get("since")) || 0;
+      return json(200, { session: st.session, openAt: st.openAt, bridgeSeenAt: st.bridgeSeenAt, messages: st.messages.filter((m) => m.id > since) });
+    }
+    if (request.method !== "POST") return json(405, "method not allowed");
+    const body = await request.json().catch(() => null);
+    if (!body || typeof body !== "object" || Array.isArray(body)) return json(400, "bad request");
+    const ctxOk = body.context === undefined || (body.context && typeof body.context === "object" && !Array.isArray(body.context) && JSON.stringify(body.context).length <= CHAT_CTX_MAX);
+    if (typeof body.session !== "string" || !body.session || body.session.length > 64 || !ctxOk) return json(400, "bad request");
+    if (url.pathname === "/chat/reply") {
+      if (!hermes) return json(403, "forbidden");
+      if (body.session !== st.session || !st.messages.some((m) => m.id === body.replyTo && m.from === "user")) return json(409, { error: "stale session or replyTo" });
+      const { reply, dropped } = PlanChat.validateReply({ text: body.text, edits: body.edits, ask: body.ask }, PLAN_VOCAB);
+      const id = push({ from: "hermes", replyTo: body.replyTo, text: reply.text, edits: reply.edits, ask: reply.ask });
+      await save();
+      return json(200, { id, dropped });
+    }
+    if (body.open === true) {
+      Object.assign(st, { session: body.session, openAt: new Date().toISOString(), messages: [] });
+      push({ from: "user", text: "", open: true, context: body.context });
+      await save();
+      return json(200, { session: st.session, bridgeSeenAt: st.bridgeSeenAt });
+    }
+    if (body.session !== st.session) return json(409, { error: "stale session" });
+    if (body.close === true) { st.openAt = null; await save(); return json(200, { session: st.session }); }
+    const text = typeof body.text === "string" ? body.text.trim() : "";
+    if (!text || text.length > CHAT_TEXT_MAX) return json(400, "text must be 1-300 characters");
+    const msg = { from: "user", text, context: body.context };
+    if (Number.isInteger(body.day) && body.day >= 1 && body.day <= 14) msg.day = body.day;
+    const id = push(msg);
+    await save();
+    return json(200, { id });
+  }
+}
+
+async function chatRoute(request, env, url, actor) {
+  if (!env.CHAT) return json(503, "chat not configured");
+  if (url.pathname === "/chat/reply" && actor !== "hermes") return json(403, "forbidden");
+  const stub = env.CHAT.get(env.CHAT.idFromName("plan"));
+  const res = await stub.fetch(new Request(url, { method: request.method, headers: { "X-Actor": actor || "" }, body: request.method === "POST" ? await request.text() : undefined }));
+  return json(res.status, await res.json().catch(() => null));
+}
+
 export default {
   async fetch(request, env) {
     if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: CORS });
@@ -1327,6 +1397,7 @@ export default {
       if (request.method !== "GET") return json(405, "method not allowed");
       return getRatings(env);
     }
+    if (url.pathname === "/chat" || url.pathname === "/chat/reply") return chatRoute(request, env, url, actor);
     if (url.pathname === "/scale") {
       if (request.method !== "GET") return json(405, "method not allowed");
       return scale(url.searchParams, env);

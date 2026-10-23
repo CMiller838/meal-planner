@@ -417,5 +417,28 @@
     "assistant": true,
     "kind": "write",
     "log": "logged"
+  },
+  {
+    "method": "POST",
+    "path": "/chat",
+    "assistant": false,
+    "kind": "write",
+    "log": "unlogged",
+    "why": "ephemeral planning-chat thread (ChatRoom DO), not planning data"
+  },
+  {
+    "method": "GET",
+    "path": "/chat",
+    "assistant": false,
+    "kind": "read",
+    "note": "polls the thread; X-Actor: hermes stamps bridgeSeenAt"
+  },
+  {
+    "method": "POST",
+    "path": "/chat/reply",
+    "assistant": false,
+    "kind": "write",
+    "log": "unlogged",
+    "why": "ephemeral planning-chat thread (ChatRoom DO), not planning data"
   }
 ]

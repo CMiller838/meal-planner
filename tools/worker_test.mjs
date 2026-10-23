@@ -10,7 +10,10 @@ registerHooks({
 const { default: worker } = await import(new URL("../worker/worker.js", import.meta.url));
 
 const kv = new Map();
-const env = { AUTH_TOKEN: "h", ASSISTANT_TOKEN: "a", MP_KV: { get: async (k) => kv.get(k) ?? null, put: async (k, v) => void kv.set(k, v) } };
+const { ChatRoom } = await import(new URL("../worker/worker.js", import.meta.url));
+const chatMem = new Map(); // Phase 72: in-memory ChatRoom storage behind a fake namespace (one instance, like idFromName("plan"))
+const room = new ChatRoom({ storage: { get: async (k) => structuredClone(chatMem.get(k)), put: async (k, v) => void chatMem.set(k, structuredClone(v)) } });
+const env = { CHAT: { idFromName: (n) => n, get: () => ({ fetch: (req) => room.fetch(req) }) }, AUTH_TOKEN: "h", ASSISTANT_TOKEN: "a", MP_KV: { get: async (k) => kv.get(k) ?? null, put: async (k, v) => void kv.set(k, v) } };
 const call = async (method, path, token, body, headers = {}) => {
   const res = await worker.fetch(new Request("https://x" + path, { method, headers: { "X-Auth-Token": token, ...headers }, body: body === undefined ? undefined : JSON.stringify(body) }), env);
   return { status: res.status, body: await res.json().catch(() => null) };
@@ -614,6 +617,38 @@ assert.equal((await call("GET", "/today", "a")).body.water, 3); // /today untouc
   assert.equal(acts()[0].who, "assistant"); // the header means nothing on the assistant token
   const pre = await worker.fetch(new Request("https://x/pantry", { method: "OPTIONS" }), env);
   assert.match(pre.headers.get("Access-Control-Allow-Headers"), /X-Actor/);
+}
+// Phase 72: planning chat
+{
+  const H = { "X-Actor": "hermes" };
+  for (const [m, p] of [["POST", "/chat"], ["GET", "/chat"], ["POST", "/chat/reply"]]) assert.equal((await call(m, p, "a", m === "POST" ? {} : undefined)).status, 403, `assistant on ${m} ${p}`);
+  assert.equal((await call("POST", "/chat", "bad", {})).status, 401);
+  let r = await call("GET", "/chat", "h", undefined, H);
+  assert.deepEqual([r.status, r.body.session, r.body.messages], [200, null, []]);
+  r = await call("POST", "/chat", "h", { session: "s1", open: true, context: { day: 1 } });
+  assert.deepEqual([r.status, r.body.session], [200, "s1"]);
+  assert.ok(r.body.bridgeSeenAt, "poll above stamped bridgeSeenAt");
+  r = await call("POST", "/chat", "h", { session: "s1", text: "no cooking Sunday", day: 7, context: { day: 7 } });
+  assert.equal(r.status, 200);
+  const uid = r.body.id;
+  assert.equal((await call("POST", "/chat", "h", { session: "old", text: "hi" })).status, 409);
+  assert.equal((await call("POST", "/chat", "h", { session: "s1", text: "x".repeat(301) })).status, 400);
+  assert.equal((await call("POST", "/chat", "h", { session: "s1", text: "  " })).status, 400);
+  const reply = { session: "s1", replyTo: uid, text: "Got it", edits: [{ type: "noCook", day: 7 }, { type: "makeMeal", name: "pie" }], ask: false };
+  assert.equal((await call("POST", "/chat/reply", "h", reply)).status, 403); // no X-Actor
+  assert.equal((await call("POST", "/chat/reply", "h", { ...reply, session: "old" }, H)).status, 409);
+  assert.equal((await call("POST", "/chat/reply", "h", { ...reply, replyTo: 999 }, H)).status, 409);
+  r = await call("POST", "/chat/reply", "h", reply, H);
+  assert.deepEqual([r.status, r.body.dropped], [200, 1]);
+  r = await call("GET", "/chat?session=s1&since=" + uid, "h");
+  assert.deepEqual([r.body.messages.length, r.body.messages[0].from, r.body.messages[0].edits], [1, "hermes", [{ type: "noCook", day: 7 }]]);
+  assert.equal((await call("GET", "/chat?session=old", "h")).status, 409);
+  assert.equal((await call("POST", "/chat", "h", { session: "s1", close: true })).status, 200);
+  assert.equal((await call("GET", "/chat?session=s1", "h")).body.openAt, null);
+  await call("POST", "/chat", "h", { session: "s2", open: true });
+  for (let i = 0; i < 45; i++) await call("POST", "/chat", "h", { session: "s2", text: "m" + i });
+  r = await call("GET", "/chat?session=s2", "h");
+  assert.deepEqual([r.body.messages.length, r.body.messages.at(-1).text], [40, "m44"]);
 }
 // Phase 56: ROUTES vs the real dispatcher
 {
