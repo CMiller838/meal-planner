@@ -632,7 +632,7 @@
   let guided = null;        // { passes, pass, days: number[], idx, total } — active only during the swipe loop, null during review
 
   // ---- Swap picker ----
-  let swapCtx = null; // { day, slotType, candidates }
+  let swapCtx = null; // { day, slotType, candidates, mode }
 
   function candidatesFor(day, slotType) {
     const slot = plan.days[day - 1].slots[slotType];
@@ -668,8 +668,8 @@
   }
 
   function openSwapPicker(day, slotType) {
-    swapCtx = { day, slotType, candidates: candidatesFor(day, slotType) };
-    renderSwapDeck();
+    swapCtx = { day, slotType, candidates: candidatesFor(day, slotType), mode: "swap" };
+    renderDeck();
     document.getElementById("swap-overlay").classList.remove("hidden");
   }
 
@@ -708,8 +708,8 @@
       guided.idx++;
       return renderGuidedStep();
     }
-    swapCtx = { day, slotType, candidates };
-    renderGuidedDeck();
+    swapCtx = { day, slotType, candidates, mode: "guided" };
+    renderDeck();
     document.getElementById("swap-overlay").classList.remove("hidden");
   }
 
@@ -724,53 +724,6 @@
     guided = null;
     renderPlan();
     document.getElementById("guided-review-banner").classList.remove("hidden");
-  }
-
-  function renderGuidedDeck() {
-    const sheet = document.getElementById("swap-sheet");
-    const { day, slotType } = swapCtx;
-    const step = guided.pass * guided.days.length + guided.idx + 1;
-    sheet.innerHTML = `<button class="close-btn" aria-label="Skip to review">✕</button>
-      <h2>Day ${day} of ${plan.days.length} — ${esc(slotType[0].toUpperCase() + slotType.slice(1))}</h2>
-      <p class="swipe-hint" style="margin-top:0;">Step ${step} of ${guided.total} ·
-      Swipe right to pick · swipe left for another option · tap to view recipe</p>
-      <div id="swap-deck" class="swipe-deck" style="height:340px;"></div>`;
-    sheet.querySelector(".close-btn").addEventListener("click", closeSwapPicker);
-    renderGuidedCards();
-  }
-
-  function renderGuidedCards() {
-    const deck = document.getElementById("swap-deck");
-    deck.innerHTML = "";
-    swapCtx.candidates.slice(0, swapCtx.slotType === "dinner" ? 5 : 3).forEach((meal, idx) => {
-      const card = document.createElement("div");
-      card.className = "swipe-card";
-      card.style.zIndex = String(10 - idx);
-      card.style.transform = `scale(${1 - idx * 0.03}) translateY(${idx * 10}px)`;
-      card.innerHTML = `
-        ${meal.image ? `<img class="card-img" src="${esc(meal.image)}" alt="${esc(meal.name)}">` : `<div class="card-img placeholder">🍽</div>`}
-        <div class="card-body">
-          <h3>${esc(meal.name)}</h3>
-          <p>${esc(meal.description || "")}</p>
-          ${tagRowHtml(meal)}
-        </div>`;
-      if (idx === 0) {
-        MP.makeSwipeable(card, {
-          onSwipeRight: () => {
-            setSlotMeal(swapCtx.day, swapCtx.slotType, meal.id);
-            toast(`Day ${swapCtx.day}: using "${meal.name}"`);
-            advanceGuided();
-          },
-          onSwipeLeft: () => {
-            swapCtx.candidates = swapCtx.candidates.filter((m) => m.id !== meal.id);
-            if (!swapCtx.candidates.length) advanceGuided();
-            else renderGuidedCards();
-          },
-          onTap: () => openDetail(meal),
-        });
-      }
-      deck.appendChild(card);
-    });
   }
 
   // ---- Variant picker (reuses the swap overlay/sheet) ----
@@ -807,27 +760,42 @@
     });
   }
 
-  function renderSwapDeck() {
+  // One deck for Swap and the guided walkthrough; swapCtx.mode is "swap" | "guided".
+  function renderDeck() {
     const sheet = document.getElementById("swap-sheet");
-    const heading = `<button class="close-btn" aria-label="Close">✕</button>
-      <h2>Swap ${esc(swapCtx.slotType)} — Day ${swapCtx.day}</h2>
+    const { day, slotType, mode } = swapCtx;
+    const head = mode === "guided"
+      ? `<button class="close-btn" aria-label="Skip to review">✕</button>
+      <h2>Day ${day} of ${plan.days.length} — ${esc(slotType[0].toUpperCase() + slotType.slice(1))}</h2>
+      <p class="swipe-hint" style="margin-top:0;">Step ${guided.pass * guided.days.length + guided.idx + 1} of ${guided.total} ·
+      Swipe right to pick · swipe left for another option · tap to view recipe</p>`
+      : `<button class="close-btn" aria-label="Close">✕</button>
+      <h2>Swap ${esc(slotType)} — Day ${day}</h2>
       <p class="swipe-hint" style="margin-top:0;">Recommended swaps are sorted first based on what today is short on.<br>
-      Swipe right to confirm · swipe left to skip · tap to view recipe</p>
-      <div id="swap-deck" class="swipe-deck" style="height:340px;"></div>`;
-    sheet.innerHTML = heading;
+      Swipe right to confirm · swipe left to skip · tap to view recipe</p>`;
+    sheet.innerHTML = `${head}
+      <div id="swap-deck" class="swipe-deck" style="height:340px;"></div>
+      <div class="deck-actions"><button class="ghost deck-pass">Pass</button>
+      <span class="deck-left" aria-live="polite"></span><button class="deck-take">Take</button></div>`;
     sheet.querySelector(".close-btn").addEventListener("click", closeSwapPicker);
-    renderSwapCards();
+    sheet.querySelector(".deck-take").addEventListener("click", () => flyOff(1));
+    sheet.querySelector(".deck-pass").addEventListener("click", () => flyOff(-1));
+    renderDeckCards();
   }
 
-  function renderSwapCards() {
+  function renderDeckCards() {
     const deck = document.getElementById("swap-deck");
     if (!deck) return;
     deck.innerHTML = "";
-    if (!swapCtx.candidates.length) {
+    const n = swapCtx.candidates.length;
+    document.querySelector(".deck-left").textContent = `${n} left`;
+    document.querySelectorAll(".deck-actions button").forEach((b) => (b.disabled = !n));
+    if (!n) {
       deck.innerHTML = `<div class="swipe-empty">No other meals in your library for this slot yet — add some on the Browse & Add page.</div>`;
       return;
     }
-    swapCtx.candidates.slice(0, 3).forEach((meal, idx) => {
+    const shown = swapCtx.mode === "guided" && swapCtx.slotType === "dinner" ? 5 : 3;
+    swapCtx.candidates.slice(0, shown).forEach((meal, idx) => {
       const card = document.createElement("div");
       card.className = "swipe-card";
       card.style.zIndex = String(10 - idx);
@@ -841,22 +809,56 @@
         </div>`;
       if (idx === 0) {
         MP.makeSwipeable(card, {
-          onSwipeRight: () => {
-            setSlotMeal(swapCtx.day, swapCtx.slotType, meal.id);
-            toast(`Swapped in "${meal.name}"`);
-            closeSwapPicker();
-            renderPlan();
-          },
-          onSwipeLeft: () => {
-            swapCtx.candidates = swapCtx.candidates.filter((m) => m.id !== meal.id);
-            renderSwapCards();
-          },
+          onSwipeRight: () => takeMeal(meal),
+          onSwipeLeft: () => passMeal(meal),
           onTap: () => openDetail(meal),
         });
       }
       deck.appendChild(card);
     });
   }
+
+  // Button path: play the fly-off on the top card, then call the same handler a swipe does.
+  function flyOff(dir) {
+    const top = swapCtx && swapCtx.candidates[0];
+    const card = document.querySelector("#swap-deck .swipe-card");
+    if (!top || !card || card.classList.contains("fly-left") || card.classList.contains("fly-right")) return;
+    card.classList.add(dir > 0 ? "fly-right" : "fly-left");
+    const go = () => (dir > 0 ? takeMeal(top) : passMeal(top));
+    if (matchMedia("(prefers-reduced-motion: reduce)").matches) go(); else setTimeout(go, 250);
+  }
+
+  // Guard on the top card so a double click or a swipe racing a button fires once.
+  function takeMeal(meal) {
+    if (!swapCtx || swapCtx.candidates[0] !== meal) return;
+    const { day, slotType, mode } = swapCtx;
+    setSlotMeal(day, slotType, meal.id);
+    if (mode === "guided") {
+      toast(`Day ${day}: using "${meal.name}"`);
+      advanceGuided();
+    } else {
+      toast(`Swapped in "${meal.name}"`);
+      closeSwapPicker();
+      renderPlan();
+    }
+  }
+
+  function passMeal(meal) {
+    if (!swapCtx || swapCtx.candidates[0] !== meal) return;
+    swapCtx.candidates = swapCtx.candidates.slice(1);
+    if (!swapCtx.candidates.length && swapCtx.mode === "guided") advanceGuided();
+    else renderDeckCards();
+  }
+
+  document.addEventListener("keydown", (e) => {
+    const t = e.target;
+    if (!swapCtx || !document.getElementById("swap-deck") || document.getElementById("swap-overlay").classList.contains("hidden")) return;
+    if (t && /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName)) return;
+    if (!document.getElementById("detail-overlay").classList.contains("hidden")) return;
+    if (e.key === "ArrowRight") flyOff(1);
+    else if (e.key === "ArrowLeft") flyOff(-1);
+    else if (e.key === "Escape") closeSwapPicker();
+  });
 
   /** Phase 51: a liked meal was nudged up by rankSlot; a flagged-never meal already in the plan stays but says so. */
   function ratingHintHtml(meal) {

@@ -140,6 +140,28 @@ for (const [vp, size] of Object.entries({ pc: { width: 1440, height: 900 }, phon
     await page.waitForFunction(() => document.querySelectorAll('.leftover-row').length === 2 && /freezer/.test(document.body.innerText));
     await shot('leftovers');
   });
+  await step('swap deck: Pass x3 walks the ranked order, counter drops, Take changes the plan, arrow keys work', async () => {
+    await page.goto(`${base}/plan.html`);
+    await page.waitForSelector('#plan-root .slot-card');
+    await page.click('#plan-root .slot-card');
+    await page.click('.day-swap-btn[data-slot="dinner"]');
+    await page.waitForSelector('#swap-deck .swipe-card');
+    const names = () => page.locator('#swap-deck .swipe-card h3').allTextContents();
+    const left = async () => parseInt(await page.textContent('.deck-left'), 10);
+    const first = await names(); const n0 = await left();
+    for (let i = 0; i < 3; i++) { await page.click('.deck-pass'); await page.waitForTimeout(400); }
+    const after = await names();
+    if (await left() !== n0 - 3) throw new Error('counter did not drop by 3');
+    if (n0 >= 6 && first[0] === after[0]) throw new Error('top card unchanged after 3 passes');
+    await page.keyboard.press('ArrowLeft'); await page.waitForTimeout(400);
+    if (await left() !== n0 - 4) throw new Error('ArrowLeft did not pass');
+    const top = (await names())[0];
+    const before = await page.evaluate(() => localStorage.getItem('mp_plan'));
+    await page.keyboard.press('ArrowRight');
+    await page.waitForSelector('#swap-overlay.hidden', { state: 'attached' });
+    const saved = await page.evaluate(() => localStorage.getItem('mp_plan'));
+    if (saved === before) throw new Error('Take did not change mp_plan');
+  });
   await step('guided: slots=lunch adds a 3-card Lunch pass after dinners; closing leaves mp_plan untouched', async () => {
     await page.goto(`${base}/plan.html`);
     await page.waitForSelector('#plan-root .slot-card'); // init saves mp_plan after its awaits; clearing earlier races it

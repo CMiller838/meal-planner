@@ -711,13 +711,15 @@ around gym and busy days. Works inside the `MP.isBatch` chain rules. **Verify:**
 appended from the current pantry. Shop days (day 1 and day 8) are replaced by a rolling shop cadence, so Phase 63 and the
 shelf-life pass must be reconciled first. **Open decision:** keep the 2-week view as an option? Requires Phase 63.
 
-## Phase 69: Swipe deck per slot [M] — not started
+## Phase 69: Swipe deck per slot [M] — built 2026-10-23, live checks pending
 
 **Added 2026-10-22.** Tapping a slot opens a deck of its ranked candidates; swipe right to take, left to pass. Reuses `swipe.js`
 (Discover's gesture code) rather than a second gesture implementation. The deck only walks `rankSlot`'s existing order. Likes and
 passes feed the taste profile (Phase 62) when it exists, and are stateless otherwise. **Verify:** passing three meals shows the
 next three ranked; taking one sets the slot through `setSlotMeal` (so `guidedActive` still gates saving); phone and PC, both
 themes. Requires Phase 24.
+
+**Built 2026-10-23:** one `renderDeck` (swap + guided) with Take/Pass buttons, arrow keys and an "n left" counter; takes and passes are stateless, so the taste-feed line was dropped. Verified: check.py 9/9, walk.mjs pass x3 / ArrowLeft / ArrowRight take, guided take stays unsaved, double click fires once, reduced motion, PC and 390 px.
 
 ## Phase 70: Live nutrient and cost meter while editing [M] — not started
 

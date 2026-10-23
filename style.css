@@ -800,3 +800,11 @@ button.ghost.danger { color: var(--danger); border-color: var(--danger); }
 .compare-card .use-candidate { margin-top: auto; }
 .btn-secondary:disabled { opacity: .5; cursor: not-allowed; }
 @media (max-width: 600px) { .compare-grid { grid-template-columns: 1fr; } }
+
+/* ---- Deck Take/Pass (Phase 69) ---- */
+.deck-actions { display: flex; align-items: center; justify-content: center; gap: 1rem; margin-top: 1rem; }
+.deck-left { color: var(--text-dim); font-size: .85rem; min-width: 4.5rem; text-align: center; }
+.swipe-card.fly-right, .swipe-card.fly-left { transition: transform .25s ease, opacity .25s ease; opacity: 0; }
+.swipe-card.fly-right { transform: translate(120%, 0) rotate(20deg) !important; }
+.swipe-card.fly-left { transform: translate(-120%, 0) rotate(-20deg) !important; }
+@media (prefers-reduced-motion: reduce) { .swipe-card.fly-right, .swipe-card.fly-left { transition: none; } }
