@@ -3018,6 +3018,40 @@
     check("useUpItems: soonest first, drops out/freezer/far", deepEqual(ui.map((x) => x.name), ["kale", "milk"]));
   }
 
+  // Phase 67: batch-cycle design
+  {
+    const G = MP.Generator;
+    const days = Array.from({ length: 7 }, (_, i) => `2026-09-${String(7 + i).padStart(2, "0")}`);
+    check("batchRuns: no busy days equals weekendRuns", days.every((sd) => deepEqual(G.batchRuns(sd, [], []), G.weekendRuns(sd))));
+    const r23 = G.batchRuns("2026-09-07", [2, 3], []);
+    check("batchRuns: busy [2,3] adds a run cooking on day 1's non-busy neighbour", deepEqual(r23[0], [1, 2, 3]) && r23.length === 3);
+    check("batchRuns: day-1 cluster adds no run", deepEqual(G.batchRuns("2026-09-07", [1, 2], []), G.weekendRuns("2026-09-07")));
+    check("batchRuns: free day within 2 before is preferred", G.batchRuns("2026-09-07", [4, 5], [2]).some((r) => r[0] === 2));
+    let capOk = true, cookOk = true;
+    for (const sd of days) for (const busy of [[], [3, 4], [2, 3, 9, 10], [2, 3, 6, 7, 9, 10]]) {
+      const rs = G.batchRuns(sd, busy, []);
+      capOk = capOk && rs.length <= 3 && rs.every((r) => r.every((d, i) => i === 0 || d === r[i - 1] + 1));
+      const w = G.weekendRuns(sd);
+      cookOk = cookOk && rs.every((r) => w.some((x) => x.includes(r[0])) || !busy.includes(r[0]));
+    }
+    check("batchRuns: max 3 runs, consecutive, extra cook day never busy", capOk && cookOk);
+    let leftOk = true;
+    for (const sd of days) for (const busy of [[], [3, 4], [2, 3, 9, 10]]) {
+      const p = G.generatePlan(library, tags, targets, shelfData, sd, undefined, undefined, { busyDays: busy });
+      const dn = (n) => p.days[n - 1].slots.dinner;
+      for (let n = 1; n <= 14; n++) {
+        const s = dn(n);
+        if (!s || !s.mealId) continue;
+        if (s.frozenFrom) { leftOk = leftOk && n - s.frozenFrom >= 5; continue; }
+        const m = mealsById[s.mealId];
+      }
+    }
+    check("batchRuns: plans generate with busy sets; frozen spares >= 5 days later", leftOk);
+    const lk = { 2: { dinner: { mealId: "chorizo-pasta", locked: true } } };
+    const rl = G.generatePlan(library, tags, targets, shelfData, "2026-09-07", undefined, undefined, { busyDays: [3, 4] }, undefined, lk);
+    check("batchRuns: locked dinner kept in a busy plan", rl.days[1].slots.dinner.mealId === "chorizo-pasta");
+  }
+
   lines.push("", `${pass} passed, ${fail} failed`);
   document.getElementById("out").textContent = lines.join("\n");
 })();

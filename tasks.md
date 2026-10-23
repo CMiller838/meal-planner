@@ -708,6 +708,7 @@ Spec: `.claude/specs/phase62.md` [M] (no cuisine, ingredient + cook-style profil
 - [ ] Live: Phase 61 — Worker accepts `PUT /planPrefs` with `repeatGap` via real Hermes and it syncs back on pull.
 
 ## Phase 67: Batch-cycle design
+- [x] batchRuns + test.html assertions + sw.js bump (built 2026-10-23)
 
 Spec: `.claude/specs/phase67.md` (build it with `/build` or queue it for `/overnight`).
 

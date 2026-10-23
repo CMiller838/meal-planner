@@ -699,7 +699,7 @@ Verified 2026-10-23: check.py 9/9, test.html group 65 (item meals placed by use-
 Wednesday" regenerates one day with locks respected, replacing today's whole-plan `regenerate` as the only option. Locks live in
 the plan, not in `mp_planPrefs`. **Verify:** locked slots survive a full regenerate; a one-day reroll leaves other days alone.
 
-## Phase 67: Batch-cycle design [M] — not started
+## Phase 67: Batch-cycle design [M] — done (built 2026-10-23; check.py 9/9, worker_test ok, tester PASS)
 
 **Added 2026-10-22.** The generator picks two or three batch cooks for the fortnight first, then places their leftover chains
 around gym and busy days. Works inside the `MP.isBatch` chain rules. **Verify:** every batch's portions land in the following

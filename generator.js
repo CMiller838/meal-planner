@@ -40,6 +40,41 @@
     return runs;
   }
 
+  // ponytail: rotation only, no re-splitting of runs (a [busy, free, busy] weekend run cooks on day 2 and covers
+  // day 3). Greedy cluster choice, no look at which meals exist; upgrade path is scoring candidate cook days
+  // by the portions they would cover.
+  /** Day-runs for the fortnight's batch cooks (Phase 67): weekend runs, plus a run before each uncovered busy cluster; max 3. */
+  function batchRuns(startDate, busyDays, freeDays, fridgeDays) {
+    const busy = busyDays || [], free = freeDays || [], maxLen = fridgeDays || 3;
+    const runs = weekendRuns(startDate).map((run) => {
+      const first = run.findIndex((d) => !busy.includes(d));
+      return first > 0 ? run.slice(first) : run;
+    });
+    const inRun = (d) => runs.some((r) => r.includes(d));
+    const clusters = [];
+    for (let d = 1; d <= 14; d++) {
+      if (!busy.includes(d)) continue;
+      if (busy.includes(d - 1)) clusters[clusters.length - 1].push(d);
+      else clusters.push([d]);
+    }
+    const extra = [];
+    for (const c of clusters.filter((c) => !c.some(inRun)).sort((a, b) => b.length - a.length || a[0] - b[0])) {
+      let cook = c[0] - 1;
+      while (cook >= 1 && busy.includes(cook)) cook--;
+      if (cook < 1) continue;
+      const pref = [c[0] - 1, c[0] - 2].find((d) => d >= 1 && free.includes(d) && !busy.includes(d));
+      if (pref) cook = pref;
+      if (inRun(cook) || extra.some((r) => r.includes(cook))) continue;
+      const run = [];
+      for (let d = cook; d <= Math.min(14, cook + Math.min(c.length + 1, maxLen) - 1); d++) {
+        if (inRun(d) || extra.some((r) => r.includes(d))) break;
+        run.push(d);
+      }
+      extra.push(run);
+    }
+    return [...runs, ...extra.slice(0, Math.max(0, 3 - runs.length))].sort((a, b) => a[0] - b[0]);
+  }
+
   function effortOf(meal) {
     return meal.prepEffort || "quick";
   }
@@ -343,16 +378,7 @@
       rankSlot(pool, dayNum, dayMealsSoFar,
         { ...opts, tags, targets, prefs, budget, halfKeys, lastUsedDay, ratings, taste, useUpLeft, startDate, profile: prefs.profile, pressure: pressureFor(dayNum) })[0] || null;
 
-    const runs = weekendRuns(startDate).map((run) => {
-      if (run.some((d) => !(prefs.busyDays || []).includes(d))) {
-        const firstNonBusy = run.findIndex((d) => !(prefs.busyDays || []).includes(d));
-        if (firstNonBusy > 0) return run.slice(firstNonBusy);
-      }
-      return run;
-    });
-    // ponytail: rotation only, no re-splitting of runs. A [busy, free, busy] run
-    // cooks on day 2 and covers day 3; splitting to also cover day 1 needs a
-    // second parent and isn't worth it until someone complains.
+    const runs = batchRuns(startDate, prefs.busyDays, prefs.freeDays, (shelfData.cooked_leftovers || {}).fridgeDays);
     const filled = new Set();
     for (let day = 1; day <= 14; day++) if (isLocked(day, "dinner")) filled.add(day);
     const spares = []; // { meal, cookDay, count } — portions the fridge run could not cover (Phase 59)
@@ -432,5 +458,5 @@
     return { startDate, days, generatedAt: new Date().toISOString() };
   }
 
-  MP.Generator = { generatePlan, rankSlot, weekendRuns, weekdayOf, isoToday, pickVariant, chipHits, activeChips, effortOf };
+  MP.Generator = { generatePlan, rankSlot, weekendRuns, batchRuns, weekdayOf, isoToday, pickVariant, chipHits, activeChips, effortOf };
 })(typeof globalThis !== "undefined" ? globalThis : this);
