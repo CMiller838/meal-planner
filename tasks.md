@@ -792,5 +792,12 @@ Spec: `.claude/specs/phase78.md`
 - [ ] Live: with the assistant, run a fridge audit against the deployed Worker, confirm two items and snooze one finding, confirm `GET /pantry/sanity` withholds it
 
 ## Phase 79: Cooking mode
-- [ ] Spec [M]: not yet written (roadmap `## Phase 79`)
+- [ ] Spec [M]: `.claude/specs/phase79.md`
 - [ ] Live: cook a meal step by step on the phone PWA with a timer running, confirm cook, check the pantry deducted once
+
+## Phase 80: Log anything
+- [ ] Spec 80a [L] (Worker resolver, food log, cross-checked lookup): `.claude/specs/phase80a.md`
+- [ ] Spec 80b [M] (app shows off-plan food, eat-requests off-plan): `.claude/specs/phase80b.md`
+- [ ] Live: get a free USDA FoodData Central key and run `npx wrangler secret put USDA_API_KEY` in `worker/`
+- [ ] Live: log today's food (waffles, hoisin duck pot noodle, tea, glycine, chilli) through the assistant; check grams, unconfirmed nutrients and the pantry
+- [ ] Live: clear the stale empty waffle eat-requests from 2026-10-24

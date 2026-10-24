@@ -607,3 +607,36 @@ and a timer button on any step with minutes (counts down in the app; a phone-clo
 which goes through the existing `PUT /eat-requests` (`commitCook`), so it deducts exactly once, same as the assistant's `log_meal`.
 **Verify:** confirm twice deducts once; a running timer survives Next/Back; no-method fallback; PC and 390 px, both themes.
 Requires Phase 40. Assistant side: none (voice stays wake word every time).
+
+## Phase 80: Log anything [L] — added 2026-10-24, not started
+
+**Added 2026-10-24.** Today only food that matches a plan slot counts as eaten, so off-plan meals, staples and supplements
+are rejected or can't be logged. This phase adds one path that needs no plan slot, for eating and for stocking the pantry:
+
+- **Resolver.** Free text such as "chicken 200g", "2 waffles" or "1 potato" resolves in this order: your saved products
+  (label or barcode data), your pantry items, a generic food from `cofid.json` (so basics like chicken, rice and eggs need no AI),
+  then the AI lookup below. No match and no data logs the entry with empty nutrients (missing, never zero) and says so.
+- **Amounts.** Grams are the unit of record. A count ("1 potato", "2 waffles") converts through a typical grams-per-item stored
+  on the product, flagged as an estimate; the log keeps both the count and the grams. A food with no known item weight asks once.
+- **Food log.** Each entry is `{when, name, grams, count?, nutrients, source}` with nutrients frozen at log time, not tied to a
+  plan slot. It feeds the weekly nutrient totals and the Phase 32 queue reports it as `off_plan` instead of rejecting it.
+  Replaying the same entry id is a no-op, so nothing deducts twice.
+- **Pantry.** Eating something in the pantry deducts it (never below zero, logged and undoable). Saying you have something
+  ("200 servings of glycine", "20 Guayusa tea bags") adds it through the same resolver. Not in the pantry: logged, no deduction.
+- **AI fill with cross-checking.** For an unknown food the lookup gathers values from at least two trusted sources (CoFID, USDA
+  FoodData Central, Open Food Facts, the manufacturer's own page). Per nutrient: if two or more sources agree within the
+  tolerance, save the mean as `basis: "estimate"` with the source names recorded. If they disagree, or only one source has it,
+  leave that nutrient empty and list it as unconfirmed. A label photo or barcode (`label` / `off`) always outranks an estimate.
+- **Supplements and composites.** Supplements (glycine, tea) count toward totals when they have confirmed data and are otherwise
+  only logged and deducted. A composite item such as a pot noodle is one product with its label nutrients, not split into ingredients.
+- **Today's food** (waffles, hoisin duck pot noodle, tea, glycine, chilli) is logged through this path once it ships. The stale
+  empty waffle eat-requests from 2026-10-24 get cleared then.
+
+Rules: planned-slot eats and `commitCook` are unchanged. No new dependency. Writes go through the existing activity log so they undo.
+**Open points** (for `plan-phase`): the agreement tolerance per nutrient (starting point 15% for energy and macros, 25% for
+micros); which sources the lookup may call and how (Hermes search vs direct API); whether the resolver lives in the Worker or the
+client; item-weight defaults list; whether "I have X" without a quantity asks or assumes one pack.
+**Verify:** a basic food resolves from CoFID with no AI; "2 waffles" logs grams and count; an off-plan eat deducts the pantry once
+and replaying it deducts nothing; two agreeing sources save as `estimate` with sources, two disagreeing sources save nothing for
+that nutrient; a label value overwrites an estimate; a no-data item logs with empty nutrients; undo restores the pantry.
+Requires Phases 30, 31, 32, 34. Assistant side: `notion_assistant` Phase 54.

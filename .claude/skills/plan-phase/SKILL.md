@@ -42,6 +42,8 @@ wrong, say so in one line and update the heading.
    Also, for any phase that writes state (a route, a KV key), grep where that state lives: the app's `localStorage` is
    the authority and the Worker's KV copy is a derived mirror (e.g. `plan`), so a "write the plan" roadmap line may need
    a pending-queue + app-apply path, which is a gate.
+   Likewise, when the roadmap has the app read data "over" a Worker route, grep the app for a local copy first
+   (e.g. `MP.methodOf`): the app should read its own library, so say so in the spec's Decisions.
    For a phase that adds a field to a stored object (a slot, a record), grep for the mirror/serialiser that copies that object
    to KV or another store (e.g. `planMirror` in `hermes-sync.js`): one that whitelists fields silently strips the new one, so
    list it under Files touched.
