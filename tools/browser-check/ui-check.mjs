@@ -4,6 +4,7 @@
 // console error (network failures are ignored: third-party APIs are blocked in sandboxes), horizontal scroll, an empty
 // body, or a theme that did not apply. --suite runs a page that prints "N passed, M failed" (the project's test page).
 // --theme-key: localStorage key the app reads its theme from; without it the theme is set as data-theme on <html>.
+// --seed-localstorage '<json object>': extra localStorage keys set before every page load (fixtures for state-driven UI).
 // Also audits text contrast (WCAG AA) and phone tap targets (>= 44 px): printed as `warn` lines, failures with --strict-ui.
 // Exit 1 on any failure. Browser: BROWSER_CHANNEL=msedge|chrome drives an installed browser instead of the download.
 import { chromium } from 'playwright';
@@ -15,6 +16,7 @@ const arg = (n, d) => { const i = process.argv.indexOf(`--${n}`); return i > 0 ?
 const root = path.resolve(arg('root', '../..'));
 const pages = arg('pages', fs.readdirSync(root).filter(f => f.endsWith('.html') && f !== arg('suite', 'test.html')).sort().join(',')).split(',');
 const themeKey = arg('theme-key', ''), shots = arg('shots', ''), suite = arg('suite', 'test.html');
+const seed = arg('seed-localstorage', '') ? JSON.parse(arg('seed-localstorage')) : null; // {"mp_foodLog": [...]}: non-strings are JSON-stringified
 const VIEWPORTS = { pc: { width: 1440, height: 900 }, phone: { width: 390, height: 844 } };
 const THEMES = ['dark', 'light'];
 const NOISE = /Failed to load resource|net::ERR|CORS|ERR_|favicon/i;
@@ -70,6 +72,7 @@ const outputs = await Promise.all(combos.map(async ([vp, size, theme]) => {
   const lines = [], say = l => lines.push(l);
   const ctx = await browser.newContext({ viewport: size });
   if (themeKey) await ctx.addInitScript(([k, t]) => localStorage.setItem(k, t), [themeKey, theme]);
+  if (seed) await ctx.addInitScript(o => { for (const [k, v] of Object.entries(o)) localStorage.setItem(k, typeof v === 'string' ? v : JSON.stringify(v)); }, seed);
   for (const name of pages) {
     const page = await ctx.newPage(), errs = [];
     page.on('pageerror', e => errs.push(String(e)));
