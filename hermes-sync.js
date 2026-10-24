@@ -385,6 +385,24 @@ window.MP = window.MP || {};
     return MP.Ratings.get();
   }
 
+  /** GET /food-log (Phase 80b) mirrored to mp_foodLog, read-only. Failure-silent: keeps the last mirror. */
+  async function fetchFoodLog() {
+    if (!config().enabled) return "off";
+    try {
+      const remote = await req("GET", "/food-log");
+      if (remote && Array.isArray(remote.entries)) localStorage.setItem("mp_foodLog", JSON.stringify({ entries: remote.entries }));
+    } catch (e) {}
+    return "ok";
+  }
+
+  /** Mirrored food-log entries; [] on a missing or malformed mirror. */
+  function localFoodLog() {
+    try {
+      const e = JSON.parse(localStorage.getItem("mp_foodLog")).entries;
+      return Array.isArray(e) ? e.filter((x) => x && typeof x === "object") : [];
+    } catch (err) { return []; }
+  }
+
   /** Profile.md settings (Phase 52), mirrored to mp_settings. null when absent or corrupt. */
   function settings() {
     try {
@@ -685,12 +703,12 @@ window.MP = window.MP || {};
       syncLibrary();
       // Sequenced: syncPlacements rewrites mp_plan from localStorage, so an
       // eat applied in parallel could be overwritten.
-      syncPlacements().then(syncEatRequests).then(fetchPlanDraft);
+      syncPlacements().then(syncEatRequests).then(fetchFoodLog).then(fetchPlanDraft);
       pushPrefs();
       flushShoppingLines();
     });
     syncLibrary();
-    syncPlacements().then(syncEatRequests).then(fetchPlanDraft);
+    syncPlacements().then(syncEatRequests).then(fetchFoodLog).then(fetchPlanDraft);
     pushPrefs();
     pushCooks(MP.Cooks ? MP.Cooks.all() : []);
     flushOps();
@@ -780,7 +798,7 @@ window.MP = window.MP || {};
     decide, needsPlan, config, saveConfig, syncLibrary, syncPlanFlag, ackPlanFlag,
     shoppingLines, setLine, fetchShoppingLines, flushShoppingLines,
     fetchItems, fetchPantry, localItems, writeLocalItems, queueOp, applyOps, flushOps,
-    planMirror, pushPlan, pushPrefs, fetchPlanPrefs, fetchDayHints, fetchPlanDraft, ackPlanDraft, fetchRatings, fetchSettings, settings, hardTerms, fetchDrafts, deleteDraft, pushRating, pushPlanPrefs, newPlacements, newSince, syncPlacements, ackPlacements, syncEatRequests,
+    planMirror, pushPlan, pushPrefs, fetchPlanPrefs, fetchDayHints, fetchPlanDraft, ackPlanDraft, fetchRatings, fetchFoodLog, localFoodLog, fetchSettings, settings, hardTerms, fetchDrafts, deleteDraft, pushRating, pushPlanPrefs, newPlacements, newSince, syncPlacements, ackPlacements, syncEatRequests,
     localEatenLog, logEaten, unlogEaten, pushEatenLog, pushCooks, start,
     syncProducts, localProducts, saveProduct, fetchActivity, undoActivity, resyncKey,
   };

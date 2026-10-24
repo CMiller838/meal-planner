@@ -14,12 +14,13 @@
   let cache = null;
   async function load() {
     if (cache) return cache;
-    const [tags, targets] = await Promise.all([
+    const [tags, targets, foodLog] = await Promise.all([
       fetch("ingredient-nutrient-tags.json").then((r) => r.json()),
       fetch("nutrition-targets.json").then((r) => r.json()),
+      fetch("food-log.json").then((r) => r.json()),
     ]);
     const sync = MP.Sync && MP.Sync.settings && MP.Sync.settings();
-    cache = { tags, targets: withProfile(targets, sync) };
+    cache = { tags, targets: withProfile(targets, sync), foodLog };
     return cache;
   }
 

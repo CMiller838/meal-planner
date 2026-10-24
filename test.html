@@ -1135,10 +1135,14 @@
       check("matchEatRequests: input plan is not mutated", deepEqual(p, clone));
       check("matchEatRequests: an eaten slot is never overwritten",
         MP.Plan.matchEatRequests(p, [r("m2", at(8, 20))], lib).rejected[0].reason === "eaten");
-      check("matchEatRequests: a meal not on that day's plan is rejected",
-        MP.Plan.matchEatRequests(p, [r("m2", at(7, 12))], lib).rejected[0].reason === "not-planned");
-      check("matchEatRequests: a date outside the plan is rejected",
-        MP.Plan.matchEatRequests(p, [r("m1", at(20, 12))], lib).rejected[0].reason === "not-planned");
+      check("matchEatRequests: a library meal not on that day's plan goes off-plan, not rejected",
+        (() => { const o = MP.Plan.matchEatRequests(p, [r("m2", at(7, 12))], lib); return o.offPlan.length === 1 && o.offPlan[0].mealId === "m2" && !o.rejected.length && !o.applied.length; })());
+      check("matchEatRequests: a date outside the plan goes off-plan",
+        MP.Plan.matchEatRequests(p, [r("m1", at(20, 12))], lib).offPlan.length === 1);
+      check("matchEatRequests: an off-plan replay (id in the eaten log) is eaten",
+        (() => { const q = r("m2", at(7, 12)); const o = MP.Plan.matchEatRequests(p, [q], lib, [{ id: q.id }]); return !o.offPlan.length && o.rejected[0].reason === "eaten"; })());
+      check("matchEatRequests: the same off-plan request twice in a batch applies once",
+        (() => { const q = r("m2", at(7, 12)); const o = MP.Plan.matchEatRequests(p, [q, q], lib); return o.offPlan.length === 1 && o.rejected[0].reason === "eaten"; })());
       check("matchEatRequests: an unknown meal is rejected",
         MP.Plan.matchEatRequests(p, [r("zzz", at(7, 12))], lib).rejected[0].reason === "unknown-meal");
       {
@@ -1153,6 +1157,17 @@
           replay.applied.length === 0 && replay.rejected[0].reason === "eaten");
         check("confirm-cook: a different eatenAt still takes the free slot",
           MP.Plan.matchEatRequests(p2, [r("m1", at(7, 19))], dup).applied.length === 1);
+      }
+      localStorage.setItem("mp_foodLog", "garbage");
+      check("localFoodLog: a malformed mirror is []", deepEqual(MP.Sync.localFoodLog(), []));
+      localStorage.setItem("mp_foodLog", JSON.stringify({ entries: [{ id: "f1", kind: "eat" }, null] }));
+      check("localFoodLog: returns entries, dropping junk", MP.Sync.localFoodLog().length === 1);
+      localStorage.removeItem("mp_foodLog");
+      {
+        const tg = { protein_g: 50, vitC_mg: 80 };
+        const fe = MP.Nutrition.foodAsEaten({ id: "f1", name: "x", when: "2026-09-07T12:00:00Z", nutrients: { vitC_mg: { value: 40 } } }, tg, 0.1);
+        const wg = MP.Nutrition.weekGaps([fe], {}, ["2026-09-07"], {}, tg, () => "2026-09-07");
+        check("gap strip: a food-log entry marks its day logged", wg.days[0].logged && wg.nutrients.length > 0);
       }
       check("newSince: only entries after the ack, ascending",
         deepEqual(MP.Sync.newSince([r("b", at(7, 13)), r("a", at(7, 11)), r("c", at(7, 9))], at(7, 10)).map((x) => x.mealId), ["a", "b"]));

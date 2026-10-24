@@ -608,9 +608,9 @@ which goes through the existing `PUT /eat-requests` (`commitCook`), so it deduct
 **Verify:** confirm twice deducts once; a running timer survives Next/Back; no-method fallback; PC and 390 px, both themes.
 Requires Phase 40. Assistant side: none (voice stays wake word every time).
 
-## Phase 80: Log anything [L] — added 2026-10-24, not started
+## Phase 80: Log anything [L] — built 2026-10-24, live checks pending
 
-**80a built 2026-10-24, live checks pending** (Worker resolver, `POST/GET /food-log`; verified by `worker_test.mjs`, `check.py` 10/10 and the tester). 80b (app side) not started.
+**80a built 2026-10-24, live checks pending** (Worker resolver, `POST/GET /food-log`; verified by `worker_test.mjs`, `check.py` 10/10 and the tester). **80b built 2026-10-24** (app mirrors `GET /food-log`; Today card "Also eaten", gap strip counts it, off-plan eat-requests applied without a slot; verified by test.html, `check.py` 10/10, seeded-mirror browser run at PC and 390 px both themes, and the tester).
 
 **Added 2026-10-24.** Today only food that matches a plan slot counts as eaten, so off-plan meals, staples and supplements
 are rejected or can't be logged. This phase adds one path that needs no plan slot, for eating and for stocking the pantry:

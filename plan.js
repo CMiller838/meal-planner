@@ -740,12 +740,19 @@
   // re-verified against the two generator phases that follow.
   // Last 7 days of the eaten log, per nutrient (informational; base targets). Today's protein
   // figure uses the gym-day target while the "Gym day today" box (mp_gymDay, today only) is ticked.
+  /** Phase 80b: mirrored off-plan eat entries as eaten-log orphans (stock entries never count). */
+  function foodEaten() {
+    return MP.Sync.localFoodLog().filter((e) => e.kind !== "stock" && e.when)
+      .map((e) => MP.Nutrition.foodAsEaten(e, tagsData.targets, tagsData.foodLog.tagShare));
+  }
+
   function renderGapStrip() {
     const el = document.getElementById("gap-strip");
     if (!el || !tagsData) return;
     let log = [];
     try { log = JSON.parse(localStorage.getItem("mp_eatenLog")) || []; } catch (e) { log = []; }
     if (!Array.isArray(log)) log = [];
+    log = log.concat(foodEaten());
     const fmt = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/London" });
     const dayKey = (e) => fmt.format(new Date(e.eatenAt));
     const today = fmt.format(new Date());
@@ -796,6 +803,11 @@
         ${mealsById[l.mealId] ? `<button class="btn" data-left-eat="${esc(l.id)}">Ate one</button>` : ""}
         ${l.storage === "fridge" ? `<button class="btn" data-left-freeze="${esc(l.id)}">Freeze 1</button>` : ""}
         <button class="ghost" data-left-bin="${esc(l.id)}">Threw away</button></li>`;
+    const todayKey = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/London" });
+    const alsoEaten = MP.Sync.localFoodLog().filter((e) => {
+      try { return e.kind !== "stock" && todayKey.format(new Date(e.when)) === todayKey.format(new Date()); } catch (err) { return false; }
+    });
+    const alsoRow = (e) => `<li>${esc(e.name)}${e.grams ? ` · ${e.gramsEstimate ? "~" : ""}${esc(String(e.grams))}g` : ""}${Object.keys(e.nutrients || {}).length ? "" : " <small>(no nutrient data)</small>"}</li>`;
     el.innerHTML = `<div class="gap-head"><strong>Today</strong>
         <label class="gap-gym"><input type="checkbox" id="today-gym"${t.gym ? " checked" : ""}> Gym day today</label></div>
       ${due.length ? `<div class="today-routines">${due.map((m) => {
@@ -804,6 +816,7 @@
       }).join("")}</div>` : ""}
       ${defrost.map((n) => `<p class="defrost-note">❄ Defrost tonight: ${esc(mealsById[n.mealId].name)} for tomorrow</p>`).join("")}
       ${lefts.length ? `<div class="leftovers"><strong>Leftovers</strong><ul>${lefts.map(leftoverRow).join("")}</ul></div>` : ""}
+      ${alsoEaten.length ? `<div class="leftovers"><strong>Also eaten</strong><ul>${alsoEaten.map(alsoRow).join("")}</ul></div>` : ""}
       ${counter("water", "Water (cups)", goal ? ` <small>of ${goal}</small>` : "")}
       ${counter("caffeine", "Caffeine (cups)",
         ` <select id="today-cup" aria-label="Cup type"><option value="">type?</option>${Object.keys(countersData.caffeine.cupMg).map((k) => `<option value="${esc(k)}"${k === cup ? " selected" : ""}>${esc(k)}</option>`).join("")}</select>` +
@@ -1679,12 +1692,14 @@
   /** Pure: which plan slot each queued request lands on — the first un-eaten
    *  slot holding that meal on the plan day of its eatenAt. Never forced:
    *  anything else is rejected (and shown), never mutates the input. */
-  function matchEatRequests(planIn, requests, library) {
+  function matchEatRequests(planIn, requests, library, eatenLog) {
+    const logged = new Set((eatenLog || []).map((e) => e && e.id));
     const byId = new Map((library || []).map((m) => [m.id, m]));
     const taken = new Set();
     const seen = new Set();
     const applied = [];
     const rejected = [];
+    const offPlan = [];
     for (const r of requests) {
       const meal = byId.get(r.mealId);
       const base = { id: r.id, mealId: r.mealId, name: meal ? meal.name : r.mealId, eatenAt: r.eatenAt };
@@ -1696,20 +1711,22 @@
       const slots = day ? planIn.days[day - 1].slots : {};
       const withMeal = SLOT_TYPES.filter((s) => slots[s] && slots[s].mealId === r.mealId);
       // Idempotent: a request id already applied (this batch, or earlier: its slot carries that eatenAt) is never applied twice.
-      if (seen.has(r.id) || withMeal.some((s) => slots[s].eatenAt === r.eatenAt)) {
+      if (seen.has(r.id) || logged.has(`${r.mealId}:${r.eatenAt}`) || withMeal.some((s) => slots[s].eatenAt === r.eatenAt)) {
         rejected.push({ ...base, reason: "eaten" });
         continue;
       }
       seen.add(r.id);
       const slotType = withMeal.find((s) => !slots[s].eatenAt && !taken.has(`${day}-${s}`));
       if (!slotType) {
-        rejected.push({ ...base, reason: withMeal.length ? "eaten" : "not-planned" });
+        // Phase 80b: a library meal with no slot is logged off-plan; one whose slots are all eaten stays "eaten".
+        if (withMeal.length) rejected.push({ ...base, reason: "eaten" });
+        else offPlan.push(base);
         continue;
       }
       taken.add(`${day}-${slotType}`);
       applied.push({ ...base, day, slotType });
     }
-    return { applied, rejected };
+    return { applied, rejected, offPlan };
   }
 
   /** Applies queued requests through the same eat flow as the Eat sheet:
@@ -1718,12 +1735,11 @@
    *  eaten-log id matches the assistant's row. null = not now (guided mode). */
   async function applyEatRequests(requests) {
     if (guidedActive || !plan) return null;
-    const result = matchEatRequests(plan, requests, library);
-    if (!result.applied.length) return result;
+    const result = matchEatRequests(plan, requests, library, MP.Sync.localEatenLog());
+    if (!result.applied.length && !result.offPlan.length) return result;
     let pantry = await MP.Sync.fetchItems("pantry");
-    for (const a of result.applied) {
-      const slot = plan.days[a.day - 1].slots[a.slotType];
-      const meal = MP.effectiveMeal(mealsById[a.mealId], slot.variantId, slot.subs);
+    // Shared cook branch: an open cook is a portion (no pantry), else a cook at the planned quantities.
+    const eatOne = (meal, variantId, eatenAt) => {
       const open = MP.Cooks.openFor(meal.id);
       if (open.length) {
         MP.Cooks.take(open[0].id);
@@ -1731,25 +1747,36 @@
         const used = Object.fromEntries((meal.ingredients || []).map((i) => [i.key, i.qty || ""]));
         applyCookOps(MP.ShoppingList.eatPlan(meal, used, pantry).ops);
         pantry = { items: MP.Sync.localItems("pantry") };
-        MP.Cooks.open(meal, slot.variantId, (meal.servings || 1) - 1);
+        MP.Cooks.open(meal, variantId, (meal.servings || 1) - 1);
       }
-      slot.eatenAt = a.eatenAt;
       if (MP.Prefs) MP.Prefs.bump(meal, "eaten");
-      logPortion(meal, a.eatenAt);
+      logPortion(meal, eatenAt);
+    };
+    for (const a of result.applied) {
+      const slot = plan.days[a.day - 1].slots[a.slotType];
+      eatOne(MP.effectiveMeal(mealsById[a.mealId], slot.variantId, slot.subs), slot.variantId, a.eatenAt);
+      slot.eatenAt = a.eatenAt;
     }
+    // Phase 80b: off-plan, no slot written.
+    for (const o of result.offPlan) eatOne(mealsById[o.mealId], undefined, o.eatenAt);
     savePlan();
     renderPlan();
+    renderGapStrip();
+    renderTodayCard();
     MP.Sync.flushOps();
     return result;
   }
 
-  function eatBannerHtml(applied, rejected) {
+  function eatBannerHtml(applied, rejected, offPlan) {
     const reasonText = { eaten: "already eaten", "not-planned": "not on that day's plan", "unknown-meal": "not in your library" };
     let html = `<button class="ghost dismiss" aria-label="Dismiss">✕</button>`;
     if (applied.length) {
       html += `<p>Marked eaten from your assistant:</p><ul>`;
       html += applied.map((a) => `<li>Day ${a.day} ${esc(a.slotType)} — ${esc(a.name || "")}</li>`).join("");
       html += `</ul>`;
+    }
+    if (offPlan && offPlan.length) {
+      html += `<p>Logged off-plan:</p><ul>${offPlan.map((o) => `<li>${esc(o.name || "")}</li>`).join("")}</ul>`;
     }
     if (rejected.length) {
       html += `<p class="rejected">Couldn't mark eaten:</p><ul class="rejected">`;
@@ -1762,8 +1789,9 @@
   window.addEventListener("mp:eat-requests-applied", (e) => {
     const el = document.getElementById("hermes-placements-banner");
     const { applied, rejected } = e.detail;
-    if (!el || (!applied.length && !rejected.length)) return;
-    el.innerHTML = eatBannerHtml(applied, rejected);
+    const offPlan = e.detail.offPlan || [];
+    if (!el || (!applied.length && !rejected.length && !offPlan.length)) return;
+    el.innerHTML = eatBannerHtml(applied, rejected, offPlan);
     el.hidden = false;
     el.querySelector(".dismiss").addEventListener("click", () => {
       el.hidden = true;
@@ -2169,6 +2197,7 @@
     vocabAll = vocab;
     dayHints = await MP.Sync.fetchDayHints();
     await MP.Sync.fetchRatings();
+    await MP.Sync.fetchFoodLog();
     applyHints((JSON.parse(localStorage.getItem(LS_PLAN) || "null") || {}).startDate);
     const guidedParam = new URLSearchParams(location.search).get("guided") === "1";
     if (guidedParam) {

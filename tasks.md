@@ -798,7 +798,8 @@ Spec: `.claude/specs/phase78.md`
 
 ## Phase 80: Log anything
 - [x] Spec 80a [L] (Worker resolver, food log, cross-checked lookup): `.claude/specs/phase80a.md`
-- [ ] Spec 80b [M] (app shows off-plan food, eat-requests off-plan): `.claude/specs/phase80b.md`
+- [x] Spec 80b [M] (app shows off-plan food, eat-requests off-plan): `.claude/specs/phase80b.md`
 - [ ] Live: get a free USDA FoodData Central key and run `npx wrangler secret put USDA_API_KEY` in `worker/`
 - [ ] Live: log today's food (waffles, hoisin duck pot noodle, tea, glycine, chilli) through the assistant; check grams, unconfirmed nutrients and the pantry
+- [ ] Live: log an off-plan library meal through the assistant; Plan page shows it under "Also eaten" and a "Logged off-plan:" banner, and a reload does not deduct the pantry twice
 - [ ] Live: clear the stale empty waffle eat-requests from 2026-10-24
