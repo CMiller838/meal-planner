@@ -642,3 +642,30 @@ client; item-weight defaults list; whether "I have X" without a quantity asks or
 and replaying it deducts nothing; two agreeing sources save as `estimate` with sources, two disagreeing sources save nothing for
 that nutrient; a label value overwrites an estimate; a no-data item logs with empty nutrients; undo restores the pantry.
 Requires Phases 30, 31, 32, 34. Assistant side: `notion_assistant` Phase 54.
+
+## Phase 81: Eating out, named, and skip that asks [M] — not started
+
+**Added 2026-10-24.** "Eating out" is a nameless marker today and Skip silently re-plans. An eating-out slot now takes a name and
+what you had (e.g. "Spoons — burger and chips"), estimated through the Phase 80a resolver. Skip asks: push to tomorrow, move to a
+later free slot, swap for something else, or drop it (today's re-flow). **Verify:** the Spoons dinner shows its name and counts toward
+coverage as an estimate; each of the four skip choices leaves the plan correct and undoable. Requires Phases 63, 80a, 80b.
+
+## Phase 82: Swap days and edit past days [M] — not started
+
+**Added 2026-10-24.** Swap any two meals or whole days in one action, and backfill or correct what you ate on earlier days (a
+meal, or eating out with a description). Re-flow stays on request only. **Verify:** swapping Tue and Thu moves leftovers and
+shelf-life warnings with them; a past dinner can be set to "Spoons" without touching the pantry; undo restores. Requires Phase 81.
+
+## Phase 83: Flexible plan start and length [L] — not started
+
+**Added 2026-10-24.** Generate a plan that starts on any date, from any first meal (dinner on day 1 leaves earlier slots empty),
+for 1 to 28 days, with a chosen shop weekday. One-tap Generate stays one tap with today's defaults. **Verify:** a plan starting
+Thursday dinner for 10 days has no Thursday breakfast or lunch, shopping and shelf-life follow the chosen shop day, and a default
+Generate is unchanged. Requires Phases 68 (rolling, shop anchor), 82.
+
+## Phase 84: Tell it anything: chat and assistant control [M] — not started
+
+**Added 2026-10-24.** The planning chat and the assistant can start a plan on a date, skip, mark eating out, swap and backfill, by
+plain message ("start Thursday dinner, I'm at Spoons Friday"). Edits are validated constraints and park as a pending draft like
+Phase 63. **Verify:** each message type produces the matching draft, an unknown edit is dropped, nothing applies unseen. Requires
+Phases 72, 81, 82, 83.

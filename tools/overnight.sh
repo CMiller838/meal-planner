@@ -11,8 +11,10 @@ args=(); export PIPELINE_SLEEP=0
 for a in "$@"; do if [ "$a" = sleep ] || [ "$a" = --sleep ]; then PIPELINE_SLEEP=1; else args+=("$a"); fi; done
 set -- ${args[@]+"${args[@]}"}
 
-if pgrep -f 'tools/pipeline.sh' >/dev/null; then
-    echo "ALREADY RUNNING: $(pgrep -af 'tools/pipeline.sh' | head -1). Not starting a second one."; exit 3
+# only a pipeline running in THIS repo counts; other projects' pipelines are independent and may run in parallel
+running=$(for p in $(pgrep -f 'tools/pipeline.sh'); do [ "$(readlink "/proc/$p/cwd")" = "$PWD" ] && ps -o pid=,args= -p "$p"; done | head -1)
+if [ -n "$running" ]; then
+    echo "ALREADY RUNNING: $running. Not starting a second one."; exit 3
 fi
 
 # workflow/tooling files are safe to commit before the run; app code is not (it is someone's half-built phase)

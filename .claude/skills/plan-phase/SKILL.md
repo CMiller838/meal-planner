@@ -15,6 +15,12 @@ heading in `docs/roadmap.md` (in file order) with no `.claude/specs/phaseN.md` a
 `tasks.md` (an [S] phase counts as planned once that section exists). Say which phase you picked in one line, then
 continue. None found: say so and stop.
 
+## Free-form request (no roadmap phase yet)
+
+Before asking the user any scoping questions, grep the code once for the request's headline nouns (e.g. "skip", "eating
+out", "start date"). Ask only about what is genuinely missing, and open with what already exists so the questions are not
+about built features.
+
 ## Tier first — read it from the heading, never ask the user
 
 Each heading in `docs/roadmap.md` ends `[S]`, `[M]` or `[L]`. "Plan Phase N" is enough.

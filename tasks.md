@@ -803,3 +803,15 @@ Spec: `.claude/specs/phase78.md`
 - [ ] Live: log today's food (waffles, hoisin duck pot noodle, tea, glycine, chilli) through the assistant; check grams, unconfirmed nutrients and the pantry
 - [ ] Live: log an off-plan library meal through the assistant; Plan page shows it under "Also eaten" and a "Logged off-plan:" banner, and a reload does not deduct the pantry twice
 - [ ] Live: clear the stale empty waffle eat-requests from 2026-10-24
+
+## Phase 81: Eating out, named, and skip that asks
+Spec: `.claude/specs/phase81.md`
+
+## Phase 82: Swap days and edit past days
+Spec: `.claude/specs/phase82.md`
+
+## Phase 83: Flexible plan start and length
+Spec: `.claude/specs/phase83.md`
+
+## Phase 84: Tell it anything: chat and assistant control
+Spec: `.claude/specs/phase84.md`
