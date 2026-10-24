@@ -1232,6 +1232,7 @@
       ${MP.methodOf(meal).steps.length ? MP.methodHtml(meal) : `<p>${esc(effMeal.instructions || "")}</p>`}
       ${MP.methodOf(meal).status === "drafted" ? `<p class="muted">Drafted by your assistant — accept it in Browse.</p>` : ""}
       <div class="day-slot-actions">
+        <button class="ghost detail-cook-btn">Cook</button>
         <button class="ghost detail-eat-btn">Eat this</button>
       </div>
     `;
@@ -1239,6 +1240,10 @@
       overlay.classList.add("hidden");
     });
     sheet.querySelector(".detail-eat-btn").addEventListener("click", () => openEatSheet(effMeal, null, null, variantId));
+    sheet.querySelector(".detail-cook-btn").addEventListener("click", () => {
+      overlay.classList.add("hidden");
+      MP.CookMode.open(meal, effMeal, () => openEatSheet(effMeal, null, null, variantId), variantId);
+    });
     overlay.classList.remove("hidden");
   }
 

@@ -21,6 +21,7 @@
 <script src="day-hints.js"></script>
 <script src="ratings.js"></script>
 <script src="plan-chat.js"></script>
+<script src="cook-mode.js"></script>
 <script src="plan.js"></script>
 <script>
 (async function () {
@@ -3216,6 +3217,34 @@
     const lib1 = [{ id: "z", name: "Z", ingredients: [] }];
     const pr = MP.Plan.applyPlacements(rolledPlan, [{ day: 5, slot: "dinner", mealId: "z", requestedAt: "2026-09-08T10:00:00Z" }, { day: 1, slot: "dinner", mealId: "z", requestedAt: "2026-09-08T10:00:00Z" }, { day: 7, slot: "dinner", mealId: "z", requestedAt: "2026-09-09T07:00:00Z" }], lib1);
     check("roll: older placement shifts by the roll, past one rejected, newer untouched", pr.applied.some((x) => x.day === 3) && pr.plan.days[2].slots.dinner && pr.rejected.length === 1 && pr.rejected[0].reason === "past" && !!pr.plan.days[6].slots.dinner);
+  }
+
+  {
+    // Phase 79: cooking mode
+    const CM = MP.CookMode;
+    check("cook: timerLeft counts down from endAt and clamps at 0", CM.timerLeft({ endAt: 5000 }, 2000) === 3000 && CM.timerLeft({ endAt: 5000 }, 9000) === 0);
+    const ov = document.createElement("div"); ov.id = "cook-overlay"; ov.className = "hidden";
+    ov.innerHTML = '<div id="cook-sheet"></div>'; document.body.appendChild(ov);
+    const mk = (extra) => ({ id: "cm1", name: "Cook <b>Test</b>", ingredients: [{ name: "Rice", qty: "100g" }], ...extra });
+    let confirmed = 0;
+    CM.open(mk({ method: [{ text: "Boil", minutes: 10 }, { text: "Serve" }] }), mk(), () => confirmed++);
+    const sh = document.getElementById("cook-sheet");
+    sh.querySelector(".cook-timer-btn").click();
+    const before = CM._state().timers[0].endAt;
+    sh.querySelector(".cook-next").click();
+    sh.querySelector(".cook-back").click();
+    check("cook: timer survives step changes", CM._state().timers[0] && CM._state().timers[0].endAt === before && /Cancel timer/.test(sh.innerHTML));
+    check("cook: meal text escaped", !sh.querySelector("h2 b"));
+    sh.querySelector(".cook-next").click();
+    check("cook: last step offers Confirm cook, step 2 has no timer button", sh.querySelector(".cook-next").textContent === "Confirm cook" && !sh.querySelector(".cook-timer-btn"));
+    const nextBtn = sh.querySelector(".cook-next");
+    nextBtn.click(); nextBtn.click();
+    check("cook: Confirm cook twice calls onConfirm once and closes", confirmed === 1 && CM._state() === null);
+    CM.open(mk(), mk(), () => confirmed++);
+    check("cook: no-method meal shows ingredients, no Back, Confirm cook offered", /Rice/.test(sh.innerHTML) && !sh.querySelector(".cook-back") && sh.querySelector(".cook-next").textContent === "Confirm cook");
+    CM.close();
+    check("cook: close without confirm calls nothing", confirmed === 1);
+    ov.remove();
   }
 
   lines.push("", `${pass} passed, ${fail} failed`);

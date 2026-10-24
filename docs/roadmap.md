@@ -598,7 +598,7 @@ Assistant side: Phase 43a.
 
 **Built 2026-10-24.** `GET /pantry/audit`, `GET /pantry/sanity`, `POST /pantry/audit` (side store KV `pantryAudit`, never writes `pantry`; logged and undoable). Verified: `node tools/worker_test.mjs` covers all five finding classes, snooze/clear/expiry, batch ordering and `remaining`, unknown-name 400 with nothing stored, undo, pantry byte-identical, 400s and auth. Live check pending.
 
-## Phase 79: Cooking mode [M] — not started
+## Phase 79: Cooking mode [M] — built 2026-10-24, live checks pending
 
 **Added 2026-10-24** (moved from `notion_assistant` Phase 46; the assistant keeps prep session and portions). A Cook button on a
 meal opens a step-by-step screen over Phase 40's `GET /meal/:id/method`: one step at a time, big text for the phone, Next/Back,

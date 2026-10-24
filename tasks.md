@@ -792,8 +792,9 @@ Spec: `.claude/specs/phase78.md`
 - [ ] Live: with the assistant, run a fridge audit against the deployed Worker, confirm two items and snooze one finding, confirm `GET /pantry/sanity` withholds it
 
 ## Phase 79: Cooking mode
-- [ ] Spec [M]: `.claude/specs/phase79.md`
+- [x] Spec [M]: `.claude/specs/phase79.md`
 - [ ] Live: cook a meal step by step on the phone PWA with a timer running, confirm cook, check the pantry deducted once
+- [ ] Live: timer finishing on the phone: screen stays awake, vibrates, strip chip pulses, toast names the step
 
 ## Phase 80: Log anything
 - [ ] Spec 80a [L] (Worker resolver, food log, cross-checked lookup): `.claude/specs/phase80a.md`
