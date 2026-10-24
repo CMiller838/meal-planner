@@ -309,7 +309,10 @@ window.MP = window.MP || {};
       const slots = {};
       for (const slotType of SLOT_TYPES) {
         const slot = d && d.slots && d.slots[slotType];
-        if (slot && slot.eatingOut) slots[slotType] = { eatingOut: true };
+        if (slot && slot.eatingOut) {
+          slots[slotType] = { eatingOut: true };
+          for (const k of ["name", "text", "foodLogId"]) if (slot[k]) slots[slotType][k] = slot[k];
+        }
         else if (slot && slot.mealId) {
           slots[slotType] = { mealId: slot.mealId, eatenAt: slot.eatenAt || null };
           if (slot.variantId) slots[slotType].variantId = slot.variantId;
@@ -393,6 +396,12 @@ window.MP = window.MP || {};
       if (remote && Array.isArray(remote.entries)) localStorage.setItem("mp_foodLog", JSON.stringify({ entries: remote.entries }));
     } catch (e) {}
     return "ok";
+  }
+
+  /** POST /food-log (Phase 81): log one eaten thing, then refresh the mirror. Never throws; "off"/"error"/"ok". */
+  async function postFoodLog(entry) {
+    if (!config().enabled) return "off";
+    try { await req("POST", "/food-log", { entries: [entry] }); await fetchFoodLog(); return "ok"; } catch (e) { return "error"; }
   }
 
   /** Mirrored food-log entries; [] on a missing or malformed mirror. */
@@ -798,7 +807,7 @@ window.MP = window.MP || {};
     decide, needsPlan, config, saveConfig, syncLibrary, syncPlanFlag, ackPlanFlag,
     shoppingLines, setLine, fetchShoppingLines, flushShoppingLines,
     fetchItems, fetchPantry, localItems, writeLocalItems, queueOp, applyOps, flushOps,
-    planMirror, pushPlan, pushPrefs, fetchPlanPrefs, fetchDayHints, fetchPlanDraft, ackPlanDraft, fetchRatings, fetchFoodLog, localFoodLog, fetchSettings, settings, hardTerms, fetchDrafts, deleteDraft, pushRating, pushPlanPrefs, newPlacements, newSince, syncPlacements, ackPlacements, syncEatRequests,
+    planMirror, pushPlan, pushPrefs, fetchPlanPrefs, fetchDayHints, fetchPlanDraft, ackPlanDraft, fetchRatings, fetchFoodLog, postFoodLog, localFoodLog, fetchSettings, settings, hardTerms, fetchDrafts, deleteDraft, pushRating, pushPlanPrefs, newPlacements, newSince, syncPlacements, ackPlacements, syncEatRequests,
     localEatenLog, logEaten, unlogEaten, pushEatenLog, pushCooks, start,
     syncProducts, localProducts, saveProduct, fetchActivity, undoActivity, resyncKey,
   };

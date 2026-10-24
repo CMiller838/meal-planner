@@ -319,6 +319,11 @@
       const v = b[k];
       if (v !== undefined && !(Array.isArray(v) && v.every((s) => s && Number.isInteger(s.day) && s.day >= 1 && s.day <= 14 && ["breakfast", "lunch", "dinner", "snack"].includes(s.slot)))) return `${k} must be [{ day 1-14, slot }]`;
     }
+    for (const s of b.eatingOut || []) {
+      if (s.name !== undefined && !(typeof s.name === "string" && s.name.length <= 60)) return "eatingOut name must be a string of at most 60 chars";
+      if (s.text !== undefined && !(typeof s.text === "string" && s.text.length <= 200)) return "eatingOut text must be a string of at most 200 chars";
+      if (s.foodLogId !== undefined && !(typeof s.foodLogId === "string" && s.foodLogId.length <= 80)) return "eatingOut foodLogId must be a string";
+    }
     if (b.ranOut !== undefined && !(Array.isArray(b.ranOut) && b.ranOut.every((s) => typeof s === "string" && s.trim()))) return "ranOut must be ingredient name strings";
     return null;
   }
@@ -328,6 +333,68 @@
     if (!startDate) return 1;
     const d = Math.round((Date.parse(todayIso) - Date.parse(startDate)) / 86400000) + 1;
     return Math.min(Math.max(d, 1), 15);
+  }
+
+  /** Slot as the change log sees it: eating-out keeps its name/text, a meal its variant. */
+  const slotRef = (s) => (s && s.eatingOut ? { eatingOut: true, ...(s.name ? { name: s.name } : {}), ...(s.text ? { text: s.text } : {}) } : s && s.mealId ? { mealId: s.mealId, ...(s.variantId ? { variantId: s.variantId } : {}) } : null);
+  const SLOT_ORDER = ["breakfast", "lunch", "dinner", "snack"];
+  /** Phase 81: eating-out slot from an input entry; a bare re-mark keeps the name/text already there. */
+  function outSlot(e, prev) {
+    const name = typeof e.name === "string" ? e.name.trim().slice(0, 60) : "", text = typeof e.text === "string" ? e.text.trim().slice(0, 200) : "";
+    const keep = prev && !name && !text ? prev : null;
+    const logId = typeof e.foodLogId === "string" && e.foodLogId ? e.foodLogId : prev && prev.foodLogId;
+    return keep || { eatingOut: true, ...(name ? { name } : {}), ...(text ? { text } : {}), ...(logId ? { foodLogId: logId } : {}) };
+  }
+  function diffPlans(before, after) {
+    const changes = [];
+    after.days.forEach((d, i) => SLOT_ORDER.forEach((t) => {
+      const b = before.days[i].slots[t], a = d.slots[t];
+      if (JSON.stringify(slotRef(b)) !== JSON.stringify(slotRef(a))) changes.push({ day: d.day, slot: t, before: slotRef(b), after: slotRef(a) });
+    }));
+    return changes;
+  }
+  const heldAt = (plan, fromDay) => (d, t) => { const s = plan.days[d - 1] && plan.days[d - 1].slots[t]; return d < fromDay || !!(s && ((s.mealId && (s.locked || s.eatenAt)) || s.frozenFrom)); };
+
+  /** Phase 81, pure: skip the meal at (day, slot) by pushing it to the same slot next day. Same-slot meals after it shift
+   *  one day too (held slots stay put and are hopped over), the last falls off the plan; a leftover chain moves as a unit
+   *  and is refused if it would fall off. Never touches the pantry. Returns { plan, changes, ignored }. */
+  function pushSlot(plan, day, slot, mealsById, fromDay) {
+    const held = heldAt(plan, fromDay), ignore = (reason) => ({ plan, changes: [], ignored: [{ day, slot, reason }] });
+    const slotAt = (d) => plan.days[d - 1] && plan.days[d - 1].slots[slot];
+    if (!slotAt(day) || held(day, slot)) return ignore("eaten, locked or past");
+    const unit = slot === "dinner" ? chainDays(plan.days, mealsById, day) : [day];
+    if (unit.some((d) => held(d, slot))) return ignore("part of the leftover chain is eaten or locked");
+    const pos = [];
+    for (let d = unit[0]; d <= plan.days.length; d++) if (!held(d, slot)) pos.push(d);
+    const last = pos[pos.length - 1];
+    if (unit.length > 1 && unit.includes(last)) return ignore("the leftover chain would fall off the plan");
+    const days = plan.days.map((dd) => ({ ...dd, slots: { ...dd.slots } }));
+    pos.forEach((d, i) => {
+      const from = i ? slotAt(pos[i - 1]) : null;
+      if (from) days[d - 1].slots[slot] = from; else delete days[d - 1].slots[slot];
+    });
+    const out = { ...plan, days };
+    return { plan: out, changes: diffPlans(plan, out), ignored: [] };
+  }
+
+  /** Phase 81, pure: move the meal at `from` to the later, non-held slot `to`; the meal that was there is freed and
+   *  `from` is re-flowed (reflowPlan), the placed meal stays. Batch cooks are refused (push or drop them). */
+  function moveSlot(plan, from, to, mealsById, fromDay, generate) {
+    const held = heldAt(plan, fromDay), ignore = (reason) => ({ plan, changes: [], ignored: [{ day: from.day, slot: from.slot, reason }] });
+    const at = (p) => plan.days[p.day - 1] && plan.days[p.day - 1].slots[p.slot];
+    const src = at(from);
+    if (!src || !src.mealId || held(from.day, from.slot)) return ignore("eaten, locked or past");
+    if (!at(to) && !(plan.days[to.day - 1] && SLOT_ORDER.includes(to.slot))) return ignore("no such slot");
+    if (!(to.day > from.day || (to.day === from.day && SLOT_ORDER.indexOf(to.slot) > SLOT_ORDER.indexOf(from.slot)))) return ignore("target is not later");
+    if (held(to.day, to.slot)) return ignore("target is eaten, locked or past");
+    const meal = mealsById[src.mealId];
+    if (meal && (isBatch(meal) || meal.leftoverOf)) return ignore("a batch cook can be pushed or dropped, not moved");
+    const staged = { ...plan, days: plan.days.map((d) => ({ ...d, slots: { ...d.slots } })) };
+    staged.days[to.day - 1].slots[to.slot] = { ...src, locked: true }; // locked so the re-flow keeps it
+    const res = reflowPlan(staged, { skipped: [from] }, mealsById, fromDay, generate);
+    const moved = { ...src }; // the moved meal is not locked by the move itself
+    res.plan.days[to.day - 1].slots[to.slot] = moved;
+    return { plan: res.plan, changes: diffPlans(plan, res.plan), ignored: res.ignored };
   }
 
   /** Phase 63, pure: re-plan only the freed slots of `plan`. Everything else (past days, eaten, locked, untouched
@@ -340,11 +407,11 @@
     const id = (d, t) => d + ":" + t;
     const slotAt = (d, t) => plan.days[d - 1] && plan.days[d - 1].slots[t];
     const held = (d, t) => { const s = slotAt(d, t); return d < fromDay || !!(s && s.mealId && (s.locked || s.eatenAt)); };
-    const free = new Set(), eatingOut = new Set(), ignored = [], avoid = new Set(); // avoid: meals the generator must not re-pick for this call
-    plan.days.forEach((d) => SLOTS.forEach((t) => { if (d.slots[t] && d.slots[t].eatingOut) eatingOut.add(id(d.day, t)); }));
+    const free = new Set(), eatingOut = new Map(), ignored = [], avoid = new Set(); // avoid: meals the generator must not re-pick for this call
+    plan.days.forEach((d) => SLOTS.forEach((t) => { if (d.slots[t] && d.slots[t].eatingOut) eatingOut.set(id(d.day, t), d.slots[t]); }));
     for (const e of input.eatingOut || []) {
       if (held(e.day, e.slot)) ignored.push({ day: e.day, slot: e.slot, reason: "eaten, locked or past" });
-      else { eatingOut.add(id(e.day, e.slot)); free.add(id(e.day, e.slot)); }
+      else { eatingOut.set(id(e.day, e.slot), outSlot(e, eatingOut.get(id(e.day, e.slot)))); free.add(id(e.day, e.slot)); }
     }
     for (const e of input.skipped || []) {
       if (held(e.day, e.slot)) { ignored.push({ day: e.day, slot: e.slot, reason: "eaten, locked or past" }); continue; }
@@ -361,18 +428,16 @@
     const locked = {};
     plan.days.forEach((d) => SLOTS.forEach((t) => { if (d.slots[t] && d.slots[t].mealId && !free.has(id(d.day, t))) (locked[d.day] = locked[d.day] || {})[t] = d.slots[t]; }));
     const gen = generate(locked, ranOut, [...avoid]);
-    const ref = (s) => (s && s.eatingOut ? { eatingOut: true } : s && s.mealId ? { mealId: s.mealId, ...(s.variantId ? { variantId: s.variantId } : {}) } : null);
-    const changes = [];
     const days = plan.days.map((d) => {
       const slots = { ...d.slots };
       for (const t of SLOTS) {
-        const next = eatingOut.has(id(d.day, t)) ? { eatingOut: true } : free.has(id(d.day, t)) ? gen.days[d.day - 1].slots[t] : d.slots[t];
+        const next = eatingOut.has(id(d.day, t)) ? eatingOut.get(id(d.day, t)) : free.has(id(d.day, t)) ? gen.days[d.day - 1].slots[t] : d.slots[t];
         if (next) slots[t] = next; else delete slots[t];
-        if (JSON.stringify(ref(d.slots[t])) !== JSON.stringify(ref(next))) changes.push({ day: d.day, slot: t, before: ref(d.slots[t]), after: ref(next) });
       }
       return { ...d, slots };
     });
-    return { plan: { ...plan, days }, changes, ignored };
+    const out = { ...plan, days };
+    return { plan: out, changes: diffPlans(plan, out), ignored };
   }
 
   /** Phase 68, pure: roll the 14-day window forward to todayIso. Kept days shift down and keep their slots; the
@@ -524,6 +589,8 @@
   MP.isBatch = isBatch;
   MP.chainDays = chainDays;
   MP.reflowPlan = reflowPlan;
+  MP.pushSlot = pushSlot;
+  MP.moveSlot = moveSlot;
   MP.rollPlan = rollPlan;
   MP.reflowInputError = reflowInputError;
   MP.reflowFromDay = reflowFromDay;

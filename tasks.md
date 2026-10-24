@@ -807,6 +807,13 @@ Spec: `.claude/specs/phase78.md`
 ## Phase 81: Eating out, named, and skip that asks
 Spec: `.claude/specs/phase81.md`
 
+- [x] `pushSlot`, `moveSlot` and input validation, with asserts
+- [x] Eating-out slot fields survive re-flow and `planMirror`
+- [x] Skip sheet with four choices; eating-out sheet (name, what you had); named card label and "estimate" tag
+- [x] Undo path reuses `mp_planUndo`
+- [ ] Live: mark a real dinner as Spoons (burger and chips) on the phone PWA; day sheet shows "Estimate pending" then "Estimate logged", coverage includes it
+- [ ] Live: skip a non-batch dinner, Move to a later slot; meal lands there, old slot re-planned, Undo restores both
+
 ## Phase 82: Swap days and edit past days
 Spec: `.claude/specs/phase82.md`
 

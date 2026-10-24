@@ -621,15 +621,100 @@
     return MP.reflowPlan(planIn, input, Object.fromEntries(lib.map((m) => [m.id, m])), ctx.fromDay, ctx.generate);
   }
 
-  function doReflow(input) {
-    const res = reflow(plan, input, library, { fromDay: MP.reflowFromDay(plan.startDate, new Date().toLocaleDateString("sv")), generate: (locked, ranOut, avoid) => generatePlan({ shopOffset: MP.ShelfLife.shopOffset(plan) }, locked, ranOut, avoid) });
-    if (!res.changes.length) { closeDayView(); toast(res.ignored.length ? "Eaten, locked or past meals can't be re-flowed" : "Nothing to change"); return; }
+  const reflowCtx = () => ({ fromDay: MP.reflowFromDay(plan.startDate, new Date().toLocaleDateString("sv")), generate: (locked, ranOut, avoid) => generatePlan({ shopOffset: MP.ShelfLife.shopOffset(plan) }, locked, ranOut, avoid) });
+
+  /** Apply a { plan, changes, ignored } result from reflow/pushSlot/moveSlot: snapshot for undo, save, toast. */
+  function applyResult(res, label) {
+    if (!res.changes.length) { closeDayView(); closeEatSheet(); toast(res.ignored.length ? (res.ignored[0].reason.startsWith("eaten") ? "Eaten, locked or past meals can't be re-flowed" : "Can't do that: " + res.ignored[0].reason) : "Nothing to change"); return false; }
     snapshot(plan);
     plan = res.plan;
     savePlan();
     closeDayView();
+    closeEatSheet();
     renderPlan();
-    toast(`Re-planned ${res.changes.length} slot${res.changes.length === 1 ? "" : "s"}`, { label: "Undo re-flow", fn: () => { const p = restore(); if (p) { plan = p; renderPlan(); toast("Back to before the re-flow"); } } });
+    toast(label || `Re-planned ${res.changes.length} slot${res.changes.length === 1 ? "" : "s"}`, { label: "Undo re-flow", fn: () => { const p = restore(); if (p) { plan = p; renderPlan(); toast("Back to before the re-flow"); } } });
+    return true;
+  }
+
+  function doReflow(input) {
+    return applyResult(reflow(plan, input, library, reflowCtx()));
+  }
+
+  // ---- Skip that asks, and named eating out (Phase 81) ----
+  const OUT_TIME = { breakfast: "08:00", lunch: "13:00", dinner: "19:00", snack: "16:00" };
+  const outName = (s) => (s && s.name) || "Eating out";
+  const slotDate = (day) => { const d = new Date(plan.startDate + "T12:00:00"); d.setDate(d.getDate() + day - 1); return d.toLocaleDateString("sv"); };
+  const showEatSheet = (html, wire) => {
+    const sheet = document.getElementById("eat-sheet");
+    sheet.innerHTML = `<button class="close-btn" aria-label="Close">✕</button>${html}`;
+    sheet.querySelector(".close-btn").addEventListener("click", closeEatSheet);
+    document.getElementById("eat-overlay").classList.remove("hidden");
+    wire(sheet);
+  };
+
+  function openSkipSheet(day, slotType) {
+    const name = mealAt(day, slotType) ? mealAt(day, slotType).name : "this";
+    showEatSheet(`<h2>Skip ${esc(name)}?</h2><p class="muted">What should happen to it?</p>
+      <div class="skip-choices">
+        <button class="ghost" data-act="push">Push to tomorrow</button>
+        <button class="ghost" data-act="move">Move to a later slot</button>
+        <button class="ghost" data-act="swap">Swap for something else</button>
+        <button class="ghost" data-act="drop">Drop it</button>
+      </div>`, (sheet) => sheet.querySelectorAll("[data-act]").forEach((b) => b.addEventListener("click", () => {
+      const act = b.dataset.act, byId = Object.fromEntries(library.map((m) => [m.id, m]));
+      if (act === "drop") doReflow({ skipped: [{ day, slot: slotType }] });
+      else if (act === "push") applyResult(MP.pushSlot(plan, day, slotType, byId, reflowCtx().fromDay), "Pushed to the next day");
+      else if (act === "swap") { closeEatSheet(); closeDayView(); openSwapPicker(day, slotType); }
+      else openMoveList(day, slotType);
+    })));
+  }
+
+  function openMoveList(day, slotType) {
+    const byId = Object.fromEntries(library.map((m) => [m.id, m]));
+    const targets = [];
+    plan.days.forEach((d) => SLOT_TYPES.forEach((t) => {
+      const later = d.day > day || (d.day === day && SLOT_TYPES.indexOf(t) > SLOT_TYPES.indexOf(slotType));
+      const sl = d.slots[t];
+      if (later && d.day >= reflowCtx().fromDay && !(sl && sl.mealId && (sl.locked || sl.eatenAt)) && !(sl && sl.frozenFrom) && targets.length < 12) targets.push({ day: d.day, slot: t, sl });
+    }));
+    showEatSheet(`<h2>Move to…</h2>${targets.length ? "" : `<p class="muted">No later free slot.</p>`}
+      <div class="skip-choices">${targets.map((t, i) => `<button class="ghost" data-i="${i}">${esc(dayHeading(t.day))} · ${t.slot}${t.sl && t.sl.mealId && mealsById[t.sl.mealId] ? ` <span class="muted">(replaces ${esc(mealsById[t.sl.mealId].name)})</span>` : ""}</button>`).join("")}</div>`,
+    (sheet) => sheet.querySelectorAll("[data-i]").forEach((b) => b.addEventListener("click", () => {
+      const t = targets[Number(b.dataset.i)];
+      const ctx = reflowCtx();
+      applyResult(MP.moveSlot(plan, { day, slot: slotType }, { day: t.day, slot: t.slot }, byId, ctx.fromDay, ctx.generate), "Moved to a later slot");
+    })));
+  }
+
+  function openOutSheet(day, slotType) {
+    const cur = plan.days[day - 1].slots[slotType];
+    const prev = cur && cur.eatingOut ? cur : {};
+    showEatSheet(`<h2>Eating out</h2>
+      <label class="out-field">Where / what <input class="out-name" maxlength="60" placeholder="Eating out" value="${esc(prev.name || "")}"></label>
+      <label class="out-field">What you had <input class="out-text" maxlength="120" placeholder="burger and chips" value="${esc(prev.text || "")}"></label>
+      <p class="muted">Counts as eaten, with an estimated nutrient profile.</p>
+      <div class="day-slot-actions"><button class="primary out-save">Save</button><button class="ghost out-cancel">Cancel</button></div>`, (sheet) => {
+      sheet.querySelector(".out-cancel").addEventListener("click", closeEatSheet);
+      sheet.querySelector(".out-save").addEventListener("click", () => {
+        const name = sheet.querySelector(".out-name").value.trim(), text = sheet.querySelector(".out-text").value.trim();
+        const label = text || name;
+        // ponytail: an edit never re-logs once an estimate exists (double count); add a food-log delete when it matters
+        const logId = label && !prev.foodLogId && (name || text) ? crypto.randomUUID() : undefined;
+        const entry = { day, slot: slotType, ...(name ? { name } : {}), ...(text ? { text } : {}), ...(logId ? { foodLogId: logId } : {}) };
+        if (!doReflow({ eatingOut: [entry] }) || !logId) return;
+        MP.Sync.postFoodLog({ id: logId, action: "eat", text: label.slice(0, 120), when: new Date(`${slotDate(day)}T${OUT_TIME[slotType]}:00`).toISOString() }).then(() => renderPlan());
+      });
+    });
+  }
+
+  /** Day-sheet block for an eating-out slot: its name, what was had and whether the estimate has landed. */
+  function outSlotHtml(day, slotType, slot) {
+    const done = slot.foodLogId && MP.Sync.localFoodLog().some((e) => e.id === slot.foodLogId);
+    return `<section class="day-slot"><div class="slot-type">${slotType}</div>
+      <h3>${esc(outName(slot))}</h3>
+      ${slot.text ? `<p>${esc(slot.text)}</p>` : ""}
+      ${slot.foodLogId ? `<p class="muted out-estimate">${done ? "Estimate logged" : "Estimate pending"}</p>` : ""}
+      <div class="day-slot-actions"><button class="ghost day-out-btn" data-slot="${slotType}">Edit</button><button class="ghost day-swap-btn" data-slot="${slotType}">Add a meal</button></div></section>`;
   }
 
   function mealAt(day, slotType) {
@@ -925,7 +1010,7 @@
               const locked = meal && plan.days[d.day - 1].slots[slotType].locked;
               return `<div class="slot-card ${meal ? "" : "empty"}${locked ? " locked" : ""}" data-day="${d.day}" data-slot="${slotType}">
                 <div class="slot-type">${slotType}${locked ? ` <span class="lock-icon" aria-label="Locked">🔒</span>` : ""}</div>
-                <div class="slot-meal">${meal ? esc(meal.name) : plan.days[d.day - 1].slots[slotType] && plan.days[d.day - 1].slots[slotType].eatingOut ? "Eating out" : "tap to add"}</div>
+                <div class="slot-meal">${meal ? esc(meal.name) : plan.days[d.day - 1].slots[slotType] && plan.days[d.day - 1].slots[slotType].eatingOut ? esc(outName(plan.days[d.day - 1].slots[slotType])) : "tap to add"}</div>
                 ${ratingHintHtml(meal)}
                 ${warningHtml(d.day, slotType, warn)}
               </div>`;
@@ -1287,6 +1372,8 @@
 
   function daySlotHtml(day, slotType) {
     const meal = mealAt(day, slotType);
+    const raw = plan.days[day - 1].slots[slotType];
+    if (!meal && raw && raw.eatingOut) return outSlotHtml(day, slotType, raw);
     if (!meal) {
       return `<section class="day-slot">
         <div class="slot-type">${slotType}</div>
@@ -1356,9 +1443,9 @@
     sheet.querySelectorAll(".day-lock-btn").forEach((b) =>
       b.addEventListener("click", () => toggleLock(day, b.dataset.slot)));
     sheet.querySelectorAll(".day-skip-btn").forEach((b) =>
-      b.addEventListener("click", () => doReflow({ skipped: [{ day, slot: b.dataset.slot }] })));
+      b.addEventListener("click", () => openSkipSheet(day, b.dataset.slot)));
     sheet.querySelectorAll(".day-out-btn").forEach((b) =>
-      b.addEventListener("click", () => doReflow({ eatingOut: [{ day, slot: b.dataset.slot }] })));
+      b.addEventListener("click", () => openOutSheet(day, b.dataset.slot)));
     sheet.querySelectorAll(".day-variant-btn").forEach((b) =>
       b.addEventListener("click", () => openVariantPicker(day, b.dataset.slot)));
     sheet.querySelectorAll(".day-recipe-btn").forEach((b) => {
@@ -1838,7 +1925,7 @@
       const meal = mealAt(day, t), s = d.slots[t];
       return `<div class="slot-card ${meal ? "" : "empty"}${s && s.locked ? " locked" : ""}${changed.has(t) ? " slot-diff" : ""}" data-slot="${t}" tabindex="0" role="button">
         <div class="slot-type">${t}${s && s.locked ? ` <span class="lock-icon" aria-label="Locked">🔒</span>` : ""}</div>
-        <div class="slot-meal">${meal ? esc(meal.name) : s && s.eatingOut ? "Eating out" : "tap to add"}</div></div>`;
+        <div class="slot-meal">${meal ? esc(meal.name) : s && s.eatingOut ? esc(outName(s)) : "tap to add"}</div></div>`;
     }).join("");
     host.classList.toggle("staging", !!staged);
     if (staged) host.querySelectorAll(".slot-card").forEach((el, i) => { el.style.animationDelay = Math.min(i * STAGE_STEP_MS, STAGE_MAX_MS) + "ms"; });

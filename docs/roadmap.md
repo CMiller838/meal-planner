@@ -643,7 +643,7 @@ and replaying it deducts nothing; two agreeing sources save as `estimate` with s
 that nutrient; a label value overwrites an estimate; a no-data item logs with empty nutrients; undo restores the pantry.
 Requires Phases 30, 31, 32, 34. Assistant side: `notion_assistant` Phase 54.
 
-## Phase 81: Eating out, named, and skip that asks [M] — not started
+## Phase 81: Eating out, named, and skip that asks [M] — built 2026-10-24, live checks pending
 
 **Added 2026-10-24.** "Eating out" is a nameless marker today and Skip silently re-plans. An eating-out slot now takes a name and
 what you had (e.g. "Spoons — burger and chips"), estimated through the Phase 80a resolver. Skip asks: push to tomorrow, move to a

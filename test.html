@@ -1039,6 +1039,34 @@
       check("reflow: real generator leaves untouched slots identical", rr.plan.days.every((d, i) => ser(d.slots) === ser(real.days[i].slots) || rr.changes.some((c) => c.day === d.day)));
     }
 
+    // Phase 81: push / move / named eating out
+    {
+      const ser = (x) => JSON.stringify(x);
+      const mk = (id, extra) => ({ id, name: id, mealTypes: ["dinner"], ingredients: [], ...extra });
+      const lib = Object.fromEntries([mk("P", { servings: 3 }), mk("C", { leftoverOf: "P" }), mk("A"), mk("B"), mk("D"), mk("N")].map((m) => [m.id, m]));
+      const mkp = (ids, n) => ({ startDate: "2026-09-07", days: Array.from({ length: n || ids.length }, (_, i) => ({ day: i + 1, slots: ids[i] ? { dinner: { mealId: ids[i] } } : {} })) });
+      const ids = (p) => p.days.map((d) => (d.slots.dinner || {}).mealId || "-").join("");
+      const p1 = mkp(["A", "B", "D", "N"]), keep = ser(p1);
+      const r1 = MP.pushSlot(p1, 2, "dinner", lib, 1);
+      check("push: shifts later same-slot meals, last falls off", ids(r1.plan) === "A-BD" && r1.changes.length === 3 && ser(p1) === keep);
+      const p2 = mkp(["A", "B", "D", "N"]); p2.days[2].slots.dinner.locked = true;
+      check("push: hops over a held slot, never displaces it", ids(MP.pushSlot(p2, 2, "dinner", lib, 1).plan) === "A-DB");
+      check("push: held or past slot is ignored", MP.pushSlot(p2, 3, "dinner", lib, 1).ignored.length === 1 && MP.pushSlot(p1, 1, "dinner", lib, 2).ignored.length === 1);
+      const p3 = mkp(["A", "P", "C", "C", "B"]);
+      check("push: a chain moves as a unit", ids(MP.pushSlot(p3, 3, "dinner", lib, 1).plan) === "A-PCC");
+      const p4 = mkp(["A", "P", "C", "C"]);
+      check("push: chain cannot fall off the plan", MP.pushSlot(p4, 2, "dinner", lib, 1).ignored.length === 1 && ids(MP.pushSlot(p4, 2, "dinner", lib, 1).plan) === "APCC");
+      const gen = (locked) => ({ days: p1.days.map((d) => ({ day: d.day, slots: { dinner: (locked[d.day] || {}).dinner || { mealId: "N" } } })) });
+      const m1 = MP.moveSlot(p1, { day: 1, slot: "dinner" }, { day: 3, slot: "dinner" }, lib, 1, gen);
+      check("move: meal lands on the later slot, source is re-flowed", ids(m1.plan) === "NBAN" && !m1.plan.days[2].slots.dinner.locked && ser(p1) === keep);
+      check("move: earlier target, batch cook and held target are refused", [MP.moveSlot(p1, { day: 3, slot: "dinner" }, { day: 1, slot: "dinner" }, lib, 1, gen), MP.moveSlot(p3, { day: 2, slot: "dinner" }, { day: 5, slot: "dinner" }, lib, 1, gen), MP.moveSlot(p2, { day: 1, slot: "dinner" }, { day: 3, slot: "dinner" }, lib, 1, gen)].every((r) => r.ignored.length === 1 && !r.changes.length));
+      const o1 = MP.reflowPlan(p1, { eatingOut: [{ day: 2, slot: "dinner", name: "Spoons", text: "burger and chips" }] }, lib, 1, gen);
+      const o2 = MP.reflowPlan(o1.plan, { eatingOut: [{ day: 2, slot: "dinner" }], skipped: [{ day: 1, slot: "dinner" }] }, lib, 1, gen);
+      check("eating out: name/text kept and survive a later re-flow", ser(o1.plan.days[1].slots.dinner) === '{"eatingOut":true,"name":"Spoons","text":"burger and chips"}' && ser(o2.plan.days[1].slots.dinner) === ser(o1.plan.days[1].slots.dinner));
+      check("eating out: planMirror carries name/text/foodLogId", ser(MP.Sync.planMirror({ days: [{ day: 1, slots: { dinner: { eatingOut: true, name: "S", text: "t", foodLogId: "f", junk: 1 } } }] }).days[0].slots.dinner) === '{"eatingOut":true,"name":"S","text":"t","foodLogId":"f"}');
+      check("eating out: validation", !!MP.reflowInputError({ eatingOut: [{ day: 1, slot: "dinner", name: "x".repeat(61) }] }) && !!MP.reflowInputError({ eatingOut: [{ day: 1, slot: "dinner", text: 5 }] }) && !MP.reflowInputError({ eatingOut: [{ day: 1, slot: "dinner", name: "ok" }] }));
+    }
+
     // planMirror
     {
       const p = { startDate: "2026-09-07", days: [

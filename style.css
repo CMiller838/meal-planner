@@ -330,6 +330,11 @@ section.section h2 { display: flex; align-items: center; gap: .5rem; color: #fff
 .day-thumb.placeholder { display: flex; align-items: center; justify-content: center;
                          background: var(--surface-alt); font-size: 1.5rem; }
 .day-slot-actions { display: flex; gap: .5rem; margin-top: .6rem; }
+.skip-choices { display: flex; flex-direction: column; gap: .5rem; margin-top: .6rem; }
+.skip-choices .ghost { text-align: left; }
+.out-field { display: block; margin-top: .6rem; font-weight: 600; }
+.out-field input { display: block; width: 100%; margin-top: .25rem; }
+.out-estimate { font-style: italic; }
 
 /* ---- Buttons ---- */
 button.primary {
