@@ -369,6 +369,20 @@
     "kind": "read"
   },
   {
+    "method": "GET",
+    "path": "/food-log",
+    "assistant": true,
+    "kind": "read"
+  },
+  {
+    "method": "POST",
+    "path": "/food-log",
+    "assistant": true,
+    "kind": "write",
+    "log": "logged",
+    "note": "logs what was eaten or stocked; also writes pantry and products (one activity id per key written); an id already logged is a no-op"
+  },
+  {
     "method": "POST",
     "path": "/spend",
     "assistant": true,

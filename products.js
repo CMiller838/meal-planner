@@ -49,14 +49,15 @@
     };
   }
 
-  /** Sets each finite value unless the existing basis outranks `basis`. Typed `label` replaces anything. */
-  function setNutrients(product, values, basis) {
+  /** Sets each finite value unless the existing basis outranks `basis`. Typed `label` replaces anything.
+   *  Optional `sources` (names of the agreeing sources) is stored on each entry set, and goes with it when a label overwrites. */
+  function setNutrients(product, values, basis, sources) {
     const nutrients = { ...product.nutrients };
     for (const [key, raw] of Object.entries(values)) {
       const v = num(raw);
       if (v === null) continue;
       const cur = nutrients[key];
-      if (!cur || BASES.indexOf(cur.basis) >= BASES.indexOf(basis)) nutrients[key] = { value: v, basis };
+      if (!cur || BASES.indexOf(cur.basis) >= BASES.indexOf(basis)) nutrients[key] = sources ? { value: v, basis, sources } : { value: v, basis };
     }
     return { ...product, nutrients };
   }

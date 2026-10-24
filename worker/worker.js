@@ -19,6 +19,9 @@ import TAGS from "../ingredient-nutrient-tags.json";
 import TARGETS from "../nutrition-targets.json";
 import PLAN_VOCAB from "../plan-preferences.json";
 import PACK_DATA from "../pack-sizes.json";
+import FOOD from "../food-log.json";
+import COFID from "../cofid.json";
+import * as FoodLog from "./food-log.js";
 
 const Exclusions = globalThis.MP.Exclusions;
 const MealDB = globalThis.MP.MealDB;
@@ -51,7 +54,7 @@ const ASSISTANT_ALLOWED = new Set([
   "GET /expiring", "GET /day", "GET /product-ranking", "GET /ratings", "GET /why", "GET /scale", "GET /cookable", "GET /substitutions", "GET /leftovers", "GET /quick",
   "GET /drafts", "POST /drafts", "GET /settings", "PUT /settings", "GET /activity", "POST /activity/undo",
   "GET /spend", "POST /spend", "GET /pantry/audit", "GET /pantry/sanity", "POST /pantry/audit",
-  "POST /plan/draft", "POST /plan/apply", "GET /planDraft", "POST /plan/reflow",
+  "POST /plan/draft", "POST /plan/apply", "GET /planDraft", "POST /plan/reflow", "GET /food-log", "POST /food-log",
 ]);
 const METHOD_PATH = /^\/meal\/([^/]+)\/method$/;
 const DRAFT_PATH = /^\/drafts\/([^/]+)$/;
@@ -417,12 +420,19 @@ async function ranking(params, env) {
   });
 }
 
+/** Phase 80: the food log's eat entries (stock entries never count as eaten). */
+const eatEntries = (raw) => (raw && Array.isArray(raw.entries) ? raw.entries.filter((e) => e.kind === "eat") : []);
+const FOOD_TRACKED = [...Object.keys(FOOD.usdaIds), "salt_g"];
+const unconfirmedOf = (nutrients) => FOOD_TRACKED.filter((k) => !(nutrients && nutrients[k]));
+const offPlanOf = (e) => ({ name: e.name, grams: e.grams, ...(e.count ? { count: e.count } : {}), ...(e.gramsEstimate ? { gramsEstimate: true } : {}), unconfirmed: unconfirmedOf(e.nutrients), eatenAt: e.when });
+
 /** One day's eaten log, planned slots and coverage: shared by GET /nutrition?date= and GET /day. */
-async function dayView(date, gym, { byId, log, planRaw, dayFmt }, env) {
+async function dayView(date, gym, { byId, log, planRaw, dayFmt, food = [] }, env) {
   const baseTargets = Nutrition.withProfile(TARGETS, await readSettings(env));
   const targets = gym ? Nutrition.withGymDay(baseTargets) : baseTargets;
   const eatenToday = log.filter((e) => dayFmt.format(new Date(e.eatenAt)) === date);
-  const { cov, missing, partial } = Nutrition.eatenDayCoverage(eatenToday, byId, TAGS, targets);
+  const foodToday = food.filter((e) => dayFmt.format(new Date(e.when)) === date);
+  const { cov, missing, partial } = Nutrition.eatenDayCoverage([...eatenToday, ...foodToday.map((e) => Nutrition.foodAsEaten(e, targets, FOOD.tagShare))], byId, TAGS, targets);
   const planned = [];
   if (planRaw && Array.isArray(planRaw.days) && planRaw.startDate) {
     const start = Date.parse(planRaw.startDate + "T00:00:00Z");
@@ -433,7 +443,7 @@ async function dayView(date, gym, { byId, log, planRaw, dayFmt }, env) {
       if (v && v.mealId && !v.eatenAt) planned.push({ slot, mealId: v.mealId, name: (byId[v.mealId] || {}).name || v.mealId });
     }
   }
-  return { eatenToday, planned, cov, missing, partial };
+  return { eatenToday, foodToday, planned, cov, missing, partial };
 }
 
 /** GET /day?date=&gym=1: the Today screen as one flat, ordered card list (read-only; /today stays the raw counters). */
@@ -447,17 +457,18 @@ async function day(params, env) {
   const read = async (k) => {
     try { return JSON.parse(await env.MP_KV.get(k)); } catch (e) { return null; }
   };
-  const [libRaw, planRaw, logRaw, pantryRaw, todayRaw, cooksRaw] = await Promise.all(["library", "plan", "eatenLog", "pantry", "today", "cooks"].map(read));
+  const [libRaw, planRaw, logRaw, pantryRaw, todayRaw, cooksRaw, foodRaw] = await Promise.all(["library", "plan", "eatenLog", "pantry", "today", "cooks", "foodLog"].map(read));
   const meals = Array.isArray(libRaw) ? libRaw : libRaw && Array.isArray(libRaw.meals) ? libRaw.meals : [];
   const byId = Object.fromEntries(meals.map((m) => [m.id, m]));
   const log = Array.isArray(logRaw) ? logRaw : [];
-  const v = await dayView(date, gym, { byId, log, planRaw, dayFmt }, env);
+  const v = await dayView(date, gym, { byId, log, planRaw, dayFmt, food: eatEntries(foodRaw) }, env);
   const t = todayRaw && typeof todayRaw === "object" && todayRaw.date === date ? todayRaw : null;
   const count = (f) => (t && Number.isInteger(t[f]) && t[f] > 0 ? Math.min(t[f], 99) : 0);
   const done = t && Array.isArray(t.routineDone) ? t.routineDone : [];
   const cards = [];
   for (const p of v.planned) cards.push({ type: "meal", slot: p.slot, mealId: p.mealId, name: p.name, state: "planned" });
   for (const e of v.eatenToday) cards.push({ type: "meal", slot: null, mealId: e.mealId, name: e.name, state: "eaten", eatenAt: e.eatenAt });
+  for (const e of v.foodToday) cards.push({ type: "food", ...offPlanOf(e) });
   for (const m of MPData.dueRoutines(meals, { gym: gym || !!(t && t.gym) })) cards.push({ type: "routine", mealId: m.id, name: m.name, done: done.includes(m.id) });
   for (const c of ["water", "caffeine"]) cards.push({ type: "counter", counter: c, count: count(c) });
   const items = pantryRaw && Array.isArray(pantryRaw.items) ? pantryRaw.items : [];
@@ -494,22 +505,25 @@ async function nutrition(params, env) {
   const read = async (k) => {
     try { return JSON.parse(await env.MP_KV.get(k)); } catch (e) { return null; }
   };
-  const [libRaw, planRaw, logRaw] = await Promise.all([read("library"), read("plan"), read("eatenLog")]);
+  const [libRaw, planRaw, logRaw, foodRaw] = await Promise.all([read("library"), read("plan"), read("eatenLog"), read("foodLog")]);
   const meals = Array.isArray(libRaw) ? libRaw : libRaw && Array.isArray(libRaw.meals) ? libRaw.meals : [];
   const byId = Object.fromEntries(meals.map((m) => [m.id, m]));
   const log = Array.isArray(logRaw) ? logRaw : [];
+  const food = eatEntries(foodRaw);
   if (dates) {
-    const g = Nutrition.weekGaps(log, byId, dates, TAGS, Nutrition.withProfile(TARGETS, await readSettings(env)), (e) => dayFmt.format(new Date(e.eatenAt)));
+    const wt = Nutrition.withProfile(TARGETS, await readSettings(env));
+    const g = Nutrition.weekGaps([...log, ...food.map((e) => Nutrition.foodAsEaten(e, wt, FOOD.tagShare))], byId, dates, TAGS, wt, (e) => dayFmt.format(new Date(e.eatenAt)));
     return json(200, { from: dates[0], to: dates[dates.length - 1], nutrients: g.nutrients, notLogged: g.notLogged });
   }
   const gym = params.get("gym") === "1" && !!TARGETS.gymDay;
-  const { eatenToday, planned, cov, missing, partial } = await dayView(date, gym, { meals, byId, log, planRaw, dayFmt }, env);
+  const { eatenToday, foodToday, planned, cov, missing, partial } = await dayView(date, gym, { meals, byId, log, planRaw, dayFmt, food }, env);
   const short = cov.proteinGramsApprox < 0.8 * cov.proteinTarget;
   const swaps = short ? Nutrition.rankByGap(meals, ["protein"], TAGS).slice(0, 3).map((m) => ({ id: m.id, name: m.name })) : [];
   return json(200, {
     date, eaten: eatenToday.map((e) => e.name), planned: planned.map(({ slot, name }) => ({ slot, name })),
     ...(gym ? { gym: true } : {}),
     proteinGramsApprox: cov.proteinGramsApprox, proteinTarget: cov.proteinTarget, missing, partial, swaps,
+    offPlan: foodToday.map(offPlanOf),
   });
 }
 
@@ -1349,6 +1363,7 @@ const ITEMS = {
   dayHints: ["days", null], // object map: item id = date key
   ratings: ["meals", null], // object map: item id = meal id
   spend: ["weeks", null], // object map: item id = shop-day ISO date
+  foodLog: ["entries", (e) => e.id], // Phase 80: Worker-owned, written only by POST /food-log
   pantryAudit: [null], today: [null], planFlag: [null], planDraft: [null], // whole value is one item, id = key name
 };
 const ACTIVITY_CAP = 200;
@@ -1374,6 +1389,8 @@ export const ROUTES = [
   row("PUT", "/adhoc", "write", { dryRun: true, log: "logged" }),
   row("POST", "/shopping/lines", "write", { log: "logged" }),
   row("GET", "/spend", "read"),
+  row("GET", "/food-log", "read"),
+  row("POST", "/food-log", "write", { log: "logged", note: "logs what was eaten or stocked; also writes pantry and products (one activity id per key written); an id already logged is a no-op" }),
   row("POST", "/spend", "write", { log: "logged", note: "logged only with an X-Actor header; one row per week, a repeat overwrites" }),
   row("GET", "/pantry/audit", "read"),
   row("GET", "/pantry/sanity", "read"),
@@ -1559,6 +1576,172 @@ async function chatRoute(request, env, url, actor) {
   return json(res.status, await res.json().catch(() => null));
 }
 
+// ---- Food log (Phase 80) ----
+const FOOD_ENTRY_KEYS = ["id", "action", "when", "text", "name", "grams", "count", "gramsPerItem", "lookup", "candidates"];
+const FOOD_CAP = 500;
+const isObj = (v) => typeof v === "object" && v !== null && !Array.isArray(v);
+const posNum = (v) => typeof v === "number" && Number.isFinite(v) && v > 0;
+const isDayStr = (d) => /^\d{4}-\d{2}-\d{2}$/.test(d) && !isNaN(Date.parse(d)) && new Date(d).toISOString().slice(0, 10) === d;
+
+/** Shape only; the whole body is rejected on any bad entry. @returns {string|null} */
+function foodLogError(parsed) {
+  if (!isObj(parsed)) return "expected an object";
+  if (Object.keys(parsed).some((k) => k !== "entries")) return "unknown key in body";
+  if (!Array.isArray(parsed.entries) || parsed.entries.length < 1 || parsed.entries.length > 20) return "entries must be 1-20 items";
+  for (const e of parsed.entries) {
+    if (!isObj(e)) return "each entry must be an object";
+    const bad = Object.keys(e).find((k) => !FOOD_ENTRY_KEYS.includes(k));
+    if (bad) return "unknown key: " + bad;
+    if (typeof e.id !== "string" || !e.id || e.id.length > 80) return "id must be 1-80 chars";
+    if (e.action !== "eat" && e.action !== "have") return "action must be eat or have";
+    if (e.when !== undefined && (typeof e.when !== "string" || !Number.isFinite(Date.parse(e.when)))) return "when must be an ISO time";
+    if ((e.text === undefined) === (e.name === undefined)) return "exactly one of text or name";
+    const label = e.text !== undefined ? e.text : e.name;
+    if (typeof label !== "string" || !label.trim() || label.length > 120) return "text/name must be 1-120 chars";
+    if (e.text !== undefined && !FoodLog.parse(e.text)) return "unreadable text";
+    if (e.grams !== undefined && !posNum(e.grams)) return "grams must be > 0";
+    if (e.gramsPerItem !== undefined && !posNum(e.gramsPerItem)) return "gramsPerItem must be > 0";
+    if (e.count !== undefined && !(Number.isInteger(e.count) && e.count > 0)) return "count must be a positive integer";
+    if (e.lookup !== undefined && e.lookup !== true) return "lookup must be true";
+    if (e.candidates !== undefined) {
+      if (!Array.isArray(e.candidates) || e.candidates.length > 5) return "candidates must be an array of at most 5";
+      for (const c of e.candidates) {
+        if (!isObj(c) || Object.keys(c).some((k) => !["source", "url", "per", "nutrients"].includes(k))) return "bad candidate";
+        if (typeof c.source !== "string" || !c.source.trim() || c.source.length > 40) return "candidate source must be 1-40 chars";
+        if (typeof c.url !== "string" || !c.url.startsWith("https://")) return "candidate url must be https";
+        if (c.per !== "100g") return "candidate per must be 100g";
+        if (!isObj(c.nutrients)) return "candidate nutrients must be an object";
+        for (const [k, v] of Object.entries(c.nutrients)) if (!/^[a-zA-Z0-9_]+$/.test(k) || typeof v !== "number" || !Number.isFinite(v) || v < 0) return "bad candidate nutrient: " + k;
+      }
+    }
+  }
+  return null;
+}
+
+const readKV = async (env, k) => parseKV(await env.MP_KV.get(k));
+const round2 = (v) => Math.round(v * 100) / 100;
+const fmtQty = (value, unit) => ({ value, unit, raw: unit === "each" ? String(value) : `${value}${unit}` });
+const newFoodProduct = (key, name, at) => ({ id: "food:" + key, name, brand: null, ingredient: null, per: "100g", servingSize: null, pack: null, price: null, state: null, nutrients: {}, source: "lookup", updatedAt: at });
+
+/** Eat: take grams (g/ml items) or the count (each items) off the matching pantry item. @returns the result's `pantry` field */
+function pantryEat(items, key, grams, count) {
+  const i = items.findIndex((x) => !x.out && ShoppingList.normalizeKey(x.name) === key);
+  if (i < 0) return null;
+  const q = ShoppingList.parseQty(items[i].qty);
+  if (!q) return { deducted: false, reason: items[i].qty ? "unparseable-quantity" : "no-quantity" };
+  const used = q.unit === "g" || q.unit === "ml" ? grams : q.unit === "each" ? count : null;
+  if (!(used > 0)) return { deducted: false, reason: "unit-mismatch" };
+  const after = ShoppingList.remainingQty(q, { value: used, unit: q.unit });
+  const before = MPData.qtyText(items[i].qty);
+  items[i] = { ...items[i], qty: after };
+  return { name: items[i].name, before, after: after.raw };
+}
+
+/** Have: add to the matching pantry item, or create one. @returns the result's `pantry` field */
+function pantryHave(items, food, key, grams, count, product) {
+  const add = grams ? fmtQty(grams, "g") : count ? fmtQty(count, "each") : product && product.pack && product.pack.value > 0 ? fmtQty(product.pack.value, product.pack.unit) : null;
+  const i = items.findIndex((x) => ShoppingList.normalizeKey(x.name) === key);
+  if (i < 0) { items.push(add ? { name: food.name, qty: add } : { name: food.name }); return { name: food.name, before: null, after: add ? add.raw : "" }; }
+  const { out, ...rest } = items[i];
+  if (!add) { if (out) items[i] = rest; return { name: rest.name, before: MPData.qtyText(rest.qty), after: MPData.qtyText(rest.qty) }; }
+  const q = rest.qty ? ShoppingList.parseQty(rest.qty) : null;
+  if (rest.qty && (!q || q.unit !== add.unit)) return { deducted: false, reason: q ? "unit-mismatch" : "unparseable-quantity" };
+  const next = q ? fmtQty(Math.round((q.value + add.value) * 1000) / 1000, q.unit) : add;
+  items[i] = { ...rest, qty: next };
+  return { name: rest.name, before: q ? MPData.qtyText(rest.qty) : null, after: next.raw };
+}
+
+async function postFoodLog(request, env, who) {
+  let parsed;
+  try { parsed = JSON.parse(await request.text()); } catch (e) { return json(400, "invalid JSON"); }
+  const bad = foodLogError(parsed);
+  if (bad) return json(400, bad);
+  const [logDoc, pantryDoc, prodDoc] = await Promise.all(["foodLog", "pantry", "products"].map((k) => readKV(env, k)));
+  const nowIso = new Date().toISOString();
+  const logged = new Set(((logDoc && logDoc.entries) || []).map((e) => e.id));
+  const newEntries = [];
+  const pantry = { ...(pantryDoc || {}), items: [...((pantryDoc && pantryDoc.items) || [])] };
+  const products = [...((prodDoc && prodDoc.products) || [])];
+  let pantryTouched = false, productsTouched = false;
+  const saveProduct = (p) => { const i = products.findIndex((x) => x.id === p.id); if (i >= 0) products[i] = p; else products.push(p); productsTouched = true; };
+  const fetchImpl = (u) => globalThis.fetch(u);
+  const results = [];
+
+  for (const e of parsed.entries) {
+    const food = e.text !== undefined ? { ...FoodLog.parse(e.text) } : { name: e.name.trim() };
+    if (e.grams) food.grams = e.grams;
+    if (e.count) food.count = e.count;
+    const key = ShoppingList.normalizeKey(food.name);
+    if (logged.has(e.id)) { results.push({ id: e.id, status: "duplicate", name: food.name }); continue; }
+    const eat = e.action === "eat";
+    let product = FoodLog.findProduct(products, key);
+
+    // grams are the unit of record: a count converts through the item weight
+    let grams = food.grams, count = food.count, gramsEstimate = false;
+    if (!grams && (eat || count)) {
+      count = count || 1;
+      const per = e.gramsPerItem || FoodLog.itemGramsFor(key, product, FOOD.itemGrams);
+      if (!per) { results.push({ id: e.id, status: "needs-grams", name: food.name, count }); continue; }
+      grams = round2(per * count); gramsEstimate = true;
+      if (e.gramsPerItem && !(product && product.itemGrams === e.gramsPerItem)) {
+        product = { ...(product || newFoodProduct(key, food.name, nowIso)), itemGrams: e.gramsPerItem, updatedAt: nowIso };
+        saveProduct(product);
+      }
+    }
+
+    // nutrients: resolver, then (unknown food, forced lookup, or caller candidates) the cross-checked lookup
+    let found = eat ? FoodLog.resolve(food, { products, pantry, cofid: COFID, action: e.action }) : null;
+    if (eat && (!found || e.lookup || e.candidates)) {
+      const looked = !found || e.lookup ? await FoodLog.lookup(food.name, { fetchImpl, usdaKey: env.USDA_API_KEY, usdaIds: FOOD.usdaIds }) : [];
+      const { nutrients: agreed } = FoodLog.crossCheck([...looked, ...(e.candidates || [])], FOOD.tolerance);
+      let p = product || newFoodProduct(key, food.name, nowIso);
+      const before = JSON.stringify(p.nutrients);
+      for (const [k, n] of Object.entries(agreed)) if (!(p.nutrients && p.nutrients[k])) p = Products.setNutrients(p, { [k]: n.value }, "estimate", n.sources);
+      if (JSON.stringify(p.nutrients) !== before) {
+        product = { ...p, updatedAt: nowIso };
+        saveProduct(product);
+        found = { kind: found ? found.kind : "lookup", ref: product.id, per100: product.nutrients };
+      }
+    }
+    const nutrients = {};
+    if (eat && found) for (const [k, n] of Object.entries(found.per100)) nutrients[k] = { value: round2((n.value * grams) / 100), basis: n.basis };
+    const matched = found ? { kind: found.kind, ref: found.ref } : { kind: "none" };
+    const source = !found ? "none" : found.kind === "lookup" || String(found.ref).startsWith("food:") ? "lookup" : found.cofid ? "cofid:" + found.cofid : "product:" + found.ref;
+
+    const pantryRes = eat ? pantryEat(pantry.items, key, grams, count) : pantryHave(pantry.items, food, key, grams, count, product);
+    if (pantryRes && pantryRes.after !== undefined) pantryTouched = true;
+    logged.add(e.id);
+    const amount = { ...(grams ? { grams } : {}), ...(count ? { count } : {}), ...(gramsEstimate ? { gramsEstimate: true } : {}) };
+    newEntries.push({ id: e.id, kind: eat ? "eat" : "stock", when: e.when || nowIso, name: food.name, ...amount, nutrients, source });
+    results.push({ id: e.id, status: eat ? "logged" : "stocked", name: food.name, ...amount, matched, nutrients, unconfirmed: eat ? unconfirmedOf(nutrients) : [], pantry: pantryRes });
+  }
+
+  // one write (and one activity entry) per KV key
+  const activity = [];
+  const write = async (key, before, after) => {
+    const changes = diffItems(key, before, after);
+    if (!changes.length) return;
+    await env.MP_KV.put(key, JSON.stringify(after));
+    const entry = await logWrite(env, { who, key, why: reasonOf(request), changes });
+    if (entry) activity.push(entry.id);
+  };
+  if (newEntries.length) await write("foodLog", logDoc, { updatedAt: nowIso, entries: [...((logDoc && logDoc.entries) || []), ...newEntries].slice(-FOOD_CAP) });
+  if (pantryTouched) await write("pantry", pantryDoc, { ...pantry, updatedAt: nowIso });
+  if (productsTouched) await write("products", prodDoc, { ...(prodDoc || {}), updatedAt: nowIso, products });
+  return json(200, { results, activity });
+}
+
+/** GET /food-log?from=&to=: the stored entries, optionally by London day (at most 31 days). */
+async function getFoodLog(params, env) {
+  const from = params.get("from"), to = params.get("to");
+  for (const d of [from, to]) if (d !== null && !isDayStr(d)) return json(400, "from/to must be YYYY-MM-DD");
+  if (from && to && (Date.parse(to) < Date.parse(from) || (Date.parse(to) - Date.parse(from)) / 86400000 > 30)) return json(400, "window must be 31 days or fewer, from before to");
+  const dayFmt = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/London" });
+  const doc = await readKV(env, "foodLog");
+  const entries = ((doc && doc.entries) || []).filter((e) => { const d = dayFmt.format(new Date(e.when)); return (!from || d >= from) && (!to || d <= to); });
+  return json(200, { entries });
+}
+
 export default {
   async fetch(request, env) {
     if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: CORS });
@@ -1598,6 +1781,11 @@ export default {
     if (url.pathname === "/pantry/sanity") {
       if (request.method !== "GET") return json(405, "method not allowed");
       return pantrySanity(url.searchParams, env);
+    }
+    if (url.pathname === "/food-log") {
+      if (request.method === "POST") return postFoodLog(request, env, actor || "app");
+      if (request.method !== "GET") return json(405, "method not allowed");
+      return getFoodLog(url.searchParams, env);
     }
     if (url.pathname === "/spend") {
       if (request.method === "POST") return postSpend(request, env, actor);

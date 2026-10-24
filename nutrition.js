@@ -104,12 +104,22 @@
   function eatenDayCoverage(entries, byId, tags, targets) {
     const known = entries.map((e) => byId[e.mealId]).filter(Boolean);
     const cov = dayCoverage(known, tags, targets);
-    const orphanTags = new Set(entries.filter((e) => !byId[e.mealId]).flatMap((e) => e.tags || []));
+    const orphans = entries.filter((e) => !byId[e.mealId]);
+    const orphanTags = new Set(orphans.flatMap((e) => e.tags || []));
+    const extraProtein = orphans.reduce((s, e) => s + (e.proteinGrams || 0), 0); // Phase 80: real grams from the food log
     return {
-      cov,
+      cov: extraProtein ? { ...cov, proteinGramsApprox: Math.round((cov.proteinGramsApprox + extraProtein) * 100) / 100 } : cov,
       missing: cov.missing.filter((n) => !orphanTags.has(n)),
       partial: [...cov.partial, ...cov.missing.filter((n) => orphanTags.has(n))],
     };
+  }
+
+  /** Phase 80: a food-log eat entry as an eaten-log-shaped orphan. A nutrient is tagged when its logged amount is at
+   *  least `tagShare` of that target, so the existing orphan path counts it "partial" at most. */
+  function foodAsEaten(entry, targets, tagShare) {
+    const n = entry.nutrients || {};
+    const tags = TRACKED_NUTRIENTS.filter((name) => Object.keys(targets).some((k) => k.startsWith(name + "_") && !k.endsWith("_cap") && n[k] && n[k].value >= tagShare * targets[k]));
+    return { id: "food:" + entry.id, mealId: "food:" + entry.id, name: entry.name, eatenAt: entry.when, tags, proteinGrams: n.protein_g ? n.protein_g.value : 0 };
   }
 
   /** Per-nutrient tally over `dates` ("YYYY-MM-DD"). dayKey(entry) gives an entry's local date
@@ -153,5 +163,5 @@
       .map((x) => x.meal);
   }
 
-  MP.Nutrition = { load, tagsForMeal, dayCoverage, weekCoverage, rankByGap, gapScore, TRACKED_NUTRIENTS, withGymDay, withProfile, profileOf, eatenDayCoverage, weekGaps };
+  MP.Nutrition = { load, tagsForMeal, dayCoverage, weekCoverage, rankByGap, gapScore, TRACKED_NUTRIENTS, withGymDay, withProfile, profileOf, eatenDayCoverage, weekGaps, foodAsEaten };
 })(typeof globalThis !== "undefined" ? globalThis : this);

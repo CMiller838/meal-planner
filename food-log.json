@@ -1,0 +1,19 @@
+{
+  "_note": "Phase 80 food log data. itemGrams are typical-weight ESTIMATES (grams per piece), keyed by ShoppingList.normalizeKey of the food name; a log that uses one is flagged gramsEstimate. usdaIds map our nutrient keys to FoodData Central nutrient ids.",
+  "tolerance": {
+    "macro": 0.15,
+    "micro": 0.25,
+    "macroKeys": ["energy_kcal", "protein_g", "carbohydrate_g", "fat_g", "saturates_g", "sugars_g", "fibre_g", "salt_g", "sodium_mg"]
+  },
+  "tagShare": 0.1,
+  "itemGrams": {
+    "potato": 175, "egg": 58, "banana": 118, "waffle": 35, "white_bread": 36, "tortilla": 62, "tea_bag": 2,
+    "apple": 180, "orange": 150, "slice_bread": 36, "sausage": 55, "rasher": 25, "crumpet": 55
+  },
+  "usdaIds": {
+    "energy_kcal": 1008, "protein_g": 1003, "carbohydrate_g": 1005, "fat_g": 1004, "saturates_g": 1258,
+    "fibre_g": 1079, "sugars_g": 2000, "sodium_mg": 1093, "potassium_mg": 1092, "calcium_mg": 1087,
+    "magnesium_mg": 1090, "iron_mg": 1089, "zinc_mg": 1095, "vitA_mcg": 1106, "vitC_mg": 1162,
+    "vitD_mcg": 1114, "vitB12_mcg": 1178, "folate_mcg": 1177
+  }
+}

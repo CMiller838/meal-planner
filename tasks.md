@@ -797,7 +797,7 @@ Spec: `.claude/specs/phase78.md`
 - [ ] Live: timer finishing on the phone: screen stays awake, vibrates, strip chip pulses, toast names the step
 
 ## Phase 80: Log anything
-- [ ] Spec 80a [L] (Worker resolver, food log, cross-checked lookup): `.claude/specs/phase80a.md`
+- [x] Spec 80a [L] (Worker resolver, food log, cross-checked lookup): `.claude/specs/phase80a.md`
 - [ ] Spec 80b [M] (app shows off-plan food, eat-requests off-plan): `.claude/specs/phase80b.md`
 - [ ] Live: get a free USDA FoodData Central key and run `npx wrangler secret put USDA_API_KEY` in `worker/`
 - [ ] Live: log today's food (waffles, hoisin duck pot noodle, tea, glycine, chilli) through the assistant; check grams, unconfirmed nutrients and the pantry

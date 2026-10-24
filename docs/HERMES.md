@@ -196,6 +196,26 @@ The app never reads this key back — it's write-only from the app's side.
 Hermes is the only reader, for questions about variety *over time* (as
 opposed to `/plan`'s current-fortnight snapshot or `/prefs`' taste counters).
 
+## `POST /food-log` / `GET /food-log`
+
+Log food with no plan slot (Phase 80a). Hermes or the assistant token.
+
+`POST` body `{ entries: [1..20] }`, each `{ id, action: "eat"|"have", text | name, when?, grams?, count?, gramsPerItem?, lookup?, candidates? }`
+(exactly one of `text`/`name`; unknown keys are a 400 and nothing is written). `text` is free text: `chicken 200g`, `2 waffles`,
+`200 servings of glycine`. `id` makes a replay a no-op (`duplicate`).
+
+Resolver order: saved product, pantry-linked item, CoFID (cooked values for `eat`), lookup (Open Food Facts, plus USDA when
+`USDA_API_KEY` is set, plus your `candidates`: `{ source, url (https), per: "100g", nutrients }`, max 5), then none.
+A nutrient is saved only when 2+ distinct sources agree (macros 15%, micros 25%); it is stored as `basis: "estimate"` with `sources`.
+Disagreeing or single-source nutrients are left out and listed in `unconfirmed`. A label or barcode value always outranks an estimate.
+A count with no known item weight returns `needs-grams`: resend with `gramsPerItem` and it is remembered on the `food:<name>` product.
+
+Response `{ results: [{ id, status: logged|stocked|duplicate|needs-grams, grams, count?, gramsEstimate?, matched, nutrients, unconfirmed, pantry? }], activity: [ids] }`.
+`eat` deducts the pantry (never below zero); `have` adds to it. Each activity id undoes via `POST /activity/undo`.
+
+`GET /food-log?from=YYYY-MM-DD&to=YYYY-MM-DD` returns entries in the window (max 31 days, London day). `/day` shows them as
+`type:"food"` cards and `/nutrition` adds `offPlan` and counts their nutrients and protein.
+
 ## `GET /plan`
 
 Read-only mirror of the current 2-week plan, pushed by the app whenever it

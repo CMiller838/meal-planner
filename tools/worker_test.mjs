@@ -832,4 +832,139 @@ assert.equal((await call("GET", "/today", "a")).body.water, 3); // /today untouc
   assert.deepEqual((await call("GET", "/swaps", "a")).body.swaps, []);
   SG.groups.pop(); SG.groups.unshift(aromatic);
 }
+// Phase 80: POST/GET /food-log
+{
+  const FL = await import(new URL("../worker/food-log.js", import.meta.url));
+  const { readFileSync } = await import("node:fs");
+  const FOOD = JSON.parse(readFileSync(new URL("../food-log.json", import.meta.url), "utf8"));
+  assert.deepEqual([FL.parse("chicken 200g"), FL.parse("200g chicken"), FL.parse("2 waffles"), FL.parse("1 potato")],
+    [{ name: "chicken", grams: 200 }, { name: "chicken", grams: 200 }, { name: "waffles", count: 2 }, { name: "potato", count: 1 }]);
+  assert.deepEqual([FL.parse("200 servings of glycine"), FL.parse("20 Guayusa tea bags"), FL.parse("tea"), FL.parse("1.5kg rice"), FL.parse("250 ml milk"), FL.parse("  ")],
+    [{ name: "glycine", count: 200 }, { name: "Guayusa tea bags", count: 20 }, { name: "tea" }, { name: "rice", grams: 1500 }, { name: "milk", grams: 250 }, null]);
+  const cc = (...c) => FL.crossCheck(c.map(([source, nutrients]) => ({ source, nutrients })), FOOD.tolerance);
+  let x = cc(["A", { protein_g: 20, iron_mg: 1 }], ["B", { protein_g: 22, iron_mg: 2 }]);
+  assert.deepEqual([x.nutrients.protein_g, x.unconfirmed], [{ value: 21, basis: "estimate", sources: ["A", "B"] }, ["iron_mg"]]);
+  assert.equal(cc(["A", { iron_mg: 1 }], ["B", { iron_mg: 1.3 }]).nutrients.iron_mg.value, 1.15);
+  assert.deepEqual(cc(["A", { protein_g: 10 }]).nutrients, {});
+  assert.deepEqual(cc(["A", { protein_g: 10 }], ["a", { protein_g: 10 }]).nutrients, {});
+  x = cc(["A", { protein_g: 10 }], ["B", { protein_g: 30 }], ["C", { protein_g: 31 }]);
+  assert.deepEqual(x.nutrients.protein_g.sources, ["B", "C"]);
+  assert.equal(FL.fromOffSearch({ products: [{ code: "1", product_name: "x" }] }), null);
+  assert.equal(FL.fromUsda({ foods: [] }, FOOD.usdaIds), null);
+
+  const realFetch = globalThis.fetch;
+  const hits = [];
+  const A = (b) => call("POST", "/food-log", "a", b);
+  const eat = (id, text, o = {}) => ({ id, action: "eat", text, when: "2026-10-24T12:00:00.000Z", ...o });
+  for (const k of ["foodLog", "activity", "products", "settings", "plan"]) kv.delete(k);
+  kv.set("pantry", JSON.stringify({ updatedAt: "2026-10-20T00:00:00.000Z", items: [
+    { name: "Chicken breast", qty: { value: 500, unit: "g", raw: "500g" } }, { name: "Waffles", qty: { value: 6, unit: "each", raw: "6" } },
+    { name: "Glycine", qty: { value: 50, unit: "g", raw: "50g" } }, { name: "Eggs", qty: "6" }] }));
+
+  globalThis.fetch = async () => { throw new Error("offline"); };
+  r = await A({ entries: [eat("c1", "chicken breast 200g")] });
+  assert.equal(r.status, 200);
+  let res = r.body.results[0];
+  assert.deepEqual([res.status, res.grams, res.matched.kind, res.nutrients.protein_g.basis, res.nutrients.protein_g.value > 40], ["logged", 200, "cofid", "cofid", true]);
+  assert.deepEqual([res.pantry.before, res.pantry.after], ["500g", "300g"]);
+  assert.equal(r.body.activity.length, 2);
+  const pb = kv.get("pantry"), ab = kv.get("activity");
+  r = await A({ entries: [eat("c1", "chicken breast 200g")] });
+  assert.deepEqual([r.body.results[0].status, r.body.activity], ["duplicate", []]);
+  assert.ok(kv.get("pantry") === pb && kv.get("activity") === ab);
+  r = await A({ entries: [eat("w1", "2 waffles")] });
+  res = r.body.results[0];
+  assert.deepEqual([res.status, res.count, res.grams, res.gramsEstimate, res.pantry.after, res.matched.kind], ["logged", 2, 70, true, "4each", "none"]);
+  assert.deepEqual([res.nutrients, res.unconfirmed.includes("protein_g")], [{}, true]);
+  r = await A({ entries: [eat("g1", "30g glycine"), eat("g2", "60g glycine")] });
+  assert.deepEqual([r.body.results[0].pantry.after, r.body.results[1].pantry.after], ["20g", "0g"]);
+  const logLen = () => JSON.parse(kv.get("foodLog")).entries.length;
+  const n0 = logLen();
+  r = await A({ entries: [eat("n1", "3 snorbles"), eat("n2", "50g oats")] });
+  assert.deepEqual(r.body.results.map((q) => q.status), ["needs-grams", "logged"]);
+  assert.equal(logLen(), n0 + 1);
+  r = await A({ entries: [eat("n1", "3 snorbles", { gramsPerItem: 40 })] });
+  assert.deepEqual([r.body.results[0].status, r.body.results[0].grams], ["logged", 120]);
+  assert.equal(JSON.parse(kv.get("products")).products.find((p) => p.id === "food:snorble").itemGrams, 40);
+  r = await A({ entries: [eat("n3", "2 snorbles")] });
+  assert.deepEqual([r.body.results[0].status, r.body.results[0].grams], ["logged", 80]);
+  r = await A({ entries: [{ id: "h1", action: "have", text: "300g lentils" }, { id: "h2", action: "have", text: "200g lentils" }, { id: "h4", action: "have", text: "tea" }] });
+  assert.deepEqual(r.body.results.map((q) => q.status), ["stocked", "stocked", "stocked"]);
+  const items = JSON.parse(kv.get("pantry")).items;
+  assert.deepEqual([items.find((i) => i.name === "lentils").qty.raw, "qty" in items.find((i) => i.name === "tea")], ["500g", false]);
+
+  // lookup: two agreeing sources save an estimate; the product then resolves with no fetch
+  const offBody = { products: [{ code: "5", product_name: "x", nutriments: { proteins_100g: 20, iron_100g: 1, fat_100g: 10 } }] };
+  const usdaBody = { foods: [{ fdcId: 1, foodNutrients: [{ nutrientId: 1003, value: 21 }, { nutrientId: 1004, value: 20 }] }] };
+  globalThis.fetch = async (u) => { hits.push(String(u)); return new Response(JSON.stringify(String(u).includes("openfoodfacts") ? offBody : usdaBody)); };
+  env.USDA_API_KEY = "k";
+  r = await A({ entries: [eat("l1", "100g quorn")] });
+  res = r.body.results[0];
+  assert.deepEqual([res.matched.kind, res.nutrients.protein_g.value, res.nutrients.protein_g.basis, "fat_g" in res.nutrients], ["lookup", 20.5, "estimate", false]);
+  assert.deepEqual(JSON.parse(kv.get("products")).products.find((p) => p.id === "food:quorn").nutrients.protein_g.sources, ["Open Food Facts", "USDA FoodData Central"]);
+  const nh = hits.length;
+  r = await A({ entries: [eat("l2", "100g quorn")] });
+  assert.deepEqual([r.body.results[0].matched.kind, hits.length], ["product", nh]);
+  const pl = JSON.parse(kv.get("products"));
+  pl.products.find((p) => p.id === "food:quorn").nutrients.protein_g = { value: 14, basis: "label" };
+  kv.set("products", JSON.stringify(pl));
+  r = await A({ entries: [eat("l3", "100g quorn", { lookup: true })] });
+  assert.equal(r.body.results[0].nutrients.protein_g.value, 14);
+  const set = globalThis.MP.Products.setNutrients;
+  const est = set({ nutrients: {} }, { protein_g: 5 }, "estimate", ["A", "B"]);
+  assert.deepEqual(est.nutrients.protein_g, { value: 5, basis: "estimate", sources: ["A", "B"] });
+  assert.deepEqual(set(est, { protein_g: 9 }, "label").nutrients.protein_g, { value: 9, basis: "label" });
+
+  // Hermes candidate + a failing lookup: never a 500
+  delete env.USDA_API_KEY;
+  const cand = (source, protein_g) => ({ source, url: "https://example.com/" + source, per: "100g", nutrients: { protein_g } });
+  r = await A({ entries: [eat("k1", "100g tofu", { candidates: [cand("Maker", 21)] })] });
+  assert.deepEqual([r.status, r.body.results[0].nutrients.protein_g.value], [200, 20.5]);
+  globalThis.fetch = async () => { throw new Error("offline"); };
+  r = await A({ entries: [eat("k2", "100g seitan", { candidates: [cand("Maker", 21)] })] });
+  assert.deepEqual([r.status, "protein_g" in r.body.results[0].nutrients], [200, false]);
+
+  // validation: 400 and nothing written
+  const snap = [kv.get("foodLog"), kv.get("pantry"), kv.get("products")].join("|");
+  for (const bad of [
+    {}, { entries: [] }, { entries: Array(21).fill(eat("z", "rice")) }, { entries: [eat("z", "rice")], extra: 1 },
+    { entries: [{ ...eat("z", "rice"), name: "rice" }] }, { entries: [{ id: "z", action: "eat" }] }, { entries: [{ ...eat("z", "rice"), bogus: 1 }] },
+    { entries: [{ ...eat("y", "rice"), action: "drink" }] }, { entries: [eat("", "rice")] }, { entries: [eat("z", "rice", { grams: -1 })] },
+    { entries: [eat("z", "rice", { candidates: [{ ...cand("M", 1), url: "http://example.com" }] })] },
+    { entries: [eat("z", "rice", { candidates: [cand("", 1)] })] }, { entries: [eat("z", "rice", { candidates: [cand("M", -1)] })] }
+  ]) assert.equal((await A(bad)).status, 400, JSON.stringify(bad).slice(0, 80));
+  assert.equal([kv.get("foodLog"), kv.get("pantry"), kv.get("products")].join("|"), snap);
+
+  // auth, GET window
+  assert.equal((await call("POST", "/food-log", "h", { entries: [eat("hh", "100g rice")] })).status, 200);
+  assert.equal((await call("POST", "/food-log", "bad", {})).status, 401);
+  assert.equal((await call("GET", "/food-log", "")).status, 401);
+  r = await call("GET", "/food-log?from=2026-10-24&to=2026-10-24", "a");
+  assert.ok(r.status === 200 && r.body.entries.length > 5);
+  assert.equal((await call("GET", "/food-log?from=2026-10-25", "a")).body.entries.length, 0);
+  assert.equal((await call("GET", "/food-log?from=x", "a")).status, 400);
+
+  // /nutrition and /day expose off-plan food; stock never counts
+  r = await call("GET", "/nutrition?date=2026-10-24", "a");
+  assert.ok(r.body.offPlan.length >= 8 && !r.body.offPlan.some((o) => o.name === "tea") && r.body.proteinGramsApprox > 0);
+  assert.ok(r.body.offPlan.find((o) => o.name === "waffles").gramsEstimate);
+  r = await call("GET", "/day?date=2026-10-24", "a");
+  assert.ok(r.body.cards.some((c) => c.type === "food" && c.name === "waffles"));
+
+  // undo: each activity id restores its key
+  const fresh = await A({ entries: [eat("u1", "100g chicken breast")] });
+  const [logAct, panAct] = fresh.body.activity;
+  const chicken = () => JSON.stringify(JSON.parse(kv.get("pantry")).items.find((i) => i.name === "Chicken breast"));
+  const cb = chicken();
+  assert.equal((await call("POST", "/activity/undo", "a", { id: panAct })).status, 200);
+  assert.notEqual(chicken(), cb);
+  assert.equal((await call("POST", "/activity/undo", "a", { id: logAct })).status, 200);
+  assert.ok(!JSON.parse(kv.get("foodLog")).entries.some((e) => e.id === "u1"));
+
+  kv.set("foodLog", JSON.stringify({ updatedAt: "x", entries: Array.from({ length: 499 }, (_, i) => ({ id: "old" + i, kind: "eat", when: "2026-01-01T00:00:00Z", name: "o", nutrients: {}, source: "none" })) }));
+  await A({ entries: [eat("cap1", "10g rice"), eat("cap2", "10g rice")] });
+  const capped = JSON.parse(kv.get("foodLog")).entries;
+  assert.deepEqual([capped.length, capped[0].id, capped.at(-1).id], [500, "old1", "cap2"]);
+  globalThis.fetch = realFetch;
+}
 console.log("worker_test: ok");

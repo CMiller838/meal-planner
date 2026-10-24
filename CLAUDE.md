@@ -175,6 +175,7 @@ Installable as a PWA on Android Chrome via `manifest.json` + `sw.js`.
   render once against the final plan, not per stage. Only the
   `hermes-generate` handler passes `staged: true`; every other `renderPlan()`
   call site stays a bare, instant call.
+- **The food log (Phase 80a) is Worker-owned KV `foodLog`, written only by `POST /food-log`**: entries freeze their nutrients at log time, an absent key means unknown (never 0), and an estimate needs 2+ distinct agreeing sources (`food-log.json` tolerances). Off-plan food reaches coverage only through `Nutrition.foodAsEaten`; stock (`have`) entries never count. Planned-slot eats and `commitCook` are unchanged.
 - **A pantry/ad-hoc `qty` (Phase 30) is a free-text string or a structured `{ value, unit, raw }` object**, never a
   second sibling field. `MP.ShoppingList.parseQty` is the only reader of its structure and `MP.qtyText` (`data.js`) the
   only reader of its display text. Quantity, plus an optional `useBy` (Phase 34) and `storage` (Phase 43, fridge|freezer|cupboard): no price, pack size or purchase date on a pantry item (pricing is
@@ -183,7 +184,7 @@ Installable as a PWA on Android Chrome via `manifest.json` + `sw.js`.
   **A computed remainder (Phase 31) is always structured**: `MP.ShoppingList.remainingQty` is its only producer (the
   pantry is a running balance, never a re-rounded display string). `pantryOverlap` means "on hand **in sufficient
   quantity**": absent is not counted, unparseable/unit-mismatched/amount-unknown stock falls back to "present".
-  `commitCook` (`plan.js`) is still the only writer of `qty`; the Pantry tab also writes `useBy` and `storage`, and only those. `MP.Cooks` is mirrored to KV `cooks` via `MP.Sync.pushCooks` (Phase 43, `PUT /cooks` is Hermes-only); the portion-eat path still never touches the pantry.
+  `commitCook` (`plan.js`) is the only app-side writer of `qty` (the Worker's `POST /food-log`, Phase 80a, also writes it: deduct on eat, add on have); the Pantry tab also writes `useBy` and `storage`, and only those. `MP.Cooks` is mirrored to KV `cooks` via `MP.Sync.pushCooks` (Phase 43, `PUT /cooks` is Hermes-only); the portion-eat path still never touches the pantry.
 
 ## Working style: plan with the user, build and test alone
 

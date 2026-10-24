@@ -610,6 +610,8 @@ Requires Phase 40. Assistant side: none (voice stays wake word every time).
 
 ## Phase 80: Log anything [L] — added 2026-10-24, not started
 
+**80a built 2026-10-24, live checks pending** (Worker resolver, `POST/GET /food-log`; verified by `worker_test.mjs`, `check.py` 10/10 and the tester). 80b (app side) not started.
+
 **Added 2026-10-24.** Today only food that matches a plan slot counts as eaten, so off-plan meals, staples and supplements
 are rejected or can't be logged. This phase adds one path that needs no plan slot, for eating and for stocking the pantry:
 
