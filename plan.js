@@ -172,6 +172,10 @@
     const costs = c.packData ? MP.ShoppingList.costIndex(c.library, c.packData) : null;
     let cost = costs ? 0 : null;
     const weekCost = [costs ? 0 : null, costs ? 0 : null];
+    if (costs) { // the real spend: the shopping list's packs per shop cycle, not each meal's packs summed
+      const lists = MP.ShoppingList.buildLists(pl, byId, c.packData, { items: [] });
+      Object.values(lists).forEach((l) => { weekCost[l.shopDay <= 7 ? 0 : 1] += l.total; cost += l.total; });
+    }
     let quickDinners = 0;
     const weeks = [[], []];
     pl.days.forEach((d, i) => {
@@ -183,7 +187,6 @@
         const prev = i > 0 && pl.days[i - 1].slots[t];
         const repeat = t === "dinner" && prev && prev.mealId === slot.mealId;
         if (meal.leftoverOf || slot.frozenFrom || repeat) return;
-        if (costs && costs[meal.id]) { cost += costs[meal.id].cost; weekCost[i < 7 ? 0 : 1] += costs[meal.id].cost; }
         if (t === "dinner" && MP.Generator.effortOf(meal) === "quick") quickDinners++;
       });
     });
@@ -2219,14 +2222,15 @@
 
   async function openChat() {
     if (chat || guidedActive || !plan) return;
-    const goFallback = (msg) => { toast(msg); setTimeout(() => { location.href = "plan-with-me.html"; }, 1200); };
-    if (!MP.Sync.config().enabled) { location.href = "plan-with-me.html"; return; }
+    const goFallback = (msg) => { toast(msg + " Opening Plan with me instead."); setTimeout(() => { location.href = "plan-with-me.html"; }, 3500); };
+    if (!MP.Sync.config().enabled) { toast("Hermes isn't set up on this device. Opening Plan with me instead."); setTimeout(() => { location.href = "plan-with-me.html"; }, 3500); return; }
+    toast("Connecting to Hermes…");
     const session = "c" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
     let r;
-    try { r = await MP.PlanChat.call("POST", "/chat", { session, open: true, context: chatContext(1) }); } catch (e) { return goFallback("Hermes is offline"); }
+    try { r = await MP.PlanChat.call("POST", "/chat", { session, open: true, context: chatContext(1) }); } catch (e) { return goFallback("Couldn't reach the Worker."); }
     if (!r.bridgeSeenAt || Date.now() - Date.parse(r.bridgeSeenAt) > CHAT_BRIDGE_FRESH_MS) {
       MP.PlanChat.call("POST", "/chat", { session, close: true }).catch(() => {});
-      return goFallback("Hermes is offline");
+      return goFallback("Hermes isn't answering (the chat bridge on your PC isn't running: python3 tools/hermes_chat_bridge.py).");
     }
     chat = { session, snapshot: JSON.stringify(plan), day: 1, since: 0, mine: new Set(), pending: 0, deadline: 0, timer: null, changes: [], ask: true, tieDone: new Set(), tradeOff: {}, cards: {} };
     guidedActive = true; // working copy: no savePlan until Save

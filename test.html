@@ -3120,7 +3120,7 @@
     check("tieFor: different scores are not a tie", MP.Plan.tieFor(1, X(tp, () => [rich], { library: [...lib4, rich] })) === null);
     check("tieFor: locked slot is skipped", MP.Plan.tieFor(1, X(mkp(["b"], [{ locked: true }]), () => [Bt])) === null);
     check("tieFor: leftover slot is skipped", MP.Plan.tieFor(1, X(mkp(["lf"]), () => [Bt])) === null);
-    const ids14 = ["a", "b", "a", "b", "a", "b", "a", "b", "a", "b", "a", "b", "a", "b"];
+    const ids14 = ["b", "b", "b", "b", "a", "b", "b", "b", "a", "b", "a", "b", "a", "b"]; // chicken once in week 1: a swap saves its whole pack
     const sp = mkp(ids14, { 0: { locked: true } });
     const before = JSON.stringify(sp);
     const bs = MP.Plan.budgetSwaps(0, 1000, X(sp, () => [B]));
@@ -3149,7 +3149,7 @@
       { id: "b", name: "B", mealTypes: ["dinner"], prepEffort: "batch", ingredients: [] },
       { id: "c", name: "C", mealTypes: ["dinner"], prepEffort: "quick", leftoverOf: "b", ingredients: [] },
     ];
-    const mkp = (ids) => ({ days: ids.map((id) => ({ slots: { dinner: { mealId: id } } })) });
+    const mkp = (ids) => ({ days: ids.map((id, i) => ({ day: i + 1, slots: { dinner: { mealId: id } } })) });
     const m = MP.Plan.planMetrics(mkp(["a", "b", "c", "c", null]), { library: lib2, tags, targets, packData: null });
     check("planMetrics: quick dinners skip leftovers, repeats and nulls", m.quickDinners === 1);
     check("planMetrics: no packData -> cost null", m.cost === null);

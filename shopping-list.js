@@ -227,7 +227,7 @@
 
   function mealCost(meal, packData) {
     let total = 0, estimated = false;
-    const keys = [];
+    const keys = [], parts = {};
     (meal.ingredients || []).forEach((ing) => {
       if (isSkippedIngredient(ing)) return;
       keys.push(normalizeKey(ing.key));
@@ -235,9 +235,11 @@
       if (!resolved) return;
       if (resolved.estimated) estimated = true;
       const needed = parseQty(ing.qty);
-      total += packsFor(needed, resolved) * resolved.price;
+      const part = packsFor(needed, resolved) * resolved.price;
+      total += part;
+      parts[normalizeKey(ing.key)] = (parts[normalizeKey(ing.key)] || 0) + part;
     });
-    return { total: Math.round(total * 100) / 100, estimated, keys };
+    return { total: Math.round(total * 100) / 100, estimated, keys, parts };
   }
 
   function costTier(total, packData) {
@@ -261,8 +263,8 @@
   function costIndex(library, packData) {
     const idx = {};
     library.forEach((meal) => {
-      const { total, keys } = mealCost(meal, packData);
-      idx[meal.id] = { cost: total, keys };
+      const { total, keys, parts } = mealCost(meal, packData);
+      idx[meal.id] = { cost: total, keys, parts };
     });
     return idx;
   }

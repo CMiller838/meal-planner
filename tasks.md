@@ -822,3 +822,9 @@ Spec: `.claude/specs/phase83.md`
 
 ## Phase 84: Tell it anything: chat and assistant control
 Spec: `.claude/specs/phase84.md`
+
+## Phase 85: Log and show every meal Hermes sends
+Spec: `.claude/specs/phase85.md`
+
+## Phase 86: Style and animate every component
+Spec: `.claude/specs/phase86.md`

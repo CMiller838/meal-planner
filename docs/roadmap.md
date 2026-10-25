@@ -669,3 +669,20 @@ Generate is unchanged. Requires Phases 68 (rolling, shop anchor), 82.
 plain message ("start Thursday dinner, I'm at Spoons Friday"). Edits are validated constraints and park as a pending draft like
 Phase 63. **Verify:** each message type produces the matching draft, an unknown edit is dropped, nothing applies unseen. Requires
 Phases 72, 81, 82, 83.
+
+## Phase 85: Log and show every meal Hermes sends [M] — not started
+
+**Added 2026-10-25.** Food and meals only, through the Phase 80a path (no new store). Hermes can log a whole meal (a name plus its
+components, e.g. "Spoons burger meal": burger, chips, drink) as one grouped entry, and remove a wrong entry. The app gets a Food log
+view: every day, every entry (grouped meals collapse), amount, nutrients with their basis, unknown shown as unknown. **Verify:** a
+three-item meal logs as one group with summed known nutrients and unknowns listed; replaying it changes nothing; a removed entry
+disappears from the view and from coverage; a meal logged by Hermes shows on Today and in the Food log view. Requires Phases 80a, 80b.
+
+## Phase 86: Style and animate every component [L] — not started
+
+**Added 2026-10-25.** A full polish pass over every component on every page (nav, cards, slot cards, sheets, banners, strips,
+meter, chips, forms, toasts, empty states, shopping rows, discover deck, plan-with-me, Food log): each gets tokenised styling, a
+motion for enter, press, change and exit, a reduced-motion fallback, and a checked look in both themes at PC and 390 px. Stray
+literals move into tokens. **Verify:** a component inventory in the spec is fully ticked, `check.py ui` passes, screenshots of
+every page in both themes at both widths show no unstyled or static component, reduced motion disables all non-essential motion.
+Requires Phase 85 (so the Food log view is polished with the rest).
