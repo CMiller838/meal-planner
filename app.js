@@ -707,6 +707,7 @@
     const cfg = MP.Sync.config();
     urlInput.value = cfg.url;
     tokenInput.value = cfg.token;
+    if (cfg.enabled) status.textContent = "Set up on this device"; // saved settings; the text below only changes on Save
 
     const STATUS_TEXT = {
       pull: "Pulled library from Hermes",
