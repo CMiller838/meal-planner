@@ -71,6 +71,8 @@ window.MP = window.MP || {};
 
   function weekdayShort(offset) {
     const d = new Date();
+    const s = document.getElementById("start-date").value;
+    if (s) d.setTime(Date.parse(s + "T12:00:00"));
     d.setDate(d.getDate() + offset);
     return d.toLocaleDateString(undefined, { weekday: "short" });
   }
@@ -153,7 +155,10 @@ window.MP = window.MP || {};
     document.getElementById("freeze-batches").checked = prefs.freezeBatches !== false;
     document.getElementById("repeat-gap").value = String(prefs.repeatGap || 0);
     document.getElementById("rolling-plan").checked = prefs.rolling !== false;
+    const startEl = document.getElementById("start-date");
+    startEl.value = startEl.min = new Date().toLocaleDateString("sv");
     renderBusyGrid();
+    startEl.addEventListener("change", () => { if (!startEl.value) startEl.value = startEl.min; renderBusyGrid(); });
 
     MP.ShoppingList.load()
       .then((packData) => renderBudget(packData && packData.planning))
@@ -200,7 +205,8 @@ window.MP = window.MP || {};
       MP.PlanPrefs.save([...busyDays], [...chips], profileBudget() ? MP.PlanPrefs.get(true).budgetTarget : budgetTarget, document.getElementById("freeze-batches").checked, document.getElementById("repeat-gap").value, document.getElementById("rolling-plan").checked);
       if (MP.Sync) MP.Sync.pushPlanPrefs();
       const extras = [...document.querySelectorAll("#also-row button.active")].map((b) => b.dataset.slot);
-      location.href = "plan.html?guided=1" + (extras.length ? "&slots=" + extras.join(",") : "");
+      const start = document.getElementById("start-date").value;
+      location.href = "plan.html?guided=1" + (start ? "&start=" + start : "") + (extras.length ? "&slots=" + extras.join(",") : "");
     });
   }
 

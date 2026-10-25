@@ -941,7 +941,7 @@ assert.equal((await call("GET", "/today", "a")).body.water, 3); // /today untouc
   assert.equal((await call("GET", "/food-log", "")).status, 401);
   r = await call("GET", "/food-log?from=2026-10-24&to=2026-10-24", "a");
   assert.ok(r.status === 200 && r.body.entries.length > 5);
-  assert.equal((await call("GET", "/food-log?from=2026-10-25", "a")).body.entries.length, 0);
+  assert.equal((await call("GET", "/food-log?from=2099-01-01", "a")).body.entries.length, 0);
   assert.equal((await call("GET", "/food-log?from=x", "a")).status, 400);
 
   // /nutrition and /day expose off-plan food; stock never counts

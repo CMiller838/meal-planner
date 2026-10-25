@@ -114,6 +114,7 @@
       method,
       headers: { "X-Auth-Token": token, "Content-Type": "application/json" },
       body: body === undefined ? undefined : JSON.stringify(body),
+      signal: AbortSignal.timeout(10000), // a hung Worker must fail (and fall back), not leave the button silent
     });
     if (!res.ok) { const err = new Error(`${method} ${path} -> ${res.status}`); err.status = res.status; throw err; }
     return res.json();

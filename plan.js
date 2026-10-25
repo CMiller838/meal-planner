@@ -137,6 +137,7 @@
 
   MP.Cooks = { all: cooksAll, openFor: cooksOpenFor, open: cooksOpen, take: cooksTake, discard: cooksDiscard, freezeOne: cooksFreezeOne };
 
+  let startOverride; // Plan with me: ?start=ISO for the guided plan only
   function generatePlan(override, locked, ranOut, avoid) {
     const lib = avoid && avoid.length ? library.filter((m) => !avoid.includes(m.id)) : library;
     const budget = packData
@@ -144,7 +145,7 @@
       : null;
     const have = MP.ShoppingList.pantryIndex({ items: MP.Sync.localItems("pantry") });
     (ranOut || []).forEach((k) => delete have[k]); // Phase 63: ran out for this generation only; the pantry is never written
-    const gen = MP.Generator.generatePlan(lib, tagsData.tags, tagsData.targets, shelfData, undefined, budget, have, Object.assign({}, prefs, override, { profile: MP.Nutrition.profileOf(MP.Sync.settings()) }), MP.Ratings.get(), locked);
+    const gen = MP.Generator.generatePlan(lib, tagsData.tags, tagsData.targets, shelfData, startOverride, budget, have, Object.assign({}, prefs, override, { profile: MP.Nutrition.profileOf(MP.Sync.settings()) }), MP.Ratings.get(), locked);
     if (basePrefs.rolling !== false) gen.shopAnchor = gen.startDate; // Phase 68: a fresh plan starts a new shop cadence; rolls/rerolls read only its days
     return gen;
   }
@@ -707,6 +708,66 @@
     });
   }
 
+  // ---- Swap and past edits (Phase 82) ----
+  const slotName = (sl) => (sl && sl.mealId && mealsById[sl.mealId] ? mealsById[sl.mealId].name : sl && sl.eatingOut ? outName(sl) : "empty");
+  const byIdMap = () => Object.fromEntries(library.map((m) => [m.id, m]));
+  const isPastSlot = (day) => slotDate(day) <= MP.Generator.isoToday();
+
+  function openSwapWith(day, slotType) {
+    const rows = [];
+    plan.days.forEach((d) => SLOT_TYPES.forEach((t) => { if (!(d.day === day && t === slotType)) rows.push({ day: d.day, slot: t, sl: d.slots[t] }); }));
+    showEatSheet(`<h2>Swap ${esc(slotName(plan.days[day - 1].slots[slotType]))} with…</h2>
+      <div class="skip-choices scroll-list">${rows.map((r, i) => `<button class="ghost" data-i="${i}">${esc(dayHeading(r.day))} · ${r.slot} <span class="muted">(${esc(slotName(r.sl))})</span></button>`).join("")}</div>`,
+    (sheet) => sheet.querySelectorAll("[data-i]").forEach((b) => b.addEventListener("click", () => {
+      const r = rows[Number(b.dataset.i)];
+      applyResult(MP.swapSlots(plan, { day, slot: slotType }, { day: r.day, slot: r.slot }, byIdMap()), "Swapped");
+    })));
+  }
+
+  function openSwapDay(day) {
+    const rows = plan.days.filter((d) => d.day !== day);
+    showEatSheet(`<h2>Swap ${esc(dayHeading(day))} with…</h2>
+      <div class="skip-choices scroll-list">${rows.map((d) => `<button class="ghost" data-d="${d.day}">${esc(dayHeading(d.day))} <span class="muted">(${esc(SLOT_TYPES.map((t) => slotName(d.slots[t])).filter((n) => n !== "empty").join(", ") || "empty")})</span></button>`).join("")}</div>`,
+    (sheet) => sheet.querySelectorAll("[data-d]").forEach((b) => b.addEventListener("click", () => applyResult(MP.swapDays(plan, day, Number(b.dataset.d), byIdMap()), "Swapped days"))));
+  }
+
+  /** "What did I actually eat?" on a past or current slot: a library meal (log only) or eating out. Never writes the pantry. */
+  function openBackfillSheet(day, slotType) {
+    const whenIso = new Date(`${slotDate(day)}T${OUT_TIME[slotType]}:00`).toISOString();
+    const done = (res, logFn) => {
+      if (res.replaced && res.replaced.eatenAt && res.replaced.mealId) MP.Sync.unlogEaten(`${res.replaced.mealId}:${res.replaced.eatenAt}`);
+      if (applyResult(res, "Recorded what you ate") && logFn) logFn();
+    };
+    showEatSheet(`<h2>What did you actually eat?</h2><p class="muted">${esc(dayHeading(day))} · ${slotType}. Counts as eaten; the pantry is not touched.</p>
+      <input class="bf-search" placeholder="Search your meals" aria-label="Search your meals">
+      <div class="skip-choices scroll-list bf-list"></div>
+      <label class="out-field">Or eating out: where <input class="out-name" maxlength="60" placeholder="Spoons"></label>
+      <label class="out-field">What you had <input class="out-text" maxlength="120" placeholder="burger and chips"></label>
+      <div class="day-slot-actions"><button class="primary out-save">Save eating out</button></div>`, (sheet) => {
+      const list = sheet.querySelector(".bf-list"), q = sheet.querySelector(".bf-search");
+      const paint = () => {
+        const f = q.value.trim().toLowerCase();
+        const ms = library.filter((m) => !f || m.name.toLowerCase().includes(f)).slice(0, 8);
+        list.innerHTML = ms.map((m, i) => `<button class="ghost" data-i="${i}">${esc(m.name)}</button>`).join("") || `<p class="muted">No match.</p>`;
+        list.querySelectorAll("[data-i]").forEach((b) => b.addEventListener("click", () => {
+          const m = ms[Number(b.dataset.i)];
+          done(MP.backfillSlot(plan, day, slotType, { mealId: m.id }, byIdMap(), whenIso, MP.Generator.isoToday()), () => logPortion(m, whenIso));
+        }));
+      };
+      q.addEventListener("input", paint);
+      paint();
+      sheet.querySelector(".out-save").addEventListener("click", () => {
+        const name = sheet.querySelector(".out-name").value.trim(), text = sheet.querySelector(".out-text").value.trim(), label = text || name;
+        if (!label) { toast("Say where or what you had"); return; }
+        const cur = plan.days[day - 1].slots[slotType];
+        const logId = cur && cur.eatingOut && cur.foodLogId ? undefined : crypto.randomUUID();
+        const entry = { eatingOut: true, ...(name ? { name } : {}), ...(text ? { text } : {}), ...(logId ? { foodLogId: logId } : {}) };
+        done(MP.backfillSlot(plan, day, slotType, entry, byIdMap(), whenIso, MP.Generator.isoToday()),
+          logId && (() => MP.Sync.postFoodLog({ id: logId, action: "eat", text: label.slice(0, 120), when: whenIso }).then(() => renderPlan())));
+      });
+    });
+  }
+
   /** Day-sheet block for an eating-out slot: its name, what was had and whether the estimate has landed. */
   function outSlotHtml(day, slotType, slot) {
     const done = slot.foodLogId && MP.Sync.localFoodLog().some((e) => e.id === slot.foodLogId);
@@ -714,8 +775,10 @@
       <h3>${esc(outName(slot))}</h3>
       ${slot.text ? `<p>${esc(slot.text)}</p>` : ""}
       ${slot.foodLogId ? `<p class="muted out-estimate">${done ? "Estimate logged" : "Estimate pending"}</p>` : ""}
-      <div class="day-slot-actions"><button class="ghost day-out-btn" data-slot="${slotType}">Edit</button><button class="ghost day-swap-btn" data-slot="${slotType}">Add a meal</button></div></section>`;
+      <div class="day-slot-actions"><button class="ghost day-out-btn" data-slot="${slotType}">Edit</button><button class="ghost day-swap-btn" data-slot="${slotType}">Add a meal</button>${swapPastBtnsHtml(day, slotType)}</div></section>`;
   }
+
+  const swapPastBtnsHtml = (day, slotType) => `<button class="ghost day-swapwith-btn" data-slot="${slotType}">Swap with…</button>${isPastSlot(day) ? `<button class="ghost day-ate-btn" data-slot="${slotType}">What I ate</button>` : ""}`;
 
   function mealAt(day, slotType) {
     const slot = plan.days[day - 1].slots[slotType];
@@ -1002,7 +1065,7 @@
       for (const d of weekDays) {
         const heading = dayHeading(d.day);
         html += `<div class="day-row" data-day="${d.day}">
-          <h3>${heading}${hintChipHtml(d.day)}<button class="reroll-btn" data-day="${d.day}" aria-label="Reroll day ${d.day}" title="Reroll this day">🎲 Reroll</button></h3>
+          <h3>${heading}${hintChipHtml(d.day)}<button class="reroll-btn" data-day="${d.day}" aria-label="Reroll day ${d.day}" title="Reroll this day">🎲 Reroll</button><button class="reroll-btn swapday-btn" data-day="${d.day}" aria-label="Swap day ${d.day} with another day" title="Swap this day with another">⇄ Swap day</button></h3>
           <div class="slot-grid">
             ${SLOT_TYPES.map((slotType) => {
               const meal = mealAt(d.day, slotType);
@@ -1034,7 +1097,8 @@
         renderPlan();
       });
     });
-    root.querySelectorAll(".reroll-btn").forEach((b) => b.addEventListener("click", () => rerollDay(Number(b.dataset.day))));
+    root.querySelectorAll(".reroll-btn:not(.swapday-btn)").forEach((b) => b.addEventListener("click", () => rerollDay(Number(b.dataset.day))));
+    root.querySelectorAll(".swapday-btn").forEach((b) => b.addEventListener("click", () => openSwapDay(Number(b.dataset.day))));
     document.getElementById("unlock-btn").hidden = !lockCount();
     root.querySelectorAll(".slot-card").forEach((el) => {
       el.addEventListener("click", (e) => {
@@ -1380,6 +1444,7 @@
         <p class="muted">Nothing planned.</p>
         <div class="day-slot-actions">
           <button class="ghost day-swap-btn" data-slot="${slotType}">Add a meal</button>
+          ${swapPastBtnsHtml(day, slotType)}
         </div>
       </section>`;
     }
@@ -1412,6 +1477,7 @@
         <button class="ghost day-skip-btn" data-slot="${slotType}">${slotType === "dinner" && MP.isBatch(meal) ? "Skip cook" : "Skip"}</button>
         <button class="ghost day-out-btn" data-slot="${slotType}">Eating out</button>`}
         ${eatBtnHtml(day, slotType)}
+        ${swapPastBtnsHtml(day, slotType)}
       </div>
       ${slotEaten(day, slotType) ? `<p class="day-slot-note">Eaten ${esc(new Date(slotEaten(day, slotType)).toLocaleDateString())}</p>` : ""}
     </section>`;
@@ -1446,6 +1512,8 @@
       b.addEventListener("click", () => openSkipSheet(day, b.dataset.slot)));
     sheet.querySelectorAll(".day-out-btn").forEach((b) =>
       b.addEventListener("click", () => openOutSheet(day, b.dataset.slot)));
+    sheet.querySelectorAll(".day-swapwith-btn").forEach((b) => b.addEventListener("click", () => openSwapWith(day, b.dataset.slot)));
+    sheet.querySelectorAll(".day-ate-btn").forEach((b) => b.addEventListener("click", () => openBackfillSheet(day, b.dataset.slot)));
     sheet.querySelectorAll(".day-variant-btn").forEach((b) =>
       b.addEventListener("click", () => openVariantPicker(day, b.dataset.slot)));
     sheet.querySelectorAll(".day-recipe-btn").forEach((b) => {
@@ -2290,7 +2358,10 @@
     if (guidedParam) {
       guidedActive = true;
       document.getElementById("compare-btn").disabled = true;
+      const start = new URLSearchParams(location.search).get("start");
+      if (/^\d{4}-\d{2}-\d{2}$/.test(start || "") && !isNaN(Date.parse(start))) startOverride = start;
       plan = generatePlan();
+      startOverride = undefined;
       startGuidedWalkthrough(parseGuidedSlots(location.search));
     } else {
       plan = loadPlan();

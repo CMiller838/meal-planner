@@ -397,6 +397,67 @@
     return { plan: res.plan, changes: diffPlans(plan, res.plan), ignored: res.ignored };
   }
 
+  /** Phase 82: leftover dinners with no earlier cook of their meal in the plan (a swap must not add any). */
+  function orphanLeftovers(plan, mealsById) {
+    const seen = new Set();
+    let n = 0;
+    plan.days.forEach((d) => {
+      const s = d.slots.dinner, m = s && s.mealId && !s.frozenFrom && mealsById[s.mealId];
+      if (m && m.leftoverOf && !seen.has(m.leftoverOf)) n++;
+      if (s && s.mealId) seen.add(s.mealId);
+    });
+    return n;
+  }
+  /** Phase 82, pure: exchange the contents of slots `a` and `b` (either may be empty or eating-out). Held (eaten, locked,
+   *  frozen) slots, batch cooks / leftovers (swap the days instead) and a swap that puts a leftover before its cook are
+   *  refused. Never touches the pantry or re-flows. Returns { plan, changes, ignored }. */
+  function swapSlots(plan, a, b, mealsById) {
+    const ignore = (reason) => ({ plan, changes: [], ignored: [{ day: a.day, slot: a.slot, reason }] });
+    const at = (p) => plan.days[p.day - 1] && SLOT_ORDER.includes(p.slot) ? plan.days[p.day - 1].slots[p.slot] || null : undefined;
+    const sa = at(a), sb = at(b);
+    if (sa === undefined || sb === undefined) return ignore("no such slot");
+    if (a.day === b.day && a.slot === b.slot) return ignore("same slot");
+    const held = (s) => !!(s && ((s.mealId && (s.locked || s.eatenAt)) || s.frozenFrom));
+    if (held(sa) || held(sb)) return ignore("eaten, locked or frozen");
+    if ([sa, sb].some((s) => { const m = s && s.mealId && mealsById[s.mealId]; return m && (m.leftoverOf || (m.servings || 1) >= 2); })) return ignore("part of a leftover chain: swap the whole days instead");
+    return settleSwap(plan, ignore, (days) => {
+      [days[a.day - 1].slots[a.slot], days[b.day - 1].slots[b.slot]] = [sb, sa];
+      [a, b].forEach((p) => { if (!days[p.day - 1].slots[p.slot]) delete days[p.day - 1].slots[p.slot]; });
+    }, mealsById);
+  }
+  /** Phase 82, pure: exchange every slot of days `d1` and `d2` (a leftover chain keeps its order or the swap is refused). */
+  function swapDays(plan, d1, d2, mealsById) {
+    const ignore = (reason) => ({ plan, changes: [], ignored: [{ day: d1, slot: "dinner", reason }] });
+    const A = plan.days[d1 - 1], B = plan.days[d2 - 1];
+    if (!A || !B || d1 === d2) return ignore("no such day");
+    const held = (s) => !!(s && ((s.mealId && (s.locked || s.eatenAt)) || s.frozenFrom));
+    if (SLOT_ORDER.some((t) => held(A.slots[t]) || held(B.slots[t]))) return ignore("eaten, locked or frozen");
+    return settleSwap(plan, ignore, (days) => { [days[d1 - 1].slots, days[d2 - 1].slots] = [B.slots, A.slots]; }, mealsById);
+  }
+  function settleSwap(plan, ignore, mutate, mealsById) {
+    const days = plan.days.map((d) => ({ ...d, slots: { ...d.slots } }));
+    mutate(days);
+    const out = { ...plan, days };
+    if (orphanLeftovers(out, mealsById) > orphanLeftovers(plan, mealsById)) return ignore("a leftover would come before its cook");
+    return { plan: out, changes: diffPlans(plan, out), ignored: [] };
+  }
+
+  /** Phase 82, pure: record what was actually eaten at (day, slot) on a past or current day. `entry` is { mealId, variantId? }
+   *  or { eatingOut: true, name?, text?, foodLogId? }. Future days are refused. Never touches the pantry (the caller logs via
+   *  logPortion / POST /food-log). `replaced` is the slot it overwrote, so the caller can drop that slot's log entry. */
+  function backfillSlot(plan, day, slot, entry, mealsById, whenIso, todayIso) {
+    const ignore = (reason) => ({ plan, changes: [], ignored: [{ day, slot, reason }], replaced: null });
+    const dd = plan.days[day - 1];
+    if (!dd || !SLOT_ORDER.includes(slot)) return ignore("no such slot");
+    if (!plan.startDate || new Date(Date.parse(plan.startDate) + (day - 1) * 86400000).toISOString().slice(0, 10) > todayIso) return ignore("that day hasn't happened yet");
+    if (!entry.eatingOut && !mealsById[entry.mealId]) return ignore("unknown meal");
+    const replaced = dd.slots[slot] || null;
+    const next = entry.eatingOut ? outSlot(entry, replaced && replaced.eatingOut ? replaced : null) : { mealId: entry.mealId, ...(entry.variantId ? { variantId: entry.variantId } : {}), eatenAt: whenIso };
+    const days = plan.days.map((d) => (d.day === day ? { ...d, slots: { ...d.slots, [slot]: next } } : d));
+    const out = { ...plan, days };
+    return { plan: out, changes: [{ day, slot, before: slotRef(replaced), after: slotRef(next) }], ignored: [], replaced };
+  }
+
   /** Phase 63, pure: re-plan only the freed slots of `plan`. Everything else (past days, eaten, locked, untouched
    *  slots) is passed to `generate(locked, ranOutKeys, avoidIds)` as locked, so it comes back identical. A skipped batch cook frees
    *  its whole leftover chain; a slot whose meal uses a ran-out ingredient is freed too. Eating-out slots end up
@@ -591,6 +652,9 @@
   MP.reflowPlan = reflowPlan;
   MP.pushSlot = pushSlot;
   MP.moveSlot = moveSlot;
+  MP.swapSlots = swapSlots;
+  MP.swapDays = swapDays;
+  MP.backfillSlot = backfillSlot;
   MP.rollPlan = rollPlan;
   MP.reflowInputError = reflowInputError;
   MP.reflowFromDay = reflowFromDay;
