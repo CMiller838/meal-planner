@@ -2221,7 +2221,9 @@
   }
 
   async function openChat() {
-    if (chat || guidedActive || !plan) return;
+    if (chat) return;
+    if (!plan) return toast("The plan hasn't loaded yet. Reload the page and try again.");
+    if (guidedActive) return toast("Finish or exit the current planning walkthrough first.");
     const goFallback = (msg) => { toast(msg + " Opening Plan with me instead."); setTimeout(() => { location.href = "plan-with-me.html"; }, 3500); };
     if (!MP.Sync.config().enabled) { toast("Hermes isn't set up on this device. Opening Plan with me instead."); setTimeout(() => { location.href = "plan-with-me.html"; }, 3500); return; }
     toast("Connecting to Hermes…");
@@ -2291,11 +2293,11 @@
     document.addEventListener("keydown", (e) => {
       if (e.key === "Escape" && chat && $("swap-overlay").classList.contains("hidden")) exitChat();
     });
-    if (new URLSearchParams(location.search).get("chat") === "1") openChat();
   }
 
   async function init() {
     MP.initTheme();
+    initChat(); // wired first: a later load error must not leave the Plan with Hermes button dead
     document.getElementById("day-overlay").addEventListener("click", (e) => {
       if (e.target.id === "day-overlay") closeDayView();
     });
@@ -2392,7 +2394,7 @@
       document.getElementById("guided-review-banner").classList.add("hidden");
       toast("Plan saved");
     });
-    initChat();
+    if (new URLSearchParams(location.search).get("chat") === "1") openChat();
   }
 
   // Guarded so this file can be included in test.html for pure-function
