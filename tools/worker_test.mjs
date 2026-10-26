@@ -1003,6 +1003,33 @@ assert.equal((await call("GET", "/today", "a")).body.water, 3); // /today untouc
   await A({ entries: [eat("cap1", "10g rice"), eat("cap2", "10g rice")] });
   const capped = JSON.parse(kv.get("foodLog")).entries;
   assert.deepEqual([capped.length, capped[0].id, capped.at(-1).id], [500, "old1", "cap2"]);
+
+  // Phase 85: meal + remove
+  kv.set("foodLog", JSON.stringify({ updatedAt: "x", entries: [] }));
+  const meal = (o = {}) => ({ id: "m1", action: "meal", name: "Spoons burger meal", when: "2026-10-25T12:00:00.000Z", items: [{ text: "chicken breast 150g" }, { text: "rice 100g" }, { name: "mystery gloop" }], ...o });
+  r = await A({ entries: [meal()] });
+  assert.equal(r.status, 200);
+  let mr = r.body.results[0];
+  assert.deepEqual([mr.status, mr.items.map((i) => i.status)], ["partial", ["logged", "logged", "needs-grams"]]);
+  let ents = JSON.parse(kv.get("foodLog")).entries;
+  assert.deepEqual(ents.map((e) => [e.id, e.group, e.meal]), [["m1:0", "m1", "Spoons burger meal"], ["m1:1", "m1", "Spoons burger meal"]]);
+  r = await A({ entries: [meal({ items: meal().items.slice(0, 2) })] });
+  assert.equal(r.body.results[0].status, "duplicate");
+  assert.equal(JSON.parse(kv.get("foodLog")).entries.length, 2);
+  for (const bad of [{ entries: [meal({ items: [] })] }, { entries: [meal({ items: Array(13).fill({ text: "rice 10g" }) })] }, { entries: [meal({ extra: 1 })] },
+    { entries: [meal({ items: [{ text: "rice 10g", id: "q" }] })] }, { entries: [{ id: "r", action: "remove" }] }, { entries: [{ id: "r", action: "remove", target: "m1", x: 1 }] }])
+    assert.equal((await A(bad)).status, 400, JSON.stringify(bad).slice(0, 80));
+  const pan = kv.get("pantry"), log0 = kv.get("foodLog");
+  assert.equal((await A({ entries: [{ id: "r1", action: "remove", target: "nope" }] })).status, 404);
+  assert.equal(kv.get("foodLog"), log0);
+  // a failed remove rejects the whole batch, new entries included
+  assert.equal((await A({ entries: [eat("single", "10g rice"), { id: "r2", action: "remove", target: "single" }] })).status, 404);
+  assert.equal(kv.get("foodLog"), log0);
+  r = await A({ entries: [{ id: "r3", action: "remove", target: "m1" }] });
+  assert.deepEqual([r.status, r.body.results[0].status, r.body.results[0].removed, r.body.results[0].pantry], [200, "removed", ["m1:0", "m1:1"], "untouched"]);
+  assert.ok(!JSON.parse(kv.get("foodLog")).entries.some((e) => e.group === "m1"));
+  assert.equal(kv.get("pantry"), pan);
+  assert.equal(r.body.activity.length, 1);
   globalThis.fetch = realFetch;
 }
 console.log("worker_test: ok");

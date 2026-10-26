@@ -180,7 +180,7 @@ Installable as a PWA on Android Chrome via `manifest.json` + `sw.js`.
   render once against the final plan, not per stage. Only the
   `hermes-generate` handler passes `staged: true`; every other `renderPlan()`
   call site stays a bare, instant call.
-- **The food log (Phase 80a) is Worker-owned KV `foodLog`, written only by `POST /food-log`**: entries freeze their nutrients at log time, an absent key means unknown (never 0), and an estimate needs 2+ distinct agreeing sources (`food-log.json` tolerances). Off-plan food reaches coverage only through `Nutrition.foodAsEaten`; stock (`have`) entries never count. Planned-slot eats and `commitCook` are unchanged.
+- **The food log (Phase 80a) is Worker-owned KV `foodLog`, written only by `POST /food-log`**: entries freeze their nutrients at log time, an absent key means unknown (never 0), and an estimate needs 2+ distinct agreeing sources (`food-log.json` tolerances). Off-plan food reaches coverage only through `Nutrition.foodAsEaten`; stock (`have`) entries never count. Planned-slot eats and `commitCook` are unchanged. Phase 85: the same route also takes `meal` (items logged as `${id}:${i}` with `group`/`meal`) and `remove` (one entry or a group; never touches the pantry; undoes via activity).
 - **A pantry/ad-hoc `qty` (Phase 30) is a free-text string or a structured `{ value, unit, raw }` object**, never a
   second sibling field. `MP.ShoppingList.parseQty` is the only reader of its structure and `MP.qtyText` (`data.js`) the
   only reader of its display text. Quantity, plus an optional `useBy` (Phase 34) and `storage` (Phase 43, fridge|freezer|cupboard): no price, pack size or purchase date on a pantry item (pricing is

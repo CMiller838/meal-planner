@@ -685,6 +685,41 @@
     wire(sheet);
   };
 
+  // ---- Food log sheet (Phase 85): last 7 days from the mirror, a meal group is one collapsible row ----
+  function openFoodLogSheet() {
+    const dayKey = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/London" });
+    const cutoff = dayKey.format(new Date(Date.now() - 6 * 86400000));
+    const days = {};
+    for (const e of MP.Sync.localFoodLog()) {
+      if (e.kind === "stock" || !e.when) continue;
+      let d; try { d = dayKey.format(new Date(e.when)); } catch (err) { continue; }
+      if (d >= cutoff) (days[d] = days[d] || []).push(e);
+    }
+    const chips = (n) => Object.entries(n || {}).map(([k, v]) => `<span class="food-chip">${esc(k.replace(/_/g, " "))} ${esc(String(v.value))} <small>${esc(v.basis || "")}</small></span>`).join("");
+    const entryRow = (e) => `<li class="food-entry"><span>${esc(e.name)}${e.grams ? ` · ${e.gramsEstimate ? "~" : ""}${esc(String(e.grams))}g` : ""}</span>
+        ${Object.keys(e.nutrients || {}).length ? chips(e.nutrients) : `<span class="food-chip">unknown</span>`}</li>`;
+    const rm = (t) => `<button class="ghost" data-food-rm="${esc(t)}">Remove</button>`;
+    const groupRow = (g) => {
+      if (!g.meal) return `<div class="food-row">${entryRow(g.entries[0])}${rm(g.entries[0].id)}</div>`;
+      const sum = {}, unknown = g.entries.filter((e) => !Object.keys(e.nutrients || {}).length);
+      for (const e of g.entries) for (const [k, v] of Object.entries(e.nutrients || {})) sum[k] = { value: Math.round(((sum[k] ? sum[k].value : 0) + v.value) * 100) / 100, basis: "sum" };
+      return `<details class="food-row food-group"><summary>${esc(g.meal)} · ${g.entries.length} items</summary>
+        <div class="food-sum">${Object.keys(sum).length ? chips(sum) : `<span class="food-chip">unknown</span>`}${unknown.length ? ` <small>${unknown.length} unknown: ${esc(unknown.map((e) => e.name).join(", "))}</small>` : ""}</div>
+        <ul>${g.entries.map(entryRow).join("")}</ul>${rm(g.key)}</details>`;
+    };
+    const body = Object.keys(days).sort().reverse().map((d) => {
+      const es = days[d].sort((a, b) => (a.when < b.when ? 1 : -1));
+      return `<h3>${esc(d)}</h3>${MP.Sync.groupFoodLog(es).map(groupRow).join("")}`;
+    }).join("") || `<p class="muted">Nothing logged in the last 7 days.</p>`;
+    showEatSheet(`<h2>Food log</h2>${body}`, (sheet) => sheet.querySelectorAll("[data-food-rm]").forEach((b) => b.addEventListener("click", async () => {
+      b.disabled = true;
+      const r = await MP.Sync.removeFoodEntry(b.dataset.foodRm);
+      toast(r === "ok" ? "Removed (pantry unchanged)" : "Couldn't remove — try again");
+      renderTodayCard(); renderGapStrip();
+      if (r === "ok") openFoodLogSheet(); else b.disabled = false;
+    })));
+  }
+
   function openSkipSheet(day, slotType) {
     const name = mealAt(day, slotType) ? mealAt(day, slotType).name : "this";
     showEatSheet(`<h2>Skip ${esc(name)}?</h2><p class="muted">What should happen to it?</p>
@@ -988,6 +1023,8 @@
       try { return e.kind !== "stock" && todayKey.format(new Date(e.when)) === todayKey.format(new Date()); } catch (err) { return false; }
     });
     const alsoRow = (e) => `<li>${esc(e.name)}${e.grams ? ` · ${e.gramsEstimate ? "~" : ""}${esc(String(e.grams))}g` : ""}${Object.keys(e.nutrients || {}).length ? "" : " <small>(no nutrient data)</small>"}</li>`;
+    const alsoGroup = (g) => g.meal ? `<li>${esc(g.meal)} · ${g.entries.length} item${g.entries.length === 1 ? "" : "s"}</li>` : alsoRow(g.entries[0]);
+    const anyLogged = MP.Sync.localFoodLog().some((e) => e.kind !== "stock");
     el.innerHTML = `<div class="gap-head"><strong>Today</strong>
         <label class="gap-gym"><input type="checkbox" id="today-gym"${t.gym ? " checked" : ""}> Gym day today</label></div>
       ${due.length ? `<div class="today-routines">${due.map((m) => {
@@ -996,11 +1033,13 @@
       }).join("")}</div>` : ""}
       ${defrost.map((n) => `<p class="defrost-note">❄ Defrost tonight: ${esc(mealsById[n.mealId].name)} for tomorrow</p>`).join("")}
       ${lefts.length ? `<div class="leftovers"><strong>Leftovers</strong><ul>${lefts.map(leftoverRow).join("")}</ul></div>` : ""}
-      ${alsoEaten.length ? `<div class="leftovers"><strong>Also eaten</strong><ul>${alsoEaten.map(alsoRow).join("")}</ul></div>` : ""}
+      ${anyLogged ? `<div class="leftovers"><div class="gap-head"><strong>Also eaten</strong> <button class="ghost" id="food-log-open">Food log</button></div>${alsoEaten.length ? `<ul>${MP.Sync.groupFoodLog(alsoEaten).map(alsoGroup).join("")}</ul>` : ""}</div>` : ""}
       ${counter("water", "Water (cups)", goal ? ` <small>of ${goal}</small>` : "")}
       ${counter("caffeine", "Caffeine (cups)",
         ` <select id="today-cup" aria-label="Cup type"><option value="">type?</option>${Object.keys(countersData.caffeine.cupMg).map((k) => `<option value="${esc(k)}"${k === cup ? " selected" : ""}>${esc(k)}</option>`).join("")}</select>` +
         (mg ? ` <small>~${mg * t.caffeine} mg (approx.)</small>` : ""))}`;
+    const fl = el.querySelector("#food-log-open");
+    if (fl) fl.addEventListener("click", openFoodLogSheet);
     el.querySelectorAll("[data-bump]").forEach((b) => b.addEventListener("click", () => {
       MP.Today.bump(b.dataset.bump, Number(b.dataset.d));
       renderTodayCard();

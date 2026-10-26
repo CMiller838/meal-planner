@@ -1223,6 +1223,10 @@
       check("localFoodLog: returns entries, dropping junk", MP.Sync.localFoodLog().length === 1);
       localStorage.removeItem("mp_foodLog");
       {
+        const g = MP.Sync.groupFoodLog([{ id: "a" }, { id: "m:0", group: "m", meal: "Burger" }, { id: "b" }, { id: "m:1", group: "m", meal: "Burger" }]);
+        check("groupFoodLog: a meal's entries are one row at first sight", g.length === 3 && g[1].meal === "Burger" && g[1].entries.length === 2 && g[0].meal === null);
+      }
+      {
         const tg = { protein_g: 50, vitC_mg: 80 };
         const fe = MP.Nutrition.foodAsEaten({ id: "f1", name: "x", when: "2026-09-07T12:00:00Z", nutrients: { vitC_mg: { value: 40 } } }, tg, 0.1);
         const wg = MP.Nutrition.weekGaps([fe], {}, ["2026-09-07"], {}, tg, () => "2026-09-07");

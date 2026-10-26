@@ -539,6 +539,14 @@ button.ghost.danger { color: var(--danger); border-color: var(--danger); }
 .leftover-row.last-day .leftover-when { color: var(--butter); font-weight: 700; }
 .stor-sel { font-size: .8rem; max-width: 9rem; }
 @media (prefers-reduced-motion: reduce) { .leftover-row { animation: none; } }
+/* Phase 85: Food log sheet */
+.food-row { padding: .4rem 0; border-bottom: 1px solid var(--border); animation: today-in .25s ease-out; }
+.food-row ul { list-style: none; margin: .3rem 0; padding: 0; display: grid; gap: .3rem; }
+.food-entry { display: flex; flex-wrap: wrap; gap: .3rem; align-items: center; }
+.food-entry > span:first-child { flex: 1 1 100%; }
+.food-chip { font-size: .8rem; padding: .1rem .45rem; border-radius: calc(var(--radius) / 2); background: color-mix(in srgb, currentColor 10%, transparent); }
+.food-group summary { cursor: pointer; font-weight: 700; }
+@media (prefers-reduced-motion: reduce) { .food-row { animation: none; } }
 @media (prefers-reduced-motion: reduce) { .today-card { animation: none; } .today-chip { transition: none; } }
 .gap-list { margin: .3rem 0 0; padding-left: 1.1rem; }
 .gap-list .gap-flag { color: var(--danger); }

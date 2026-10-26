@@ -836,6 +836,7 @@ Spec: `.claude/specs/phase84.md`
 
 ## Phase 85: Log and show every meal Hermes sends
 Spec: `.claude/specs/phase85.md`
+- [ ] Live: ask Hermes to log "Spoons burger meal: burger, chips, cola" and see one group in the Food log view on the phone PWA
 
 ## Phase 86: Style and animate every component
 Spec: `.claude/specs/phase86.md`

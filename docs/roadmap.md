@@ -672,7 +672,7 @@ plain message ("start Thursday dinner, I'm at Spoons Friday"). Edits are validat
 Phase 63. **Verify:** each message type produces the matching draft, an unknown edit is dropped, nothing applies unseen. Requires
 Phases 72, 81, 82, 83.
 
-## Phase 85: Log and show every meal Hermes sends [M] — not started
+## Phase 85: Log and show every meal Hermes sends [M] — built 2026-10-26, live checks pending
 
 **Added 2026-10-25.** Food and meals only, through the Phase 80a path (no new store). Hermes can log a whole meal (a name plus its
 components, e.g. "Spoons burger meal": burger, chips, drink) as one grouped entry, and remove a wrong entry. The app gets a Food log

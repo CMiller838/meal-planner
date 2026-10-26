@@ -1652,6 +1652,36 @@ function foodLogError(parsed) {
   if (Object.keys(parsed).some((k) => k !== "entries")) return "unknown key in body";
   if (!Array.isArray(parsed.entries) || parsed.entries.length < 1 || parsed.entries.length > 20) return "entries must be 1-20 items";
   for (const e of parsed.entries) {
+    if (isObj(e) && e.action === "meal") { const m = foodMealError(e); if (m) return m; continue; }
+    if (isObj(e) && e.action === "remove") {
+      if (Object.keys(e).some((k) => !["id", "action", "target"].includes(k))) return "unknown key in remove";
+      if (typeof e.id !== "string" || !e.id || e.id.length > 80) return "id must be 1-80 chars";
+      if (typeof e.target !== "string" || !e.target || e.target.length > 80) return "target must be 1-80 chars";
+      continue;
+    }
+    const m = foodEntryError(e);
+    if (m) return m;
+  }
+  return null;
+}
+
+/** A meal: { id, action:"meal", name, when?, items:[1-12 eat items without id/action] }. */
+function foodMealError(m) {
+  if (Object.keys(m).some((k) => !["id", "action", "name", "when", "items"].includes(k))) return "unknown key in meal";
+  if (typeof m.id !== "string" || !m.id || m.id.length > 70) return "meal id must be 1-70 chars";
+  if (typeof m.name !== "string" || !m.name.trim() || m.name.length > 60) return "meal name must be 1-60 chars";
+  if (m.when !== undefined && (typeof m.when !== "string" || !Number.isFinite(Date.parse(m.when)))) return "when must be an ISO time";
+  if (!Array.isArray(m.items) || m.items.length < 1 || m.items.length > 12) return "meal items must be 1-12";
+  for (const it of m.items) {
+    if (!isObj(it) || "id" in it || "action" in it || "when" in it) return "meal items take no id, action or when";
+    const bad = foodEntryError({ id: "x", action: "eat", ...it });
+    if (bad) return bad;
+  }
+  return null;
+}
+
+function foodEntryError(e) {
+  {
     if (!isObj(e)) return "each entry must be an object";
     const bad = Object.keys(e).find((k) => !FOOD_ENTRY_KEYS.includes(k));
     if (bad) return "unknown key: " + bad;
@@ -1730,7 +1760,23 @@ async function postFoodLog(request, env, who) {
   const fetchImpl = (u) => globalThis.fetch(u);
   const results = [];
 
+  // a meal expands to one eat per item (id `${id}:${i}`); a remove is applied to the stored entries first
+  const units = [], removes = [], mealOf = new Map();
   for (const e of parsed.entries) {
+    if (e.action === "remove") removes.push(e);
+    else if (e.action === "meal") { mealOf.set(e.id, e); e.items.forEach((it, i) => units.push({ ...it, id: `${e.id}:${i}`, action: "eat", ...(e.when ? { when: e.when } : {}), group: e.id, meal: e.name.trim() })); }
+    else units.push(e);
+  }
+  let stored = (logDoc && logDoc.entries) || [];
+  const removed = [];
+  for (const r of removes) {
+    const hit = stored.filter((x) => x.id === r.target || x.group === r.target);
+    if (!hit.length) return json(404, "nothing logged as " + r.target);
+    stored = stored.filter((x) => !hit.includes(x));
+    removed.push({ id: r.id, status: "removed", target: r.target, removed: hit.map((x) => x.id), pantry: "untouched" });
+  }
+
+  for (const e of units) {
     const food = e.text !== undefined ? { ...FoodLog.parse(e.text) } : { name: e.name.trim() };
     if (e.grams) food.grams = e.grams;
     if (e.count) food.count = e.count;
@@ -1775,7 +1821,7 @@ async function postFoodLog(request, env, who) {
     if (pantryRes && pantryRes.after !== undefined) pantryTouched = true;
     logged.add(e.id);
     const amount = { ...(grams ? { grams } : {}), ...(count ? { count } : {}), ...(gramsEstimate ? { gramsEstimate: true } : {}) };
-    newEntries.push({ id: e.id, kind: eat ? "eat" : "stock", when: e.when || nowIso, name: food.name, ...amount, nutrients, source });
+    newEntries.push({ id: e.id, kind: eat ? "eat" : "stock", when: e.when || nowIso, name: food.name, ...amount, nutrients, source, ...(e.group ? { group: e.group, meal: e.meal } : {}) });
     results.push({ id: e.id, status: eat ? "logged" : "stocked", name: food.name, ...amount, matched, nutrients, unconfirmed: eat ? unconfirmedOf(nutrients) : [], pantry: pantryRes });
   }
 
@@ -1788,10 +1834,19 @@ async function postFoodLog(request, env, who) {
     const entry = await logWrite(env, { who, key, why: reasonOf(request), changes });
     if (entry) activity.push(entry.id);
   };
-  if (newEntries.length) await write("foodLog", logDoc, { updatedAt: nowIso, entries: [...((logDoc && logDoc.entries) || []), ...newEntries].slice(-FOOD_CAP) });
+  if (newEntries.length || removed.length) await write("foodLog", logDoc, { updatedAt: nowIso, entries: [...stored, ...newEntries].slice(-FOOD_CAP) });
   if (pantryTouched) await write("pantry", pantryDoc, { ...pantry, updatedAt: nowIso });
   if (productsTouched) await write("products", prodDoc, { ...(prodDoc || {}), updatedAt: nowIso, products });
-  return json(200, { results, activity });
+  const out = [];
+  for (const e of parsed.entries) {
+    if (e.action === "remove") out.push(removed.find((x) => x.id === e.id));
+    else if (e.action === "meal") {
+      const items = results.filter((r) => r.id.startsWith(e.id + ":") && mealOf.get(e.id) === e);
+      const status = items.every((r) => r.status === "duplicate") ? "duplicate" : items.some((r) => r.status === "needs-grams") ? "partial" : "logged";
+      out.push({ id: e.id, status, items });
+    } else out.push(results.find((r) => r.id === e.id));
+  }
+  return json(200, { results: out, activity });
 }
 
 /** GET /food-log?from=&to=: the stored entries, optionally by London day (at most 31 days). */
