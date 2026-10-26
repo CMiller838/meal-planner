@@ -44,11 +44,11 @@ Requires: nothing unbuilt. Reuses Phase 80-82 pieces (`logPortion`, eaten log, `
 
 ## Tasks
 Logic (TDD)
-- [ ] `MP.tickPlanEaten` in `data.js` + test.html asserts (cases above)
-- [ ] `MP.Sync.logPortion(meal, eatenAt, n)` in `hermes-sync.js` + asserts (n entries, ids, no pantry write)
-- [ ] `plan.js logPortion` delegates to `MP.Sync.logPortion` (its consumer; existing Plan eat paths unchanged)
+- [x] `MP.tickPlanEaten` in `data.js` + test.html asserts (cases above)
+- [x] `MP.Sync.logPortion(meal, eatenAt, n)` in `hermes-sync.js` + asserts (n entries, ids, no pantry write)
+- [x] `plan.js logPortion` delegates to `MP.Sync.logPortion` (its consumer; existing Plan eat paths unchanged)
 UI (follow `ui-build`)
-- [ ] Browse detail sheet: Eat button, inline row (− n +, datetime-local, Log/Cancel), toast "Logged 2 × Name" (+ "plan ticked")
-- [ ] `app.js` handler: clamp, call `MP.Sync.logPortion`, `MP.Prefs.bump(meal,"eaten")` once, `tickPlanEaten` → save `mp_plan` + dispatch `mp:plan-saved`
+- [x] Browse detail sheet: Eat button, inline row (− n +, datetime-local, Log/Cancel), toast "Logged 2 × Name" (+ "plan ticked")
+- [x] `app.js` handler: clamp, call `MP.Sync.logPortion`, `MP.Prefs.bump(meal,"eaten")` once, `tickPlanEaten` → save `mp_plan` + dispatch `mp:plan-saved`
 Wrap-up
-- [ ] CLAUDE.md invariant clause, `sw.js` CACHE bump, `python3 check.py`
+- [x] CLAUDE.md invariant clause, `sw.js` CACHE bump, `python3 check.py`

@@ -53,7 +53,7 @@ the days before the next shop from that alone. Requires 88; builds on Phases 59,
 Goal: standing notes ("hates Sunday cooking", "tight budget last week of the month") live in a vault note the user can edit in
 Obsidian; the assistant syncs it to KV, the planner and Hermes read it, and Hermes can propose a note that the user confirms.
 
-## Phase 92: Eat from Browse [M] — not started
+## Phase 92: Eat from Browse [M] — built 2026-10-26, live checks pending
 
 Goal: press Eat on any meal or snack in Browse, pick portions (and optionally when), and it is logged for nutrition; a match with today's plan ticks the plan slot. Log-only, never the pantry.
 

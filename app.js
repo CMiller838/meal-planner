@@ -285,6 +285,7 @@
       ${meal.variants && meal.variants.length && method.steps.length ? `<p class="muted">Steps are for the base recipe; variants have no steps of their own.</p>` : ""}
       <div class="modal-actions">
         ${method.status === "drafted" ? `<button id="detail-accept" class="btn">Accept steps</button>` : ""}
+        <button id="detail-eat" class="btn">Eat</button>
         <button id="detail-edit" class="btn">Edit</button>
         <button id="detail-delete" class="ghost danger">Delete</button>
       </div>
@@ -300,7 +301,45 @@
       openDetail(accepted);
     });
     sheet.querySelector("#detail-delete").addEventListener("click", () => deleteMeal(meal));
+    sheet.querySelector("#detail-eat").addEventListener("click", () => openEatRow(meal, sheet));
     overlay.classList.remove("hidden");
+  }
+
+  /** Phase 92: log-only portion-eat from Browse; ticks today's matching plan slot, never touches the pantry. */
+  function openEatRow(meal, sheet) {
+    if (sheet.querySelector(".eat-row")) return;
+    const pad = (x) => String(x).padStart(2, "0");
+    const nowLocal = () => { const d = new Date(); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`; };
+    const row = document.createElement("div");
+    row.className = "rating-row eat-row";
+    row.innerHTML = `<div class="rating-btns"><button class="ghost" data-d="-1" aria-label="Fewer portions">−</button><output class="eat-n" aria-live="polite">1</output><button class="ghost" data-d="1" aria-label="More portions">+</button><span class="muted">portion(s)</span></div>
+      <label class="muted">When <input type="datetime-local" class="eat-when" max="${nowLocal()}" value="${nowLocal()}"></label>
+      <div class="rating-btns"><button class="btn eat-log">Log</button><button class="ghost eat-cancel">Cancel</button></div>`;
+    sheet.querySelector(".modal-actions").after(row);
+    const out = row.querySelector(".eat-n");
+    row.querySelectorAll("[data-d]").forEach((b) => b.addEventListener("click", () => { out.textContent = Math.min(6, Math.max(1, +out.textContent + +b.dataset.d)); }));
+    row.querySelector(".eat-cancel").addEventListener("click", () => row.remove());
+    row.querySelector(".eat-log").addEventListener("click", () => {
+      const n = Math.min(6, Math.max(1, Math.floor(+out.textContent) || 1));
+      const picked = new Date(row.querySelector(".eat-when").value);
+      const when = isNaN(picked) || picked > new Date() ? new Date() : picked;
+      const whenIso = when.toISOString();
+      MP.Sync.logPortion(meal, whenIso, n);
+      if (MP.Prefs) MP.Prefs.bump(meal, "eaten");
+      const london = (d) => new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/London" }).format(d);
+      let ticked = null;
+      try {
+        const plan = JSON.parse(localStorage.getItem("mp_plan"));
+        ticked = MP.tickPlanEaten(plan, meal.id, london(new Date()), whenIso);
+        if (ticked && london(when) !== london(new Date())) ticked = null;
+        if (ticked) {
+          localStorage.setItem("mp_plan", JSON.stringify(ticked.plan));
+          window.dispatchEvent(new CustomEvent("mp:plan-saved", { detail: ticked.plan }));
+        }
+      } catch (e) { /* no or malformed plan: log only */ }
+      closeDetail();
+      toast(`Logged ${n} × ${meal.name}${ticked ? " — plan ticked" : ""}`);
+    });
   }
 
   function deleteMeal(meal) {

@@ -672,6 +672,14 @@ window.MP = window.MP || {};
     return capped;
   }
 
+  /** Phase 92: one eaten-log entry per portion (ids `${meal.id}:${eatenAt}`, then `#2`..). Never touches the pantry. */
+  function logPortion(meal, eatenAt, n = 1) {
+    const count = Math.min(6, Math.max(1, Math.floor(Number(n)) || 1));
+    return MP.Nutrition.load()
+      .then(({ tags }) => MP.Nutrition.tagsForMeal(meal, tags), () => [])
+      .then((tags) => { for (let i = 1; i <= count; i++) logEaten({ id: `${meal.id}:${eatenAt}${i > 1 ? "#" + i : ""}`, mealId: meal.id, name: meal.name, eatenAt, tags }); });
+  }
+
   /** Remove one entry (routine undo) and push the shorter log. */
   function unlogEaten(id) {
     const kept = localEatenLog().filter((e) => e.id !== id);
@@ -860,7 +868,7 @@ window.MP = window.MP || {};
     shoppingLines, setLine, fetchShoppingLines, flushShoppingLines,
     fetchItems, fetchPantry, localItems, writeLocalItems, queueOp, applyOps, flushOps,
     planMirror, pushPlan, pushPrefs, fetchPlanPrefs, fetchDayHints, fetchPlanDraft, ackPlanDraft, fetchRatings, fetchFoodLog, postFoodLog, removeFoodEntry, groupFoodLog, localFoodLog, fetchSettings, settings, fetchNotes, notes, proposeNote, hardTerms, noteLibraryChange, fetchDrafts, deleteDraft, pushRating, pushPlanPrefs, newPlacements, newSince, syncPlacements, ackPlacements, syncEatRequests,
-    localEatenLog, logEaten, unlogEaten, pushEatenLog, pushCooks, start,
+    localEatenLog, logEaten, logPortion, unlogEaten, pushEatenLog, pushCooks, start,
     syncProducts, localProducts, saveProduct, fetchActivity, undoActivity, resyncKey,
   };
 })();

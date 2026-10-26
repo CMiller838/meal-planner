@@ -1932,9 +1932,7 @@
    *  portion path. Returns the promise so a caller/test can await it;
    *  production call sites fire-and-forget. */
   function logPortion(meal, eatenAt) {
-    return MP.Nutrition.load()
-      .then(({ tags }) => MP.Nutrition.tagsForMeal(meal, tags), () => [])
-      .then((tags) => MP.Sync.logEaten({ id: `${meal.id}:${eatenAt}`, mealId: meal.id, name: meal.name, eatenAt, tags }));
+    return MP.Sync.logPortion(meal, eatenAt, 1);
   }
 
   /** Pantry/ad-hoc side of a cook: apply locally, queue for the relay. Only

@@ -799,6 +799,10 @@ button.ghost.danger { color: var(--danger); border-color: var(--danger); }
 .useup-strip li span { color: var(--butter); font-weight: 700; }
 .useup-strip li.over span { color: var(--danger); }
 
+/* Phase 92: Eat from Browse reuses .rating-row */
+.eat-n { min-width: 1.5rem; text-align: center; font-variant-numeric: tabular-nums; }
+.eat-row .eat-when { margin-left: .4rem; }
+
 /* Phase 51: meal ratings */
 .rating-row { display: grid; gap: .5rem; margin-top: .8rem; animation: rating-in .2s ease-out; }
 .rating-btns { display: flex; flex-wrap: wrap; gap: .5rem; }

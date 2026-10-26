@@ -1091,6 +1091,16 @@
       check("backfill: sets meal eaten at that date, replaced = old slot", bf.plan.days[1].slots.dinner.mealId === "N" && bf.plan.days[1].slots.dinner.eatenAt === "2026-09-08T19:00:00.000Z" && bf.replaced.mealId === "B" && ser(p1) === keep);
       check("backfill: future day and unknown meal refused", MP.backfillSlot(p1, 4, "dinner", { mealId: "N" }, lib, "x", "2026-09-09").ignored.length === 1 && MP.backfillSlot(p1, 1, "dinner", { mealId: "ZZ" }, lib, "x", "2026-09-09").ignored.length === 1);
       check("backfill: eating out keeps name/text", MP.backfillSlot(p1, 1, "dinner", { eatingOut: true, name: "Spoons", text: "burger" }, lib, "x", "2026-09-09").plan.days[0].slots.dinner.name === "Spoons");
+      const tp = { startDate: "2026-09-08", days: [{ day: 1, slots: { lunch: { mealId: "N", eatenAt: "x" }, dinner: { mealId: "N" } } }, { day: 2, slots: { lunch: { mealId: "N", eatingOut: true }, dinner: { mealId: "N" } } }] };
+      const tpk = JSON.stringify(tp), tk = MP.tickPlanEaten(tp, "N", "2026-09-08", "W");
+      check("tickPlanEaten: first uneaten matching slot today, pure", tk && tk.day === 1 && tk.slot === "dinner" && tk.plan.days[0].slots.dinner.eatenAt === "W" && JSON.stringify(tp) === tpk);
+      check("tickPlanEaten: skips eatingOut, other days, other meals, no startDate", MP.tickPlanEaten(tp, "N", "2026-09-10", "W") === null && MP.tickPlanEaten(tp, "Z", "2026-09-08", "W") === null && MP.tickPlanEaten({ days: tp.days }, "N", "2026-09-08", "W") === null && MP.tickPlanEaten(null, "N", "2026-09-08", "W") === null && MP.tickPlanEaten(tp, "N", "2026-09-09", "W").slot === "dinner" && MP.tickPlanEaten(tp, "N", "2026-09-09", "W").day === 2);
+      const pbefore = localStorage.getItem("mp_planItems"), lbefore = MP.Sync.localEatenLog().length;
+      MP.Sync.logPortion({ id: "t92", name: "T", ingredients: [] }, "2026-01-01T10:00:00.000Z", 3).then(() => {
+        const l = MP.Sync.localEatenLog().filter((e) => e.mealId === "t92");
+        check("Sync.logPortion: n entries, distinct ids, pantry untouched", l.length === 3 && new Set(l.map((e) => e.id)).size === 3 && MP.Sync.localEatenLog().length === lbefore + 3 && localStorage.getItem("mp_planItems") === pbefore);
+        l.forEach((e) => MP.Sync.unlogEaten(e.id));
+      });
       const o1 = MP.reflowPlan(p1, { eatingOut: [{ day: 2, slot: "dinner", name: "Spoons", text: "burger and chips" }] }, lib, 1, gen);
       const o2 = MP.reflowPlan(o1.plan, { eatingOut: [{ day: 2, slot: "dinner" }], skipped: [{ day: 1, slot: "dinner" }] }, lib, 1, gen);
       check("eating out: name/text kept and survive a later re-flow", ser(o1.plan.days[1].slots.dinner) === '{"eatingOut":true,"name":"Spoons","text":"burger and chips"}' && ser(o2.plan.days[1].slots.dinner) === ser(o1.plan.days[1].slots.dinner));

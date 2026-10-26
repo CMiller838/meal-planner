@@ -551,6 +551,19 @@
     return { plan: out, changes: [{ day, slot, before: slotRef(replaced), after: slotRef(next) }], ignored: [], replaced };
   }
 
+  /** Phase 92, pure: tick the first uneaten, non-eating-out slot today holding `mealId` (eatenAt = whenIso). Null when none. */
+  function tickPlanEaten(plan, mealId, todayIso, whenIso) {
+    if (!plan || !plan.startDate || !Array.isArray(plan.days)) return null;
+    for (const d of plan.days) {
+      if (new Date(Date.parse(plan.startDate) + (d.day - 1) * 86400000).toISOString().slice(0, 10) !== todayIso) continue;
+      const slot = SLOT_ORDER.find((s) => { const x = d.slots[s]; return x && x.mealId === mealId && !x.eatingOut && !x.eatenAt; });
+      if (!slot) return null;
+      const days = plan.days.map((e) => (e === d ? { ...e, slots: { ...e.slots, [slot]: { ...e.slots[slot], eatenAt: whenIso } } } : e));
+      return { plan: { ...plan, days }, day: d.day, slot };
+    }
+    return null;
+  }
+
   /** Phase 63, pure: re-plan only the freed slots of `plan`. Everything else (past days, eaten, locked, untouched
    *  slots) is passed to `generate(locked, ranOutKeys, avoidIds)` as locked, so it comes back identical. A skipped batch cook frees
    *  its whole leftover chain; a slot whose meal uses a ran-out ingredient is freed too. Eating-out slots end up
@@ -793,6 +806,7 @@
   MP.orphanDays = orphanDays;
   MP.swapDays = swapDays;
   MP.backfillSlot = backfillSlot;
+  MP.tickPlanEaten = tickPlanEaten;
   MP.rollPlan = rollPlan;
   MP.reflowInputError = reflowInputError;
   MP.reflowFromDay = reflowFromDay;
