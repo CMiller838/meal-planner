@@ -867,6 +867,18 @@ body.chat-open { overflow: hidden; }
 .chat-ticker:empty { display: none; }
 .chat-ticker b { color: var(--text); }
 .chat-ticker .tk.flash { animation: mp-tk-flash 900ms ease-out; }
+.chat-stock { font-size: .85rem; color: var(--text-dim); background: var(--surface); border: 1px solid var(--border); border-radius: .6rem; padding: .35rem .6rem; }
+.chat-shop { font-size: .85rem; background: var(--surface); border: 1px solid var(--border); border-radius: .6rem; padding: .35rem .6rem; }
+.chat-shop summary { cursor: pointer; font-weight: 600; }
+.chat-shop .shop-count { margin-left: .4rem; padding: 0 .5rem; border-radius: 999px; background: var(--accent); color: var(--on-accent); font-size: .75rem; }
+.chat-shop h4 { margin: .5rem 0 .2rem; font-size: .8rem; color: var(--text-dim); }
+.chat-shop ul { list-style: none; margin: 0; padding: 0; }
+.chat-shop li { padding: .1rem .3rem; border-radius: .3rem; }
+.chat-shop li.new { border-left: 3px solid var(--butter); }
+.chat-shop li.fresh { animation: mp-shop-new calc(var(--motion-base) * 5) ease-out; }
+.chat-shop .shop-tag { color: var(--butter); font-size: .75rem; }
+.chat-shop .shop-price { float: right; color: var(--text-dim); }
+@keyframes mp-shop-new { 0% { background: var(--butter); opacity: .4; } 100% { background: transparent; opacity: 1; } }
 @keyframes mp-tk-flash { 0% { color: var(--butter); opacity: .4; } 100% { opacity: 1; } }
 .chat-week .slot-card { background: var(--surface); transition: border-color 200ms, box-shadow 200ms; }
 .cw-strip { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: .25rem; margin-bottom: .5rem; }

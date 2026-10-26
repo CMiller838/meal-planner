@@ -3118,6 +3118,25 @@
       res = put(1, "dinner", "p"); // 2026-09-07 is a Monday (weekday 1), cap 30, meal 60
       check("placeSlots: over-cap is placed with a soft note", res.changes.length === 1 && /over your 30 min cap/.test(res.notes[0]) && put(3, "dinner", "p").notes.length === 0);
       check("placeSlots: hard terms refuse", MP.placeSlots(pl, [{ day: 1, slot: "dinner", mealId: "e" }], byId, { ...ctx, terms: ["rice"] }).refused.length === 1);
+      { // Phase 90b: fridge notes, stock, window
+        const fr = (w, have) => ({ ...ctx, fridge: { window: w, have } }), run = (day, id, c) => MP.placeSlots(pl, [{ day, slot: "dinner", mealId: id }], byId, c);
+        const byId2 = { ...byId, s: meal("s", { ingredients: [{ key: "rice", qty: "1" }, { key: "leftover_chilli", qty: "1" }, { key: "gravy", qty: "from roast" }] }) };
+        check("fridge: a meal needing keys not on hand is placed with a 'needs' note", run(1, "e", fr([1, 3], {})).changes.length === 1 && run(1, "e", fr([1, 3], {})).notes.includes("e: needs Rice") && !run(1, "e", fr([1, 3], {})).refused.length);
+        check("fridge: outside the window, or on hand, no note", run(5, "e", fr([1, 3], {})).notes.length === 0 && run(1, "e", fr([1, 3], { rice: "" })).notes.length === 0);
+        check("fridge: stock counts as have (fridgeHave merges, pantry wins)", MP.Plan.fridgeHave([{ name: "Rice", qty: "2 cups" }, { name: "egg" }]).rice !== undefined && MP.Plan.fridgeHave([{ name: "egg" }]).egg === "");
+        check("fridge: staples/leftover keys skipped", MP.placeSlots(pl, [{ day: 1, slot: "dinner", mealId: "s" }], byId2, fr([1, 3], { rice: "" })).notes.length === 0);
+        const cooks = [{ id: "ck", mealId: "e", portionsLeft: 2 }]; // ponytail: no eat-by (no storage/cookedAt) so the date check passes
+        check("fridge: a fromCook slot needs nothing", MP.placeSlots(pl, [{ day: 1, slot: "dinner", mealId: "e", cookId: "ck" }], byId, { ...fr([1, 3], {}), cooks }).notes.length === 0);
+        const mon = { startDate: "2026-09-07", days: Array.from({ length: 14 }, (_, i) => ({ day: i + 1, slots: {} })) };
+        const W = (t, p0) => MP.Plan.fridgeWindow(p0 || mon, t);
+        check("fridgeWindow: today to the day before the next shop", deepEqual(W("2026-09-09").window, [3, 7]) && deepEqual(W("2026-09-12").window, [6, 7]) && W("2026-09-09").fresh === false);
+        check("fridgeWindow: shop today is an empty window", W("2026-09-07").window[1] < W("2026-09-07").window[0] && W("2026-09-14").window[1] < W("2026-09-14").window[0]);
+        check("fridgeWindow: no current plan -> fresh window from the old shop anchor", deepEqual(W("2026-10-01"), { window: [1, 4], fresh: true }) && W("2026-10-05").window[1] < 1);
+        const vr = (e) => PC.validateReply({ text: "", edits: [e] }, {}).reply.edits;
+        check("validateReply: stock normalised, bad dropped", vr({ type: "stock", items: [{ name: " eggs ", qty: "6" }, { name: "milk" }] })[0].items.length === 2 && vr({ type: "stock", items: [{ name: "eggs ", qty: "6" }] })[0].items[0].name === "eggs"
+          && !vr({ type: "stock", items: [] }).length && !vr({ type: "stock", items: [{ qty: "1" }] }).length && !vr({ type: "stock", items: Array.from({ length: 41 }, () => ({ name: "x" })) }).length && !vr({ type: "stock", items: [{ name: "x".repeat(10), qty: 5 }] }).length);
+        check("describe: stock reads back", PC.describe([{ type: "stock", items: [{ name: "eggs" }] }], "2026-09-07").includes("you have eggs"));
+      }
       // timeCaps round-trip
       const P = MP.PlanPrefs;
       P.save([], [], 0, true, 0, true, { 1: 30, 9: 30, 2: 3, 3: "x" });

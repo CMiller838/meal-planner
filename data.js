@@ -438,6 +438,12 @@
       if (wd) wd.setUTCDate(wd.getUTCDate() + p.day - 1);
       const cap = wd && caps[wd.getUTCDay()];
       if (cap && mins && mins > cap) notes.push(`${m.name}: over your ${cap} min cap`);
+      // Phase 90b fridge mode: inside the window, a meal needing keys not on hand is placed with a note (never refused)
+      const f = c.fridge, SL = MP.ShoppingList;
+      if (f && SL && !cookRec && p.day >= f.window[0] && p.day <= f.window[1]) {
+        const miss = (MP.effectiveMeal(m, slotValue.variantId).ingredients || []).filter((ing) => !SL.isSkippedIngredient(ing) && !SL.hasEnough(ing, f.have || {})).map((ing) => MP.labelize(ing.key));
+        if (miss.length) notes.push(`${m.name}: needs ${miss.join(", ")}`);
+      }
     }
     return { plan: cur, changes: diffPlans(plan, cur), refused, notes };
   }

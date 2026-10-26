@@ -570,7 +570,7 @@
     // Phase 88: Hermes's own picks go in last, so a place beats a re-pick of the same slot. App-side checks live in MP.placeSlots.
     const places = edits.filter((e) => e.type === "place");
     if (places.length) {
-      const res = MP.placeSlots(pl, places, c.byId, { terms: MP.Sync.hardTerms(), ratings: MP.Ratings.get(), fridgeDays: ((shelfData || {}).cooked_leftovers || {}).fridgeDays, caps: (c.prefs && c.prefs.timeCaps) || {}, pending: (ctx && ctx.pending) || [], cooks: (ctx && ctx.cooks) || MP.Cooks.all(), shelfData });
+      const res = MP.placeSlots(pl, places, c.byId, { terms: MP.Sync.hardTerms(), ratings: MP.Ratings.get(), fridgeDays: ((shelfData || {}).cooked_leftovers || {}).fridgeDays, caps: (c.prefs && c.prefs.timeCaps) || {}, pending: (ctx && ctx.pending) || [], cooks: (ctx && ctx.cooks) || MP.Cooks.all(), shelfData, fridge: ctx && ctx.fridge });
       res.changes.forEach((ch) => {
         const i = changes.findIndex((x) => x.day === ch.day && x.slot === ch.slot);
         const before = i >= 0 ? changes[i].before : pl.days[ch.day - 1].slots[ch.slot] || null, after = res.plan.days[ch.day - 1].slots[ch.slot] || null;
@@ -634,6 +634,26 @@
     return { cards, refused };
   }
 
+  /** Phase 90b: the days from today to the day before the next shop day, [from, to] (empty when to < from). `fresh` = no current plan:
+   *  the window is for a new plan starting today, counted from the old plan's shopAnchor. Pure. */
+  function fridgeWindow(pl, today) {
+    const DAY = 86400000, days = pl && pl.days ? pl.days.length : 0;
+    const lastMs = pl && pl.startDate ? Date.parse(pl.startDate) + (days - 1) * DAY : -Infinity;
+    if (days && Date.parse(today) <= lastMs) {
+      const d = MP.reflowFromDay(pl.startDate, today), off = MP.ShelfLife.shopOffset(pl), sd = MP.ShelfLife.shopDayFor(d, off);
+      return { window: [d, Math.min(days, (sd === d ? d : sd + 7) - 1)], fresh: false };
+    }
+    const anchor = pl && (pl.shopAnchor || pl.startDate), mod = anchor ? ((Math.round((Date.parse(today) - Date.parse(anchor)) / DAY) % 7) + 7) % 7 : 0;
+    return { window: [1, mod ? 7 - mod : 0], fresh: true };
+  }
+
+  /** Phase 90b: what is on hand in fridge mode: the pantry plus the typed list (a pantry item of the same name wins). */
+  function fridgeHave(stock) {
+    const have = MP.ShoppingList.pantryIndex({ items: MP.Sync.localItems("pantry") });
+    (stock || []).forEach((i) => { const k = MP.ShoppingList.normalizeKey(i.name); if (have[k] === undefined) have[k] = i.qty || ""; });
+    return have;
+  }
+
   /** Phase 88: the app's briefing for Hermes, built once at chat open (the app is the authority; the bridge adds spend).
    *  Over CHAT_BRIEF_MAX chars: meal descriptions go first, then non-dinner meals' tags. ctx (tests): { plan, library, prefs, ... }. */
   const CHAT_BRIEF_MAX = 60000;
@@ -669,6 +689,7 @@
       gaps: c.metrics.weekGaps,
       cooks, shopDays: pk && pk.items ? Object.keys(MP.ShoppingList.buildLists(c.plan, mealsById, pk, null)).map(Number).sort((a, b) => a - b) : [],
       bulk: pk && pk.items ? MP.ShoppingList.bulkOptions(c.plan, mealsById, pk, sh) : [],
+      ...(c.fridge ? { mode: "fridge", window: c.fridge.window, ...(c.fridge.fresh ? { newPlanFrom: MP.Generator.isoToday() } : {}) } : {}),
       meals,
       plan: c.plan.days.map((d) => ({ day: d.day, slots: Object.fromEntries(SLOT_TYPES.map((t) => { const x = d.slots[t]; return [t, x ? (x.eatingOut ? "out" : x.mealId || null) : null]; })) })),
     };
@@ -2240,7 +2261,7 @@
     renderPlacementBanner(e.detail);
   });
 
-  MP.Plan = { applyBulkEdits, applyChatEdits, applyMealEdits, applyRateEdits, chatBriefing, chatContext, tieFor, effectiveBudget, budgetSwaps, resetChatPrefs, reflow, snapshot, restore, planMetrics, whatIf, fixGap, wrapUp, cookMinsFor, tickerFor, parseGuidedSlots, applyPlacements, logPortion, matchEatRequests, applyEatRequests };
+  MP.Plan = { fridgeWindow, fridgeHave, applyBulkEdits, applyChatEdits, applyMealEdits, applyRateEdits, chatBriefing, chatContext, tieFor, effectiveBudget, budgetSwaps, resetChatPrefs, reflow, snapshot, restore, planMetrics, whatIf, fixGap, wrapUp, cookMinsFor, tickerFor, parseGuidedSlots, applyPlacements, logPortion, matchEatRequests, applyEatRequests };
 
   // ---- Planning chat with Hermes (Phase 72) ----
   // The working plan is `plan` itself with guidedActive on (no savePlan runs); Exit restores the snapshot, Save commits.
@@ -2310,7 +2331,40 @@
       el.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); open(); } });
     });
     renderTicker(flash);
+    renderChatShop();
+    renderChatStock();
     renderChatCards();
+  }
+
+  // Phase 90b: the shopping list as the chat builds it. Display-only: reads buildLists, never writes the list or the pantry.
+  function renderChatShop() {
+    const box = $("chat-shop"), body = $("chat-shop-body");
+    if (!box) return;
+    const pk = packData || { items: {} }, pantry = { items: MP.Sync.localItems("pantry") };
+    const keyed = (lists) => Object.values(lists).flatMap((l) => [...new Map([...l.lines, ...l.staples, ...l.estimated].map((x) => [x.key, x])).values()].map((x) => [l.shopDay, x]));
+    const was = chat.shopBase || (chat.shopBase = new Set(keyed(MP.ShoppingList.buildLists(JSON.parse(chat.snapshot), mealsById, pk, pantry)).map(([d, x]) => d + ":" + x.key)));
+    const seen = chat.shopSeen || (chat.shopSeen = new Set());
+    const now = keyed(MP.ShoppingList.buildLists(plan, mealsById, pk, pantry));
+    let isNew = 0;
+    const days = {};
+    now.forEach(([d, x]) => { (days[d] = days[d] || []).push(x); });
+    body.innerHTML = Object.keys(days).map(Number).sort((a, b) => a - b).map((d) => `<h4>Shop day ${d}</h4><ul>` + days[d].map((x) => {
+      const id = d + ":" + x.key, fresh = !was.has(id);
+      if (fresh) isNew++;
+      const cls = fresh ? (seen.has(id) ? " new" : " new fresh") : "";
+      seen.add(id);
+      return `<li class="${cls.trim()}">${esc(x.label)}${x.bulk ? ` <span class="shop-tag">bulk · freeze ${x.bulk.freeze}</span>` : ""}${x.price != null && x.lineCost ? ` <span class="shop-price">£${x.lineCost.toFixed(2)}</span>` : ""}</li>`;
+    }).join("") + `</ul>`).join("") || `<p class="wrap-none">Nothing to buy</p>`;
+    $("chat-shop-count").textContent = now.length + (isNew ? ` (${isNew} new)` : "");
+  }
+
+  // Phase 90b: the typed fridge list, session-only. Chips, not pantry rows.
+  function renderChatStock() {
+    const el = $("chat-stock");
+    const pantry = MP.ShoppingList.pantryIndex({ items: MP.Sync.localItems("pantry") });
+    const list = (chat.stock || []).filter((i) => pantry[MP.ShoppingList.normalizeKey(i.name)] === undefined);
+    el.hidden = !list.length;
+    el.textContent = list.length ? "You said you have: " + list.map((i) => i.name + (i.qty ? ` (${i.qty})` : "")).join(", ") : "";
   }
 
   // Phase 89: the week's cost and gaps against the plan when the chat opened. Display-only, never edits or ranks.
@@ -2549,9 +2603,12 @@
     rated.applied.forEach((a) => chat.meals.push({ rate: true, text: a.text, undo: a.undo }));
     rated.refused.forEach((r) => chat.meals.push({ text: r.why }));
     if (mealEdits.length || reply.edits.some((e) => e.type === "rate" || e.type === "bulk")) renderChatMeals();
-    const rest = reply.edits.filter((e) => !e.type.startsWith("meal") && e.type !== "rate" && e.type !== "bulk");
+    reply.edits.filter((e) => e.type === "stock").forEach((e) => { // session-only: never the pantry
+      e.items.forEach((i) => { const k = MP.ShoppingList.normalizeKey(i.name); chat.stock = [...chat.stock.filter((x) => MP.ShoppingList.normalizeKey(x.name) !== k), i]; });
+    });
+    const rest = reply.edits.filter((e) => !e.type.startsWith("meal") && e.type !== "rate" && e.type !== "bulk" && e.type !== "stock");
     if (rest.length) {
-      const changes = applyChatEdits(rest, { focusDay: chat.day, pending: pendingMealIds() });
+      const changes = applyChatEdits(rest, { focusDay: chat.day, pending: pendingMealIds(), fridge: chat.fridge ? { window: chat.fridge.window, have: fridgeHave(chat.stock) } : undefined });
       const line = MP.PlanChat.describe(rest, plan.startDate, chat.day);
       if (line) { const u = chatBubble("understood", "Understood: " + line); u.classList.add("chat-understood"); }
       changes.notes.forEach((n) => { toast(n); chatBubble("understood", n); });
@@ -2607,21 +2664,26 @@
     }
   }
 
-  async function openChat() {
+  async function openChat(fromFridge) {
     if (chat) return;
     if (!plan) return toast("The plan hasn't loaded yet. Reload the page and try again.");
     if (guidedActive) return toast("Finish or exit the current planning walkthrough first.");
     const goFallback = (msg) => { toast(msg + " Opening Plan with me instead."); setTimeout(() => { location.href = "plan-with-me.html"; }, 3500); };
     if (!MP.Sync.config().enabled) { toast("Hermes isn't set up on this device. Opening Plan with me instead."); setTimeout(() => { location.href = "plan-with-me.html"; }, 3500); return; }
+    let fridge = null;
+    if (fromFridge === true) {
+      fridge = fridgeWindow(plan, MP.Generator.isoToday());
+      if (fridge.window[1] < fridge.window[0]) { fridge = null; toast("Your shop is today: planning as normal."); }
+    }
     toast("Connecting to Hermes…");
     const session = "c" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
     let r;
-    try { r = await MP.PlanChat.call("POST", "/chat", { session, open: true, context: { ...chatContext(1), brief: chatBriefing() } }); } catch (e) { return goFallback("Couldn't reach the Worker."); }
+    try { r = await MP.PlanChat.call("POST", "/chat", { session, open: true, context: { ...chatContext(1), brief: chatBriefing({ fridge }) } }); } catch (e) { return goFallback("Couldn't reach the Worker."); }
     if (!r.bridgeSeenAt || Date.now() - Date.parse(r.bridgeSeenAt) > CHAT_BRIDGE_FRESH_MS) {
       MP.PlanChat.call("POST", "/chat", { session, close: true }).catch(() => {});
       return goFallback("Hermes isn't answering (the chat bridge on your PC isn't running: python3 tools/hermes_chat_bridge.py).");
     }
-    chat = { session, snapshot: JSON.stringify(plan), day: 1, since: 0, mine: new Set(), pending: 0, deadline: 0, timer: null, changes: [], ask: true, tieDone: new Set(), tradeOff: {}, cards: {}, meals: [] };
+    chat = { session, snapshot: JSON.stringify(plan), day: 1, since: 0, mine: new Set(), pending: 0, deadline: 0, timer: null, changes: [], ask: true, tieDone: new Set(), tradeOff: {}, cards: {}, meals: [], stock: [], fridge };
     guidedActive = true; // working copy: no savePlan until Save
     $("chat-log").innerHTML = "";
     $("chat-diff").innerHTML = "";
@@ -2682,7 +2744,8 @@
   }
 
   function initChat() {
-    $("plan-chat-btn").addEventListener("click", openChat);
+    $("plan-chat-btn").addEventListener("click", () => openChat());
+    $("plan-fridge-btn").addEventListener("click", () => openChat(true));
     $("chat-exit").addEventListener("click", exitChat);
     $("chat-save").addEventListener("click", () => chat && renderWrap());
     $("chat-accept-all").addEventListener("click", () => chat && chat.changes.forEach((c) => setChange(c, false)));
@@ -2804,7 +2867,7 @@
       document.getElementById("guided-review-banner").classList.add("hidden");
       toast("Plan saved");
     });
-    if (new URLSearchParams(location.search).get("chat") === "1") openChat();
+    if (new URLSearchParams(location.search).get("chat") === "1") openChat(new URLSearchParams(location.search).get("from") === "fridge");
   }
 
   // Guarded so this file can be included in test.html for pure-function

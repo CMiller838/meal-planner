@@ -39,14 +39,14 @@ Goal: a 7-column week grid with the chat docked beside it; Hermes's changes show
 with a live £ and nutrient-gap delta (the ticker), each dinner card shows its total cook time and a day over its cap is flagged, and a wrap-up checklist (gaps left, uncooked leftovers, items to buy) before
 the plan is accepted and handed to the shopping list.
 
-## Phase 90: Weekly Asda shop, freezer-first, bulk buys and batch cooks [L] — not started
+## Phase 90: Weekly Asda shop, freezer-first, bulk buys and batch cooks [L] — built 2026-10-26, live checks pending
 
 Goal: Hermes plans around one shop a week: uses the freezer first, proposes bulk buys that serve later weeks (e.g. 1 kg chicken
 thighs, part frozen) and cheaper meal variations, and schedules batch-cook days with the leftover and freezer chain, choosing
 by total cost over several weeks; the shopping list builds up as you chat. Also a "plan from the fridge" mode: you list or photo what is left (fridge, freezer, cupboard) and it plans
 the days before the next shop from that alone. Requires 88; builds on Phases 59, 67, 76.
 
-90a (freezer-first placement, bulk buys, 28-day shop lists) built 2026-10-26, live checks pending; verified by check.py 10/10 and worker_test. 90b still to build.
+90a (freezer-first placement, bulk buys, 28-day shop lists) built 2026-10-26, live checks pending; verified by check.py 10/10 and worker_test. 90b (shop panel in the chat, plan from what's left, `stock` edit) built 2026-10-26, live checks pending; verified by check.py 10/10 (test.html fridge asserts, walk fridge step at PC and phone, bridge self-test) and tester PASS.
 
 ## Phase 91: Hermes notes in Obsidian [M] — not started
 

@@ -864,7 +864,7 @@ Spec: `.claude/specs/phase89.md` (tasks there).
 
 ## Phase 90: Weekly Asda shop, freezer-first, bulk buys and batch cooks
 - [x] 90a: `.claude/specs/phase90a.md` (freezer-first placement, bulk buys, whole-plan shop lists) built 2026-10-26; check.py 10/10, worker_test ok.
-- 90b: `.claude/specs/phase90b.md` (shop list in the chat, plan from the fridge; tasks there).
+- [x] 90b: `.claude/specs/phase90b.md` (shop list in the chat, plan from the fridge) built 2026-10-26; check.py 10/10, tester PASS.
 - [ ] Live: on the phone, ask Hermes to plan with freezer-first and bulk buys; Accept a bulk card and Undo it, and see the "From the freezer" slot with its defrost note the day before
 - [ ] Live: check the `pack-sizes.json` `bulk` prices against Asda (seeded as estimates)
 - [ ] Live: on the phone, plan from what's left after typing the fridge contents; then photo the fridge to Hermes on Telegram and confirm the pantry updates

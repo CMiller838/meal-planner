@@ -29,6 +29,7 @@ GIVE_UP = {"text": "I didn't follow, could you put it another way?", "edits": []
 EDIT_TYPES = """Edit types (day is 1-14, slot is breakfast|lunch|dinner|snack):
   {"type":"place","day":N,"slot":S,"mealId":ID,"variantId":ID,"cookId":ID}  (puts a library meal in a slot; cookId = a briefing "cooks" entry for that meal, eaten from the freezer/fridge, buys nothing; the app refuses a held slot, wrong slot type, hard exclusions, "never" meals, orphan leftovers)
   {"type":"bulk","key":"<a briefing bulk key>","shopDay":N}  (proposes a bulk buy from the briefing's "bulk" list only; the user accepts on a card, max 5)
+  {"type":"stock","items":[{"name":"<=60 chars","qty":"<=30 chars"}]}  (fridge mode only: the user's typed list of what is left, 1-40 items; session-only, never the pantry)
   {"type":"busy","day":N}  {"type":"free","day":N}  {"type":"noCook","day":N}
   {"type":"chip","id":"comfort|light|no-spice|less-red-meat|no-pasta|protein-boost","days":[N]}
   {"type":"budget","perWeek":POUNDS,"days":[N]}
@@ -80,6 +81,12 @@ def build_prompt(messages, context, opener=False, strict=False, brief=None, spen
         " pick the cheaper variant or meal by cost, and plan batch cooks with leftover and freezer chains.",
         'Reply with ONLY one JSON object: {"text":"your reply","edits":[...],"ask":false}. "ask":true only closes a tie-break card; edits apply whatever it says.',
     ]
+    if brief and brief.get("mode") == "fridge":
+        lines.append(
+            f"FRIDGE MODE: plan ONLY the days in the briefing's window {brief.get('window')} (day numbers), from the pantry, cooks and the user's list of what is left."
+            " Send a stock edit first with their list (turn what they typed into items), then place meals that use it; the app notes what is still missing."
+            " If the briefing has newPlanFrom, send a start edit for that date first, in its own reply, then place."
+        )
     if strict:
         lines.append("Your last edits were rejected: use only these types and fields exactly as listed.")
     if opener:

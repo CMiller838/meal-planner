@@ -45,6 +45,7 @@
     <button id="useup-btn" class="btn-secondary">Use it up</button>
     <button id="compare-btn" class="btn-secondary">Compare 3 weeks</button>
     <button id="plan-chat-btn" class="btn-secondary">Plan with Hermes</button>
+    <button id="plan-fridge-btn" class="btn-secondary">Plan from what's left</button>
     <a id="plan-with-me-btn" class="btn-secondary" href="plan-with-me.html">Plan with me</a>
   </div>
   <div id="today-card" class="week-summary gap-strip today-card"></div>
@@ -82,6 +83,8 @@
       <button id="chat-next" class="icon-btn" aria-label="Next week">›</button>
     </div>
     <div id="chat-ticker" class="chat-ticker" aria-live="polite"></div>
+    <div id="chat-stock" class="chat-stock" hidden></div>
+    <details id="chat-shop" class="chat-shop"><summary>Shopping so far <span id="chat-shop-count" class="shop-count"></span></summary><div id="chat-shop-body"></div></details>
     <div id="chat-week" class="chat-week"></div>
     <div id="chat-cards" class="chat-cards"></div>
     <div id="chat-diff-all" class="chat-diff-all" hidden>

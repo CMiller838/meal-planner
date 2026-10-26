@@ -330,6 +330,32 @@ for (const [vp, size] of Object.entries({ pc: { width: 1440, height: 900 }, phon
     if (!same) throw new Error('Exit changed mp_plan');
     if (!n) throw new Error('no bulk card offered for beef mince on shops 1 and 8');
   });
+  await step('chat: fridge mode shows stock chips, a "needs" note and the shop panel; Exit leaves mp_plan and mp_pantry identical (Phase 90b)', async () => {
+    const orig = await planLS();
+    await page.evaluate(() => { const p = JSON.parse(localStorage.getItem('mp_plan')); const d = new Date(); d.setDate(d.getDate() - 1); p.startDate = d.toLocaleDateString('sv'); delete p.shopAnchor; delete p.firstSlot; p.days.forEach(x => { x.slots = {}; }); localStorage.setItem('mp_plan', JSON.stringify(p)); });
+    await page.reload();
+    chatMock.reply = { text: 'From the fridge', edits: [{ type: 'stock', items: [{ name: 'rice', qty: '500 g' }, { name: 'pasta' }, { name: 'chorizo' }] }, { type: 'place', day: 2, slot: 'dinner', mealId: 'chorizo-pasta' }, { type: 'place', day: 3, slot: 'dinner', mealId: 'tuna-rice-veg' }] };
+    const pantry0 = await page.evaluate(() => localStorage.getItem('mp_pantry'));
+    await page.click('#plan-fridge-btn');
+    await page.waitForSelector('#plan-chat:not([hidden]) .chat-bubble.hermes', { timeout: 8000 });
+    await say('rice, pasta and chorizo');
+    await page.waitForFunction(() => document.querySelectorAll('.chat-bubble.understood').length > 1, null, { timeout: 8000 }).catch(async e => { throw new Error(e.message + ' bubbles: ' + (await page.locator('.chat-bubble').allInnerTexts()).join(' / ')); });
+    const before = await planLS();
+    if (!/You said you have: rice \(500 g\), pasta, chorizo/.test(await page.textContent('#chat-stock'))) throw new Error('stock chips: ' + await page.textContent('#chat-stock'));
+    const bubbles = await page.locator('.chat-bubble.understood').allInnerTexts();
+    if (!bubbles.some(t => /Chorizo Pasta.*needs White Sauce/i.test(t) || /needs White Sauce/i.test(t))) throw new Error('no needs note: ' + bubbles.join(' | '));
+    if (bubbles.some(t => /needs .*Rice/.test(t) || /needs Chorizo/.test(t))) throw new Error('stock should count as have: ' + bubbles.join(' | '));
+    await page.click('#chat-shop summary');
+    if (!/new/.test(await page.textContent('#chat-shop-count'))) throw new Error('shop count: ' + await page.textContent('#chat-shop-count'));
+    if (!(await page.locator('#chat-shop li.new').count())) throw new Error('no new shop lines');
+    await shot('chat-fridge');
+    await page.click('#chat-exit');
+    await page.waitForSelector('#plan-chat', { state: 'hidden' });
+    const same = (await page.evaluate(() => localStorage.getItem('mp_pantry'))) === pantry0;
+    await page.evaluate(o => localStorage.setItem('mp_plan', o), orig);
+    await page.reload();
+    if (!same) throw new Error('Exit changed mp_pantry');
+  });
   await step('chat: slot tap opens the deck with Pick for me', async () => {
     chatMock.reply = { text: 'ok', edits: [] };
     await openChat();
