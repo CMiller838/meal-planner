@@ -86,5 +86,6 @@
     { "id": "cupboard", "label": "Cupboard", "keywords": ["pasta", "rice", "oat", "flour", "sauce", "bean", "stock", "spice", "gravy", "tuna", "peanut", "powder", "tea", "oil", "sugar", "tin", "pea"] },
     { "id": "household", "label": "Household", "keywords": ["foil", "bag", "towel", "tissue", "washing", "soap"] }
   ],
+  "essentials": ["Milk", "Bread", "Eggs", "Butter", "Tea bags", "Fruit", "Toilet roll", "Washing-up liquid"],
   "costTiers": { "cheap": 6.00, "med": 12.00 }
 }

@@ -41,7 +41,7 @@
     return `<li class="${classes.join(" ")}">
       <label>
         <input type="checkbox" data-shop="${shopDay}" data-key="${esc(line.key)}" ${state === "got" ? "checked" : ""}>
-        <span class="shop-qty">${esc(fmtQty(line))}</span>
+        ${line.essential ? "" : `<span class="shop-qty">${esc(fmtQty(line))}</span>`}
         <span class="shop-name">${esc(line.label)}</span>
         ${line.bulk && line.bulk.freeze ? `<span class="have">freeze ${esc(line.bulk.freeze >= 1000 ? +(line.bulk.freeze / 1000).toFixed(2) + "kg" : line.bulk.freeze + line.unit)}</span>` : ""}
         ${line.pantryQty ? `<span class="have">have ${esc(line.pantryQty)}</span>` : ""}
@@ -68,6 +68,15 @@
     return !!plan.shopAnchor && plan.startDate && isoPlus(plan.startDate, shopDay + 6) <= new Date().toLocaleDateString("en-CA");
   }
 
+  // Always-on checklist at the end of every shop: pack-sizes.json "essentials", unpriced, ticks sync like any plan line
+  function essentialsHtml(plan, shopDay, states) {
+    const names = (packData && packData.essentials) || [];
+    if (!names.length) return "";
+    const lines = names.map((n) => ({ key: "essential-" + MP.ShoppingList.normalizeKey(n), label: n, essential: true, packs: 1, meals: [] }));
+    return `<h4 class="shop-aisle">Essentials</h4>
+      <ul class="shop-list">${lines.map((l) => lineHtml(plan, shopDay, l, states, false)).join("")}</ul>`;
+  }
+
   function blockHtml(plan, list, states) {
     return `<section class="shop-block">
       <h3>${shopHeading(plan, list.shopDay)} <span class="shop-total">£${list.total.toFixed(2)}</span></h3>
@@ -80,6 +89,7 @@
         <summary>Estimated — category price, not exact (${list.estimated.length})</summary>
         ${aisleHtml(plan, list.shopDay, list.estimated, states, true)}
       </details>` : ""}
+      ${essentialsHtml(plan, list.shopDay, states)}
     </section>`;
   }
 
