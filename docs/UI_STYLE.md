@@ -42,7 +42,8 @@ when next touched, do not add more.
 - Presses and hovers 150-200 ms (`translateY(-1px)`, `scale(.95)` on active); theme change fades background and colour over .4 s.
 - Cards rest at a slight random tilt (`--r`) and lift flat on hover with an overshoot curve `cubic-bezier(.2, .9, .3, 1.4)`, .35 s.
 - Plan slots stagger in with `mp-slot-in` (220 ms, 6 px rise). Swipe/fan cards use transform transitions, none while dragging.
-- Every animation sits behind `prefers-reduced-motion: reduce` (see the `mp-slot-in` block). `transform` and `opacity` only.
+- Tokens: `--motion-base` 180 ms, `--motion-exit` 120 ms, `--ease-lift`. Utilities: `.m-enter` (rise + fade), `.m-press` (hover lift, active `scale(.95)`), `.m-exit` (120 ms fade), `.m-stagger` (children enter, `--i` capped at 7). Sheets, overlay, toast, banners, empty states, ghost/secondary buttons, chips, tabs and form inputs already use them in `style.css`.
+- One `prefers-reduced-motion: reduce` block at the end of `style.css`: movement off, short opacity fades stay. Do not add per-component reduced-motion blocks. `transform` and `opacity` only. Colours are tokens (`--on-accent`, `--on-butter`, `--accent-hover`, `--accent-glow`, `--pin-hi`/`--pin-lo`, `--on-cork`, `--scrim`); no raw hex outside the theme blocks.
 
 ## Patterns
 - Nav: sticky translucent bar, pill links, active link filled with `--accent`, round icon buttons.

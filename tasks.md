@@ -840,6 +840,8 @@ Spec: `.claude/specs/phase85.md`
 
 ## Phase 86: Style and animate every component
 Spec: `.claude/specs/phase86.md`
+- [x] Built: motion tokens, shared reduced-motion block, hex-free style.css; check.py 10/10, tester PASS
+- [ ] Live: use the installed phone PWA through all five pages (and Android reduced motion); nothing feels static or janky, sheets/toasts enter, no movement under reduced motion
 
 ## Phase 87: Plan with Hermes can create and change meals
 Spec: `.claude/specs/phase87.md`

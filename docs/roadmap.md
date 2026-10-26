@@ -680,7 +680,7 @@ view: every day, every entry (grouped meals collapse), amount, nutrients with th
 three-item meal logs as one group with summed known nutrients and unknowns listed; replaying it changes nothing; a removed entry
 disappears from the view and from coverage; a meal logged by Hermes shows on Today and in the Food log view. Requires Phases 80a, 80b.
 
-## Phase 86: Style and animate every component [L] — not started
+## Phase 86: Style and animate every component [L] — built 2026-10-26, live checks pending
 
 **Added 2026-10-25.** A full polish pass over every component on every page (nav, cards, slot cards, sheets, banners, strips,
 meter, chips, forms, toasts, empty states, shopping rows, discover deck, plan-with-me, Food log): each gets tokenised styling, a

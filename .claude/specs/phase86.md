@@ -45,11 +45,19 @@ classes: .m-enter  .m-press  .m-exit  .m-stagger (children get --i via nth-child
 - No real credential needed.
 
 ## Tasks
-- [ ] Component inventory written below and approved by the tester
-- [ ] Motion tokens, utility classes, single reduced-motion block, `UI_STYLE.md` Motion updated
-- [ ] Group A: shared components
-- [ ] Group B: plan, Today, Food log
-- [ ] Group C: index, discover
-- [ ] Group D: shopping, plan-with-me
-- [ ] Stray literals tokenised
-- [ ] Live: use the installed phone PWA through all five pages; nothing feels static or janky
+- [x] Component inventory written below and approved by the tester
+- [x] Motion tokens, utility classes, single reduced-motion block, `UI_STYLE.md` Motion updated
+- [x] Group A: shared components
+- [x] Group B: plan, Today, Food log
+- [x] Group C: index, discover
+- [x] Group D: shopping, plan-with-me
+- [x] Stray literals tokenised
+- [x] (moved to tasks.md) Live: use the installed phone PWA through all five pages; nothing feels static or janky
+
+## Component inventory (all in `style.css`; one stylesheet serves every page)
+- [x] A shared: nav + icon buttons (existing hover/press), `.modal-overlay`/`.modal-sheet`/`.close-btn` (new enter + press), `.toast` (new enter), `.banner`/`.hermes-banner` (new enter), `.empty` (new fade), buttons `primary`/`.btn` (existing, tokenised hover), `ghost`/`.btn-secondary`/`.chip`/`.tab-btn` (new hover/press), inputs/selects/textareas (new focus ring), `:focus-visible` on buttons/links, disabled state
+- [x] B plan, Today, Food log: `.slot-card`, `.today-card`, `.tomorrow-card`, `.food-row`, `.leftover-row`, `.meter-strip` already animated (kept; reduced-motion consolidated); `.day-slot`, chips, ghost buttons via shared rules
+- [x] C index, discover: cards (lift), `.swipe-card`, `.draft-card`, `.rating-row`, chips/tabs via shared rules
+- [x] D shopping, plan-with-me: `.shop-line`, `.useup-strip`, `.chat-*`, `.customise` inputs via shared rules
+- [x] Motion tokens `--motion-base/--motion-exit/--ease-lift`; classes `.m-enter .m-press .m-exit .m-stagger` defined (utility; no page JS toggles needed)
+- [x] Literals tokenised: grep outside theme blocks empty
