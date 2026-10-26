@@ -67,8 +67,8 @@
 
   function packsFor(needed, item) {
     if (!item || !needed) return 1;
+    if (needed.value <= 0) return 0; // pantry covers it all, whatever the pack unit
     if (needed.unit !== item.unit) return 1;
-    if (needed.value <= 0) return 0;
     return Math.max(1, Math.ceil(needed.value / item.packSize));
   }
 

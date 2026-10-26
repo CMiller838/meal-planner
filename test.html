@@ -208,6 +208,7 @@
     check("packsFor(500g, 500g pack) == 1", MP.ShoppingList.packsFor({ value: 500, unit: "g" }, gPack) === 1);
     check("packsFor(null, item) == 1", MP.ShoppingList.packsFor(null, gPack) === 1);
     check("packsFor(unit mismatch) == 1", MP.ShoppingList.packsFor({ value: 2, unit: "tbsp" }, gPack) === 1);
+    check("packsFor(fully covered, unit mismatch) == 0", MP.ShoppingList.packsFor({ value: 0, unit: "tbsp" }, gPack) === 0);
     check("packsFor(unknown item) == 1", MP.ShoppingList.packsFor({ value: 900, unit: "g" }, null) === 1);
   }
 
