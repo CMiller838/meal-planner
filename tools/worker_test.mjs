@@ -375,6 +375,9 @@ assert.equal((await call("GET", "/why?meal=m1&day=0", "a")).status, 400);
 // the assistant token still can't reach other writes
 assert.equal((await call("PUT", "/plan", "a", { days: [] })).status, 403);
 assert.equal((await call("PUT", "/planPrefs", "a", {})).status, 403);
+// Phase 88: timeCaps validated
+for (const [tc, st] of [[{ 1: 30 }, 204], [{}, 204], [{ 7: 30 }, 400], [{ 1: 4 }, 400], [{ 1: 241 }, 400], [[30], 400], ["x", 400]])
+  assert.equal((await call("PUT", "/planPrefs", "h", { updatedAt: "2026-10-26T10:00:00Z", busyDays: [], chips: [], timeCaps: tc })).status, st, JSON.stringify(tc));
 
 // Phase 53: /scale
 kv.set("library", JSON.stringify({ meals: [{ id: "chilli", name: "Chilli", servings: 4, prepEffort: "batch",
@@ -778,7 +781,7 @@ assert.equal((await call("GET", "/today", "a")).body.water, 3); // /today untouc
   assert.equal(r.status, 200);
   const uid = r.body.id;
   assert.equal((await call("POST", "/chat", "h", { session: "old", text: "hi" })).status, 409);
-  assert.equal((await call("POST", "/chat", "h", { session: "s1", text: "x".repeat(301) })).status, 400);
+  assert.equal((await call("POST", "/chat", "h", { session: "s1", text: "x".repeat(1001) })).status, 400);
   assert.equal((await call("POST", "/chat", "h", { session: "s1", text: "  " })).status, 400);
   const reply = { session: "s1", replyTo: uid, text: "Got it", edits: [{ type: "noCook", day: 7 }, { type: "makeMeal", name: "pie" }], ask: false };
   assert.equal((await call("POST", "/chat/reply", "h", reply)).status, 403); // no X-Actor
@@ -788,6 +791,12 @@ assert.equal((await call("GET", "/today", "a")).body.water, 3); // /today untouc
   assert.deepEqual([r.status, r.body.dropped], [200, 1]);
   r = await call("GET", "/chat?session=s1&since=" + uid, "h");
   assert.deepEqual([r.body.messages.length, r.body.messages[0].from, r.body.messages[0].edits], [1, "hermes", [{ type: "noCook", day: 7 }]]);
+  // Phase 88: place/cap/rate normalised, bad ones dropped
+  r = await call("POST", "/chat/reply", "h", { session: "s1", replyTo: uid, text: "Done", ask: false, edits: [{ type: "place", day: 2, slot: "dinner", mealId: "m1" }, { type: "cap", minutes: 30, weekdays: [3, 1] }, { type: "rate", mealId: "m1", rating: "down", note: "dull" }, { type: "cap", minutes: 3, weekdays: [1] }, { type: "rate", mealId: "m1", rating: "never" }] }, H);
+  assert.deepEqual([r.status, r.body.dropped], [200, 2]);
+  r = await call("GET", "/chat?session=s1&since=" + uid, "h");
+  assert.deepEqual(r.body.messages.at(-1).edits.map((e) => e.type), ["place", "cap", "rate"]);
+  assert.deepEqual(r.body.messages.at(-1).edits[1].weekdays, [1, 3]);
   // Phase 87: meal edits are accepted and normalised, bad ones dropped
   r = await call("POST", "/chat/reply", "h", { session: "s1", replyTo: uid, text: "Added", ask: false, edits: [{ type: "mealCreate", name: " Turkey chilli ", mealTypes: ["dinner"], ingredients: [{ name: "turkey mince", qty: "500 g" }] }, { type: "mealEdit", mealId: "m1", patch: { id: "evil" } }, { type: "mealRemove", mealId: "m1" }] }, H);
   assert.deepEqual([r.status, r.body.dropped], [200, 1]);
@@ -795,8 +804,13 @@ assert.equal((await call("GET", "/today", "a")).body.water, 3); // /today untouc
   assert.deepEqual(r.body.messages.at(-1).edits.map((e) => e.type), ["mealCreate", "mealRemove"]);
   assert.equal(r.body.messages.at(-1).edits[0].name, "Turkey chilli");
   assert.equal((await call("GET", "/chat?session=old", "h")).status, 409);
-  assert.equal((await call("POST", "/chat", "h", { session: "s1", close: true })).status, 200);
-  assert.equal((await call("GET", "/chat?session=s1", "h")).body.openAt, null);
+  // Phase 88: the open message may carry a big brief; other context stays small
+  assert.equal((await call("POST", "/chat", "h", { session: "s4", open: true, context: { brief: "x".repeat(70000) } })).status, 400);
+  assert.equal((await call("POST", "/chat", "h", { session: "s3", open: true, context: { brief: "x".repeat(50000) } })).status, 200);
+  assert.equal((await call("POST", "/chat", "h", { session: "s3", text: "x".repeat(1000) })).status, 200);
+  assert.equal((await call("POST", "/chat", "h", { session: "s3", text: "hi", context: { brief: "x".repeat(5000) } })).status, 400);
+  assert.equal((await call("POST", "/chat", "h", { session: "s3", close: true })).status, 200);
+  assert.equal((await call("GET", "/chat?session=s3", "h")).body.openAt, null);
   await call("POST", "/chat", "h", { session: "s2", open: true });
   for (let i = 0; i < 45; i++) await call("POST", "/chat", "h", { session: "s2", text: "m" + i });
   r = await call("GET", "/chat?session=s2", "h");

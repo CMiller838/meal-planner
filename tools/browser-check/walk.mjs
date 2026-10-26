@@ -269,13 +269,37 @@ for (const [vp, size] of Object.entries({ pc: { width: 1440, height: 900 }, phon
     await page.waitForSelector('#plan-chat', { state: 'hidden' });
     if (n && await planLS() === before) throw new Error('Save did not change mp_plan');
   });
-  await step('chat: ask:true shows the question and changes nothing', async () => {
+  await step('chat: ask:true shows the question and the edits still apply (Phase 88)', async () => {
     chatMock.reply = { text: 'Which day do you mean?', ask: true, edits: [{ type: 'noCook', day: 7 }] };
     await openChat();
     await say('make it quick');
     await page.waitForFunction(() => [...document.querySelectorAll('.chat-bubble.hermes')].some(b => /Which day/.test(b.textContent)), null, { timeout: 8000 });
-    if (await page.locator('#chat-diff .diff-row, .chat-understood').count()) throw new Error('ask applied something');
+    await page.waitForSelector('.chat-understood', { timeout: 8000 });
     await page.click('#chat-exit');
+  });
+  await step('chat: 5 places show 5 slot cards, a new meal waits on Add/No, Add then Undo, a place of a pending meal is refused (Phase 88)', async () => {
+    const ids = ['roast-chicken', 'chilli-con-carne', 'chorizo-pasta', 'salmon-rice-broccoli', 'tuna-rice-veg'];
+    chatMock.reply = { text: 'Done', edits: [...ids.map((mealId, i) => ({ type: 'place', day: i + 1, slot: 'dinner', mealId })),
+      { type: 'place', day: 6, slot: 'dinner', mealId: 'turkey-chilli-bowl' },
+      { type: 'mealCreate', name: 'Turkey chilli bowl', mealTypes: ['dinner'], ingredients: [{ name: 'turkey mince', qty: '500 g' }] }] };
+    await openChat();
+    const before = await planLS();
+    const lib0 = await page.evaluate(() => (JSON.parse(localStorage.getItem('mp_library') || '[]').length));
+    await say('fill the first five dinners');
+    await page.waitForSelector('#chat-meals .chat-meal-add', { timeout: 8000 });
+    if (await page.locator('#chat-meals .chat-meal-add').count() !== 1) throw new Error('expected one Add card');
+    if (await page.locator('#chat-meals .chat-meal-no').count() !== 1) throw new Error('expected one No button');
+    const rows = await page.locator('#chat-diff .diff-row button:text("Accept")').count();
+    if (rows < 1 || rows > 5) throw new Error('slot cards: ' + rows);
+    if (!/add the meal first/i.test(await page.locator('#plan-chat').innerText())) throw new Error('pending place not refused: ' + (await page.locator('.chat-bubble').allInnerTexts()).slice(3).map(t => t.slice(-90)).join(' // '));
+    if (await page.evaluate(() => (JSON.parse(localStorage.getItem('mp_library') || '[]').length)) !== lib0) throw new Error('meal added before Add');
+    await page.click('#chat-meals .chat-meal-add');
+    await page.waitForSelector('#chat-meals button:text("Undo")', { timeout: 5000 });
+    await page.click('#chat-meals button:text("Undo")');
+    await page.waitForSelector('#chat-meals .rejected');
+    await page.click('#chat-exit');
+    await page.waitForSelector('#plan-chat', { state: 'hidden' });
+    if (await planLS() !== before) throw new Error('Exit changed mp_plan');
   });
   await step('chat: slot tap opens the deck with Pick for me', async () => {
     chatMock.reply = { text: 'ok', edits: [] };

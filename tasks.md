@@ -856,6 +856,7 @@ Spec: `.claude/specs/phase87.md`
 ## Phase 88: Hermes briefing, human chat and direct placement
 Spec: `.claude/specs/phase88.md` (tasks there).
 - [ ] Live: on the phone, ask Hermes to plan next week with 20 min max on weeknights; check it places dinners itself, asks before adding a new meal, and "that was boring" logs a down rating with the reason
+- [ ] Live: in chat say "no more than 30 minutes on Tuesdays", then open Plan with me and Save; the cap survives the save
 
 ## Phase 89: Weekly plan view with live diff, ticker and wrap-up
 Spec: `.claude/specs/phase89.md` (tasks there).

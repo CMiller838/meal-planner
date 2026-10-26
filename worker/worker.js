@@ -1277,6 +1277,8 @@ function planPrefsError(parsed) {
   if (parsed.freezeBatches !== undefined && typeof parsed.freezeBatches !== "boolean") return "freezeBatches must be a boolean";
   if (parsed.rolling !== undefined && typeof parsed.rolling !== "boolean") return "rolling must be a boolean";
   if (parsed.repeatGap !== undefined && !(Number.isInteger(parsed.repeatGap) && parsed.repeatGap >= 0 && parsed.repeatGap <= 14)) return "repeatGap must be an integer 0-14";
+  const tc = parsed.timeCaps; // Phase 88: { "0".."6": minutes 5-240 }
+  if (tc !== undefined && (typeof tc !== "object" || tc === null || Array.isArray(tc) || !Object.keys(tc).every((k) => /^[0-6]$/.test(k) && Number.isInteger(tc[k]) && tc[k] >= 5 && tc[k] <= 240))) return "timeCaps must map weekdays 0-6 to minutes 5-240";
   return null;
 }
 
@@ -1577,7 +1579,7 @@ async function undoActivity(env, who, { id, force }) {
 // ---- Planning chat (Phase 72) ----
 // One SQLite-backed Durable Object ("plan") holds the current chat session only; KV's ~60 s read cache can't serve a 1 s
 // poll. State "s": { session, seq, openAt, bridgeSeenAt, messages } (messages capped at CHAT_CAP, oldest dropped).
-const CHAT_CAP = 40, CHAT_TEXT_MAX = 300, CHAT_CTX_MAX = 4000, BRIDGE_STAMP_MS = 5000;
+const CHAT_CAP = 40, CHAT_TEXT_MAX = 1000, CHAT_CTX_MAX = 4000, CHAT_BRIEF_MAX = 60000, BRIDGE_STAMP_MS = 5000; // Phase 88: the open message's context carries the briefing
 
 export class ChatRoom {
   constructor(ctx) { this.ctx = ctx; }
@@ -1590,7 +1592,8 @@ export class ChatRoom {
     const push = (m) => {
       m.id = ++st.seq; m.at = new Date().toISOString();
       st.messages.push(m);
-      if (st.messages.length > CHAT_CAP) st.messages.splice(0, st.messages.length - CHAT_CAP);
+      // the open message holds the briefing, so it is never the one dropped
+      while (st.messages.length > CHAT_CAP) { const i = st.messages.findIndex((x) => !x.open); st.messages.splice(i < 0 ? 0 : i, 1); }
       return m.id;
     };
     if (request.method === "GET" && url.pathname === "/chat") {
@@ -1603,7 +1606,7 @@ export class ChatRoom {
     if (request.method !== "POST") return json(405, "method not allowed");
     const body = await request.json().catch(() => null);
     if (!body || typeof body !== "object" || Array.isArray(body)) return json(400, "bad request");
-    const ctxOk = body.context === undefined || (body.context && typeof body.context === "object" && !Array.isArray(body.context) && JSON.stringify(body.context).length <= CHAT_CTX_MAX);
+    const ctxOk = body.context === undefined || (body.context && typeof body.context === "object" && !Array.isArray(body.context) && JSON.stringify(body.context).length <= (body.open === true ? CHAT_BRIEF_MAX : CHAT_CTX_MAX));
     if (typeof body.session !== "string" || !body.session || body.session.length > 64 || !ctxOk) return json(400, "bad request");
     if (url.pathname === "/chat/reply") {
       if (!hermes) return json(403, "forbidden");
@@ -1622,7 +1625,7 @@ export class ChatRoom {
     if (body.session !== st.session) return json(409, { error: "stale session" });
     if (body.close === true) { st.openAt = null; await save(); return json(200, { session: st.session }); }
     const text = typeof body.text === "string" ? body.text.trim() : "";
-    if (!text || text.length > CHAT_TEXT_MAX) return json(400, "text must be 1-300 characters");
+    if (!text || text.length > CHAT_TEXT_MAX) return json(400, "text must be 1-1000 characters");
     const msg = { from: "user", text, context: body.context };
     if (Number.isInteger(body.day) && body.day >= 1 && body.day <= 28) msg.day = body.day;
     const id = push(msg);

@@ -21,7 +21,9 @@ confirms; a typing indicator is the only latency treatment (the KV relay stays).
 (88's briefing reads its notes when they exist). Shop model: **one Asda shop a week**, and total cost efficiency across weeks
 beats a single week's cost.
 
-## Phase 88: Hermes briefing, human chat and direct placement [L] — not started
+## Phase 88: Hermes briefing, human chat and direct placement [L] — built 2026-10-26, live checks pending
+
+Verified 2026-10-26: check.py 10/10 (test.html 858 assertions incl. placeSlots refusals, validateReply limits, timeCaps round-trip; walk step: place cards + Add/No + Undo + pending-place refusal, PC and phone), worker_test, bridge self-test; tester PASS.
 
 Goal: Hermes gets the whole Plan-with-me briefing (start, length, shop day, busy days, chips, budget, freezer, repeat gap, profile,
 ratings and taste, pantry and use-by, last spend, nutrient gaps, every liked meal) in its first message, talks freely (limits

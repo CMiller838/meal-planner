@@ -4,7 +4,8 @@
 `python3 tools/hermes_chat_bridge.py [--once] [--responder "cmd {prompt}"]`. Polls GET /chat on the Worker, runs the
 responder once per unanswered user message (default `hermes -z "<prompt>" chat`, an argv list, no shell) and posts the
 reply to POST /chat/reply. Reads MP_WORKER_URL and MP_AUTH_TOKEN from the environment or ./.env.
-Hermes returns constraints and edits, never meals; the Worker validates every reply.
+Phase 88: Hermes talks freely, reads the app's briefing (the open message's context.brief) every turn, may place meals
+itself and may propose new or changed meals (the user confirms those); the Worker validates every reply.
 """
 import argparse
 import json
@@ -21,20 +22,22 @@ from notify import env
 POLL_ACTIVE = 1  # seconds while a chat was opened under ACTIVE_WINDOW ago
 POLL_IDLE = 10
 ACTIVE_WINDOW = 600
-HISTORY = 12
+HISTORY = 30
 RESPONDER_TIMEOUT = 120
 FALLBACK = {"text": "Sorry, could you say that another way?", "edits": [], "ask": False}
 GIVE_UP = {"text": "I didn't follow, could you put it another way?", "edits": [], "ask": False}
 EDIT_TYPES = """Edit types (day is 1-14, slot is breakfast|lunch|dinner|snack):
+  {"type":"place","day":N,"slot":S,"mealId":ID,"variantId":ID}  (puts a library meal in a slot; the app refuses a held slot, wrong slot type, hard exclusions, "never" meals, orphan leftovers)
   {"type":"busy","day":N}  {"type":"free","day":N}  {"type":"noCook","day":N}
   {"type":"chip","id":"comfort|light|no-spice|less-red-meat|no-pasta|protein-boost","days":[N]}
   {"type":"budget","perWeek":POUNDS,"days":[N]}
+  {"type":"cap","minutes":5-240 (0 clears),"weekdays":[0-6, Sunday=0]}  (a cooking-time cap)
+  {"type":"rate","mealId":ID,"rating":"up|down","note":"<=200 chars"}  (e.g. "that was boring" -> down with a note)
   {"type":"lock","day":N,"slot":S}  {"type":"unlock","day":N,"slot":S}  {"type":"reroll","day":N,"slot":S}
-  {"type":"mealCreate","name":"<=60 chars","mealTypes":["dinner"],"servings":N,"prepEffort":"quick|batch","ingredients":[{"key":"known-key","name":"label","qty":"400 g"}],"method":["step"]}  (<=20 ingredients, <=12 steps)
-  {"type":"mealEdit","mealId":ID,"patch":{name,description,mealTypes,servings,prepEffort,ingredients,method}}  {"type":"mealRemove","mealId":ID}
-(Meal edits apply at once with Undo, max 3 per reply. Give ingredients as "key" from the library's known keys when you can; the app refuses mushrooms, standalone egg meals and the user's allergies.)
-(days and slot are optional on chip, budget and reroll; days defaults to the day in focus.)"""
-
+  {"type":"mealCreate","name":"<=60 chars","mealTypes":["dinner"],"servings":N,"prepEffort":"quick|batch","totalMins":N,"ingredients":[{"key":"known-key","name":"label","qty":"400 g"}],"method":["step"]}  (<=20 ingredients, <=12 steps)
+  {"type":"mealEdit","mealId":ID,"patch":{name,description,mealTypes,servings,prepEffort,totalMins,ingredients,method}}  {"type":"mealRemove","mealId":ID}
+(Meal edits wait for the user's OK on a card, max 5 per reply. A meal's time is totalMins when set, else estMins, an estimate from its steps: propose mealEdit {patch:{totalMins}} to confirm it. Give ingredients as "key" from the library's known keys when you can; the app refuses mushrooms, standalone egg meals and the user's allergies. Place only meals that exist in the briefing; a meal you just proposed cannot be placed until the user adds it.)
+(days and slot are optional on chip, budget and reroll; days defaults to the day in focus. Up to 60 edits per reply.)"""
 
 def poll_interval(open_at, now=None):
     """1 s while a chat opened under 10 min ago, else 10 s (keeps the Worker under its free-tier request budget)."""
@@ -58,17 +61,30 @@ def parse_reply(out):
     return dict(FALLBACK)
 
 
-def build_prompt(messages, context, opener=False, strict=False):
+def brief_of(messages):
+    """The app's briefing: the open message's context.brief (absent from an old app)."""
+    for m in messages:
+        if m.get("open") and isinstance(m.get("context"), dict):
+            return m["context"].get("brief")
+    return None
+
+
+def build_prompt(messages, context, opener=False, strict=False, brief=None, spend=None):
     lines = [
-        "You help plan a two-week meal plan by chatting, one day at a time. Lead; ask ONE question at a time.",
-        "Never name or choose meals: the app's generator picks meals. You only return constraints as edits.",
+        "You help plan the user's meal plan by chatting normally: answer questions, give opinions, say what you notice, then act.",
+        "You know their whole plan and library from the briefing below. You may place library meals into slots yourself with place edits;"
+        " new or changed meals only wait for the user's OK. The app checks every edit.",
         EDIT_TYPES,
-        'Reply with ONLY one JSON object: {"text":"short reply","edits":[...],"ask":false}. Set "ask":true with no edits when you need to ask a question first.',
+        'Reply with ONLY one JSON object: {"text":"your reply","edits":[...],"ask":false}. "ask":true only closes a tie-break card; edits apply whatever it says.',
     ]
     if strict:
         lines.append("Your last edits were rejected: use only these types and fields exactly as listed.")
     if opener:
-        lines.append("Open the chat: one short question, using the gaps, expiring items or an over-budget week in the context.")
+        lines.append("Open the chat with a short, friendly note on what you see (gaps, expiring items, an over-budget week) and what you could do.")
+    if brief:
+        lines.append("Briefing (from the app, read it every turn): " + json.dumps(brief, separators=(",", ":")))
+        if spend:
+            lines.append("Spend so far: " + json.dumps(spend, separators=(",", ":")))
     lines.append("Context: " + json.dumps(context or {}))
     recent = [m for m in messages if m.get("text")][-HISTORY:]
     lines += [f'{"User" if m["from"] == "user" else "Hermes"}: {m["text"]}' for m in recent]
@@ -93,15 +109,28 @@ def ask(responder, prompt):
         return dict(FALLBACK)
 
 
+SPEND = {}  # session -> GET /spend, fetched once per chat session
+
+
+def spend_for(base, token, session):
+    if session not in SPEND:
+        SPEND.clear()
+        SPEND[session] = (call(base, token, "GET", "/spend") or (0, None))[1]
+    return SPEND[session]
+
+
 def answer(base, token, responder, thread, msg):
     """Answer one user message; re-ask once when the Worker dropped edits, give up politely when nothing valid survives twice."""
     history = [m for m in thread["messages"] if m["id"] <= msg["id"]]
     opener = bool(msg.get("open"))
     post = lambda rep: (call(base, token, "POST", "/chat/reply", {"session": thread["session"], "replyTo": msg["id"], **rep}) or (0, None))[1] or {}
-    rep = ask(responder, build_prompt(history, msg.get("context"), opener))
+    brief = brief_of(thread["messages"])
+    spend = spend_for(base, token, thread["session"]) if brief else None
+    kw = {"brief": brief, "spend": spend}
+    rep = ask(responder, build_prompt(history, msg.get("context"), opener, **kw))
     got = post(rep)
     if got.get("dropped"):
-        rep = ask(responder, build_prompt(history, msg.get("context"), opener, strict=True))
+        rep = ask(responder, build_prompt(history, msg.get("context"), opener, strict=True, **kw))
         got = post(rep)
         if got.get("dropped") and got["dropped"] >= len(rep["edits"]):
             post(GIVE_UP)

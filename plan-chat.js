@@ -6,7 +6,7 @@
   "use strict";
 
   const SLOTS = ["breakfast", "lunch", "dinner", "snack"];
-  const TEXT_MAX = 500, EDITS_MAX = 20;
+  const TEXT_MAX = 1500, EDITS_MAX = 60;
   const isDay = (d) => Number.isInteger(d) && d >= 1 && d <= 28;
   const isSlot = (s) => SLOTS.includes(s);
   const isIso = (d) => typeof d === "string" && /^\d{4}-\d{2}-\d{2}$/.test(d) && !isNaN(Date.parse(d));
@@ -22,8 +22,8 @@
     return ids;
   }
 
-  // Phase 87 meal fields. Limits: name <= 60, ingredients <= 20, method steps <= 12, 3 meal edits per reply.
-  const MEAL_EDITS = ["mealCreate", "mealEdit", "mealRemove"], MEAL_EDITS_MAX = 3, EFFORT = ["quick", "batch"];
+  // Phase 87 meal fields. Limits: name <= 60, ingredients <= 20, method steps <= 12, 5 meal edits per reply.
+  const MEAL_EDITS = ["mealCreate", "mealEdit", "mealRemove"], MEAL_EDITS_MAX = 5, EFFORT = ["quick", "batch"];
   const ingredients = (v) => {
     if (!Array.isArray(v) || !v.length || v.length > 20) return null;
     const out = v.map((i) => i && typeof i === "object" && (str(i.key, 60) || str(i.name, 60)) && { ...(str(i.key, 60) ? { key: str(i.key, 60) } : {}), ...(str(i.name, 60) ? { name: str(i.name, 60) } : {}), qty: str(typeof i.qty === "number" ? String(i.qty) : i.qty, 40) });
@@ -31,11 +31,13 @@
   };
   const types = (v) => { const t = Array.isArray(v) ? [...new Set(v.filter((x) => SLOTS.includes(x)))] : []; return t.length ? t : null; };
   const method = (v) => (Array.isArray(v) && v.length <= 12 && v.every((x) => typeof x === "string" && x.trim()) ? v.map((x) => x.trim().slice(0, 300)) : null);
+  const mins = (v) => Number.isInteger(v) && v >= 1 && v <= 600;
   const servings = (v) => Number.isInteger(v) && v >= 1 && v <= 12;
   /** Whitelisted patch fields only; any other key is ignored. null = a whitelisted field is invalid. */
   const PATCH = {
     name: (v) => str(v, 60) || null, description: (v) => (typeof v === "string" ? v.trim().slice(0, 300) : null),
     mealTypes: types, servings: (v) => (servings(v) ? v : null), prepEffort: (v) => (EFFORT.includes(v) ? v : null), ingredients, method,
+    totalMins: (v) => (mins(v) ? v : null),
   };
   function patchOf(p) {
     if (!p || typeof p !== "object" || Array.isArray(p)) return null;
@@ -71,10 +73,18 @@
     swapDay: (e) => isDay(e.a) && isDay(e.b) && e.a !== e.b && { type: "swapDay", a: e.a, b: e.b },
     backfill: (e) => isDay(e.day) && isSlot(e.slot) && (typeof e.mealId === "string" && e.mealId ? { type: "backfill", day: e.day, slot: e.slot, mealId: e.mealId } : str(e.name, 60) && { type: "backfill", day: e.day, slot: e.slot, name: str(e.name, 60), ...(str(e.text, 200) ? { text: str(e.text, 200) } : {}) }),
     mealCreate: (e) => { const ing = ingredients(e.ingredients), t = e.mealTypes === undefined ? ["dinner"] : types(e.mealTypes), m = e.method === undefined ? undefined : method(e.method);
-      return str(e.name, 60) && ing && t && m !== null && (e.servings === undefined || servings(e.servings)) && (e.prepEffort === undefined || EFFORT.includes(e.prepEffort))
-        && { type: "mealCreate", name: str(e.name, 60), mealTypes: t, ingredients: ing, ...(e.servings ? { servings: e.servings } : {}), ...(e.prepEffort ? { prepEffort: e.prepEffort } : {}), ...(m ? { method: m } : {}) }; },
+      return str(e.name, 60) && ing && t && m !== null && (e.servings === undefined || servings(e.servings)) && (e.prepEffort === undefined || EFFORT.includes(e.prepEffort)) && (e.totalMins === undefined || mins(e.totalMins))
+        && { type: "mealCreate", name: str(e.name, 60), mealTypes: t, ingredients: ing, ...(e.servings ? { servings: e.servings } : {}), ...(e.prepEffort ? { prepEffort: e.prepEffort } : {}), ...(m ? { method: m } : {}), ...(e.totalMins ? { totalMins: e.totalMins } : {}) }; },
     mealEdit: (e) => { const patch = mealId(e) && patchOf(e.patch); return patch && { type: "mealEdit", mealId: e.mealId, patch }; },
     mealRemove: (e) => mealId(e) && { type: "mealRemove", mealId: e.mealId },
+    // Phase 88: Hermes places a chosen meal; the app checks it (MP.placeSlots). cap/rate are prefs and rating edits.
+    place: (e) => isDay(e.day) && isSlot(e.slot) && mealId(e) && (e.variantId === undefined || str(e.variantId, 80))
+      && { type: "place", day: e.day, slot: e.slot, mealId: e.mealId, ...(e.variantId ? { variantId: str(e.variantId, 80) } : {}) },
+    cap: (e) => Number.isInteger(e.minutes) && (e.minutes === 0 || (e.minutes >= 5 && e.minutes <= 240)) && Array.isArray(e.weekdays) && e.weekdays.length >= 1 && e.weekdays.length <= 7
+      && e.weekdays.every((d) => Number.isInteger(d) && d >= 0 && d <= 6) && new Set(e.weekdays).size === e.weekdays.length
+      && { type: "cap", minutes: e.minutes, weekdays: [...e.weekdays].sort((a, b) => a - b) },
+    rate: (e) => mealId(e) && (e.rating === "up" || e.rating === "down") && (e.note === undefined || typeof e.note === "string")
+      && { type: "rate", mealId: e.mealId, rating: e.rating, ...(str(e.note, 200) ? { note: str(e.note, 200) } : {}) },
     reroll: (e) => isDay(e.day) && (e.slot === undefined || isSlot(e.slot)) && (e.slot === undefined ? { type: "reroll", day: e.day } : { type: "reroll", day: e.day, slot: e.slot }),
   };
 
@@ -160,6 +170,9 @@
       else if (e.type === "mealCreate") parts.push(`new meal: ${e.name}`);
       else if (e.type === "mealEdit") parts.push(`changed meal ${e.mealId}`);
       else if (e.type === "mealRemove") parts.push(`removed meal ${e.mealId}`);
+      else if (e.type === "place") parts.push(`${name(e.day)} ${e.slot}: ${e.mealId} placed`);
+      else if (e.type === "cap") parts.push(e.minutes ? `${e.weekdays.map((w) => WEEKDAYS[w]).join("/")}: cooking capped at ${e.minutes} min` : `${e.weekdays.map((w) => WEEKDAYS[w]).join("/")}: time cap cleared`);
+      else if (e.type === "rate") parts.push(`${e.mealId}: rated ${e.rating}`);
       else if (e.type === "backfill") parts.push(`${name(e.day)} ${e.slot}: recorded as eaten${e.name ? ` (${e.name})` : ""}`);
     }
     return parts.join(", ");

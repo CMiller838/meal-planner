@@ -1969,11 +1969,11 @@
     const KEY = P.KEY;
 
     localStorage.removeItem(KEY);
-    check("get() with key absent -> empty default", deepEqual(P.get(), { busyDays: [], chips: [], freezeBatches: true, repeatGap: 0, rolling: true, budgetTarget: 0 }));
+    check("get() with key absent -> empty default", deepEqual(P.get(), { busyDays: [], chips: [], freezeBatches: true, repeatGap: 0, rolling: true, timeCaps: {}, budgetTarget: 0 }));
 
     for (const bad of ["not json", "null", "[]", "3"]) {
       localStorage.setItem(KEY, bad);
-      check(`get() with ${JSON.stringify(bad)} -> empty default, no throw`, deepEqual(P.get(), { busyDays: [], chips: [], freezeBatches: true, repeatGap: 0, rolling: true, budgetTarget: 0 }));
+      check(`get() with ${JSON.stringify(bad)} -> empty default, no throw`, deepEqual(P.get(), { busyDays: [], chips: [], freezeBatches: true, repeatGap: 0, rolling: true, timeCaps: {}, budgetTarget: 0 }));
     }
 
     localStorage.setItem(KEY, JSON.stringify({ busyDays: [0, 3, 29, "4", 3, 14], chips: ["comfort", 5, "no-spice", null] }));
@@ -1985,10 +1985,10 @@
     const saved = P.save([11, 2], ["comfort"]);
     check("save() sorts busyDays ascending", deepEqual(saved.busyDays, [2, 11]));
     check("save() stamps a parseable ISO updatedAt", !isNaN(new Date(saved.updatedAt).getTime()));
-    check("save() round-trips through get()", deepEqual(P.get(), { busyDays: [2, 11], chips: ["comfort"], freezeBatches: true, repeatGap: 0, rolling: true, budgetTarget: 0 }));
+    check("save() round-trips through get()", deepEqual(P.get(), { busyDays: [2, 11], chips: ["comfort"], freezeBatches: true, repeatGap: 0, rolling: true, timeCaps: {}, budgetTarget: 0 }));
 
     const savedEmpty = P.save([], []);
-    check("save([], []) round-trips to the empty shape", deepEqual(P.get(), { busyDays: [], chips: [], freezeBatches: true, repeatGap: 0, rolling: true, budgetTarget: 0 }));
+    check("save([], []) round-trips to the empty shape", deepEqual(P.get(), { busyDays: [], chips: [], freezeBatches: true, repeatGap: 0, rolling: true, timeCaps: {}, budgetTarget: 0 }));
     check("save([], []) has no busyDays/chips leak", deepEqual(savedEmpty.busyDays, []) && deepEqual(savedEmpty.chips, []));
     localStorage.removeItem(KEY);
 
@@ -2032,7 +2032,7 @@
 
     MP.PlanPrefs.save([0, "3", 29, 7, 7], ["comfort", 3, null]);
     check("pull coercion: hostile remote body round-trips to sane shape",
-      deepEqual(MP.PlanPrefs.get(), { busyDays: [7], chips: ["comfort"], freezeBatches: true, repeatGap: 0, rolling: true, budgetTarget: 0 }));
+      deepEqual(MP.PlanPrefs.get(), { busyDays: [7], chips: ["comfort"], freezeBatches: true, repeatGap: 0, rolling: true, timeCaps: {}, budgetTarget: 0 }));
     localStorage.removeItem(KEY);
   }
 
@@ -2373,7 +2373,7 @@
 
       const saved = P.save([2], ["comfort"], 75);
       check("PlanPrefs.save(): round-trips budgetTarget 75 with busyDays/chips intact",
-        deepEqual(P.get(), { busyDays: [2], chips: ["comfort"], freezeBatches: true, repeatGap: 0, rolling: true, budgetTarget: 75 }));
+        deepEqual(P.get(), { busyDays: [2], chips: ["comfort"], freezeBatches: true, repeatGap: 0, rolling: true, timeCaps: {}, budgetTarget: 75 }));
       check("PlanPrefs.save(): return value carries budgetTarget", saved.budgetTarget === 75);
 
       P.save([], [], undefined);
@@ -3035,13 +3035,13 @@
   {
     const PC = MP.PlanChat;
     const vocab = { chips: [{ id: "comfort" }], candidates: { protein: { chip: { id: "protein-boost" } } } };
-    const v = PC.validateReply({ text: "  " + "x".repeat(600) + " ", ask: true, edits: [
+    const v = PC.validateReply({ text: "  " + "x".repeat(1600) + " ", ask: true, edits: [
       { type: "busy", day: 3 }, { type: "bogus", day: 1 }, { type: "busy", day: 29 }, { type: "lock", day: 2, slot: "brunch" },
       { type: "chip", id: "nope" }, { type: "chip", id: "protein-boost", days: [2, 3] }, { type: "chip", id: "comfort", days: [99] },
       { type: "budget", perWeek: -5 }, { type: "budget", perWeek: 40 }, { type: "reroll", day: 4, slot: "dinner" }, "junk", null, { type: "toString" },
     ] }, vocab);
     check("validateReply: keeps only valid edits", v.reply.edits.map((e) => e.type).join() === "busy,chip,budget,reroll" && v.dropped === 9);
-    check("validateReply: text trimmed and capped at 500, ask kept", v.reply.text.length === 500 && v.reply.ask === true);
+    check("validateReply: text trimmed and capped at 1500, ask kept", v.reply.text.length === 1500 && v.reply.ask === true);
     { // Phase 84: plan-action edit types
       const ed = (list, today) => PC.validateReply({ edits: list }, vocab, today).reply.edits;
       const ok = ed([
@@ -3067,7 +3067,7 @@
       check("validateReply: meal edit types kept, non-whitelisted patch field ignored", ok.map((e) => e.type).join() === "mealCreate,mealEdit,mealRemove" && ok[0].name === "Turkey chilli" && Object.keys(ok[1].patch).join() === "name");
       const bad = ed([{ type: "mealCreate", name: "", ingredients: ing }, { type: "mealCreate", name: "A", ingredients: [] }, { type: "mealCreate", name: "A", ingredients: ing, servings: 99 }, { type: "mealEdit", mealId: "m1", patch: { id: "z" } }, { type: "mealEdit", patch: { name: "x" } }, { type: "mealRemove" }]);
       check("validateReply: bad meal edits dropped", bad.length === 0);
-      check("validateReply: at most 3 meal edits per reply", ed([1, 2, 3, 4].map((i) => ({ type: "mealRemove", mealId: "m" + i }))).length === 3);
+      check("validateReply: at most 5 meal edits per reply", ed([1, 2, 3, 4, 5, 6].map((i) => ({ type: "mealRemove", mealId: "m" + i }))).length === 5);
       check("mealFromEdit: same-name creates get distinct ids", MP.mealFromEdit(ok[0], ["turkey-mince"]).id !== MP.mealFromEdit(ok[0], ["turkey-mince"]).id);
       const base = { id: "m1", name: "Old", source: "seed", servings: 1, mealTypes: ["dinner"], ingredients: [{ key: "rice", qty: "1" }] };
       const snap = JSON.stringify(base);
@@ -3086,6 +3086,67 @@
       check("applyMealEdits: remove refused while in the plan", r.refused.length === 1 && /day 3/.test(r.refused[0].why) && store.length === 2);
       r = MP.Plan.applyMealEdits([{ type: "mealRemove", mealId: "m1" }], mk(noPlan));
       check("applyMealEdits: remove works outside the plan, Undo restores", r.applied.length === 1 && store.length === 1 && (r.applied[0].undo(), store.length === 2));
+    }
+    { // Phase 88: place/cap/rate, limits, totalMins, estMins, placeSlots, timeCaps
+      const ed = (list) => PC.validateReply({ edits: list }, vocab, "2026-01-01").reply.edits;
+      const ok = ed([{ type: "place", day: 2, slot: "dinner", mealId: "m1", variantId: "v" }, { type: "cap", minutes: 30, weekdays: [3, 1] }, { type: "cap", minutes: 0, weekdays: [0] }, { type: "rate", mealId: "m1", rating: "down", note: "boring" }]);
+      check("validateReply: place, cap (sorted, 0 clears) and rate kept", ok.length === 4 && ok[0].variantId === "v" && deepEqual(ok[1].weekdays, [1, 3]) && ok[2].minutes === 0 && ok[3].note === "boring");
+      const bad = ed([{ type: "place", day: 0, slot: "dinner", mealId: "m1" }, { type: "place", day: 1, slot: "brunch", mealId: "m1" }, { type: "place", day: 1, slot: "dinner" }, { type: "cap", minutes: 3, weekdays: [1] }, { type: "cap", minutes: 30, weekdays: [] }, { type: "cap", minutes: 30, weekdays: [7] }, { type: "cap", minutes: 30, weekdays: [1, 1] }, { type: "rate", mealId: "m1", rating: "never" }, { type: "rate", rating: "up" }]);
+      check("validateReply: bad place/cap/rate dropped (never is not settable)", bad.length === 0);
+      const many = PC.validateReply({ text: "x".repeat(2000), edits: Array.from({ length: 70 }, (_, i) => ({ type: "busy", day: 1 + (i % 14) })) }, vocab).reply;
+      check("validateReply: text 1500 and 60 edits per reply", many.text.length === 1500 && many.edits.length === 60);
+      const tm = ed([{ type: "mealCreate", name: "A", ingredients: [{ name: "rice", qty: "1" }], totalMins: 25 }, { type: "mealEdit", mealId: "m1", patch: { totalMins: 40 } }, { type: "mealEdit", mealId: "m1", patch: { totalMins: 0 } }, { type: "mealCreate", name: "B", ingredients: [{ name: "rice", qty: "1" }], totalMins: 601 }]);
+      check("validateReply: totalMins 1-600 on create and patch", tm.length === 2 && tm[0].totalMins === 25 && tm[1].patch.totalMins === 40);
+      check("patchMeal: totalMins in the whitelist", MP.patchMeal({ id: "m", ingredients: [] }, { totalMins: 40 }, []).totalMins === 40);
+      check("estMins: sums step minutes, null with none", MP.estMins({ method: [{ text: "a", minutes: 5 }, { text: "b" }, { text: "c", minutes: 10 }] }) === 15 && MP.estMins({ method: [{ text: "a" }] }) === null && MP.estMins({}) === null);
+      check("describe: place/cap/rate read back", PC.describe([{ type: "place", day: 1, slot: "dinner", mealId: "m1" }, { type: "cap", minutes: 30, weekdays: [1] }, { type: "rate", mealId: "m1", rating: "up" }], "2026-09-07").includes("capped at 30 min"));
+      // placeSlots
+      const meal = (id, o) => ({ id, name: id, mealTypes: ["dinner"], servings: 1, ingredients: [{ key: "rice", qty: "1" }], ...o });
+      const byId = { a: meal("a", { servings: 4 }), b: meal("b", { leftoverOf: "a" }), c: meal("c", { mealTypes: ["lunch"] }), d: meal("d", { ingredients: [{ key: "mushroom", qty: "1" }] }), e: meal("e"), n: meal("n"), p: meal("p", { totalMins: 60 }), v: meal("v", { variants: [{ id: "v1", name: "V", ingredients: [{ key: "rice", qty: "2" }] }] }) };
+      const mkPlan = () => ({ startDate: "2026-09-07", days: Array.from({ length: 6 }, (_, i) => ({ day: i + 1, slots: i === 1 ? { dinner: { mealId: "e", locked: true } } : {} })) });
+      const ctx = { terms: [], ratings: { n: { rating: null, never: true } }, fridgeDays: 3, caps: { 1: 30 }, pending: ["pend"] };
+      const pl = mkPlan(), snapP = JSON.stringify(pl);
+      const put = (day, slot, mealId, extra) => MP.placeSlots(pl, [{ day, slot, mealId, ...extra }], byId, ctx);
+      let res = put(1, "dinner", "e");
+      check("placeSlots: places, pure, diff reported", res.plan.days[0].slots.dinner.mealId === "e" && res.changes.length === 1 && JSON.stringify(pl) === snapP && !res.refused.length);
+      check("placeSlots: unknown meal / held slot / wrong slot type / mushroom / never / pending refused", [["zz", 1, "dinner"], ["e", 2, "dinner"], ["c", 1, "dinner"], ["d", 1, "dinner"], ["n", 1, "dinner"], ["pend", 1, "dinner"]].every(([m, d, sl]) => { const r = put(d, sl, m); return r.refused.length === 1 && !r.changes.length; }) && put(1, "dinner", "pend").refused[0].why === "add the meal first");
+      check("placeSlots: orphan leftover refused, placed after its cook in the same reply, refused beyond fridgeDays", put(3, "dinner", "b").refused.length === 1
+        && MP.placeSlots(pl, [{ day: 1, slot: "dinner", mealId: "a" }, { day: 3, slot: "dinner", mealId: "b" }], byId, ctx).changes.length === 2
+        && MP.placeSlots(pl, [{ day: 1, slot: "dinner", mealId: "a" }, { day: 5, slot: "dinner", mealId: "b" }], byId, ctx).refused.length === 1
+        && MP.placeSlots(pl, [{ day: 3, slot: "dinner", mealId: "b" }, { day: 1, slot: "dinner", mealId: "a" }], byId, ctx).refused.length === 1);
+      check("placeSlots: last place per slot wins; bad variant -> base", MP.placeSlots(pl, [{ day: 1, slot: "dinner", mealId: "e" }, { day: 1, slot: "dinner", mealId: "n" }, { day: 1, slot: "dinner", mealId: "p" }], byId, ctx).plan.days[0].slots.dinner.mealId === "p" && !put(1, "dinner", "v", { variantId: "nope" }).plan.days[0].slots.dinner.variantId && put(1, "dinner", "v", { variantId: "v1" }).plan.days[0].slots.dinner.variantId === "v1");
+      res = put(1, "dinner", "p"); // 2026-09-07 is a Monday (weekday 1), cap 30, meal 60
+      check("placeSlots: over-cap is placed with a soft note", res.changes.length === 1 && /over your 30 min cap/.test(res.notes[0]) && put(3, "dinner", "p").notes.length === 0);
+      check("placeSlots: hard terms refuse", MP.placeSlots(pl, [{ day: 1, slot: "dinner", mealId: "e" }], byId, { ...ctx, terms: ["rice"] }).refused.length === 1);
+      // timeCaps round-trip
+      const P = MP.PlanPrefs;
+      P.save([], [], 0, true, 0, true, { 1: 30, 9: 30, 2: 3, 3: "x" });
+      check("PlanPrefs: timeCaps round-trip, junk keys/values cleaned", deepEqual(P.get().timeCaps, { 1: 30 }));
+      P.save([], [], 0, true, 0, true);
+      check("PlanPrefs: no timeCaps -> {}", deepEqual(P.get().timeCaps, {}));
+      P.save([], [], 0, true, 0, true, { 5: 45 });
+      MP.Plan.applyChatEdits([{ type: "cap", minutes: 20, weekdays: [1] }], { plan: mkPlan(), byId, prefs: {}, focusDay: 1 });
+      check("applyChatEdits: cap saves through PlanPrefs and keeps the others; 0 clears", deepEqual(P.get().timeCaps, { 1: 20, 5: 45 }) && (MP.Plan.applyChatEdits([{ type: "cap", minutes: 0, weekdays: [1, 5] }], { plan: mkPlan(), byId, prefs: {}, focusDay: 1 }), deepEqual(P.get().timeCaps, {})));
+      P.save([], [], 0, true, 0, true, { 5: 45 });
+      const keep = P.get();
+      P.save(keep.busyDays, keep.chips, keep.budgetTarget, keep.freezeBatches, keep.repeatGap, keep.rolling, keep.timeCaps);
+      check("PlanPrefs: a re-save passing timeCaps through keeps them", deepEqual(P.get().timeCaps, { 5: 45 }));
+      P.save([], [], 0, true, 0, true);
+      // place via applyChatEdits wins over a reroll of the same slot; refusal -> note
+      const gen = () => { const g = mkPlan(); g.days[0].slots.dinner = { mealId: "n" }; return g; };
+      const ce = MP.Plan.applyChatEdits([{ type: "reroll", day: 1, slot: "dinner" }, { type: "place", day: 1, slot: "dinner", mealId: "e" }, { type: "place", day: 2, slot: "dinner", mealId: "p" }], { plan: mkPlan(), byId, prefs: {}, focusDay: 1, generate: gen, chatPrefs: null });
+      check("applyChatEdits: place wins over reroll, held slot gives a note", ce.length === 1 && ce[0].after.mealId === "e" && ce[0].before === null && ce.notes.some((n) => /locked/.test(n)));
+      MP.Plan.resetChatPrefs();
+      const rr = MP.Plan.applyRateEdits([{ type: "rate", mealId: "e", rating: "down", note: "boring" }, { type: "rate", mealId: "zz", rating: "up" }], { byId });
+      check("applyRateEdits: down with note applied + Undo; unknown meal refused", rr.applied.length === 1 && MP.Ratings.get().e.rating === "down" && MP.Ratings.get().e.note === "boring" && rr.refused.length === 1 && (rr.applied[0].undo(), MP.Ratings.get().e.rating === null));
+      localStorage.removeItem("mp_ratings");
+      const br = MP.Plan.chatBriefing({ plan: mkPlan(), library: Object.values(byId), prefs: { busyDays: [2], chips: [] }, base: { timeCaps: { 1: 30 } }, settings: { allergies: ["peanut"] }, ratings: { e: { rating: "up", note: "yum", never: false } }, pantry: [{ name: "rice", qty: "1 kg" }], metrics: { weekGaps: [["iron"], []] } });
+      check("chatBriefing: the spec fields", br.start === "2026-09-07" && br.days === 6 && deepEqual(br.timeCaps, { 1: 30 }) && deepEqual(br.profile.allergies, ["peanut"]) && br.ratings.e.rating === "up" && br.pantry[0].name === "rice" && deepEqual(br.gaps, [["iron"], []]) && br.plan.length === 6 && br.plan[1].slots.dinner === "e" && br.meals.length === 8);
+      const bm = br.meals.find((m) => m.id === "p"), ba = br.meals.find((m) => m.id === "a");
+      check("chatBriefing: totalMins wins over estMins, leadsTo on a batch parent, leftoverOf on its child", bm.totalMins === 60 && !bm.estMins && deepEqual(ba.leadsTo, ["b"]) && br.meals.find((m) => m.id === "b").leftoverOf === "a");
+      const big = Array.from({ length: 700 }, (_, i) => meal("x" + i, { description: "d".repeat(80), tags: ["t".repeat(20)], mealTypes: ["lunch"] }));
+      const bb = MP.Plan.chatBriefing({ plan: mkPlan(), library: big, prefs: {}, base: {}, settings: null, ratings: {}, pantry: [], metrics: { weekGaps: [[], []] } });
+      check("chatBriefing: over 60000 drops descriptions, then non-dinner tags", JSON.stringify(bb).length <= 60000 && !bb.meals[0].description && !bb.meals[0].tags);
     }
     check("validateReply: garbage input -> empty reply", deepEqual(PC.validateReply("x", vocab), { reply: { text: "", edits: [], ask: false }, dropped: 0 }));
     const o = PC.toOverride([{ type: "noCook", day: 7 }, { type: "chip", id: "comfort" }, { type: "budget", perWeek: 30, days: [2] }, { type: "reroll", day: 9, slot: "dinner" }, { type: "lock", day: 1, slot: "lunch" }], null, 5);

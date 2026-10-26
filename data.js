@@ -205,11 +205,11 @@
     });
   }
 
-  /** Phase 87: pure whitelist patch of a library meal (name, description, mealTypes, servings, prepEffort, ingredients, method). Never id/source/leftoverOf/tags/cost. */
+  /** Phase 87: pure whitelist patch of a library meal (name, description, mealTypes, servings, prepEffort, totalMins, ingredients, method). Never id/source/leftoverOf/tags/cost. */
   function patchMeal(meal, patch, keys) {
     const out = { ...meal };
     const p = patch || {};
-    for (const k of ["name", "description", "mealTypes", "servings", "prepEffort"]) if (p[k] !== undefined) out[k] = p[k];
+    for (const k of ["name", "description", "mealTypes", "servings", "prepEffort", "totalMins"]) if (p[k] !== undefined) out[k] = p[k];
     if (p.ingredients) out.ingredients = chatIngredients(p.ingredients, keys);
     if (p.method) { out.method = p.method; out.methodStatus = "accepted"; }
     return out;
@@ -220,6 +220,7 @@
   function mealFromEdit(edit, keys) {
     const m = draftToMeal({ id: "chat", source: "hermes", name: edit.name, mealTypes: edit.mealTypes, servings: edit.servings, prepEffort: edit.prepEffort, method: edit.method, ingredients: [] });
     m.ingredients = chatIngredients(edit.ingredients, keys);
+    if (edit.totalMins) m.totalMins = edit.totalMins;
     delete m.fromDraft;
     m.id += "-" + (++chatSeq).toString(36); // two same-name creates in one millisecond must not share an id
     return m;
@@ -383,6 +384,49 @@
     return changes;
   }
   const heldAt = (plan, fromDay) => (d, t) => { const s = plan.days[d - 1] && plan.days[d - 1].slots[t]; return d < fromDay || !!(s && ((s.mealId && (s.locked || s.eatenAt)) || s.frozenFrom)); };
+
+  /** Phase 88: summed method-step `minutes` (an estimate); null when no step has minutes. */
+  function estMins(meal) {
+    const n = ((meal && meal.method) || []).reduce((a, st) => a + (st && Number.isFinite(st.minutes) ? st.minutes : 0), 0);
+    return n > 0 ? n : null;
+  }
+
+  /** Phase 88, pure: put Hermes-chosen meals into slots (last place per slot wins; applied in order, so a cook can precede its
+   *  leftover in one reply). ctx = { terms, ratings, fridgeDays, caps: {weekday: mins}, pending: [mealId] }. Each refusal says why;
+   *  an over-cap meal is placed with a note. Never ranks, never touches the pantry. Returns { plan, changes, refused, notes }. */
+  function placeSlots(plan, places, byId, ctx) {
+    const c = ctx || {}, refused = [], notes = [];
+    const last = new Map();
+    (places || []).forEach((p) => last.set(p.day + ":" + p.slot, p));
+    let cur = { ...plan, days: plan.days.map((d) => ({ ...d, slots: { ...d.slots } })) };
+    const fridge = c.fridgeDays || 3, caps = c.caps || {};
+    for (const p of last.values()) {
+      const no = (why) => refused.push({ day: p.day, slot: p.slot, mealId: p.mealId, why });
+      const dd = cur.days[p.day - 1], m = byId[p.mealId];
+      if (!dd || !SLOT_ORDER.includes(p.slot)) { no("no such slot"); continue; }
+      if ((c.pending || []).includes(p.mealId)) { no("add the meal first"); continue; }
+      if (!m) { no("unknown meal"); continue; }
+      const s = dd.slots[p.slot];
+      if (s && ((s.mealId && (s.locked || s.eatenAt)) || s.frozenFrom)) { no("eaten, locked or frozen"); continue; }
+      if (!(m.mealTypes || []).includes(p.slot)) { no(`not a ${p.slot} meal`); continue; }
+      const mx = MP.Exclusions;
+      const chk = mx ? mx.check(m, c.terms || []) : { ok: true, reasons: [] };
+      if (!chk.ok) { no(chk.reasons.join(", ")); continue; }
+      if (c.ratings && c.ratings[m.id] && c.ratings[m.id].never) { no("rated never"); continue; }
+      if (m.leftoverOf) {
+        const ok = cur.days.some((d) => d.day < p.day && p.day - d.day <= fridge && d.slots.dinner && d.slots.dinner.mealId === m.leftoverOf);
+        if (!ok) { no("no cook of its parent dinner in the days before"); continue; }
+      }
+      const slotValue = { mealId: m.id };
+      if (p.variantId && findVariant(m, p.variantId)) slotValue.variantId = p.variantId;
+      cur.days[p.day - 1].slots[p.slot] = slotValue;
+      const mins = m.totalMins || estMins(m), wd = cur.startDate ? new Date(`${cur.startDate}T12:00:00Z`) : null;
+      if (wd) wd.setUTCDate(wd.getUTCDate() + p.day - 1);
+      const cap = wd && caps[wd.getUTCDay()];
+      if (cap && mins && mins > cap) notes.push(`${m.name}: over your ${cap} min cap`);
+    }
+    return { plan: cur, changes: diffPlans(plan, cur), refused, notes };
+  }
 
   /** Phase 81, pure: skip the meal at (day, slot) by pushing it to the same slot next day. Same-slot meals after it shift
    *  one day too (held slots stay put and are hopped over), the last falls off the plan; a leftover chain moves as a unit
@@ -721,6 +765,8 @@
   MP.pushSlot = pushSlot;
   MP.moveSlot = moveSlot;
   MP.swapSlots = swapSlots;
+  MP.placeSlots = placeSlots;
+  MP.estMins = estMins;
   MP.swapDays = swapDays;
   MP.backfillSlot = backfillSlot;
   MP.rollPlan = rollPlan;

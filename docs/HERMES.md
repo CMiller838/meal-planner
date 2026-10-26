@@ -298,7 +298,17 @@ is `403`), and `force` on undo is ignored. `403` elsewhere (e.g. `PUT /prefs`, `
 
 - `POST /chat` `{ session, open: true, context }` resets the thread; `{ session, text, day, context }` appends a user message; `{ session, close: true }` ends it. `GET /chat?session=&since=` returns newer messages. `POST /chat/reply` `{ session, replyTo, text, edits, ask }` (needs `X-Actor: hermes`, else 403) posts Hermes's reply.
 - Reply shape: `{ text, edits, ask }`. Edit types are a fixed set: `busy`, `free`, `noCook`, `chip`, `budget`, `lock`, `unlock`, `reroll`, plus (Phase 87) `mealCreate {name, mealTypes, servings?, prepEffort?, ingredients:[{key?,name?,qty}], method?}`, `mealEdit {mealId, patch}` (patch: name, description, mealTypes, servings, prepEffort, ingredients, method) and `mealRemove {mealId}` (max 3 per reply). Meal edits are applied by the app at once to the library with Undo, after its own hard checks (exclusions, allergies; remove refused while the meal is in the plan); the library PUT is logged with `X-Actor: hermes`. Plan picks stay the app's generator's job. `MP.PlanChat.validateReply` (Worker and app) drops anything else and `/chat/reply` answers `{ id, dropped }`; the bridge re-asks once when `dropped > 0`.
-- To ask rather than guess, reply with `ask: true` and no edits.
-- Max 40 messages per thread, 300 characters per user message. Stale session gets 409.
+- To ask rather than guess, reply with `ask: true`. Since Phase 88 `ask` no longer blocks edits: they apply whatever `ask` says.
+- Max 40 messages per thread, 1000 characters per user message (Phase 88; the open message is pinned and never dropped). Stale session gets 409.
+
+Phase 88 additions:
+- Reply limits: `text` 1500 chars, 60 edits, 5 meal edits per reply. New edit types: `place {day, slot, mealId, variantId?}`
+  (Hermes chooses the meal; the app refuses with a reason on an unknown meal, wrong slot type, hard exclusion or allergy,
+  `never`, a held slot, an orphan leftover, or a meal still waiting on its Add card; over a time cap it places with a note),
+  `cap {minutes, weekdays}` (minutes 0 clears; stored in `mp_planPrefs.timeCaps`) and `rate {mealId, rating up|down, note?}`
+  (`never` is not settable from chat). `mealCreate`/`mealEdit`/`mealRemove` now wait for the user's Add/No card; `totalMins`
+  (1-600) is a meal field Hermes may propose.
+- The open `POST /chat` carries `context.brief` (up to 60 000 chars; other context stays 4000): plan, prefs, profile,
+  ratings, taste, pantry, gaps and the whole library. The bridge re-sends it every turn and adds `spend` from `GET /spend`.
 
 `context.cards` (on `POST /chat`) lists the tie or trade-off cards currently on screen in the app (e.g. `tie Tue: Chicken curry or Chilli`). The app wrote them; Hermes must not pick between them or contradict them.

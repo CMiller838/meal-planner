@@ -529,7 +529,88 @@
         }
       });
     });
+    // Phase 88: Hermes's own picks go in last, so a place beats a re-pick of the same slot. App-side checks live in MP.placeSlots.
+    const places = edits.filter((e) => e.type === "place");
+    if (places.length) {
+      const res = MP.placeSlots(pl, places, c.byId, { terms: MP.Sync.hardTerms(), ratings: MP.Ratings.get(), fridgeDays: ((shelfData || {}).cooked_leftovers || {}).fridgeDays, caps: (c.prefs && c.prefs.timeCaps) || {}, pending: (ctx && ctx.pending) || [] });
+      res.changes.forEach((ch) => {
+        const i = changes.findIndex((x) => x.day === ch.day && x.slot === ch.slot);
+        const before = i >= 0 ? changes[i].before : pl.days[ch.day - 1].slots[ch.slot] || null, after = res.plan.days[ch.day - 1].slots[ch.slot] || null;
+        if (i >= 0) changes.splice(i, 1);
+        if (JSON.stringify(before) !== JSON.stringify(after)) changes.push({ day: ch.day, slot: ch.slot, before, after });
+      });
+      pl.days = res.plan.days;
+      res.refused.forEach((r) => changes.notes.push(`Day ${r.day} ${r.slot}: not placed, ${r.why}`));
+      res.notes.forEach((n) => changes.notes.push(n));
+    }
+    // a time cap is a stored pref (mp_planPrefs.timeCaps); minutes 0 clears
+    edits.filter((e) => e.type === "cap").forEach((e) => {
+      const p = MP.PlanPrefs.get(true), tc = { ...p.timeCaps };
+      e.weekdays.forEach((w) => { if (e.minutes) tc[w] = e.minutes; else delete tc[w]; });
+      MP.PlanPrefs.save(p.busyDays, p.chips, p.budgetTarget, p.freezeBatches, p.repeatGap, p.rolling, tc);
+      basePrefs.timeCaps = tc; prefs.timeCaps = tc;
+      MP.Sync.pushPlanPrefs();
+    });
     return changes;
+  }
+
+  /** Phase 88: chat `rate` edits, applied at once through the ratings writers (Phase 74's logged, undoable path). `never` is not settable here.
+   *  Returns { applied: [{ edit, text, undo() }], refused: [{ edit, why }] }. */
+  function applyRateEdits(edits, ctx) {
+    const c = Object.assign({ byId: mealsById }, ctx);
+    const applied = [], refused = [];
+    for (const e of edits.filter((x) => x.type === "rate")) {
+      const m = c.byId[e.mealId];
+      if (!m) { refused.push({ edit: e, why: `Unknown meal ${e.mealId}` }); continue; }
+      const prev = MP.Ratings.get()[m.id] || {};
+      MP.Ratings.set(m.id, { rating: e.rating, ...(e.note ? { note: e.note } : {}) });
+      MP.Sync.pushRating(m.id, { rating: e.rating, ...(e.note ? { note: e.note } : {}) }, e.note ? "rated in chat: " + e.note.slice(0, 80) : "rated in chat");
+      applied.push({ edit: e, text: `Rated ${m.name} ${e.rating === "up" ? "👍" : "👎"}${e.note ? ` (${e.note})` : ""}`, undo: () => {
+        const back = { rating: prev.rating || null, note: prev.note || "" };
+        MP.Ratings.set(m.id, back);
+        MP.Sync.pushRating(m.id, back, "undo in chat");
+      } });
+    }
+    return { applied, refused };
+  }
+
+  /** Phase 88: the app's briefing for Hermes, built once at chat open (the app is the authority; the bridge adds spend).
+   *  Over CHAT_BRIEF_MAX chars: meal descriptions go first, then non-dinner meals' tags. ctx (tests): { plan, library, prefs, ... }. */
+  const CHAT_BRIEF_MAX = 60000;
+  function chatBriefing(ctx) {
+    const c = Object.assign({ plan, library, prefs, base: basePrefs, settings: MP.Sync.settings(), ratings: MP.Ratings.get(), pantry: MP.Sync.localItems("pantry") }, ctx);
+    if (!c.metrics) c.metrics = planMetrics(c.plan);
+    const kids = {};
+    c.library.forEach((m) => { if (m.leftoverOf) (kids[m.leftoverOf] = kids[m.leftoverOf] || []).push(m.id); });
+    const s = c.settings || {};
+    const taste = MP.Ratings.tasteProfile(c.ratings, c.library, packData && packData.planning);
+    const tokens = Object.entries(taste.tokens || {}).sort((a, b) => b[1] - a[1]);
+    const meals = c.library.map((m) => {
+      const est = m.totalMins ? null : MP.estMins(m);
+      return {
+        id: m.id, name: m.name, mealTypes: m.mealTypes, servings: m.servings || 1,
+        ...(m.prepEffort ? { prepEffort: m.prepEffort } : {}), ...(m.leftoverOf ? { leftoverOf: m.leftoverOf } : {}), ...(kids[m.id] ? { leadsTo: kids[m.id] } : {}),
+        ...(m.freezable !== undefined ? { freezable: m.freezable } : {}), ...(m.totalMins ? { totalMins: m.totalMins } : est ? { estMins: est } : {}),
+        ...(Array.isArray(m.variants) && m.variants.length ? { variants: m.variants.map((v) => ({ id: v.id, name: v.name })) } : {}),
+        ...(m.tags && m.tags.length ? { tags: m.tags } : {}), ...(m.description ? { description: m.description } : {}),
+      };
+    });
+    const brief = {
+      start: c.plan.startDate, days: c.plan.days.length, ...(c.plan.firstSlot ? { firstSlot: c.plan.firstSlot } : {}), shopAnchor: c.plan.shopAnchor || c.plan.startDate,
+      busyDays: c.prefs.busyDays || [], freeDays: c.prefs.freeDays || [], chips: c.prefs.chips || [], budgetTarget: Number(c.prefs.budgetTarget) || 0,
+      freezeBatches: c.prefs.freezeBatches !== false, repeatGap: c.prefs.repeatGap || 0, timeCaps: (c.base && c.base.timeCaps) || {},
+      profile: { allergies: s.allergies || [], never: s.never || [], likes: s.likes || [], dislikes: s.dislikes || [] },
+      ratings: Object.fromEntries(Object.entries(c.ratings).map(([id, r]) => [id, { rating: r.never ? "never" : r.rating, note: r.note || "" }])),
+      taste: { rated: taste.n, liked: tokens.filter((t) => t[1] > 0).slice(0, 8).map((t) => t[0]), disliked: tokens.filter((t) => t[1] < 0).slice(-8).map((t) => t[0]) },
+      pantry: c.pantry.map((i) => ({ name: i.name, qty: MP.qtyText(i.qty), ...(i.useBy ? { useBy: i.useBy } : {}), ...(i.storage ? { storage: i.storage } : {}) })),
+      gaps: c.metrics.weekGaps,
+      meals,
+      plan: c.plan.days.map((d) => ({ day: d.day, slots: Object.fromEntries(SLOT_TYPES.map((t) => { const x = d.slots[t]; return [t, x ? (x.eatingOut ? "out" : x.mealId || null) : null]; })) })),
+    };
+    const size = () => JSON.stringify(brief).length;
+    if (size() > CHAT_BRIEF_MAX) brief.meals.forEach((m) => { delete m.description; });
+    if (size() > CHAT_BRIEF_MAX) brief.meals.forEach((m) => { if (!m.mealTypes.includes("dinner")) delete m.tags; });
+    return brief;
   }
 
   /** Phase 87: apply mealCreate/mealEdit/mealRemove straight to the library (existing writers only), after the same hard checks as every other path.
@@ -2089,7 +2170,7 @@
     renderPlacementBanner(e.detail);
   });
 
-  MP.Plan = { applyChatEdits, applyMealEdits, chatContext, tieFor, effectiveBudget, budgetSwaps, resetChatPrefs, reflow, snapshot, restore, planMetrics, whatIf, fixGap, parseGuidedSlots, applyPlacements, logPortion, matchEatRequests, applyEatRequests };
+  MP.Plan = { applyChatEdits, applyMealEdits, applyRateEdits, chatBriefing, chatContext, tieFor, effectiveBudget, budgetSwaps, resetChatPrefs, reflow, snapshot, restore, planMetrics, whatIf, fixGap, parseGuidedSlots, applyPlacements, logPortion, matchEatRequests, applyEatRequests };
 
   // ---- Planning chat with Hermes (Phase 72) ----
   // The working plan is `plan` itself with guidedActive on (no savePlan runs); Exit restores the snapshot, Save commits.
@@ -2285,16 +2366,38 @@
   }
 
   /** Phase 87: one card per meal change (applied with Undo, or refused with the reason); library changes outlive Exit, so Exit warns. */
-  const liveMealChanges = () => (chat ? chat.meals.filter((x) => x.undo && !x.undone) : []);
+  const liveMealChanges = () => (chat ? chat.meals.filter((x) => x.undo && !x.undone && !x.rate) : []);
+  const pendingText = (e) => {
+    const old = e.mealId && mealsById[e.mealId], nm = old ? old.name : e.mealId;
+    return e.type === "mealCreate" ? `Hermes wants to add ${e.name}` : e.type === "mealEdit" ? `Hermes wants to change ${nm}${e.patch.totalMins ? ` (${e.patch.totalMins} min)` : ""}` : `Hermes wants to remove ${nm}`;
+  };
+  /** Slugs of meals Hermes proposed but the user hasn't added yet: a place of one is refused ("add the meal first"). */
+  const pendingMealIds = () => chat.meals.filter((x) => x.pending && x.edit.type === "mealCreate").flatMap((x) => { const sl = x.edit.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, ""); return [sl, "user-" + sl, MP.slugify(x.edit.name)]; });
+  function answerMeal(x, yes) {
+    if (!yes) { chat.meals.splice(chat.meals.indexOf(x), 1); return renderChatMeals(); }
+    MP.Sync.noteLibraryChange("chat: " + (x.edit.name || x.edit.mealId)); // before the write: its save event starts the sync
+    const res = applyMealEdits([x.edit]);
+    x.pending = false;
+    if (res.applied[0]) { x.text = res.applied[0].text; x.undo = res.applied[0].undo; } else x.text = res.refused[0] ? res.refused[0].why : "Meal not found";
+    renderChatMeals(); renderPlan(); renderChatDay();
+  }
   function renderChatMeals() {
     const ul = $("chat-meals");
     ul.innerHTML = "";
     chat.meals.forEach((x) => {
       const li = document.createElement("li");
-      li.className = "diff-row chat-meal" + (x.undo ? "" : " refused") + (x.undone ? " rejected" : "");
+      li.className = "diff-row chat-meal" + (x.undo || x.pending ? "" : " refused") + (x.undone ? " rejected" : "");
       const txt = document.createElement("span");
-      txt.textContent = x.undo ? (x.undone ? "Undone: " : "") + x.text : "Refused: " + x.text;
+      txt.textContent = x.pending ? x.text : x.undo ? (x.undone ? "Undone: " : "") + x.text : "Refused: " + x.text;
       li.appendChild(txt);
+      if (x.pending) {
+        [["Add", true, "btn-secondary chat-meal-add"], ["No", false, "btn-secondary chat-meal-no"]].forEach(([label, yes, cls]) => {
+          const b = document.createElement("button");
+          b.type = "button"; b.className = cls; b.textContent = label;
+          b.addEventListener("click", () => answerMeal(x, yes));
+          li.appendChild(b);
+        });
+      }
       if (x.undo && !x.undone) {
         const b = document.createElement("button");
         b.type = "button"; b.className = "btn-secondary"; b.textContent = "Undo";
@@ -2314,7 +2417,7 @@
     }
   }
   function undoMeal(x) {
-    MP.Sync.noteLibraryChange("undo in chat: " + x.text);
+    if (!x.rate) MP.Sync.noteLibraryChange("undo in chat: " + x.text);
     x.undo(); x.undone = true;
     renderChatMeals(); renderPlan(); renderChatDay();
   }
@@ -2324,20 +2427,21 @@
     const { reply } = MP.PlanChat.validateReply(m, vocabAll); // the app re-validates before applying anything
     if (reply.text) chatBubble("hermes", reply.text);
     chat.ask = !!reply.ask;
-    if (chat.ask) chat.tieDone.add(chat.day); // a question from Hermes closes any open tie card for good
+    if (chat.ask) chat.tieDone.add(chat.day); // a question from Hermes closes any open tie card for good (edits still apply)
     chat.changes = [];
-    if (!reply.ask && reply.edits.some((e) => e.type.startsWith("meal"))) {
-      MP.Sync.noteLibraryChange("chat: " + reply.edits.filter((e) => e.type.startsWith("meal")).map((e) => e.name || e.mealId).join(", ")); // before the writes: their save event starts the sync
-      const res = applyMealEdits(reply.edits);
-      res.applied.forEach((a) => chat.meals.push({ text: a.text, undo: a.undo }));
-      res.refused.forEach((r) => chat.meals.push({ text: r.why }));
-      renderChatMeals();
-    }
-    if (!reply.ask && reply.edits.length) {
-      const changes = applyChatEdits(reply.edits, { focusDay: chat.day });
-      const line = MP.PlanChat.describe(reply.edits, plan.startDate, chat.day);
+    // Phase 88: meal create/edit/remove wait for an Add/No card; ratings apply at once with Undo
+    const mealEdits = reply.edits.filter((e) => e.type.startsWith("meal"));
+    mealEdits.forEach((e) => chat.meals.push({ edit: e, pending: true, text: pendingText(e) }));
+    const rated = applyRateEdits(reply.edits);
+    rated.applied.forEach((a) => chat.meals.push({ rate: true, text: a.text, undo: a.undo }));
+    rated.refused.forEach((r) => chat.meals.push({ text: r.why }));
+    if (mealEdits.length || reply.edits.some((e) => e.type === "rate")) renderChatMeals();
+    const rest = reply.edits.filter((e) => !e.type.startsWith("meal") && e.type !== "rate");
+    if (rest.length) {
+      const changes = applyChatEdits(rest, { focusDay: chat.day, pending: pendingMealIds() });
+      const line = MP.PlanChat.describe(rest, plan.startDate, chat.day);
       if (line) { const u = chatBubble("understood", "Understood: " + line); u.classList.add("chat-understood"); }
-      changes.notes.forEach((n) => toast(n));
+      changes.notes.forEach((n) => { toast(n); chatBubble("understood", n); });
       chat.changes = changes;
       if (changes.length && !changes.some((c) => c.day === chat.day)) chat.day = changes[0].day;
       renderPlan();
@@ -2399,7 +2503,7 @@
     toast("Connecting to Hermes…");
     const session = "c" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
     let r;
-    try { r = await MP.PlanChat.call("POST", "/chat", { session, open: true, context: chatContext(1) }); } catch (e) { return goFallback("Couldn't reach the Worker."); }
+    try { r = await MP.PlanChat.call("POST", "/chat", { session, open: true, context: { ...chatContext(1), brief: chatBriefing() } }); } catch (e) { return goFallback("Couldn't reach the Worker."); }
     if (!r.bridgeSeenAt || Date.now() - Date.parse(r.bridgeSeenAt) > CHAT_BRIDGE_FRESH_MS) {
       MP.PlanChat.call("POST", "/chat", { session, close: true }).catch(() => {});
       return goFallback("Hermes isn't answering (the chat bridge on your PC isn't running: python3 tools/hermes_chat_bridge.py).");
