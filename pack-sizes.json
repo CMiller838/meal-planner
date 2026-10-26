@@ -24,6 +24,7 @@
     "onion": { "label": "Onions, 1kg", "packSize": 1000, "unit": "g", "price": 0.85 },
     "pasta": { "label": "Pasta, 500g", "packSize": 500, "unit": "g", "price": 0.60, "bulk": { "packSize": 1000, "price": 1.00, "label": "pasta" } },
     "peanut_butter": { "label": "Peanut butter", "packSize": 1, "unit": "each", "price": 1.80, "staple": true },
+    "garlic": { "label": "Garlic bulb (about 10 cloves)", "packSize": 10, "unit": "each", "price": 0.60 },
     "peppers": { "label": "Mixed peppers, pack of 3", "packSize": 1, "unit": "each", "price": 1.10 },
     "potatoes": { "label": "Potatoes, 2.5kg", "packSize": 2500, "unit": "g", "price": 1.90 },
     "rice": { "label": "Long grain rice, 1kg", "packSize": 1000, "unit": "g", "price": 1.20, "bulk": { "packSize": 2000, "price": 2.00, "label": "rice" } },
