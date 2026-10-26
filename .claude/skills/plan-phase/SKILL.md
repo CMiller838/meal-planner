@@ -109,6 +109,8 @@ wrong, say so in one line and update the heading.
    **Write one file** `.claude/specs/phaseN.md` (or the sub-specs above) (legacy `phaseN_spec.md` names stay valid):
    Decisions (user-chosen vs own call, labelled) · Files touched · Signatures/schemas (no
    bodies) · Edge cases · Verification · Tasks as `- [ ]` split Logic (TDD) / UI.
+   For every helper in Signatures, name who consumes its return value (e.g. who logs `backfilled`) and give that
+   caller its own task; a return value nobody consumes is a gap the tester will flag.
    Before moving on run `python3 tools/spec_lint.py phaseN`: it fails a spec with no tier tag, no `## Files touched`,
    or a `## Verification` without a runnable command in backticks (`/overnight` refuses to start on the same check).
    Under the first line add `Plain: <one everyday sentence on what this gives the user>`: the building-now pane shows it.
