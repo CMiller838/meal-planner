@@ -828,3 +828,6 @@ Spec: `.claude/specs/phase85.md`
 
 ## Phase 86: Style and animate every component
 Spec: `.claude/specs/phase86.md`
+
+## Phase 87: Plan with Hermes can create and change meals
+Spec: `.claude/specs/phase87.md`

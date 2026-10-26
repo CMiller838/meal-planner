@@ -686,3 +686,12 @@ motion for enter, press, change and exit, a reduced-motion fallback, and a check
 literals move into tokens. **Verify:** a component inventory in the spec is fully ticked, `check.py ui` passes, screenshots of
 every page in both themes at both widths show no unstyled or static component, reduced motion disables all non-essential motion.
 Requires Phase 85 (so the Food log view is polished with the rest).
+
+## Phase 87: Plan with Hermes can create and change meals [L] — not started
+
+**Added 2026-10-26.** With Phases 83 and 84 the chat sets the start date, first meal, length and shop day. This adds meals: Hermes
+can create a new meal, edit one (ingredients, servings, effort, meal types, method) or remove an unused one, from the chat. Changes
+apply at once (user-chosen) as cards with one-tap Undo, after the hard checks (allergies, `never` foods, no mushrooms, no standalone
+egg meals, no vegetables in toasties). **Verify:** "add a turkey chilli, 4 servings" creates a meal that can be planned and shows in
+Browse; "make the chilli use turkey" edits it and the shopping list follows; a mushroom meal is refused with the reason; Undo restores
+the previous meal. Requires Phases 50, 52, 72, 83, 84.
