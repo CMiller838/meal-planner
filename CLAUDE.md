@@ -36,6 +36,7 @@ python3 check.py              # every self-check, one line each (non-zero exit o
                               #   secrets    = secret scan of tracked files
                               #   ui pages   = test.html (all assertions) + every page at PC and phone, dark and light
                               #   ui walk    = click-through: browse, meal sheet, theme, plan generation, shopping
+                              # full run exceeds the 120 s default Bash timeout: pass timeout 600000 or use `runner`
 python3 check.py --changed    # only what the uncommitted changes need (the Stop hook); `python3 check.py ui` = browser checks
 python3 data_check.py         # the data/PWA-shell check alone
 cd tools/browser-check && npm ci && PLAYWRIGHT_BROWSERS_PATH=$PWD/.browsers npx playwright install chromium   # once
