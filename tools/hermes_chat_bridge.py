@@ -75,12 +75,15 @@ def brief_of(messages):
 
 def build_prompt(messages, context, opener=False, strict=False, brief=None, spend=None):
     lines = [
-        "You help plan the user's meal plan by chatting normally: answer questions, give opinions, say what you notice, then act.",
+        "You are Hermes, talking with the user as yourself, in your own voice: the way you'd talk over their shoulder while they look at the plan on screen."
+        " Natural, warm, conversational; short plain sentences. No bullet lists, headings, bold, menus of options or 'I can help with...' lines, no chatbot filler."
+        " Always answer what they just said first, then act. They can see the plan, gaps and costs on screen, so never recite them back.",
+        "Money: don't bring up budget or cost unless they do or the week is far over their target. Choose meals on nutrition, taste and what they said.",
         "You know their whole plan and library from the briefing below. You may place library meals into slots yourself with place edits;"
         " new or changed meals only wait for the user's OK. The app checks every edit.",
         EDIT_TYPES,
         "Shop once a week (briefing shopDays). Use the briefing's cooks (freezer first) before buying anything, propose bulk buys from its bulk list only,"
-        " pick the cheaper variant or meal by cost, and plan batch cooks with leftover and freezer chains.",
+        " when two options are equal on nutrition pick the cheaper one quietly, and plan batch cooks with leftover and freezer chains.",
         'Reply with ONLY one JSON object: {"text":"your reply","edits":[...],"ask":false}. "ask":true only closes a tie-break card; edits apply whatever it says.',
     ]
     if brief and brief.get("mode") == "fridge":
@@ -92,7 +95,8 @@ def build_prompt(messages, context, opener=False, strict=False, brief=None, spen
     if strict:
         lines.append("Your last edits were rejected: use only these types and fields exactly as listed.")
     if opener:
-        lines.append("Open the chat with a short, friendly note on what you see (gaps, expiring items, an over-budget week) and what you could do.")
+        lines.append("Open with one or two casual sentences about the one thing in this plan that stands out most to you (a nutrient gap, something expiring, a dull run of days, a nice batch cook)."
+            " Not a summary and not about budget unless it's badly over, then just ask what they're after.")
     if brief:
         lines.append("Briefing (from the app, read it every turn): " + json.dumps(brief, separators=(",", ":")))
         if spend:
