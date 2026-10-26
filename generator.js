@@ -407,7 +407,7 @@
       // and no freezer state — with the seed library and a Monday start only
       // chorizo-pasta survives to Friday. Real fix is freezer-aware planning
       // (buy day 1, freeze, defrost Thursday); logged in docs/FUTURE.md.
-      const safe = batchCandidates.filter((m) => MP.ShelfLife.rawSafeOn(m, d0, shelfData, shopOffset));
+      const safe = []; // shelf-life filtering switched off (user only wants warnings for entered use-by dates)
       const candidatePool = safe.length ? safe : batchCandidates;
       const parent = pickMeal(candidatePool, d0, [], { prefer: "batch", excludeIds });
       if (!parent) continue; // no batch meal available at all; days fall through to quick fill below

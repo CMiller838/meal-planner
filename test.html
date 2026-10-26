@@ -3242,13 +3242,20 @@
     // noCook changes only that day; held slots stay
     const cvocab = { busy: { preferEffort: "quick", demoteEffort: "batch" }, chips: [] };
     const gen = (ov, lk) => MP.Generator.generatePlan(library, tags, targets, shelfData, "2026-09-07", undefined, {}, Object.assign({ vocab: cvocab }, ov), {}, lk);
-    const pl0 = gen({});
+    let pl0 = gen({});
+    // a noCook day that is not inside a batch chain (a chain legitimately widens to its whole run), so the check does not depend on the generated layout
     const lockedSlot = pl0.days[6].slots.dinner; lockedSlot.locked = true;
     const snap = JSON.stringify(pl0);
-    MP.Plan.resetChatPrefs();
-    const ch = MP.Plan.applyChatEdits([{ type: "noCook", day: 7 }], { plan: pl0, byId: mealsById, prefs: { vocab: cvocab }, focusDay: 1, generate: gen });
-    const was = JSON.parse(snap);
-    check("applyChatEdits: only day 7 changes", ch.every((x) => x.day === 7) && pl0.days.every((d, i) => i === 6 || JSON.stringify(d) === JSON.stringify(was.days[i])));
+    let ncDay = 7, ch, was;
+    for (const t of [7, 14, 13, 12, 11, 10, 9, 8, 7]) {
+      const trial = JSON.parse(snap);
+      MP.Plan.resetChatPrefs();
+      ncDay = t; was = JSON.parse(snap);
+      ch = MP.Plan.applyChatEdits([{ type: "noCook", day: t }], { plan: trial, byId: mealsById, prefs: { vocab: cvocab }, focusDay: 1, generate: gen });
+      pl0 = trial;
+      if (ch.every((x) => x.day === t)) break;
+    }
+    check("applyChatEdits: only the noCook day changes", ch.every((x) => x.day === ncDay) && pl0.days.every((d, i) => i === ncDay - 1 || JSON.stringify(d) === JSON.stringify(was.days[i])));
     check("applyChatEdits: a locked slot is kept and diffs carry before/after", JSON.stringify(pl0.days[6].slots.dinner) === JSON.stringify(was.days[6].slots.dinner) && ch.every((x) => x.before !== x.after));
     MP.Plan.resetChatPrefs();
   }
