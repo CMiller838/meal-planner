@@ -323,7 +323,7 @@ window.MP = window.MP || {};
       }
       return { day: d.day, slots };
     });
-    return { startDate: plan.startDate || null, ...(plan.shopAnchor ? { shopAnchor: plan.shopAnchor } : {}), days };
+    return { startDate: plan.startDate || null, ...(plan.shopAnchor ? { shopAnchor: plan.shopAnchor } : {}), ...(plan.firstSlot ? { firstSlot: plan.firstSlot } : {}), days };
   }
 
   /** Best-effort, failure-silent — the plan mirror is derived data. */

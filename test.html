@@ -974,6 +974,20 @@
         deepEqual(MP.Sync.newPlacements(remote, "2026-09-04T00:00:00Z"), []));
     }
 
+    // Phase 83: flexible start and length
+    {
+      const G = MP.Generator, gp = (sd, o) => G.generatePlan(library, tags, targets, shelfData, sd, undefined, undefined, undefined, undefined, undefined, o);
+      const ser = (x) => JSON.stringify(x.days);
+      check("p83: days:14 equals the default plan", ser(gp("2026-09-07")) === ser(gp("2026-09-07", { days: 14 })));
+      const one = gp("2026-09-07", { days: 1 });
+      check("p83: days=1 gives one day", one.days.length === 1 && !!one.days[0].slots.dinner);
+      const thu = gp("2026-09-10", { days: 10, firstSlot: "dinner" });
+      check("p83: Thursday-dinner 10-day plan has no day-1 breakfast or lunch", thu.days.length === 10 && !thu.days[0].slots.breakfast && !thu.days[0].slots.lunch && !!thu.days[0].slots.dinner && thu.firstSlot === "dinner" && !!thu.days[1].slots.breakfast);
+      check("p83: 28 days generates", gp("2026-09-07", { days: 28 }).days.length === 28);
+      check("p83: weekendRuns honours n", deepEqual(G.weekendRuns("2026-09-07", 7), [[5, 6, 7]]));
+      check("p83: shopAnchorFor weekday", MP.shopAnchorFor("2026-09-10", 1) === "2026-09-07" && MP.shopAnchorFor("2026-09-10", 4) === "2026-09-10" && MP.shopAnchorFor("2026-09-10", 5) === "2026-09-04");
+    }
+
     // Phase 66: lock and fill
     {
       const G = MP.Generator, byId = Object.fromEntries(library.map((m) => [m.id, m]));
@@ -1028,7 +1042,7 @@
       let seen = null;
       const r5 = MP.Plan.reflow(p0, { ranOut: [" rice"] }, lib, { fromDay: 1, generate: (l, ro) => { seen = ro; return fill(l); } });
       check("reflow: ranOut key reaches the generator, empty input changes nothing", ser(seen) === '["rice"]' && MP.Plan.reflow(p0, {}, lib, { fromDay: 1, generate: fill }).changes.length === 0 && r5.changes.length === 0);
-      check("reflow: input validation", MP.reflowInputError({ skipped: [{ day: 0, slot: "dinner" }] }) && MP.reflowInputError({ eatingOut: [{ day: 15, slot: "dinner" }] }) && MP.reflowInputError({ skipped: [{ day: 1, slot: "brunch" }] }) && MP.reflowInputError({ skipped: "x" }) && MP.reflowInputError({ ranOut: [1] }) && !MP.reflowInputError({}));
+      check("reflow: input validation", MP.reflowInputError({ skipped: [{ day: 0, slot: "dinner" }] }) && MP.reflowInputError({ eatingOut: [{ day: 29, slot: "dinner" }] }) && MP.reflowInputError({ skipped: [{ day: 1, slot: "brunch" }] }) && MP.reflowInputError({ skipped: "x" }) && MP.reflowInputError({ ranOut: [1] }) && !MP.reflowInputError({}));
       localStorage.removeItem("mp_planUndo");
       MP.Plan.snapshot(p0);
       check("reflow: restore returns the exact prior plan", ser(MP.Plan.restore()) === keep);
@@ -1958,9 +1972,9 @@
       check(`get() with ${JSON.stringify(bad)} -> empty default, no throw`, deepEqual(P.get(), { busyDays: [], chips: [], freezeBatches: true, repeatGap: 0, rolling: true, budgetTarget: 0 }));
     }
 
-    localStorage.setItem(KEY, JSON.stringify({ busyDays: [0, 3, 15, "4", 3, 14], chips: ["comfort", 5, "no-spice", null] }));
+    localStorage.setItem(KEY, JSON.stringify({ busyDays: [0, 3, 29, "4", 3, 14], chips: ["comfort", 5, "no-spice", null] }));
     const filtered = P.get();
-    check("get() filters busyDays to unique ints 1-14", deepEqual(filtered.busyDays, [3, 14]));
+    check("get() filters busyDays to unique ints 1-28", deepEqual(filtered.busyDays, [3, 14]));
     check("get() drops non-string chips, keeps unknown ids", deepEqual(filtered.chips, ["comfort", "no-spice"]));
 
     localStorage.removeItem(KEY);
@@ -2012,7 +2026,7 @@
     }
     localStorage.removeItem(KEY);
 
-    MP.PlanPrefs.save([0, "3", 15, 7, 7], ["comfort", 3, null]);
+    MP.PlanPrefs.save([0, "3", 29, 7, 7], ["comfort", 3, null]);
     check("pull coercion: hostile remote body round-trips to sane shape",
       deepEqual(MP.PlanPrefs.get(), { busyDays: [7], chips: ["comfort"], freezeBatches: true, repeatGap: 0, rolling: true, budgetTarget: 0 }));
     localStorage.removeItem(KEY);
@@ -3018,7 +3032,7 @@
     const PC = MP.PlanChat;
     const vocab = { chips: [{ id: "comfort" }], candidates: { protein: { chip: { id: "protein-boost" } } } };
     const v = PC.validateReply({ text: "  " + "x".repeat(600) + " ", ask: true, edits: [
-      { type: "busy", day: 3 }, { type: "bogus", day: 1 }, { type: "busy", day: 15 }, { type: "lock", day: 2, slot: "brunch" },
+      { type: "busy", day: 3 }, { type: "bogus", day: 1 }, { type: "busy", day: 29 }, { type: "lock", day: 2, slot: "brunch" },
       { type: "chip", id: "nope" }, { type: "chip", id: "protein-boost", days: [2, 3] }, { type: "chip", id: "comfort", days: [99] },
       { type: "budget", perWeek: -5 }, { type: "budget", perWeek: 40 }, { type: "reroll", day: 4, slot: "dinner" }, "junk", null, { type: "toString" },
     ] }, vocab);

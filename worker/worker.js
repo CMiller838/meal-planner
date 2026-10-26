@@ -256,37 +256,38 @@ async function planInputs(env, { useUp = false, budget = null } = {}) {
     const items = ShoppingList.useUpItems((pantry && pantry.items) || [], mirror, Generator.isoToday(), SHELF_DATA);
     if (items.length) prefs.useUp = { items, window: PACK_DATA.planning.useUpWindow || 6 };
   }
-  return { library, mirror, hasMirror, startDate, prefs, pantry, ratingsRaw, settings };
+  const nDays = (hasMirror && mirror.days.length) || 14, firstSlot = hasMirror ? mirror.firstSlot : undefined; // Phase 83
+  return { library, mirror, hasMirror, startDate, prefs, pantry, ratingsRaw, settings, nDays, firstSlot };
 }
 
 /** Generator.generatePlan over `pool`, with `ranOut` pantry keys treated as absent (generation only; the pantry is never written). */
-function runGenerator({ startDate, prefs, pantry, ratingsRaw, settings }, pool, locked, ranOut = []) {
+function runGenerator({ startDate, prefs, pantry, ratingsRaw, settings, nDays, firstSlot }, pool, locked, ranOut = []) {
   const budgetObj = { costIndex: ShoppingList.costIndex(pool, PACK_DATA), groups: ShoppingList.groupIndex(SUB_GROUPS), ...PACK_DATA.planning };
   const have = ShoppingList.pantryIndex(pantry || { items: [] });
   ranOut.forEach((k) => delete have[k]);
-  return Generator.generatePlan(pool, TAGS, Nutrition.withProfile(TARGETS, settings), SHELF_DATA, startDate, budgetObj, have, prefs, (ratingsRaw && ratingsRaw.meals) || {}, locked);
+  return Generator.generatePlan(pool, TAGS, Nutrition.withProfile(TARGETS, settings), SHELF_DATA, startDate, budgetObj, have, prefs, (ratingsRaw && ratingsRaw.meals) || {}, locked, { days: nDays, firstSlot });
 }
 
 /** POST /plan/draft: Generator.generatePlan around the synced inputs, merged over the plan mirror. Stores nothing. */
 async function draftPlan(body, env) {
   if (typeof body !== "object" || body === null || Array.isArray(body)) return json(400, "expected an object");
   const { days = null, keep = [], avoid = [], budget = null, useUp = false } = body;
-  if (days !== null && (!Array.isArray(days) || !days.every((d) => Number.isInteger(d) && d >= 1 && d <= 14))) return json(400, "days must be integers 1-14");
-  if (!Array.isArray(keep) || !keep.every((k) => k && Number.isInteger(k.day) && k.day >= 1 && k.day <= 14 && SLOT_TYPES.includes(k.slot))) return json(400, "keep must be [{ day 1-14, slot }]");
+  if (days !== null && (!Array.isArray(days) || !days.every((d) => Number.isInteger(d) && d >= 1 && d <= 28))) return json(400, "days must be integers 1-28");
+  if (!Array.isArray(keep) || !keep.every((k) => k && Number.isInteger(k.day) && k.day >= 1 && k.day <= 28 && SLOT_TYPES.includes(k.slot))) return json(400, "keep must be [{ day 1-28, slot }]");
   if (!Array.isArray(avoid) || !avoid.every((a) => typeof a === "string")) return json(400, "avoid must be meal id strings");
   if (budget !== null && !(typeof budget === "number" && isFinite(budget) && budget > 0)) return json(400, "budget must be a number > 0");
   if (typeof useUp !== "boolean") return json(400, "useUp must be a boolean");
 
   const inp = await planInputs(env, { useUp, budget });
-  const { library, mirror, hasMirror, startDate, prefs } = inp;
+  const { library, mirror, hasMirror, startDate, prefs, nDays } = inp;
   if (!library.length) return json(409, "library must be synced first");
-  const want = new Set(days || Array.from({ length: 14 }, (_, i) => i + 1));
+  const want = new Set(days || Array.from({ length: nDays }, (_, i) => i + 1));
   const kept = new Set(keep.map((k) => `${k.day}:${k.slot}`));
   const avoidSet = new Set(avoid);
 
   // Phase 66: slots the merge below keeps are passed as locked, so the draft fills around them.
   const locked = {};
-  if (hasMirror) for (let day = 1; day <= 14; day++) {
+  if (hasMirror) for (let day = 1; day <= nDays; day++) {
     const old = (mirror.days[day - 1] && mirror.days[day - 1].slots) || {};
     for (const slot of SLOT_TYPES) {
       const cur = old[slot];
@@ -298,7 +299,7 @@ async function draftPlan(body, env) {
 
   const merged = [];
   const changes = [];
-  for (let day = 1; day <= 14; day++) {
+  for (let day = 1; day <= nDays; day++) {
     const old = (hasMirror && mirror.days[day - 1] && mirror.days[day - 1].slots) || {};
     const slots = {};
     for (const slot of SLOT_TYPES) {
@@ -330,7 +331,7 @@ async function applyDraft(body, env, who) {
   if (!ids.size) return json(409, "library must be synced first");
   const refOk = (r) => r && typeof r.mealId === "string" && ids.has(r.mealId);
   for (const c of d.changes) {
-    if (!c || !Number.isInteger(c.day) || c.day < 1 || c.day > 14 || !SLOT_TYPES.includes(c.slot)) return json(400, "each change needs day 1-14 and a valid slot");
+    if (!c || !Number.isInteger(c.day) || c.day < 1 || c.day > 28 || !SLOT_TYPES.includes(c.slot)) return json(400, "each change needs day 1-28 and a valid slot");
     if (!refOk(c.after)) return json(400, "change references a meal not in the library");
   }
   return json(200, await parkDraft(env, who, d));
@@ -357,7 +358,7 @@ async function reflowRoute(body, env, who) {
   if (!inp.library.length) return json(409, "library must be synced first");
   if (!inp.hasMirror) return json(409, "no plan to re-flow");
   const { library, mirror, startDate } = inp;
-  const planIn = { ...mirror, days: Array.from({ length: 14 }, (_, i) => mirror.days[i] || { day: i + 1, slots: {} }) };
+  const planIn = { ...mirror, days: Array.from({ length: inp.nDays }, (_, i) => mirror.days[i] || { day: i + 1, slots: {} }) };
   const res = globalThis.MP.reflowPlan(planIn, body, Object.fromEntries(library.map((m) => [m.id, m])), globalThis.MP.reflowFromDay(startDate, Generator.isoToday()),
     (locked, ranOut, avoid) => runGenerator(inp, library.filter((m) => !avoid.includes(m.id)), locked, ranOut));
   const names = Object.fromEntries(library.map((m) => [m.id, m.name]));
@@ -386,8 +387,8 @@ function rankingReasons(m, day, c) {
 async function ranking(params, env) {
   const dayRaw = params.get("day");
   const day = Number(dayRaw);
-  if (dayRaw === null || dayRaw === "" || !Number.isInteger(day) || day < 1 || day > 14) {
-    return json(400, "day must be 1-14");
+  if (dayRaw === null || dayRaw === "" || !Number.isInteger(day) || day < 1 || day > 28) {
+    return json(400, "day must be 1-28");
   }
 
   const slot = params.get("slot") || "dinner";
@@ -889,7 +890,7 @@ async function readLibrary(env) {
 /** GET /why?meal=&day=&slot= — why a meal sits where it does for a slot, from the same inputs as /ranking. */
 async function why(params, env) {
   const day = Number(params.get("day"));
-  if (!Number.isInteger(day) || day < 1 || day > 14) return json(400, "day must be 1-14");
+  if (!Number.isInteger(day) || day < 1 || day > 28) return json(400, "day must be 1-28");
   const slot = params.get("slot") || "dinner";
   if (!SLOT_TYPES.includes(slot)) return json(400, "slot must be breakfast, lunch, dinner or snack");
   const c = await slotContext(day, slot, env);
@@ -1189,7 +1190,7 @@ function placementsError(parsed) {
   for (const p of parsed.placements) {
     if (typeof p !== "object" || p === null || Array.isArray(p)) return "each placement must be an object";
     if (typeof p.mealId !== "string" || !p.mealId) return "each placement needs a non-empty mealId";
-    if (typeof p.day !== "number" || p.day < 1 || p.day > 14) return "each placement needs day 1-14";
+    if (typeof p.day !== "number" || p.day < 1 || p.day > 28) return "each placement needs day 1-28";
     if (!SLOT_TYPES.includes(p.slot)) return "each placement needs a valid slot";
   }
   return null;
@@ -1208,8 +1209,8 @@ function prefsError(parsed) {
 function planPrefsError(parsed) {
   if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) return "expected an object";
   if (typeof parsed.updatedAt !== "string" || isNaN(Date.parse(parsed.updatedAt))) return "updatedAt must be an ISO date string";
-  if (!Array.isArray(parsed.busyDays) || !parsed.busyDays.every((d) => Number.isInteger(d) && d >= 1 && d <= 14)) {
-    return "busyDays must be integers 1-14";
+  if (!Array.isArray(parsed.busyDays) || !parsed.busyDays.every((d) => Number.isInteger(d) && d >= 1 && d <= 28)) {
+    return "busyDays must be integers 1-28";
   }
   if (!Array.isArray(parsed.chips) || !parsed.chips.every((c) => typeof c === "string")) return "chips must be an array of strings";
   if (parsed.freezeBatches !== undefined && typeof parsed.freezeBatches !== "boolean") return "freezeBatches must be a boolean";
@@ -1561,7 +1562,7 @@ export class ChatRoom {
     const text = typeof body.text === "string" ? body.text.trim() : "";
     if (!text || text.length > CHAT_TEXT_MAX) return json(400, "text must be 1-300 characters");
     const msg = { from: "user", text, context: body.context };
-    if (Number.isInteger(body.day) && body.day >= 1 && body.day <= 14) msg.day = body.day;
+    if (Number.isInteger(body.day) && body.day >= 1 && body.day <= 28) msg.day = body.day;
     const id = push(msg);
     await save();
     return json(200, { id });

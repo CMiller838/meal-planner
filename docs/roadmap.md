@@ -656,12 +656,14 @@ coverage as an estimate; each of the four skip choices leaves the plan correct a
 meal, or eating out with a description). Re-flow stays on request only. **Verify:** swapping Tue and Thu moves leftovers and
 shelf-life warnings with them; a past dinner can be set to "Spoons" without touching the pantry; undo restores. Requires Phase 81.
 
-## Phase 83: Flexible plan start and length [L] — not started
+## Phase 83: Flexible plan start and length [L] — built 2026-10-26, live checks pending
 
 **Added 2026-10-24.** Generate a plan that starts on any date, from any first meal (dinner on day 1 leaves earlier slots empty),
 for 1 to 28 days, with a chosen shop weekday. One-tap Generate stays one tap with today's defaults. **Verify:** a plan starting
 Thursday dinner for 10 days has no Thursday breakfast or lunch, shopping and shelf-life follow the chosen shop day, and a default
 Generate is unchanged. Requires Phases 68 (rolling, shop anchor), 82.
+
+Built 2026-10-26: check.py 10/10, worker_test ok, tester PASS (guided flow at 390 px: 10-day dinner-first plan, shop anchor). Live: Thursday-dinner plan on the phone, check Shopping.
 
 ## Phase 84: Tell it anything: chat and assistant control [M] — not started
 

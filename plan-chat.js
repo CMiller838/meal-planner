@@ -6,7 +6,7 @@
 
   const SLOTS = ["breakfast", "lunch", "dinner", "snack"];
   const TEXT_MAX = 500, EDITS_MAX = 20;
-  const isDay = (d) => Number.isInteger(d) && d >= 1 && d <= 14;
+  const isDay = (d) => Number.isInteger(d) && d >= 1 && d <= 28;
   const isSlot = (s) => SLOTS.includes(s);
 
   /** Chip ids a reply may name: plan-preferences.json's `chips[].id` plus `candidates.protein.chip.id`. */

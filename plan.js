@@ -138,6 +138,7 @@
   MP.Cooks = { all: cooksAll, openFor: cooksOpenFor, open: cooksOpen, take: cooksTake, discard: cooksDiscard, freezeOne: cooksFreezeOne };
 
   let startOverride; // Plan with me: ?start=ISO for the guided plan only
+  let genOpts; // Phase 83: { days, firstSlot, shopWeekday } for one generation; absent = the current plan's own length and first slot
   function generatePlan(override, locked, ranOut, avoid) {
     const lib = avoid && avoid.length ? library.filter((m) => !avoid.includes(m.id)) : library;
     const budget = packData
@@ -145,16 +146,23 @@
       : null;
     const have = MP.ShoppingList.pantryIndex({ items: MP.Sync.localItems("pantry") });
     (ranOut || []).forEach((k) => delete have[k]); // Phase 63: ran out for this generation only; the pantry is never written
-    const gen = MP.Generator.generatePlan(lib, tagsData.tags, tagsData.targets, shelfData, startOverride, budget, have, Object.assign({}, prefs, override, { profile: MP.Nutrition.profileOf(MP.Sync.settings()) }), MP.Ratings.get(), locked);
-    if (basePrefs.rolling !== false) gen.shopAnchor = gen.startDate; // Phase 68: a fresh plan starts a new shop cadence; rolls/rerolls read only its days
+    if (genOpts && genOpts.shopWeekday != null) { // Phase 83: shop day override, as the offset the generator reads
+      const start = startOverride || new Date().toLocaleDateString("sv");
+      override = Object.assign({}, override, { shopOffset: MP.ShelfLife.shopOffset({ startDate: start, shopAnchor: MP.shopAnchorFor(start, genOpts.shopWeekday) }) });
+    }
+    const gen = MP.Generator.generatePlan(lib, tagsData.tags, tagsData.targets, shelfData, startOverride, budget, have, Object.assign({}, prefs, override, { profile: MP.Nutrition.profileOf(MP.Sync.settings()) }), MP.Ratings.get(), locked,
+      genOpts || (plan ? { days: plan.days.length, firstSlot: plan.firstSlot } : undefined));
+    if (basePrefs.rolling !== false) gen.shopAnchor = genOpts && genOpts.shopWeekday != null ? MP.shopAnchorFor(gen.startDate, genOpts.shopWeekday) : gen.startDate; // Phase 68: a fresh plan starts a new shop cadence; rolls/rerolls read only its days
     return gen;
   }
 
   // Phase 68: roll the window to today. Runs on Plan open and on visible, before placements and drafts apply.
   function rollIfDue() {
     if (!plan || guidedActive || basePrefs.rolling === false) return false;
+    genOpts = { days: plan.days.length }; // a rolled plan keeps its length; day 1 is a whole day again
     const res = MP.rollPlan(plan, new Date().toLocaleDateString("en-CA"), (locked, start) =>
       generatePlan({ shopOffset: MP.ShelfLife.shopOffset({ startDate: start, shopAnchor: plan.shopAnchor || plan.startDate }) }, locked));
+    genOpts = undefined;
     if (!res) return false;
     plan = res.plan;
     localStorage.removeItem(LS_UNDO); // its day numbers are stale
@@ -415,7 +423,9 @@
     applyHints();
     const held = lockedMap();
     if (SLOT_TYPES.every((t) => plan.days.every((d) => held[d.day] && held[d.day][t]))) { toast("Nothing to fill"); return; }
-    plan = generatePlan(override, held); // fresh startDate/shopAnchor, offset 0
+    genOpts = { days: plan.days.length };
+    plan = generatePlan(override, held);
+    genOpts = undefined; // fresh startDate/shopAnchor, offset 0
     savePlan();
     renderPlan(staged);
   }
@@ -833,12 +843,12 @@
       .join("")}</div>`;
   }
 
-  function coverageHtml(meals) {
+  function coverageHtml(meals, partialDay) {
     const cov = MP.Nutrition.dayCoverage(meals, tagsData.tags, tagsData.targets);
     const shortList = [...cov.missing, ...cov.partial];
     const bits = [
       `Protein ~${cov.proteinGramsApprox}g / ${cov.proteinTarget}g (approx)`,
-      shortList.length ? `Short on: ${shortList.map(labelize).join(", ")}` : "All tracked nutrients covered",
+      partialDay ? "Part day: nutrient gaps not flagged" : shortList.length ? `Short on: ${shortList.map(labelize).join(", ")}` : "All tracked nutrients covered",
     ];
     if (cov.sodiumCaution) bits.push("⚠ high sodium day");
     return `<div class="coverage-list"><span class="tag">${bits.join(" · ")}</span></div>`;
@@ -1082,7 +1092,7 @@
               </div>`;
             }).join("")}
           </div>
-          ${coverageHtml(dayMeals(d.day))}
+          ${coverageHtml(dayMeals(d.day), d.day === 1 && !!plan.firstSlot)}
         </div>`;
       }
       html += `</div>`;
@@ -1504,7 +1514,7 @@
       <button class="close-btn" aria-label="Close">✕</button>
       <h2>${esc(dayHeading(day))}</h2>
       ${SLOT_TYPES.map((slotType) => daySlotHtml(day, slotType)).join("")}
-      ${coverageHtml(dayMeals(day))}`;
+      ${coverageHtml(dayMeals(day), day === 1 && !!plan.firstSlot)}`;
     sheet.querySelector(".close-btn").addEventListener("click", closeDayView);
     wireMoveBtns(sheet);
     sheet.querySelectorAll(".day-swap-btn").forEach((b) =>
@@ -2365,9 +2375,11 @@
       guidedActive = true;
       document.getElementById("compare-btn").disabled = true;
       const start = new URLSearchParams(location.search).get("start");
-      if (/^\d{4}-\d{2}-\d{2}$/.test(start || "") && !isNaN(Date.parse(start))) startOverride = start;
+      if (/^\d{4}-\d{2}-\d{2}$/.test(start || "") && !isNaN(Date.parse(start)) && start >= new Date().toLocaleDateString("sv")) startOverride = start; // Phase 83: a past start is Phase 82's job
+      const q = new URLSearchParams(location.search), days = Number(q.get("days")), shop = q.get("shop");
+      genOpts = { days: days >= 1 && days <= 28 ? Math.floor(days) : 14, firstSlot: q.get("first") || undefined, shopWeekday: /^[0-6]$/.test(shop || "") ? Number(shop) : null };
       plan = generatePlan();
-      startOverride = undefined;
+      startOverride = genOpts = undefined;
       startGuidedWalkthrough(parseGuidedSlots(location.search));
     } else {
       plan = loadPlan();

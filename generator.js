@@ -23,11 +23,11 @@
     return date.getDay();
   }
 
-  /** Maximal consecutive day-position runs (1..14) whose real weekday is Fri/Sat/Sun. */
-  function weekendRuns(startDate) {
+  /** Maximal consecutive day-position runs (1..n) whose real weekday is Fri/Sat/Sun. */
+  function weekendRuns(startDate, n = 14) {
     const runs = [];
     let current = [];
-    for (let day = 1; day <= 14; day++) {
+    for (let day = 1; day <= n; day++) {
       const wd = weekdayOf(startDate, day);
       if (wd === 5 || wd === 6 || wd === 0) {
         current.push(day);
@@ -44,15 +44,15 @@
   // day 3). Greedy cluster choice, no look at which meals exist; upgrade path is scoring candidate cook days
   // by the portions they would cover.
   /** Day-runs for the fortnight's batch cooks (Phase 67): weekend runs, plus a run before each uncovered busy cluster; max 3. */
-  function batchRuns(startDate, busyDays, freeDays, fridgeDays) {
+  function batchRuns(startDate, busyDays, freeDays, fridgeDays, n = 14) {
     const busy = busyDays || [], free = freeDays || [], maxLen = fridgeDays || 3;
-    const runs = weekendRuns(startDate).map((run) => {
+    const runs = weekendRuns(startDate, n).map((run) => {
       const first = run.findIndex((d) => !busy.includes(d));
       return first > 0 ? run.slice(first) : run;
     });
     const inRun = (d) => runs.some((r) => r.includes(d));
     const clusters = [];
-    for (let d = 1; d <= 14; d++) {
+    for (let d = 1; d <= n; d++) {
       if (!busy.includes(d)) continue;
       if (busy.includes(d - 1)) clusters[clusters.length - 1].push(d);
       else clusters.push([d]);
@@ -66,7 +66,7 @@
       if (pref) cook = pref;
       if (inRun(cook) || extra.some((r) => r.includes(cook))) continue;
       const run = [];
-      for (let d = cook; d <= Math.min(14, cook + Math.min(c.length + 1, maxLen) - 1); d++) {
+      for (let d = cook; d <= Math.min(n, cook + Math.min(c.length + 1, maxLen) - 1); d++) {
         if (inRun(d) || extra.some((r) => r.includes(d))) break;
         run.push(d);
       }
@@ -292,15 +292,17 @@
     return bestId;
   }
 
-  function generatePlan(library, tags, targets, shelfData, startDate, budget, have, prefs, ratings, locked) {
+  function generatePlan(library, tags, targets, shelfData, startDate, budget, have, prefs, ratings, locked, opts) {
     startDate = startDate || isoToday();
+    const n = Math.min(28, Math.max(1, Math.floor(Number(opts && opts.days)) || 14));
+    const skipDay1 = ({ breakfast: [], lunch: ["breakfast"], dinner: ["breakfast", "lunch"], snack: ["breakfast", "lunch", "dinner"] })[opts && opts.firstSlot] || [];
     have = have || {};
     prefs = prefs || {};
     const mealsById = Object.fromEntries(library.map((m) => [m.id, m]));
     const taste = MP.Ratings.tasteProfile(ratings, library, budget);
     library = library.filter((m) => !m.routine); // routine items are logged, never scheduled (Phase 41)
     const dinnerPool = library.filter((m) => (m.mealTypes || []).includes("dinner") && !(prefs.noBatch && m.leftoverOf)); // noBatch cooks no parent, so no leftover meal either
-    const days = Array.from({ length: 14 }, (_, i) => ({ day: i + 1, slots: {} }));
+    const days = Array.from({ length: n }, (_, i) => ({ day: i + 1, slots: {} }));
     const lastUsedDay = {};
     const useUpLeft = new Set(((prefs.useUp && prefs.useUp.items) || []).map((it) => MP.ShoppingList.normalizeKey(it.name)));
     const shopOffset = Number(prefs.shopOffset) || 0; // Phase 68: per call, never stored
@@ -335,7 +337,7 @@
 
     // Phase 66: locked/eaten slots go in untouched; they still count toward cost, halfKeys and recency.
     const isLocked = (day, slotType) => !!(locked && locked[day] && locked[day][slotType] && locked[day][slotType].mealId);
-    for (let day = 1; day <= 14; day++) {
+    for (let day = 1; day <= n; day++) {
       for (const slotType of ["dinner"].concat(OTHER_SLOTS)) {
         if (!isLocked(day, slotType)) continue;
         const slot = { ...locked[day][slotType] };
@@ -356,7 +358,7 @@
     }
     // ponytail: lock-aware recency only looks one day ahead; a locked meal 3 days later can still repeat nearby. Upgrade path is a window.
     function nextMealId(day, slotType) {
-      if (day >= 14) return null;
+      if (day >= n) return null;
       const slot = days[day].slots[slotType];
       return slot && isLocked(day + 1, slotType) ? slot.mealId : null;
     }
@@ -384,9 +386,9 @@
       rankSlot(pool, dayNum, dayMealsSoFar,
         { ...opts, tags, targets, prefs, budget, halfKeys, half: halfOf(dayNum), lastUsedDay, ratings, taste, useUpLeft, startDate, profile: prefs.profile, pressure: pressureFor(dayNum) })[0] || null;
 
-    const runs = batchRuns(startDate, prefs.busyDays, prefs.freeDays, (shelfData.cooked_leftovers || {}).fridgeDays);
+    const runs = batchRuns(startDate, prefs.busyDays, prefs.freeDays, (shelfData.cooked_leftovers || {}).fridgeDays, n);
     const filled = new Set();
-    for (let day = 1; day <= 14; day++) if (isLocked(day, "dinner")) filled.add(day);
+    for (let day = 1; day <= n; day++) if (isLocked(day, "dinner")) filled.add(day);
     const spares = []; // { meal, cookDay, count } — portions the fridge run could not cover (Phase 59)
 
     // ponytail: noBatch trades leftovers for daily cooking; no cook-time model (Phase 64).
@@ -425,7 +427,7 @@
     // Frozen portions land on the earliest unfilled dinner day >= cookDay + 5; no free day, no frozen portion.
     for (const { meal, cookDay, count } of spares) {
       let left = count;
-      for (let day = cookDay + 5; day <= 14 && left > 0; day++) {
+      for (let day = cookDay + 5; day <= n && left > 0; day++) {
         if (filled.has(day)) continue;
         place(day, "dinner", meal, false, cookDay);
         filled.add(day);
@@ -433,8 +435,9 @@
       }
     }
 
-    for (let day = 1; day <= 14; day++) {
+    for (let day = 1; day <= n; day++) {
       if (filled.has(day)) continue;
+      if (day === 1 && skipDay1.includes("dinner")) continue;
       const excludeIds = new Set();
       const prevId = prevMealId(day, "dinner");
       if (prevId) excludeIds.add(prevId);
@@ -444,9 +447,10 @@
       place(day, "dinner", meal);
     }
 
-    for (let day = 1; day <= 14; day++) {
+    for (let day = 1; day <= n; day++) {
       for (const slotType of OTHER_SLOTS) {
         if (isLocked(day, slotType)) continue;
+        if (day === 1 && skipDay1.includes(slotType)) continue;
         const pool = library.filter((m) => (m.mealTypes || []).includes(slotType));
         const excludeIds = new Set();
         const prevId = prevMealId(day, slotType);
@@ -461,7 +465,7 @@
       }
     }
 
-    return { startDate, days, generatedAt: new Date().toISOString() };
+    return { startDate, ...(skipDay1.length ? { firstSlot: opts.firstSlot } : {}), days, generatedAt: new Date().toISOString() };
   }
 
   MP.Generator = { generatePlan, rankSlot, weekendRuns, batchRuns, weekdayOf, isoToday, pickVariant, chipHits, activeChips, effortOf };

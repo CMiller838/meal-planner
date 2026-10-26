@@ -33,6 +33,25 @@
   <h3>Start date</h3>
   <input type="date" id="start-date" aria-label="Plan start date">
 
+  <details class="customise">
+    <summary>Customise</summary>
+    <label class="gap-gym">First meal on day 1
+      <select id="first-slot">
+        <option value="breakfast">Breakfast</option>
+        <option value="lunch">Lunch</option>
+        <option value="dinner">Dinner</option>
+        <option value="snack">Snack</option>
+      </select></label>
+    <label class="gap-gym">Days
+      <input type="number" id="plan-days" min="1" max="28" value="14" inputmode="numeric"></label>
+    <label class="gap-gym">Shop day
+      <select id="shop-day">
+        <option value="">Start day</option>
+        <option value="1">Monday</option><option value="2">Tuesday</option><option value="3">Wednesday</option>
+        <option value="4">Thursday</option><option value="5">Friday</option><option value="6">Saturday</option><option value="0">Sunday</option>
+      </select></label>
+  </details>
+
   <h3>Busy days</h3>
   <div id="busy-grid" class="busy-grid"></div>
 

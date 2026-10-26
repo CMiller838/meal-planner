@@ -317,7 +317,7 @@
     if (typeof b !== "object" || b === null || Array.isArray(b)) return "expected an object";
     for (const k of ["skipped", "eatingOut"]) {
       const v = b[k];
-      if (v !== undefined && !(Array.isArray(v) && v.every((s) => s && Number.isInteger(s.day) && s.day >= 1 && s.day <= 14 && ["breakfast", "lunch", "dinner", "snack"].includes(s.slot)))) return `${k} must be [{ day 1-14, slot }]`;
+      if (v !== undefined && !(Array.isArray(v) && v.every((s) => s && Number.isInteger(s.day) && s.day >= 1 && s.day <= 28 && ["breakfast", "lunch", "dinner", "snack"].includes(s.slot)))) return `${k} must be [{ day 1-28, slot }]`;
     }
     for (const s of b.eatingOut || []) {
       if (s.name !== undefined && !(typeof s.name === "string" && s.name.length <= 60)) return "eatingOut name must be a string of at most 60 chars";
@@ -328,11 +328,11 @@
     return null;
   }
 
-  /** Phase 63: first plan day (1-based) a re-flow may touch: today's day, clamped to 1..15. Today stays re-plannable. */
+  /** Phase 63: first plan day (1-based) a re-flow may touch: today's day, clamped to 1..29. Today stays re-plannable. */
   function reflowFromDay(startDate, todayIso) {
     if (!startDate) return 1;
     const d = Math.round((Date.parse(todayIso) - Date.parse(startDate)) / 86400000) + 1;
-    return Math.min(Math.max(d, 1), 15);
+    return Math.min(Math.max(d, 1), 29);
   }
 
   /** Slot as the change log sees it: eating-out keeps its name/text, a meal its variant. */
@@ -501,15 +501,15 @@
     return { plan: out, changes: diffPlans(plan, out), ignored };
   }
 
-  /** Phase 68, pure: roll the 14-day window forward to todayIso. Kept days shift down and keep their slots; the
-   *  appended days come from `generate(locked, startDate)` with every kept slot locked. Shift >= 14 is a fresh plan.
+  /** Phase 68, pure: roll the plan window forward to todayIso. Kept days shift down and keep their slots; the
+   *  appended days come from `generate(locked, startDate)` with every kept slot locked. Shift >= the plan length is a fresh plan.
    *  Returns { plan, shift } or null when startDate is not in the past. */
   function rollPlan(plan, todayIso, generate) {
     if (!plan || !plan.startDate || !Array.isArray(plan.days)) return null;
     const shift = Math.round((Date.parse(todayIso) - Date.parse(plan.startDate)) / 86400000);
     if (!(shift > 0)) return null;
-    const stamp = { shopAnchor: plan.shopAnchor || plan.startDate, rolledFrom: plan.startDate, rolledAt: new Date().toISOString() };
-    if (shift >= 14) return { plan: { ...generate({}, todayIso), ...stamp }, shift };
+    const stamp = { shopAnchor: plan.shopAnchor || plan.startDate, rolledFrom: plan.startDate, rolledAt: new Date().toISOString(), firstSlot: undefined }; // Phase 83: a rolled day 1 is a whole day
+    if (shift >= plan.days.length) return { plan: { ...generate({}, todayIso), ...stamp }, shift };
     const SLOTS = ["breakfast", "lunch", "dinner", "snack"];
     const kept = plan.days.slice(shift).map((d, i) => ({
       ...d, day: i + 1,
@@ -521,6 +521,13 @@
     const days = kept.concat(gen.days.slice(kept.length).map((d, i) => ({ ...d, day: kept.length + i + 1 })));
     return { plan: { ...plan, startDate: todayIso, days, ...stamp }, shift };
   }
+
+  /** Phase 83: the latest date with this weekday (0 = Sunday) on or before startDate: a plan's shopAnchor. */
+  MP.shopAnchorFor = (startDate, weekday) => {
+    const d = new Date(startDate + "T12:00:00Z");
+    d.setUTCDate(d.getUTCDate() - ((d.getUTCDay() - weekday + 7) % 7));
+    return d.toISOString().slice(0, 10);
+  };
 
   /** Cook day of a frozen portion's parent, or null. Trusts `frozenFrom` only while that
    *  earlier day's dinner is still the same meal (Phase 59); otherwise it is a plain slot. */

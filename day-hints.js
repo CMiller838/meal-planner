@@ -13,11 +13,11 @@
   }
 
   /** hints = { updatedAt, days: { iso: { effort, why } } } (or junk). off = { iso: updatedAt }.
-   *  Drops past dates, dates outside the 14-day plan, `normal`, unknown efforts and dismissed hints. */
+   *  Drops past dates, dates outside the plan, `normal`, unknown efforts and dismissed hints. */
   function resolve(hints, startDate, todayIso, off) {
     const out = { busyDays: [], freeDays: [], byDay: {} };
     if (!hints || typeof hints !== "object" || !hints.days || typeof hints.days !== "object" || !startDate) return out;
-    for (let n = 1; n <= 14; n++) {
+    for (let n = 1; n <= 28; n++) {
       const iso = dateOfDay(startDate, n);
       const h = hints.days[iso];
       if (!h || iso < todayIso || !EFFORTS.includes(h.effort) || h.effort === "normal") continue;

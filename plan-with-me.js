@@ -16,7 +16,7 @@ window.MP = window.MP || {};
     }
     if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) parsed = {};
     const busyDays = Array.isArray(parsed.busyDays)
-      ? [...new Set(parsed.busyDays.filter((d) => Number.isInteger(d) && d >= 1 && d <= 14))]
+      ? [...new Set(parsed.busyDays.filter((d) => Number.isInteger(d) && d >= 1 && d <= 28))]
       : [];
     const chips = Array.isArray(parsed.chips) ? parsed.chips.filter((c) => typeof c === "string") : [];
     const budgetTarget = Number(parsed.budgetTarget);
@@ -77,9 +77,15 @@ window.MP = window.MP || {};
     return d.toLocaleDateString(undefined, { weekday: "short" });
   }
 
+  /** Phase 83: the Customise length, clamped 1..28 (blank or junk = 14). */
+  function planDays() {
+    const n = Math.floor(Number(document.getElementById("plan-days").value));
+    return n >= 1 && n <= 28 ? n : 14;
+  }
+
   function renderBusyGrid() {
     let html = "";
-    for (let day = 1; day <= 14; day++) {
+    for (let day = 1; day <= planDays(); day++) {
       const active = busyDays.has(day);
       html += `<button class="busy-cell${active ? " is-busy" : ""}" data-day="${day}" aria-pressed="${active}">
         <span class="busy-day">${day}</span><span class="busy-dow">${esc(weekdayShort(day - 1))}</span>
@@ -158,6 +164,7 @@ window.MP = window.MP || {};
     const startEl = document.getElementById("start-date");
     startEl.value = startEl.min = new Date().toLocaleDateString("sv");
     renderBusyGrid();
+    document.getElementById("plan-days").addEventListener("change", () => { [...busyDays].forEach((d) => d > planDays() && busyDays.delete(d)); renderBusyGrid(); renderSummary(); });
     startEl.addEventListener("change", () => { if (!startEl.value) startEl.value = startEl.min; renderBusyGrid(); });
 
     MP.ShoppingList.load()
@@ -202,11 +209,11 @@ window.MP = window.MP || {};
     });
 
     document.getElementById("pwm-generate-btn").addEventListener("click", () => {
-      MP.PlanPrefs.save([...busyDays], [...chips], profileBudget() ? MP.PlanPrefs.get(true).budgetTarget : budgetTarget, document.getElementById("freeze-batches").checked, document.getElementById("repeat-gap").value, document.getElementById("rolling-plan").checked);
+      MP.PlanPrefs.save([...busyDays].filter((d) => d <= planDays()), [...chips], profileBudget() ? MP.PlanPrefs.get(true).budgetTarget : budgetTarget, document.getElementById("freeze-batches").checked, document.getElementById("repeat-gap").value, document.getElementById("rolling-plan").checked);
       if (MP.Sync) MP.Sync.pushPlanPrefs();
       const extras = [...document.querySelectorAll("#also-row button.active")].map((b) => b.dataset.slot);
       const start = document.getElementById("start-date").value;
-      location.href = "plan.html?guided=1" + (start ? "&start=" + start : "") + (extras.length ? "&slots=" + extras.join(",") : "");
+      location.href = "plan.html?guided=1" + (start ? "&start=" + start : "") + "&days=" + planDays() + "&first=" + document.getElementById("first-slot").value + "&shop=" + document.getElementById("shop-day").value + (extras.length ? "&slots=" + extras.join(",") : "");
     });
   }
 

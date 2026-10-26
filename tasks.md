@@ -819,6 +819,11 @@ Spec: `.claude/specs/phase82.md`
 
 ## Phase 83: Flexible plan start and length
 Spec: `.claude/specs/phase83.md`
+- [x] Generator day count and `firstSlot`, default-output unchanged test
+- [x] `shopAnchorFor`; lift the 14-day bounds listed above
+- [x] Coverage ignores slots before `firstSlot` on day 1
+- [x] "Customise" disclosure: date, first meal, length, shop day
+- [ ] Live: generate a plan starting Thursday dinner on the phone and check Shopping
 
 ## Phase 84: Tell it anything: chat and assistant control
 Spec: `.claude/specs/phase84.md`
