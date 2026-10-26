@@ -28,7 +28,7 @@
     frozen_veg: "frozen_vegetables",
     milk: "dairy",
     greek_yogurt: "dairy",
-    cheese: "dairy",
+    cheese: "cheese",
     white_bread: "bread",
     tortillas: "bread",
     egg: "eggs",

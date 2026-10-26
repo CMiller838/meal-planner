@@ -10,6 +10,7 @@
   "frozen_vegetables": { "label": "Frozen vegetables", "ambient": false, "frozenMonths": 6, "useWithinDaysOfOpening": 4 },
   "hard_cheese": { "label": "Hard cheese", "fridgeDays": 28, "frozenMonths": 6 },
   "dairy": { "label": "Dairy (use-by on pack)", "fridgeDays": 7 },
+  "cheese": { "label": "Hard cheese", "fridgeDays": 28, "frozenMonths": 6 },
   "bread": { "label": "Bread", "fridgeDays": 5 },
   "eggs": { "label": "Eggs", "fridgeDays": 21 }
 }
