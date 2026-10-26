@@ -10,7 +10,7 @@
     "broccoli": { "label": "Broccoli", "packSize": 1, "unit": "each", "price": 0.75 },
     "cannellini_beans": { "label": "Cannellini beans, 400g tin", "packSize": 1, "unit": "tins", "price": 0.65 },
     "carrots": { "label": "Carrots, 1kg", "packSize": 1000, "unit": "g", "price": 0.65 },
-    "cheese": { "label": "Cheddar cheese, 500g", "packSize": 500, "unit": "g", "price": 3.75, "bulk": { "packSize": 500, "price": 3.75, "label": "cheddar cheese" } },
+    "cheese": { "label": "Cheddar cheese, 500g", "packSize": 500, "unit": "g", "price": 3.50 },
     "chicken_breast": { "label": "Chicken breast fillets, 640g", "packSize": 640, "unit": "g", "price": 4.20, "bulk": { "packSize": 1000, "price": 5.50, "label": "chicken breast" } },
     "chicken_roast": { "label": "Whole chicken", "packSize": 1, "unit": "each", "price": 5.50 },
     "chilli_beans": { "label": "Chilli beans, 390g tin", "packSize": 1, "unit": "tins", "price": 0.90 },
