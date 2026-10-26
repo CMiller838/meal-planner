@@ -696,7 +696,7 @@
     };
     const size = () => JSON.stringify(brief).length;
     if (size() > CHAT_BRIEF_MAX) brief.meals.forEach((m) => { delete m.description; });
-    if (size() > CHAT_BRIEF_MAX) brief.meals.forEach((m) => { if (!m.mealTypes.includes("dinner")) delete m.tags; });
+    if (size() > CHAT_BRIEF_MAX) brief.meals.forEach((m) => { if (!(m.mealTypes || []).includes("dinner")) delete m.tags; });
     return brief;
   }
 
@@ -1430,7 +1430,7 @@
       const m = effectiveMealAt(day, s);
       return m ? [m] : [];
     });
-    const pool = library.filter((m) => m.mealTypes.includes(slotType) && m.id !== currentId);
+    const pool = library.filter((m) => (m.mealTypes || []).includes(slotType) && m.id !== currentId);
     // Same variety guard generator.js's own auto-fill loop uses: exclude the
     // immediately adjacent day's pick, demote every other already-used meal
     // by recency, so re-picking a slot doesn't just re-rank from scratch.
