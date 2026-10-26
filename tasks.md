@@ -852,3 +852,25 @@ Spec: `.claude/specs/phase87.md`
 - [x] Result cards with Undo, Exit warning with Undo all
 - [x] CLAUDE.md invariant amendments, `docs/HERMES.md`, bump `sw.js` CACHE
 - [ ] Live: on the phone ask Hermes "add a turkey chilli, 4 servings", plan it, then Undo it
+
+## Phase 88: Hermes briefing, human chat and direct placement
+Spec: `.claude/specs/phase88.md` (tasks there).
+- [ ] Live: on the phone, ask Hermes to plan next week with 20 min max on weeknights; check it places dinners itself, asks before adding a new meal, and "that was boring" logs a down rating with the reason
+
+## Phase 89: Weekly plan view with live diff, ticker and wrap-up
+Spec: `.claude/specs/phase89.md` (tasks there).
+- [ ] Live: on the phone, plan with Hermes: tap through the 7-day strip, check a weeknight over its cap is flagged, then Save & shop
+
+## Phase 90: Weekly Asda shop, freezer-first, bulk buys and batch cooks
+- 90a: `.claude/specs/phase90a.md` (freezer-first placement, bulk buys, whole-plan shop lists; tasks there).
+- 90b: `.claude/specs/phase90b.md` (shop list in the chat, plan from the fridge; tasks there).
+- [ ] Live: check the `pack-sizes.json` `bulk` prices against Asda (seeded as estimates)
+- [ ] Live: on the phone, plan from what's left after typing the fridge contents; then photo the fridge to Hermes on Telegram and confirm the pantry updates
+
+## Phase 91: Hermes notes in Obsidian
+Spec: `.claude/specs/phase91.md` (tasks there).
+- [ ] Live: add a bullet to `Meals/Notes.md` in Obsidian and confirm the assistant syncs it (it shows under Standing notes on Plan with me); ask Hermes to remember "no cooking on Sundays", Accept the card, and confirm the assistant appends it to `Notes.md`
+
+## Phase 92: Eat from Browse
+Spec: `.claude/specs/phase92.md` (tasks there).
+- [ ] Live: on the phone, Browse a snack, Eat 2 portions, confirm the Plan coverage moves; Eat today's planned dinner from Browse and confirm its plan slot shows Eaten

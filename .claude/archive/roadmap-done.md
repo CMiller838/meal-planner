@@ -223,3 +223,11 @@ question card ("chicken curry or chilli?"); ignoring it applies the default. Whe
 swaps with the numbers ("swap Wed and Fri saves £9, costs 12 g protein"), computed by the generator, never by Hermes, and applied
 only on accept. **Verify:** a tie produces exactly one card; accepting a swap changes the totals shown. Requires Phases 27, 72 (was "75", a stale renumber).
 Verified 2026-10-23: check.py 10/10 (test.html gapScore/tieFor/budgetSwaps cases, walk tie + trade-off cards at PC and phone, Exit leaves mp_plan identical); tester PASS.
+
+## Phase 82: Swap days and edit past days [M] — done
+
+**Done 2026-10-26** (tester PASS: swap days/slots, past backfill, pantry untouched, undo; PC+390px, both themes).
+
+**Added 2026-10-24.** Swap any two meals or whole days in one action, and backfill or correct what you ate on earlier days (a
+meal, or eating out with a description). Re-flow stays on request only. **Verify:** swapping Tue and Thu moves leftovers and
+shelf-life warnings with them; a past dinner can be set to "Spoons" without touching the pantry; undo restores. Requires Phase 81.
