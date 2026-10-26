@@ -650,7 +650,7 @@ what you had (e.g. "Spoons — burger and chips"), estimated through the Phase 8
 later free slot, swap for something else, or drop it (today's re-flow). **Verify:** the Spoons dinner shows its name and counts toward
 coverage as an estimate; each of the four skip choices leaves the plan correct and undoable. Requires Phases 63, 80a, 80b.
 
-## Phase 82: Swap days and edit past days [M] — not started
+## Phase 82: Swap days and edit past days [M] — done 2026-10-26 (tester PASS: swap days/slots, past backfill, pantry untouched, undo; PC+390px, both themes)
 
 **Added 2026-10-24.** Swap any two meals or whole days in one action, and backfill or correct what you ate on earlier days (a
 meal, or eating out with a description). Re-flow stays on request only. **Verify:** swapping Tue and Thu moves leftovers and
