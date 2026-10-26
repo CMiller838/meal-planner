@@ -23,6 +23,7 @@
   }
 
   // Phase 87 meal fields. Limits: name <= 60, ingredients <= 20, method steps <= 12, 5 meal edits per reply.
+  const NOTE_MAX = 2; // Phase 91: standing-note proposals per reply; applied only by the app's Accept card
   const MEAL_EDITS = ["mealCreate", "mealEdit", "mealRemove"], MEAL_EDITS_MAX = 5, EFFORT = ["quick", "batch"];
   const ingredients = (v) => {
     if (!Array.isArray(v) || !v.length || v.length > 20) return null;
@@ -90,6 +91,7 @@
       && { type: "cap", minutes: e.minutes, weekdays: [...e.weekdays].sort((a, b) => a - b) },
     rate: (e) => mealId(e) && (e.rating === "up" || e.rating === "down") && (e.note === undefined || typeof e.note === "string")
       && { type: "rate", mealId: e.mealId, rating: e.rating, ...(str(e.note, 200) ? { note: str(e.note, 200) } : {}) },
+    note: (e) => typeof e.text === "string" && e.text.trim() && e.text.trim().length <= 200 && { type: "note", text: e.text.trim() },
     reroll: (e) => isDay(e.day) && (e.slot === undefined || isSlot(e.slot)) && (e.slot === undefined ? { type: "reroll", day: e.day } : { type: "reroll", day: e.day, slot: e.slot }),
   };
 
@@ -100,11 +102,13 @@
     const ids = chipIds(vocab);
     const edits = [];
     let meals = 0, bulks = 0;
+    const known = new Set(((vocab && vocab.notes && vocab.notes.items) || []).concat(((vocab && vocab.notes && vocab.notes.pending) || []).map((p) => p.text || p)).map((t) => String(t).toLowerCase()));
     for (const e of list.slice(0, EDITS_MAX)) {
       if (e && MEAL_EDITS.includes(e.type) && ++meals > MEAL_EDITS_MAX) continue;
       if (e && e.type === "bulk" && ++bulks > 5) continue;
-      const f = e && typeof e === "object" && Object.prototype.hasOwnProperty.call(NORM, e.type) ? NORM[e.type](e, ids, today) : null;
-      if (f) edits.push(f);
+      const f0 = e && typeof e === "object" && Object.prototype.hasOwnProperty.call(NORM, e.type) ? NORM[e.type](e, ids, today) : null;
+      const f = f0 && f0.type === "note" && (known.has(f0.text.toLowerCase()) || edits.filter((x) => x.type === "note").length >= NOTE_MAX) ? null : f0;
+      if (f) { edits.push(f); if (f.type === "note") known.add(f.text.toLowerCase()); }
     }
     return {
       reply: { text: typeof r.text === "string" ? r.text.trim().slice(0, TEXT_MAX) : "", edits, ask: r.ask === true },
@@ -180,6 +184,7 @@
       else if (e.type === "bulk") parts.push(`bulk buy: ${e.key.replace(/-/g, " ")} on shop ${e.shopDay}`);
       else if (e.type === "cap") parts.push(e.minutes ? `${e.weekdays.map((w) => WEEKDAYS[w]).join("/")}: cooking capped at ${e.minutes} min` : `${e.weekdays.map((w) => WEEKDAYS[w]).join("/")}: time cap cleared`);
       else if (e.type === "stock") parts.push(`you have ${e.items.map((i) => i.name).join(", ")}`);
+      else if (e.type === "note") parts.push(`suggested note: ${e.text}`);
       else if (e.type === "rate") parts.push(`${e.mealId}: rated ${e.rating}`);
       else if (e.type === "backfill") parts.push(`${name(e.day)} ${e.slot}: recorded as eaten${e.name ? ` (${e.name})` : ""}`);
     }

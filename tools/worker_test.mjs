@@ -438,6 +438,24 @@ for (const bad of [{ targets: { protein: -1 } }, { targets: { protein: 99999 } }
   assert.equal((await call("PUT", "/settings", "a", bad)).status, 400, JSON.stringify(bad));
 assert.equal((await call("PUT", "/settings", "h", { targets: {} })).status, 200);
 assert.equal((await call("PUT", "/settings", "a", { targets: { calories: 2400 }, allergies: ["peanut"], dislikes: ["olives"] })).status, 200);
+// Phase 91: /notes
+assert.equal((await call("GET", "/notes", "")).status, 401);
+assert.deepEqual((await call("GET", "/notes", "a")).body.items, []);
+r = await call("PUT", "/notes", "a", { items: [" Hates Sunday cooking ", "hates sunday cooking", "", "No fish"] });
+assert.deepEqual([r.status, r.body.items], [200, ["Hates Sunday cooking", "No fish"]]);
+for (const bad of [{ items: "x" }, {}, { items: [1] }, { items: ["x".repeat(201)] }, { items: Array.from({ length: 31 }, (_, i) => "n" + i) }])
+  assert.equal((await call("PUT", "/notes", "a", bad)).status, 400, JSON.stringify(bad).slice(0, 50));
+assert.deepEqual((await call("GET", "/notes", "a")).body.items, ["Hates Sunday cooking", "No fish"]); // bad PUTs left KV alone
+assert.equal((await call("POST", "/notes/pending", "a", { text: "x" })).status, 403);
+assert.equal((await call("POST", "/notes/pending", "h", { text: "  " })).status, 400);
+assert.equal((await call("POST", "/notes/pending", "h", { text: "NO FISH" })).status, 409);
+r = await call("POST", "/notes/pending", "h", { text: "Likes soup" });
+assert.deepEqual([r.status, r.body.pending.length, r.body.pending[0].text], [200, 1, "Likes soup"]);
+assert.equal((await call("POST", "/notes/pending", "h", { text: "likes SOUP" })).status, 409);
+assert.equal((await call("PUT", "/notes", "a", { items: ["No fish"] })).body.pending.length, 1); // stale PUT keeps pending
+assert.equal((await call("PUT", "/notes", "a", { items: ["No fish", "likes soup"] })).body.pending.length, 0); // accepted note clears it
+assert.equal((await call("GET", "/notes", "a")).body.pending.length, 0);
+kv.delete("notes");
 // ranking: peanut meal never returned, olive meal after an otherwise-equal one
 kv.set("library", JSON.stringify([
   { id: "p", name: "P", mealTypes: ["dinner"], ingredients: [{ key: "peanut butter", label: "Peanut butter" }] },

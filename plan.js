@@ -686,6 +686,7 @@
       ratings: Object.fromEntries(Object.entries(c.ratings).map(([id, r]) => [id, { rating: r.never ? "never" : r.rating, note: r.note || "" }])),
       taste: { rated: taste.n, liked: tokens.filter((t) => t[1] > 0).slice(0, 8).map((t) => t[0]), disliked: tokens.filter((t) => t[1] < 0).slice(-8).map((t) => t[0]) },
       pantry: c.pantry.map((i) => ({ name: i.name, qty: MP.qtyText(i.qty), ...(i.useBy ? { useBy: i.useBy } : {}), ...(i.storage ? { storage: i.storage } : {}) })),
+      notes: (() => { const n = c.notes || MP.Sync.notes(); return { items: n.items, pending: n.pending.map((p) => p.text) }; })(),
       gaps: c.metrics.weekGaps,
       cooks, shopDays: pk && pk.items ? Object.keys(MP.ShoppingList.buildLists(c.plan, mealsById, pk, null)).map(Number).sort((a, b) => a - b) : [],
       bulk: pk && pk.items ? MP.ShoppingList.bulkOptions(c.plan, mealsById, pk, sh) : [],
@@ -2536,7 +2537,16 @@
   };
   /** Slugs of meals Hermes proposed but the user hasn't added yet: a place of one is refused ("add the meal first"). */
   const pendingMealIds = () => chat.meals.filter((x) => x.pending && x.edit && x.edit.type === "mealCreate").flatMap((x) => { const sl = x.edit.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, ""); return [sl, "user-" + sl, MP.slugify(x.edit.name)]; });
+  /** Phase 91: a proposed standing note is saved only on Accept (POST /notes/pending); a failure keeps the card with its error. */
+  async function answerNote(x, yes) {
+    if (!yes) { chat.meals.splice(chat.meals.indexOf(x), 1); return renderChatMeals(); }
+    const r = await MP.Sync.proposeNote(x.edit.text);
+    if (r.ok) { x.pending = false; x.saved = true; x.err = ""; x.text = `Saved: ${x.edit.text} (waiting for Obsidian)`; }
+    else x.err = r.error || "couldn't save, try again";
+    if (chat) renderChatMeals();
+  }
   function answerMeal(x, yes) {
+    if (x.note) return answerNote(x, yes);
     if (!yes) { chat.meals.splice(chat.meals.indexOf(x), 1); return renderChatMeals(); }
     if (x.bulk) { x.accept(); x.pending = false; x.undo = x.undoBulk; renderChatMeals(); renderPlan(); return; }
     MP.Sync.noteLibraryChange("chat: " + (x.edit.name || x.edit.mealId)); // before the write: its save event starts the sync
@@ -2550,17 +2560,18 @@
     ul.innerHTML = "";
     chat.meals.forEach((x) => {
       const li = document.createElement("li");
-      li.className = "diff-row chat-meal" + (x.undo || x.pending ? "" : " refused") + (x.undone ? " rejected" : "");
+      li.className = "diff-row chat-meal" + (x.undo || x.pending || x.saved ? "" : " refused") + (x.undone ? " rejected" : "");
       const txt = document.createElement("span");
-      txt.textContent = x.pending ? x.text : x.undo ? (x.undone ? "Undone: " : "") + x.text : "Refused: " + x.text;
+      txt.textContent = x.pending || x.saved ? x.text : x.undo ? (x.undone ? "Undone: " : "") + x.text : "Refused: " + x.text;
       li.appendChild(txt);
       if (x.pending) {
-        [[x.bulk ? "Accept" : "Add", true, "btn-secondary chat-meal-add"], ["No", false, "btn-secondary chat-meal-no"]].forEach(([label, yes, cls]) => {
+        [[x.bulk || x.note ? "Accept" : "Add", true, "btn-secondary chat-meal-add"], [x.note ? "Dismiss" : "No", false, "btn-secondary chat-meal-no"]].forEach(([label, yes, cls]) => {
           const b = document.createElement("button");
           b.type = "button"; b.className = cls; b.textContent = label;
           b.addEventListener("click", () => answerMeal(x, yes));
           li.appendChild(b);
         });
+        if (x.err) { const er = document.createElement("span"); er.className = "chat-meal-err"; er.setAttribute("role", "alert"); er.textContent = x.err; li.appendChild(er); }
       }
       if (x.undo && !x.undone) {
         const b = document.createElement("button");
@@ -2588,7 +2599,7 @@
   function undoAllMeals() { liveMealChanges().reverse().forEach(undoMeal); }
 
   function onChatReply(m) {
-    const { reply } = MP.PlanChat.validateReply(m, vocabAll); // the app re-validates before applying anything
+    const { reply } = MP.PlanChat.validateReply(m, { ...vocabAll, notes: MP.Sync.notes() }); // the app re-validates before applying anything
     if (reply.text) chatBubble("hermes", reply.text);
     chat.ask = !!reply.ask;
     if (chat.ask) chat.tieDone.add(chat.day); // a question from Hermes closes any open tie card for good (edits still apply)
@@ -2599,14 +2610,16 @@
     const bulked = applyBulkEdits(reply.edits);
     bulked.cards.forEach((k) => chat.meals.push({ bulk: true, pending: true, text: k.text, accept: k.accept, undoBulk: k.undo }));
     bulked.refused.forEach((r) => chat.meals.push({ text: r.why }));
+    const noted = reply.edits.filter((e) => e.type === "note");
+    noted.forEach((e) => chat.meals.push({ note: true, edit: e, pending: true, text: `Hermes suggests a standing note: ${e.text}` }));
     const rated = applyRateEdits(reply.edits);
     rated.applied.forEach((a) => chat.meals.push({ rate: true, text: a.text, undo: a.undo }));
     rated.refused.forEach((r) => chat.meals.push({ text: r.why }));
-    if (mealEdits.length || reply.edits.some((e) => e.type === "rate" || e.type === "bulk")) renderChatMeals();
+    if (mealEdits.length || noted.length || reply.edits.some((e) => e.type === "rate" || e.type === "bulk")) renderChatMeals();
     reply.edits.filter((e) => e.type === "stock").forEach((e) => { // session-only: never the pantry
       e.items.forEach((i) => { const k = MP.ShoppingList.normalizeKey(i.name); chat.stock = [...chat.stock.filter((x) => MP.ShoppingList.normalizeKey(x.name) !== k), i]; });
     });
-    const rest = reply.edits.filter((e) => !e.type.startsWith("meal") && e.type !== "rate" && e.type !== "bulk" && e.type !== "stock");
+    const rest = reply.edits.filter((e) => !e.type.startsWith("meal") && e.type !== "rate" && e.type !== "bulk" && e.type !== "stock" && e.type !== "note");
     if (rest.length) {
       const changes = applyChatEdits(rest, { focusDay: chat.day, pending: pendingMealIds(), fridge: chat.fridge ? { window: chat.fridge.window, have: fridgeHave(chat.stock) } : undefined });
       const line = MP.PlanChat.describe(rest, plan.startDate, chat.day);
@@ -2678,6 +2691,7 @@
     toast("Connecting to Hermes…");
     const session = "c" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
     let r;
+    await MP.Sync.fetchNotes(); // so the brief and the dedupe see the latest Notes.md
     try { r = await MP.PlanChat.call("POST", "/chat", { session, open: true, context: { ...chatContext(1), brief: chatBriefing({ fridge }) } }); } catch (e) { return goFallback("Couldn't reach the Worker."); }
     if (!r.bridgeSeenAt || Date.now() - Date.parse(r.bridgeSeenAt) > CHAT_BRIDGE_FRESH_MS) {
       MP.PlanChat.call("POST", "/chat", { session, close: true }).catch(() => {});

@@ -461,6 +461,34 @@ window.MP = window.MP || {};
     return settings();
   }
 
+  /** Standing notes (Phase 91), mirrored to mp_notes. Always { items, pending }; corrupt or absent cache = empty. */
+  function notes() {
+    try {
+      const n = JSON.parse(localStorage.getItem("mp_notes"));
+      return n && typeof n === "object" ? { items: Array.isArray(n.items) ? n.items.filter((t) => typeof t === "string") : [], pending: Array.isArray(n.pending) ? n.pending.filter((p) => p && typeof p.text === "string") : [] } : { items: [], pending: [] };
+    } catch (e) { return { items: [], pending: [] }; }
+  }
+
+  /** GET /notes and cache it. Failure-silent: keeps the last cache. */
+  async function fetchNotes() {
+    if (!config().enabled) return notes();
+    try {
+      const remote = await req("GET", "/notes");
+      if (remote && Array.isArray(remote.items)) localStorage.setItem("mp_notes", JSON.stringify(remote));
+    } catch (e) {}
+    return notes();
+  }
+
+  /** POST /notes/pending: park an accepted note for the assistant to append to Notes.md. No queue: { ok:false, error } on failure. */
+  async function proposeNote(text) {
+    if (!config().enabled) return { ok: false, error: "Hermes sync is off" };
+    try {
+      const r = await req("POST", "/notes/pending", { text });
+      if (r && Array.isArray(r.items)) localStorage.setItem("mp_notes", JSON.stringify(r));
+      return { ok: true };
+    } catch (e) { return { ok: false, error: /409/.test(e.message) ? "already a note" : "couldn't save, try again" }; }
+  }
+
   /** GET /drafts (Phase 50), mirrored to mp_drafts. Never throws; { drafts: [] } when sync is off or fails. */
   async function fetchDrafts() {
     if (!config().enabled) return { drafts: [] };
@@ -831,7 +859,7 @@ window.MP = window.MP || {};
     decide, needsPlan, config, saveConfig, syncLibrary, syncPlanFlag, ackPlanFlag,
     shoppingLines, setLine, fetchShoppingLines, flushShoppingLines,
     fetchItems, fetchPantry, localItems, writeLocalItems, queueOp, applyOps, flushOps,
-    planMirror, pushPlan, pushPrefs, fetchPlanPrefs, fetchDayHints, fetchPlanDraft, ackPlanDraft, fetchRatings, fetchFoodLog, postFoodLog, removeFoodEntry, groupFoodLog, localFoodLog, fetchSettings, settings, hardTerms, noteLibraryChange, fetchDrafts, deleteDraft, pushRating, pushPlanPrefs, newPlacements, newSince, syncPlacements, ackPlacements, syncEatRequests,
+    planMirror, pushPlan, pushPrefs, fetchPlanPrefs, fetchDayHints, fetchPlanDraft, ackPlanDraft, fetchRatings, fetchFoodLog, postFoodLog, removeFoodEntry, groupFoodLog, localFoodLog, fetchSettings, settings, fetchNotes, notes, proposeNote, hardTerms, noteLibraryChange, fetchDrafts, deleteDraft, pushRating, pushPlanPrefs, newPlacements, newSince, syncPlacements, ackPlacements, syncEatRequests,
     localEatenLog, logEaten, unlogEaten, pushEatenLog, pushCooks, start,
     syncProducts, localProducts, saveProduct, fetchActivity, undoActivity, resyncKey,
   };

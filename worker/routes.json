@@ -370,6 +370,28 @@
   },
   {
     "method": "GET",
+    "path": "/notes",
+    "assistant": true,
+    "kind": "read"
+  },
+  {
+    "method": "PUT",
+    "path": "/notes",
+    "assistant": true,
+    "kind": "write",
+    "log": "unlogged",
+    "why": "standing notes from Notes.md, not an everyday edit"
+  },
+  {
+    "method": "POST",
+    "path": "/notes/pending",
+    "assistant": false,
+    "kind": "write",
+    "log": "unlogged",
+    "why": "inbox for notes the app accepted; the assistant appends them to Notes.md"
+  },
+  {
+    "method": "GET",
     "path": "/food-log",
     "assistant": true,
     "kind": "read"

@@ -285,6 +285,23 @@ plan day of `eatenAt`; it is rejected (banner) when there is none, never
 forced, and goes through the normal eat flow (cook, or a portion of an open
 cook) keeping `eatenAt`.
 
+## `GET /notes` / `PUT /notes` / `POST /notes/pending` (Phase 91)
+
+Standing notes ("hates Sunday cooking") live in the vault file `Meals/Notes.md`: one `- ` bullet per note; blank lines and
+other text are ignored. The assistant parses it and calls `PUT /notes { items: string[] }` (like Profile.md → `PUT /settings`).
+KV `notes` = `{ updatedAt, items, pending: [{ id, text, at }] }`. Limits: note ≤200 chars, ≤30 items, ≤10 pending, body ≤8 KB;
+items are trimmed, empties dropped, de-duplicated case-insensitively; a bad shape is `400` and KV is unchanged.
+
+| Call | A | Notes |
+|---|---|---|
+| `GET /notes` | A | The whole object, including `pending` (the inbox the assistant reads). |
+| `PUT /notes` | A | Replaces `items`; drops any `pending` whose text now appears in `items`. Never creates `pending`. |
+| `POST /notes/pending { text }` | | Hermes/app token only. `409` if the text is already in `items` or `pending`. |
+
+Sync loop: the user accepts a Hermes-proposed `note` edit on a chat card → app `POST /notes/pending` → the assistant reads
+`GET /notes`, appends each `pending` text as a bullet to `Notes.md`, then `PUT /notes` with the full list (which clears them).
+Not logged to activity. Notes are prose: they reach Hermes in the chat briefing (`brief.notes`) and never feed the generator.
+
 ## Credentials
 
 Two tokens, one per consumer: Hermes's `AUTH_TOKEN` (every route), and the personal assistant's `ASSISTANT_TOKEN`, which

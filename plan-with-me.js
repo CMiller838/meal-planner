@@ -161,7 +161,22 @@ window.MP = window.MP || {};
     el.textContent = budgetTarget > 0 ? `${base} · £${budgetTarget}/wk` : base;
   }
 
+  /** Phase 91: read-only standing notes (external text: textContent only). Hidden when there are none. */
+  function renderNotes() {
+    const n = MP.Sync.notes(), ul = document.getElementById("notes-list");
+    ul.textContent = "";
+    n.items.forEach((t) => { const li = document.createElement("li"); li.textContent = t; ul.appendChild(li); });
+    n.pending.forEach((p) => {
+      const li = document.createElement("li"), tag = document.createElement("span");
+      li.textContent = p.text + " ";
+      tag.className = "notes-tag"; tag.textContent = "waiting for Obsidian";
+      li.appendChild(tag); ul.appendChild(li);
+    });
+    document.getElementById("notes-section").hidden = !ul.children.length;
+  }
+
   async function init() {
+    if (MP.Sync) { renderNotes(); MP.Sync.fetchNotes().then(renderNotes); }
     if (MP.Sync) await MP.Sync.fetchSettings();
     const prefs = MP.Sync ? await MP.Sync.fetchPlanPrefs() : MP.PlanPrefs.get();
     prefs.busyDays.forEach((d) => busyDays.add(d));

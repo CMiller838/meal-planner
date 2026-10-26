@@ -48,7 +48,7 @@ the days before the next shop from that alone. Requires 88; builds on Phases 59,
 
 90a (freezer-first placement, bulk buys, 28-day shop lists) built 2026-10-26, live checks pending; verified by check.py 10/10 and worker_test. 90b (shop panel in the chat, plan from what's left, `stock` edit) built 2026-10-26, live checks pending; verified by check.py 10/10 (test.html fridge asserts, walk fridge step at PC and phone, bridge self-test) and tester PASS.
 
-## Phase 91: Hermes notes in Obsidian [M] — not started
+## Phase 91: Hermes notes in Obsidian [M] — built 2026-10-26, live checks pending
 
 Goal: standing notes ("hates Sunday cooking", "tight budget last week of the month") live in a vault note the user can edit in
 Obsidian; the assistant syncs it to KV, the planner and Hermes read it, and Hermes can propose a note that the user confirms.

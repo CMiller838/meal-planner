@@ -204,6 +204,12 @@ for (const [vp, size] of Object.entries({ pc: { width: 1440, height: 900 }, phon
   await page.route('https://fake.test/**', route => {
     const req = route.request(), u = new URL(req.url()), m = chatMock;
     const ok = body => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
+    if (u.pathname === '/notes') return ok({ updatedAt: 'x', items: ['No fish'], pending: chatMock.notePending || [] });
+    if (u.pathname === '/notes/pending') { // Phase 91: first Accept fails, the retry saves
+      if (!chatMock.noteFailed) { chatMock.noteFailed = true; return route.fulfill({ status: 500, body: '{}' }); }
+      chatMock.notePending = [{ id: 'n1', text: req.postDataJSON().text, at: 'x' }];
+      return ok({ updatedAt: 'x', items: ['No fish'], pending: chatMock.notePending });
+    }
     if (u.pathname !== '/chat') return route.fulfill({ status: 404, body: '{}' });
     if (req.method() === 'GET') return ok({ session: m.session, openAt: 'x', bridgeSeenAt: null, messages: m.msgs.filter(x => x.id > Number(u.searchParams.get('since') || 0)) });
     const b = req.postDataJSON();
@@ -277,6 +283,31 @@ for (const [vp, size] of Object.entries({ pc: { width: 1440, height: 900 }, phon
     await page.waitForFunction(() => [...document.querySelectorAll('.chat-bubble.hermes')].some(b => /Which day/.test(b.textContent)), null, { timeout: 8000 });
     await page.waitForSelector('.chat-understood', { timeout: 8000 });
     await page.click('#chat-exit');
+  });
+  await step('chat: a note card saves only on Accept, shows the error then retries, Dismiss writes nothing (Phase 91)', async () => {
+    const orig = await planLS();
+    chatMock.noteFailed = false; chatMock.notePending = [];
+    chatMock.reply = { text: 'Noted.', edits: [{ type: 'note', text: '<b>Hates</b> Sunday cooking' }, { type: 'note', text: 'no fish' }, { type: 'note', text: 'Likes soup' }] };
+    await openChat();
+    await say('I hate cooking on Sundays');
+    await page.waitForSelector('#chat-meals .chat-meal-add', { timeout: 8000 });
+    if (await page.locator('#chat-meals .chat-meal-add').count() !== 2) throw new Error('expected 2 note cards (duplicate of "No fish" dropped)');
+    if (await page.locator('#chat-meals b').count()) throw new Error('note text was rendered as HTML');
+    await shot('chat-note');
+    await page.click('#chat-meals .chat-meal-add >> nth=0');
+    await page.waitForSelector('#chat-meals .chat-meal-err');
+    if (await page.evaluate(() => (localStorage.getItem('mp_notes') || '').includes('Hates'))) throw new Error('cache written before a successful save');
+    await page.click('#chat-meals .chat-meal-add >> nth=0');
+    await page.waitForFunction(() => /waiting for Obsidian/.test(document.getElementById('chat-meals').innerText));
+    await page.click('#chat-meals .chat-meal-no');
+    if (await page.locator('#chat-meals .chat-meal-add').count() !== 0) throw new Error('Dismiss left a card');
+    await page.click('#chat-exit');
+    await page.waitForSelector('#plan-chat', { state: 'hidden' });
+    if (await planLS() !== orig) throw new Error('note edits changed mp_plan');
+    await page.goto(`${base}/plan-with-me.html`);
+    await page.waitForSelector('#notes-list li');
+    if (!/No fish/.test(await page.locator('#notes-list').innerText()) || !/waiting for Obsidian/.test(await page.locator('#notes-list').innerText())) throw new Error('Standing notes list: ' + await page.locator('#notes-list').innerText());
+    await shot('notes-list');
   });
   await step('chat: 5 places show 5 slot cards, a new meal waits on Add/No, Add then Undo, a place of a pending meal is refused (Phase 88)', async () => {
     const ids = ['roast-chicken', 'chilli-con-carne', 'chorizo-pasta', 'salmon-rice-broccoli', 'tuna-rice-veg'];

@@ -1014,3 +1014,7 @@ button:disabled { opacity: .5; cursor: not-allowed; transform: none; }
   .chat-typing span { opacity: .7; }
   .cook-chip.done { background: var(--accent); color: var(--on-accent); }
 }
+
+.chat-meal-err { flex: 1 1 100%; color: var(--danger); font-size: .75rem; }
+.notes-list { margin: 0 0 .4rem; padding-left: 1.2rem; font-size: .9rem; }
+.notes-tag { font-size: .7rem; color: var(--text-dim); border: 1px solid var(--border); border-radius: 1rem; padding: 0 .45rem; white-space: nowrap; }

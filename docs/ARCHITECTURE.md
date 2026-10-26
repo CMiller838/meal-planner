@@ -543,3 +543,10 @@ by the meter, never re-scored. The briefing is built by the app (the localStorag
 carried in the `ChatRoom` open message (up to 60 000 chars); the bridge re-sends it each turn and adds KV-only `spend`.
 Meal create/edit/remove wait for a user confirm card; per-weekday time caps are stored in `mp_planPrefs.timeCaps`.
 One-tap Generate and Plan with me stay the offline fallback, unchanged.
+
+## v9 - standing notes (Phase 91)
+
+`Meals/Notes.md` (vault) -> assistant -> `PUT /notes` -> KV `notes` -> app cache `mp_notes` (`MP.Sync.fetchNotes`/`notes`).
+Read-only "Standing notes" list on Plan with me; `brief.notes` in the chat briefing. Hermes may suggest one with a `note`
+chat edit: a card in the chat, saved only on Accept (`POST /notes/pending`), after which the assistant appends it to
+`Notes.md`. Notes never enter `rankSlot`/`generatePlan`: Hermes turns them into edits it already has.

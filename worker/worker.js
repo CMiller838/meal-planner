@@ -55,6 +55,7 @@ const ASSISTANT_ALLOWED = new Set([
   "GET /drafts", "POST /drafts", "GET /settings", "PUT /settings", "GET /activity", "POST /activity/undo",
   "GET /spend", "POST /spend", "GET /pantry/audit", "GET /pantry/sanity", "POST /pantry/audit",
   "POST /plan/draft", "POST /plan/apply", "GET /planDraft", "POST /plan/reflow", "POST /plan/edit", "GET /food-log", "POST /food-log",
+  "GET /notes", "PUT /notes",
 ]);
 const METHOD_PATH = /^\/meal\/([^/]+)\/method$/;
 const DRAFT_PATH = /^\/drafts\/([^/]+)$/;
@@ -127,6 +128,63 @@ async function readSettings(env) {
     const s = JSON.parse(await env.MP_KV.get("settings"));
     return s && typeof s === "object" && !Array.isArray(s) ? s : null;
   } catch (e) { return null; }
+}
+
+const NOTE_MAX_ITEMS = 30, NOTE_MAX_PENDING = 10, NOTE_MAX_LEN = 200;
+
+/** Phase 91: Notes.md bullets -> stored items. Trimmed, empties dropped, case-insensitive de-dupe; bad shape is an error. */
+function normalizeNotes(body) {
+  if (!body || !Array.isArray(body.items)) return { items: [], error: "items: expected an array of strings" };
+  const items = [], seen = new Set();
+  for (const raw of body.items) {
+    if (typeof raw !== "string") return { items: [], error: "items: every note must be a string" };
+    const t = raw.trim();
+    if (!t || seen.has(t.toLowerCase())) continue;
+    if (t.length > NOTE_MAX_LEN) return { items: [], error: `items: a note is over ${NOTE_MAX_LEN} characters` };
+    seen.add(t.toLowerCase());
+    items.push(t);
+  }
+  if (items.length > NOTE_MAX_ITEMS) return { items: [], error: `items: over ${NOTE_MAX_ITEMS} notes` };
+  return { items };
+}
+
+async function readNotes(env) {
+  const s = parseKV(await env.MP_KV.get("notes"));
+  return s && typeof s === "object" && !Array.isArray(s)
+    ? { updatedAt: s.updatedAt || null, items: Array.isArray(s.items) ? s.items : [], pending: Array.isArray(s.pending) ? s.pending : [] }
+    : { updatedAt: null, items: [], pending: [] };
+}
+
+async function putNotes(request, env) {
+  const text = await request.text();
+  if (text.length > 8192) return json(400, "body: over 8 KB");
+  let body;
+  try { body = JSON.parse(text); } catch (e) { return json(400, "invalid JSON"); }
+  const r = normalizeNotes(body);
+  if (r.error) return json(400, r.error);
+  const cur = await readNotes(env);
+  const have = new Set(r.items.map((t) => t.toLowerCase()));
+  const doc = { updatedAt: new Date().toISOString(), items: r.items, pending: cur.pending.filter((p) => !have.has(String(p.text).toLowerCase())) };
+  await env.MP_KV.put("notes", JSON.stringify(doc));
+  return json(200, { ok: true, ...doc });
+}
+
+async function postNotePending(request, env) {
+  const text = await request.text();
+  if (text.length > 8192) return json(400, "body: over 8 KB");
+  let body;
+  try { body = JSON.parse(text); } catch (e) { return json(400, "invalid JSON"); }
+  const t = body && typeof body.text === "string" ? body.text.trim() : "";
+  if (!t) return json(400, "text: required");
+  if (t.length > NOTE_MAX_LEN) return json(400, `text: over ${NOTE_MAX_LEN} characters`);
+  const cur = await readNotes(env);
+  const low = t.toLowerCase();
+  if (cur.items.some((i) => String(i).toLowerCase() === low) || cur.pending.some((p) => String(p.text).toLowerCase() === low)) return json(409, "note already exists");
+  if (cur.pending.length >= NOTE_MAX_PENDING) return json(400, `pending: over ${NOTE_MAX_PENDING} waiting`);
+  const at = new Date().toISOString();
+  const doc = { updatedAt: cur.updatedAt || at, items: cur.items, pending: [...cur.pending, { id: "n" + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), text: t, at }] };
+  await env.MP_KV.put("notes", JSON.stringify(doc));
+  return json(200, { ok: true, ...doc });
 }
 
 async function putSettings(request, env) {
@@ -1453,6 +1511,9 @@ export const ROUTES = [
   row("PUT", "/adhoc", "write", { dryRun: true, log: "logged" }),
   row("POST", "/shopping/lines", "write", { log: "logged" }),
   row("GET", "/spend", "read"),
+  row("GET", "/notes", "read"),
+  row("PUT", "/notes", "write", quiet("standing notes from Notes.md, not an everyday edit")),
+  row("POST", "/notes/pending", "write", quiet("inbox for notes the app accepted; the assistant appends them to Notes.md")),
   row("GET", "/food-log", "read"),
   row("POST", "/food-log", "write", { log: "logged", note: "logs what was eaten or stocked; also writes pantry and products (one activity id per key written); an id already logged is a no-op" }),
   row("POST", "/spend", "write", { log: "logged", note: "logged only with an X-Actor header; one row per week, a repeat overwrites" }),
@@ -1912,6 +1973,15 @@ export default {
       if (request.method === "POST") return postSpend(request, env, actor);
       if (request.method !== "GET") return json(405, "method not allowed");
       return getSpend(env);
+    }
+    if (url.pathname === "/notes") {
+      if (request.method === "PUT") return putNotes(request, env);
+      if (request.method !== "GET") return json(405, "method not allowed");
+      return json(200, await readNotes(env));
+    }
+    if (url.pathname === "/notes/pending") {
+      if (request.method !== "POST") return json(405, "method not allowed");
+      return postNotePending(request, env);
     }
     if (url.pathname === "/settings") {
       if (request.method === "PUT") return putSettings(request, env);

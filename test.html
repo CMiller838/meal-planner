@@ -3060,6 +3060,21 @@
       const plain = MP.PlanChat.describe([{ type: "swapDay", a: 1, b: 2 }, { type: "out", day: 5, slot: "dinner", name: "Spoons" }], "2026-01-05", 1);
       check("describe: new types read back", plain.includes("swapped with") && plain.includes("eating out (Spoons)"));
     }
+    { // Phase 91: note edit + notes cache
+      const ed = (list, v) => PC.validateReply({ edits: list }, v || vocab, "2026-01-01").reply.edits;
+      const n = ed([{ type: "note", text: " Hates Sunday cooking " }, { type: "note", text: "hates sunday cooking" }, { type: "note", text: "A" }, { type: "note", text: "B" }, { type: "note", text: "" }, { type: "note", text: "x".repeat(201) }]);
+      check("validateReply: note trimmed, deduped, capped at 2, bad dropped", n.length === 2 && n[0].text === "Hates Sunday cooking" && n[1].text === "A");
+      check("validateReply: note dropped when already an item or pending", ed([{ type: "note", text: "NO FISH" }, { type: "note", text: "soup" }], { ...vocab, notes: { items: ["No fish"], pending: [{ text: "Soup" }] } }).length === 0);
+      check("describe: note reads back", MP.PlanChat.describe([{ type: "note", text: "No fish" }], "2026-01-05", 1).includes("No fish"));
+      const keep = localStorage.getItem("mp_notes");
+      localStorage.removeItem("mp_notes");
+      check("Sync.notes: absent cache is empty", JSON.stringify(MP.Sync.notes()) === '{"items":[],"pending":[]}');
+      localStorage.setItem("mp_notes", "{oops");
+      check("Sync.notes: corrupt cache is empty", MP.Sync.notes().items.length === 0);
+      localStorage.setItem("mp_notes", JSON.stringify({ items: ["a", 3], pending: [{ id: "n1", text: "b" }, null] }));
+      check("Sync.notes: reads items and pending, drops junk", MP.Sync.notes().items.join() === "a" && MP.Sync.notes().pending.length === 1);
+      if (keep === null) localStorage.removeItem("mp_notes"); else localStorage.setItem("mp_notes", keep);
+    }
     { // Phase 87: meal edit types, patchMeal, applyMealEdits
       const ed = (list) => PC.validateReply({ edits: list }, vocab, "2026-01-01").reply.edits;
       const ing = [{ key: "turkey-mince", name: "Turkey mince", qty: "500 g" }];
