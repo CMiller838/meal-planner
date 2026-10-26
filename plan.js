@@ -467,6 +467,25 @@
     const changes = [];
     changes.notes = [];
     const held = (s) => !!(s && s.mealId && (s.locked || s.eatenAt));
+    // Phase 84: plan actions go through MP.applyPlanEdits (the Worker's /plan/edit uses the same one); the diff keeps the real slots so Reject restores them
+    const acts = edits.filter((e) => ["skip", "out", "swap", "swapDay", "backfill"].includes(e.type));
+    if (acts.length) {
+      const today = new Date().toLocaleDateString("sv");
+      const gen = (locked, ranOut, avoid) => generatePlan({ shopOffset: MP.ShelfLife.shopOffset(pl) }, locked, ranOut, avoid);
+      const res = MP.applyPlanEdits(pl, acts, c.byId, MP.reflowFromDay(pl.startDate, today), (ctx && ctx.generate) || gen, today);
+      res.changes.forEach((ch) => changes.push({ day: ch.day, slot: ch.slot, before: pl.days[ch.day - 1].slots[ch.slot] || null, after: res.plan.days[ch.day - 1].slots[ch.slot] || null }));
+      pl.days = res.plan.days;
+      res.ignored.forEach((i) => changes.notes.push(`Day ${i.day} ${i.slot}: ${i.reason}`));
+    }
+    const start = edits.filter((e) => e.type === "start").pop(); // ponytail: a chat `start` swaps the working plan wholesale, no per-slot Accept/Reject; Exit still leaves mp_plan untouched
+    if (start && !(ctx && ctx.plan)) {
+      startOverride = start.date;
+      genOpts = { days: start.days || pl.days.length, firstSlot: start.firstSlot, shopWeekday: start.shopDay != null ? start.shopDay : null };
+      plan = generatePlan();
+      startOverride = genOpts = undefined;
+      changes.notes.push(`New plan from ${start.date}`);
+      return changes;
+    }
     r.unlocks.forEach(({ day, slot }) => {
       const s = pl.days[day - 1].slots[slot];
       if (s && s.locked) { const n = { ...s }; delete n.locked; pl.days[day - 1].slots[slot] = n; }
@@ -1819,10 +1838,11 @@
     const changes = shift > 0 ? draft.changes.map((c) => ({ ...c, day: c.day - shift })).filter((c) => c.day >= 1) : draft.changes;
     if (!changes.length) { el.hidden = true; MP.Sync.ackPlanDraft(draft); return; }
     const rows = changes.map((c) => {
-      const m = mealsById[c.after.mealId];
-      return `<li>Day ${c.day} ${esc(c.slot)} — ${c.after.eatingOut ? "Eating out" : esc(m ? m.name : c.after.mealId)}</li>`;
+      const m = c.after && mealsById[c.after.mealId];
+      return `<li>Day ${c.day} ${esc(c.slot)} — ${!c.after ? "cleared" : c.after.eatingOut ? "Eating out" : esc(m ? m.name : c.after.mealId)}</li>`;
     }).join("");
-    el.innerHTML = `<p>The assistant drafted ${changes.length} change${changes.length === 1 ? "" : "s"} to your plan:</p><ul>${rows}</ul>
+    const lead = draft.start ? `The assistant drafted a new ${draft.start.days}-day plan from ${esc(draft.startDate)}` : `The assistant drafted ${changes.length} change${changes.length === 1 ? "" : "s"} to your plan`;
+    el.innerHTML = `<p>${lead}:</p><ul>${rows}</ul>
       <button class="btn" data-act="apply">Apply</button> <button class="btn" data-act="dismiss">Dismiss</button>`;
     el.hidden = false;
     el.onclick = async (e) => {
@@ -1831,8 +1851,19 @@
       el.hidden = true;
       if (act === "apply") {
         if (draft.reflow) MP.Plan.snapshot(plan); // Phase 63: Activity "Undo" on the draft restores this
-        const outs = changes.filter((c) => c.after.eatingOut);
-        const placements = changes.filter((c) => !c.after.eatingOut).map((c) => ({ day: c.day, slot: c.slot, mealId: c.after.mealId, variantId: c.after.variantId }));
+        if (draft.start) { // Phase 84: a `start` draft regenerates through generatePlan with the Phase 83 options; the Worker's changes were the preview
+          startOverride = draft.startDate;
+          genOpts = { days: draft.start.days, firstSlot: draft.start.firstSlot, shopWeekday: new Date(draft.start.shopAnchor + "T12:00:00Z").getUTCDay() };
+          plan = generatePlan();
+          startOverride = genOpts = undefined;
+          savePlan();
+          renderPlan();
+          await MP.Sync.ackPlanDraft(draft);
+          return;
+        }
+        changes.filter((c) => !c.after).forEach((c) => { delete plan.days[c.day - 1].slots[c.slot]; }); // Phase 84: a push can empty a slot
+        const outs = changes.filter((c) => c.after && c.after.eatingOut);
+        const placements = changes.filter((c) => c.after && !c.after.eatingOut).map((c) => ({ day: c.day, slot: c.slot, mealId: c.after.mealId, variantId: c.after.variantId }));
         const res = MP.Plan.applyPlacements(plan, placements, library);
         plan = res.plan;
         outs.forEach((c) => { const sl = plan.days[c.day - 1].slots; if (!(sl[c.slot] && sl[c.slot].eatenAt)) sl[c.slot] = { eatingOut: true }; });

@@ -609,6 +609,44 @@ assert.equal((await call("GET", "/today", "a")).body.water, 3); // /today untouc
     kv.set("plan", planKv);
     kv.delete("planDraft");
   }
+  // Phase 84: POST /plan/edit + /plan/draft start fields
+  {
+    assert.equal((await call("POST", "/plan/edit", "a", { edits: [] })).status, 400);
+    assert.equal((await call("POST", "/plan/edit", "a", { edits: [{ type: "swapDay", a: 1, b: 1 }] })).status, 400); // all invalid
+    assert.equal((await call("POST", "/plan/edit", "a", [])).status, 400);
+    assert.equal((await call("POST", "/plan/edit", "a", { edits: [{ type: "busy", day: 1 }] })).status, 400); // constraint types are not plan actions
+    const planKv = kv.get("plan");
+    const rm = JSON.parse(planKv).days.map((x) => ({ ...x, slots: { ...x.slots } }));
+    rm[2].slots.dinner = { mealId: "m1" }; rm[3].slots.dinner = { mealId: "m2" }; rm[4].slots.dinner = { mealId: "m2", locked: true };
+    kv.set("plan", JSON.stringify({ startDate: "2999-01-01", days: rm }));
+    const n1 = acts().length;
+    const e1 = await call("POST", "/plan/edit", "a", { edits: [{ type: "swapDay", a: 3, b: 4 }, { type: "swap", a: { day: 5, slot: "dinner" }, b: { day: 3, slot: "dinner" } }, { type: "bogus" }] });
+    assert.equal(e1.status, 200);
+    assert.deepEqual([e1.body.status, e1.body.dropped, e1.body.ignored.length], ["parked", 1, 1]); // locked day 5 swap is ignored, not applied
+    const st = JSON.parse(kv.get("planDraft"));
+    assert.deepEqual([st.pending, st.id, [...new Set(st.changes.map((c) => c.day))].join()], [true, e1.body.id, "3,4"]);
+    assert.equal(acts().length, n1 + 1);
+    assert.equal(JSON.stringify(JSON.parse(kv.get("plan")).days), JSON.stringify(rm)); // mirror untouched
+    const e2 = await call("POST", "/plan/edit", "a", { edits: [{ type: "out", day: 6, slot: "dinner", name: "Spoons" }, { type: "out", day: 6, slot: "dinner", name: "Pret" }] });
+    assert.equal(e2.body.ignored[0].reason, "overridden by a later edit"); // last wins
+    assert.equal(JSON.parse(kv.get("planDraft")).changes[0].after.name, "Pret");
+    // start: a fresh plan, carried alone with its Phase 83 options
+    const e3 = await call("POST", "/plan/edit", "a", { edits: [{ type: "start", date: "2999-02-03", firstSlot: "dinner", days: 7, shopDay: 5 }, { type: "swapDay", a: 1, b: 2 }] });
+    assert.deepEqual([e3.status, e3.body.status, e3.body.dropped], [200, "parked", 1]);
+    const sd = JSON.parse(kv.get("planDraft"));
+    assert.deepEqual([sd.startDate, sd.start.days, sd.start.firstSlot, sd.start.shopAnchor], ["2999-02-03", 7, "dinner", "2999-02-01"]);
+    assert.equal((await call("POST", "/plan/edit", "a", { edits: [{ type: "start", date: "2000-01-01" }] })).status, 400); // past start dropped
+    const dr = await call("POST", "/plan/draft", "a", { startDate: "2999-02-03", days: 7, firstSlot: "dinner", shopDay: 5 });
+    assert.deepEqual([dr.status, dr.body.plan.days.length, dr.body.draft.start.days], [200, 7, 7]);
+    assert.equal((await call("POST", "/plan/draft", "a", { startDate: "2000-01-01" })).status, 400);
+    assert.equal((await call("POST", "/plan/draft", "a", { days: 7 })).status, 400); // numeric days needs startDate
+    assert.equal((await call("POST", "/plan/draft", "a", { startDate: "2999-02-03", shopDay: 9 })).status, 400);
+    kv.set("plan", planKv);
+    kv.delete("plan");
+    assert.equal((await call("POST", "/plan/edit", "a", { edits: [{ type: "swapDay", a: 1, b: 2 }] })).status, 409);
+    kv.set("plan", planKv);
+    kv.delete("planDraft");
+  }
   // bad applies
   const ch = d.body.draft.changes[0];
   const bogus = { ...d.body.draft, changes: [{ ...ch, after: { mealId: "nope" } }] };

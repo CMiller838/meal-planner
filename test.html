@@ -3038,6 +3038,24 @@
     ] }, vocab);
     check("validateReply: keeps only valid edits", v.reply.edits.map((e) => e.type).join() === "busy,chip,budget,reroll" && v.dropped === 9);
     check("validateReply: text trimmed and capped at 500, ask kept", v.reply.text.length === 500 && v.reply.ask === true);
+    { // Phase 84: plan-action edit types
+      const ed = (list, today) => PC.validateReply({ edits: list }, vocab, today).reply.edits;
+      const ok = ed([
+        { type: "start", date: "2999-01-05", firstSlot: "dinner", days: 7, shopDay: 5 }, { type: "skip", day: 3, slot: "dinner", how: "push" },
+        { type: "skip", day: 3, slot: "dinner", how: "move", to: { day: 4, slot: "lunch" } }, { type: "out", day: 5, slot: "dinner", name: " Spoons ", text: "burger" },
+        { type: "swap", a: { day: 1, slot: "lunch" }, b: { day: 2, slot: "lunch" } }, { type: "swapDay", a: 1, b: 2 },
+        { type: "backfill", day: 1, slot: "dinner", mealId: "m1" }, { type: "backfill", day: 1, slot: "lunch", name: "Pret", text: "baguette" },
+      ], "2026-01-01");
+      check("validateReply: every new edit type is kept and normalised", ok.map((e) => e.type).join() === "start,skip,skip,out,swap,swapDay,backfill,backfill" && ok[3].name === "Spoons" && ok[2].to.slot === "lunch");
+      const bad = ed([
+        { type: "start", date: "2000-01-01" }, { type: "start", date: "nope" }, { type: "start", date: "2999-01-05", days: 40 }, { type: "start", date: "2999-01-05", shopDay: 7 },
+        { type: "skip", day: 3, slot: "dinner", how: "move" }, { type: "skip", day: 3, slot: "dinner", how: "eat" }, { type: "out", day: 0, slot: "dinner" },
+        { type: "swap", a: { day: 1, slot: "lunch" } }, { type: "swapDay", a: 2, b: 2 }, { type: "backfill", day: 1, slot: "dinner" },
+      ], "2026-01-01");
+      check("validateReply: bad new edits are dropped (past start, bad fields, move without to, swapDay same, backfill with nothing)", bad.length === 0);
+      const plain = MP.PlanChat.describe([{ type: "swapDay", a: 1, b: 2 }, { type: "out", day: 5, slot: "dinner", name: "Spoons" }], "2026-01-05", 1);
+      check("describe: new types read back", plain.includes("swapped with") && plain.includes("eating out (Spoons)"));
+    }
     check("validateReply: garbage input -> empty reply", deepEqual(PC.validateReply("x", vocab), { reply: { text: "", edits: [], ask: false }, dropped: 0 }));
     const o = PC.toOverride([{ type: "noCook", day: 7 }, { type: "chip", id: "comfort" }, { type: "budget", perWeek: 30, days: [2] }, { type: "reroll", day: 9, slot: "dinner" }, { type: "lock", day: 1, slot: "lunch" }], null, 5);
     check("toOverride: noCook -> busy day, chip defaults to focus day", deepEqual(o.chatPrefs.busyDays, [7]) && deepEqual(o.chatPrefs.chips, { 5: ["comfort"] }) && deepEqual(o.chatPrefs.budget, { 2: 30 }));

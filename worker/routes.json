@@ -459,6 +459,14 @@
   },
   {
     "method": "POST",
+    "path": "/plan/edit",
+    "assistant": true,
+    "kind": "write",
+    "log": "logged",
+    "note": "Phase 84: validates chat-style edits (start, skip, out, swap, swapDay, backfill), applies them to the mirrored plan and parks the result in planDraft"
+  },
+  {
+    "method": "POST",
     "path": "/plan/reflow",
     "assistant": true,
     "kind": "write",

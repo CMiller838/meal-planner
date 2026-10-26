@@ -665,7 +665,7 @@ Generate is unchanged. Requires Phases 68 (rolling, shop anchor), 82.
 
 Built 2026-10-26: check.py 10/10, worker_test ok, tester PASS (guided flow at 390 px: 10-day dinner-first plan, shop anchor). Live: Thursday-dinner plan on the phone, check Shopping.
 
-## Phase 84: Tell it anything: chat and assistant control [M] — not started
+## Phase 84: Tell it anything: chat and assistant control [M] — built 2026-10-26, live checks pending
 
 **Added 2026-10-24.** The planning chat and the assistant can start a plan on a date, skip, mark eating out, swap and backfill, by
 plain message ("start Thursday dinner, I'm at Spoons Friday"). Edits are validated constraints and park as a pending draft like

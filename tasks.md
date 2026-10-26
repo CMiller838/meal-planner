@@ -828,6 +828,12 @@ Spec: `.claude/specs/phase83.md`
 ## Phase 84: Tell it anything: chat and assistant control
 Spec: `.claude/specs/phase84.md`
 
+- [x] Validators for the new edit types
+- [x] `/plan/edit` route, `/plan/draft` start fields, routes.json
+- [x] Chat "understood" lines and Accept flow for the new types
+- [ ] Known gap: a chat/assistant `backfill` updates the plan but does not log the food (`applyPlanEdits` returns `backfilled`, unconsumed); assistant should also call `POST /food-log`
+- [ ] Live: send each example message through the assistant and accept the draft
+
 ## Phase 85: Log and show every meal Hermes sends
 Spec: `.claude/specs/phase85.md`
 

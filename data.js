@@ -501,6 +501,36 @@
     return { plan: out, changes: diffPlans(plan, out), ignored };
   }
 
+  /** Phase 84, pure: apply validated chat/assistant plan edits (skip, out, swap, swapDay, backfill) in order through the
+   *  Phase 81-83 helpers only. Two edits on one slot: the last wins (the earlier is reported in `ignored`).
+   *  Returns { plan, changes, ignored, backfilled } where backfilled = [{ day, slot, entry, replaced }] for the caller's food log. */
+  function applyPlanEdits(plan, edits, mealsById, fromDay, generate, todayIso) {
+    const ignored = [], backfilled = [], key = (e) => (e.type === "swap" ? "" : e.day + ":" + e.slot);
+    const last = new Map();
+    edits.forEach((e, i) => { if (["skip", "out", "backfill"].includes(e.type)) last.set(key(e), i); });
+    let cur = plan;
+    edits.forEach((e, i) => {
+      if (last.has(key(e)) && ["skip", "out", "backfill"].includes(e.type) && last.get(key(e)) !== i) { ignored.push({ day: e.day, slot: e.slot, reason: "overridden by a later edit" }); return; }
+      let res;
+      if (e.type === "skip" && e.how === "push") res = pushSlot(cur, e.day, e.slot, mealsById, fromDay);
+      else if (e.type === "skip" && e.how === "move") res = moveSlot(cur, { day: e.day, slot: e.slot }, e.to, mealsById, fromDay, generate);
+      else if (e.type === "skip") res = reflowPlan(cur, { skipped: [{ day: e.day, slot: e.slot }] }, mealsById, fromDay, generate);
+      else if (e.type === "out") res = reflowPlan(cur, { eatingOut: [{ day: e.day, slot: e.slot, name: e.name, text: e.text }] }, mealsById, fromDay, generate);
+      else if (e.type === "swap") res = swapSlots(cur, e.a, e.b, mealsById);
+      else if (e.type === "swapDay") res = swapDays(cur, e.a, e.b, mealsById);
+      else if (e.type === "backfill") {
+        const when = (cur.startDate ? new Date(Date.parse(cur.startDate) + (e.day - 1) * 86400000).toISOString().slice(0, 10) : todayIso) + "T12:00:00.000Z";
+        const entry = e.mealId ? { mealId: e.mealId } : { eatingOut: true, name: e.name, text: e.text };
+        res = backfillSlot(cur, e.day, e.slot, entry, mealsById, when, todayIso);
+        if (!res.ignored.length) backfilled.push({ day: e.day, slot: e.slot, entry, replaced: res.replaced });
+      } else return;
+      cur = res.plan;
+      ignored.push(...res.ignored);
+    });
+    return { plan: cur, changes: diffPlans(plan, cur), ignored, backfilled };
+  }
+  MP.applyPlanEdits = applyPlanEdits;
+
   /** Phase 68, pure: roll the plan window forward to todayIso. Kept days shift down and keep their slots; the
    *  appended days come from `generate(locked, startDate)` with every kept slot locked. Shift >= the plan length is a fresh plan.
    *  Returns { plan, shift } or null when startDate is not in the past. */

@@ -54,7 +54,7 @@ const ASSISTANT_ALLOWED = new Set([
   "GET /expiring", "GET /day", "GET /product-ranking", "GET /ratings", "GET /why", "GET /scale", "GET /cookable", "GET /substitutions", "GET /leftovers", "GET /quick",
   "GET /drafts", "POST /drafts", "GET /settings", "PUT /settings", "GET /activity", "POST /activity/undo",
   "GET /spend", "POST /spend", "GET /pantry/audit", "GET /pantry/sanity", "POST /pantry/audit",
-  "POST /plan/draft", "POST /plan/apply", "GET /planDraft", "POST /plan/reflow", "GET /food-log", "POST /food-log",
+  "POST /plan/draft", "POST /plan/apply", "GET /planDraft", "POST /plan/reflow", "POST /plan/edit", "GET /food-log", "POST /food-log",
 ]);
 const METHOD_PATH = /^\/meal\/([^/]+)\/method$/;
 const DRAFT_PATH = /^\/drafts\/([^/]+)$/;
@@ -271,17 +271,24 @@ function runGenerator({ startDate, prefs, pantry, ratingsRaw, settings, nDays, f
 /** POST /plan/draft: Generator.generatePlan around the synced inputs, merged over the plan mirror. Stores nothing. */
 async function draftPlan(body, env) {
   if (typeof body !== "object" || body === null || Array.isArray(body)) return json(400, "expected an object");
-  const { days = null, keep = [], avoid = [], budget = null, useUp = false } = body;
-  if (days !== null && (!Array.isArray(days) || !days.every((d) => Number.isInteger(d) && d >= 1 && d <= 28))) return json(400, "days must be integers 1-28");
+  const { days = null, keep = [], avoid = [], budget = null, useUp = false, startDate: newStart = null, firstSlot = null, shopDay = null } = body;
+  const length = Number.isInteger(days) ? days : null; // Phase 84: an integer `days` is the new plan's length (with startDate); an array is the days to redo
+  if (days !== null && length === null && (!Array.isArray(days) || !days.every((d) => Number.isInteger(d) && d >= 1 && d <= 28))) return json(400, "days must be integers 1-28");
   if (!Array.isArray(keep) || !keep.every((k) => k && Number.isInteger(k.day) && k.day >= 1 && k.day <= 28 && SLOT_TYPES.includes(k.slot))) return json(400, "keep must be [{ day 1-28, slot }]");
   if (!Array.isArray(avoid) || !avoid.every((a) => typeof a === "string")) return json(400, "avoid must be meal id strings");
   if (budget !== null && !(typeof budget === "number" && isFinite(budget) && budget > 0)) return json(400, "budget must be a number > 0");
   if (typeof useUp !== "boolean") return json(400, "useUp must be a boolean");
+  if (length !== null && !(length >= 1 && length <= 28)) return json(400, "days must be 1-28");
+  if (newStart !== null && !(typeof newStart === "string" && /^\d{4}-\d{2}-\d{2}$/.test(newStart) && !isNaN(Date.parse(newStart)) && newStart >= Generator.isoToday())) return json(400, "startDate must be an ISO date, today or later");
+  if (firstSlot !== null && !SLOT_TYPES.includes(firstSlot)) return json(400, "firstSlot must be breakfast, lunch, dinner or snack");
+  if (shopDay !== null && !(Number.isInteger(shopDay) && shopDay >= 0 && shopDay <= 6)) return json(400, "shopDay must be 0-6 (0 = Sunday)");
+  if ((firstSlot !== null || shopDay !== null || length !== null) && newStart === null) return json(400, "firstSlot, shopDay and a numeric days need startDate");
 
   const inp = await planInputs(env, { useUp, budget });
+  if (newStart !== null) return freshStart(inp, { date: newStart, firstSlot, days: length, shopDay }, avoid);
   const { library, mirror, hasMirror, startDate, prefs, nDays } = inp;
   if (!library.length) return json(409, "library must be synced first");
-  const want = new Set(days || Array.from({ length: nDays }, (_, i) => i + 1));
+  const want = new Set((Array.isArray(days) ? days : null) || Array.from({ length: nDays }, (_, i) => i + 1));
   const kept = new Set(keep.map((k) => `${k.day}:${k.slot}`));
   const avoidSet = new Set(avoid);
 
@@ -321,6 +328,20 @@ async function draftPlan(body, env) {
   return json(200, { draft: { id: draftId(changes), startDate, changes, summary }, plan: { startDate, days: merged } });
 }
 
+/** Phase 84: a whole new plan from `s.date` (Phase 83 options), generated like Plan with me. The draft carries `start` so the app replaces the plan instead of merging. */
+function freshStart(inp, s, avoid = []) {
+  if (!inp.library.length) return json(409, "library must be synced first");
+  const startDate = s.date, nDays = s.days || 14, firstSlot = s.firstSlot || undefined;
+  const shopAnchor = s.shopDay != null ? globalThis.MP.shopAnchorFor(startDate, s.shopDay) : startDate;
+  const prefs = { ...inp.prefs, shopOffset: ShelfLife.shopOffset({ startDate, shopAnchor }) };
+  const pool = inp.library.filter((m) => !avoid.includes(m.id));
+  const gen = runGenerator({ ...inp, startDate, prefs, nDays, firstSlot }, pool, {});
+  const changes = [];
+  gen.days.forEach((d) => SLOT_TYPES.forEach((slot) => { const after = d.slots[slot]; if (after && (after.mealId || after.eatingOut)) changes.push({ day: d.day, slot, before: null, after: slotRef(after) }); }));
+  const draft = { id: draftId([startDate, nDays, firstSlot, shopAnchor, changes]), startDate, changes, summary: `new ${nDays}-day plan from ${startDate}`, start: { days: nDays, ...(firstSlot ? { firstSlot } : {}), shopAnchor } };
+  return json(200, { draft, plan: { startDate, firstSlot, shopAnchor, days: gen.days } });
+}
+
 /** POST /plan/apply: park a draft in KV planDraft for the app to adopt; never touches the plan mirror. */
 async function applyDraft(body, env, who) {
   const d = body && body.draft;
@@ -344,7 +365,7 @@ async function parkDraft(env, who, d, reflow = false) {
     if (cur.pending) return { id: d.id, status: "already pending" };
     if (cur.ackedId === d.id) return { id: d.id, status: "already applied" };
   }
-  const next = { id: d.id, at: new Date().toISOString(), pending: true, ...(reflow ? { reflow: true } : {}), startDate: d.startDate, changes: d.changes.map(({ day, slot, before, after }) => ({ day, slot, before: before && before.eatingOut ? before : slotRef(before), after: after && after.eatingOut ? after : slotRef(after) })) };
+  const next = { id: d.id, at: new Date().toISOString(), pending: true, ...(reflow ? { reflow: true } : {}), startDate: d.startDate, ...(d.start ? { start: d.start } : {}), changes: d.changes.map(({ day, slot, before, after }) => ({ day, slot, before: before && before.eatingOut ? before : slotRef(before), after: after && after.eatingOut ? after : slotRef(after) })) };
   await env.MP_KV.put("planDraft", JSON.stringify(next));
   await logWrite(env, { who, key: "planDraft", why: reflow ? "re-flow" : "", changes: diffItems("planDraft", cur, next) });
   return { id: d.id, status: "pending" };
@@ -369,6 +390,38 @@ async function reflowRoute(body, env, who) {
   const draft = { id: draftId(res.changes), startDate, changes: res.changes, summary };
   if (res.changes.length) await parkDraft(env, who, draft, true);
   return json(200, { draft, plan: { startDate, days: res.plan.days } });
+}
+
+/** POST /plan/edit (Phase 84): validate chat-style edits with PlanChat.validateReply, apply them to the mirrored plan through MP.applyPlanEdits
+ *  and park the result as a pending planDraft. Nothing reaches the app's plan until the user accepts it. A `start` edit replaces the plan, so it travels alone. */
+async function editRoute(body, env, who) {
+  if (typeof body !== "object" || body === null || Array.isArray(body)) return json(400, "expected an object");
+  if (!Array.isArray(body.edits) || !body.edits.length) return json(400, "edits must be a non-empty array");
+  if (body.source !== undefined && typeof body.source !== "string") return json(400, "source must be a string");
+  const today = Generator.isoToday();
+  const { reply, dropped } = PlanChat.validateReply({ edits: body.edits }, PLAN_VOCAB, today);
+  const edits = reply.edits.filter((e) => ["start", "skip", "out", "swap", "swapDay", "backfill"].includes(e.type));
+  const dropAll = dropped + (reply.edits.length - edits.length);
+  if (!edits.length) return json(400, "no valid edits");
+  const inp = await planInputs(env);
+  if (!inp.library.length) return json(409, "library must be synced first");
+  const start = edits.filter((e) => e.type === "start").pop();
+  if (start) {
+    const res = await freshStart(inp, { date: start.date, firstSlot: start.firstSlot, days: start.days, shopDay: start.shopDay });
+    const out = await res.json();
+    if (!res.ok) return json(res.status, out.error || out);
+    await parkDraft(env, who, out.draft, true);
+    return json(200, { id: out.draft.id, status: "parked", dropped: dropAll + edits.length - 1 });
+  }
+  if (!inp.hasMirror) return json(409, "no plan to edit");
+  const { library, mirror, startDate } = inp;
+  const planIn = { ...mirror, days: Array.from({ length: inp.nDays }, (_, i) => mirror.days[i] || { day: i + 1, slots: {} }) };
+  const res = globalThis.MP.applyPlanEdits(planIn, edits, Object.fromEntries(library.map((m) => [m.id, m])), globalThis.MP.reflowFromDay(startDate, today),
+    (locked, ranOut, avoid) => runGenerator(inp, library.filter((m) => !avoid.includes(m.id)), locked, ranOut), today);
+  if (!res.changes.length) return json(200, { id: null, status: "no changes", dropped: dropAll, ignored: res.ignored });
+  const draft = { id: draftId(res.changes), startDate, changes: res.changes };
+  await parkDraft(env, who, draft, true);
+  return json(200, { id: draft.id, status: "parked", dropped: dropAll, ignored: res.ignored });
 }
 
 /** The real ranking terms behind a meal's place, as codes. Only inputs rankSlot reads: gap, prefer chip, busy-day effort, rating. */
@@ -1402,6 +1455,7 @@ export const ROUTES = [
   row("DELETE", "/drafts/:id", "write", { assistant: true, ...quiet("inert until the app accepts") }),
   row("POST", "/plan/draft", "read", { note: "computes a draft, stores nothing; useUp:true cooks expiring pantry items first" }),
   row("POST", "/plan/apply", "write", { log: "logged", note: "parks the draft in planDraft" }),
+  row("POST", "/plan/edit", "write", { log: "logged", note: "Phase 84: validates chat-style edits (start, skip, out, swap, swapDay, backfill), applies them to the mirrored plan and parks the result in planDraft" }),
   row("POST", "/plan/reflow", "write", { log: "logged", note: "re-plans only skipped / eatingOut / ranOut slots and parks the result in planDraft" }),
   row("POST", "/activity/undo", "write", { log: "logged" }),
   row("POST", "/chat", "write", quiet("ephemeral planning-chat thread (ChatRoom DO), not planning data")),
@@ -1839,6 +1893,13 @@ export default {
       let b;
       try { b = JSON.parse(await request.text()); } catch (e) { return json(400, "invalid JSON"); }
       return url.pathname === "/plan/draft" ? draftPlan(b, env) : applyDraft(b, env, who);
+    }
+
+    if (url.pathname === "/plan/edit") {
+      if (request.method !== "POST") return json(405, "method not allowed");
+      let b;
+      try { b = JSON.parse(await request.text()); } catch (e) { return json(400, "invalid JSON"); }
+      return editRoute(b, env, who);
     }
 
     if (url.pathname === "/plan/reflow") {
