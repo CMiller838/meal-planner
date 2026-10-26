@@ -284,6 +284,10 @@
           const prevSlot = plan.days[idx - 1].slots.dinner;
           if (prevSlot && prevSlot.mealId === slot.mealId && MP.isBatch(meal) && !MP.frozenParentDay(plan, day.day - 1, prevSlot)) return;
         }
+        if (slotType === "lunch" && idx > 0) { // a batch lunch ("makes 2 lunches") on back-to-back days is one cook
+          const prevLunch = plan.days[idx - 1].slots.lunch;
+          if (prevLunch && prevLunch.mealId === slot.mealId && !prevLunch.fromCook && MP.isBatch(meal)) return;
+        }
         occ.push({ day: day.day, meal: MP.effectiveMeal(meal, slot.variantId, slot.subs) });
       });
     });

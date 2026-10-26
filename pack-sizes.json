@@ -28,6 +28,7 @@
     "olive_oil": { "label": "Olive oil", "packSize": 1, "unit": "each", "price": 1.00, "staple": true },
     "vegetable_oil": { "label": "Vegetable oil", "packSize": 1, "unit": "each", "price": 1.00, "staple": true },
     "salt": { "label": "Salt", "packSize": 1, "unit": "each", "price": 1.00, "staple": true },
+    "ham": { "label": "Sliced ham, 10 slices", "packSize": 10, "unit": "slices", "price": 1.80 },
     "peppers": { "label": "Mixed peppers, pack of 3", "packSize": 1, "unit": "each", "price": 1.10 },
     "potatoes": { "label": "Potatoes, 2.5kg", "packSize": 2500, "unit": "g", "price": 1.90 },
     "rice": { "label": "Long grain rice, 1kg", "packSize": 1000, "unit": "g", "price": 1.20, "bulk": { "packSize": 2000, "price": 2.00, "label": "rice" } },

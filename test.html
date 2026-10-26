@@ -247,6 +247,24 @@
     );
   }
 
+  // 11b. Batch lunch on back-to-back days is one cook
+  {
+    const days = emptyPlanDays();
+    [1, 2].forEach((d) => (days[d - 1].slots.lunch = { mealId: "chilli-con-carne" }));
+    const lists = MP.ShoppingList.buildLists({ startDate: "2026-09-07", days }, mealsById, packData);
+    const line = lists["1"].lines.find((l) => l.key === "beef_mince");
+    check("batch lunch on days 1-2 buys beef_mince once", !!line && deepEqual(line.needed, { value: 500, unit: "g" }));
+  }
+
+  // 11b. Batch lunch on back-to-back days is one cook
+  {
+    const days = emptyPlanDays();
+    [1, 2].forEach((d) => (days[d - 1].slots.lunch = { mealId: "chilli-con-carne" }));
+    const lists = MP.ShoppingList.buildLists({ startDate: "2026-09-07", days }, mealsById, packData);
+    const line = lists["1"].lines.find((l) => l.key === "beef_mince");
+    check("batch lunch on days 1-2 buys beef_mince once", !!line && deepEqual(line.needed, { value: 500, unit: "g" }));
+  }
+
   // 12. Non-batch repeat is not deduped (both occurrences counted, not folded into one)
   {
     const days = emptyPlanDays();
