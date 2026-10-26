@@ -34,5 +34,7 @@ visual ideas; never prototype a normal feature.
 - Look at it: spawn a sonnet general-purpose agent with the URL and a short checklist that uses `prototype-preview`
   in each theme at desktop width and at the phone width from UI_STYLE, reduced motion on once. Checklist always
   includes: no horizontal scroll on the phone, every theme legible, entrance plays once, empty/error state renders.
+- Every "flashes/animates/tweens on X" behaviour you add or the spec claims gets a browser assertion in the walk
+  (trigger X, check the class/computed style changed, and that it does not fire on first paint or plain refresh).
 - If you introduced a new token, pattern or motion rule, add it to `docs/UI_STYLE.md`.
 - Name the component source you adapted in the summary or commit.
