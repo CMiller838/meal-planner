@@ -279,6 +279,44 @@
     return null;
   }
 
+  // Phase 89 (display-only): Save's checklist. ctx = { byId, library, tags, targets, packData, pantry, fridgeDays }.
+  function wrapUp(pl, ctx) {
+    const c = Object.assign({ byId: mealsById, library, tags: tagsData && tagsData.tags, targets: tagsData && tagsData.targets, packData, pantry: { items: MP.Sync.localItems("pantry") }, fridgeDays: ((shelfData || {}).cooked_leftovers || {}).fridgeDays || 3 }, ctx);
+    const gaps = planMetrics(pl, c).weekGaps.slice(0, Math.ceil(pl.days.length / 7));
+    const dinner = (d) => (d && d.slots.dinner && d.slots.dinner.mealId && !d.slots.dinner.frozenFrom ? c.byId[d.slots.dinner.mealId] : null);
+    const spare = [];
+    pl.days.forEach((d, i) => {
+      const m = dinner(d);
+      if (!m || !MP.isBatch(m)) return;
+      const used = pl.days.slice(i + 1, i + 1 + c.fridgeDays).filter((x) => { const n = dinner(x); return n && (n.leftoverOf === m.id || n.id === m.id); }).length;
+      const portions = (m.servings - 1) - used;
+      if (portions > 0) spare.push({ day: d.day, name: m.name, portions });
+    });
+    const shops = Object.values(MP.ShoppingList.buildLists(pl, c.byId, c.packData || { items: {} }, c.pantry))
+      .map((l) => ({ shopDay: l.shopDay, lines: l.lines.length, total: c.packData ? l.total : null }));
+    return { gaps, orphans: MP.orphanDays(pl, c.byId), spare, shops };
+  }
+
+  // Phase 89: dinner minutes of `day` against that weekday's cap. Leftover, frozen and eating-out dinners cost 0 min.
+  function cookMinsFor(day, ctx) {
+    const c = Object.assign({ plan, byId: mealsById, caps: basePrefs.timeCaps || {} }, ctx);
+    const s = c.plan.days[day - 1].slots.dinner, m = s && s.mealId ? c.byId[s.mealId] : null;
+    const none = { mins: null, est: false, cap: null, over: false };
+    if (!m) return none;
+    const wd = c.plan.startDate ? MP.Generator.weekdayOf(c.plan.startDate, day) : null;
+    const cap = wd === null ? null : c.caps[wd] || null;
+    if (m.leftoverOf || s.frozenFrom) return { ...none, mins: 0, cap };
+    const mins = m.totalMins || MP.estMins(m);
+    if (!mins) return { ...none, cap };
+    return { mins, est: !m.totalMins, cap, over: !!cap && mins > cap };
+  }
+
+  // Phase 89: week `w` (0-based) cost/gaps now vs the plan when the chat opened. planMetrics folds weeks 3-4 into 2.
+  function tickerFor(pl, b, w, ctx) { // b = planMetrics of the baseline plan
+    const k = Math.min(w, 1), a = planMetrics(pl, ctx);
+    return { cost: a.weekCost[k], dCost: a.weekCost[k] === null ? null : a.weekCost[k] - b.weekCost[k], gaps: a.weekGaps[k].length, dGaps: a.weekGaps[k].length - b.weekGaps[k].length };
+  }
+
   // Phase 70: sticky Wk1|Wk2 meter. Display-only; built once, updated in place, animates only what an edit changed.
   let lastMeter = null, meterFrame = 0, fixDismissed = { sig: "", days: new Set() };
   const reducedMotion = () => window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -1315,7 +1353,7 @@
       root.classList.remove("staging");
     }
     if (dayCtx) renderDayView();
-    if (chat) renderChatDay();
+    if (chat) renderChatWeek();
     renderTomorrowCard();
   }
 
@@ -2170,7 +2208,7 @@
     renderPlacementBanner(e.detail);
   });
 
-  MP.Plan = { applyChatEdits, applyMealEdits, applyRateEdits, chatBriefing, chatContext, tieFor, effectiveBudget, budgetSwaps, resetChatPrefs, reflow, snapshot, restore, planMetrics, whatIf, fixGap, parseGuidedSlots, applyPlacements, logPortion, matchEatRequests, applyEatRequests };
+  MP.Plan = { applyChatEdits, applyMealEdits, applyRateEdits, chatBriefing, chatContext, tieFor, effectiveBudget, budgetSwaps, resetChatPrefs, reflow, snapshot, restore, planMetrics, whatIf, fixGap, wrapUp, cookMinsFor, tickerFor, parseGuidedSlots, applyPlacements, logPortion, matchEatRequests, applyEatRequests };
 
   // ---- Planning chat with Hermes (Phase 72) ----
   // The working plan is `plan` itself with guidedActive on (no savePlan runs); Exit restores the snapshot, Save commits.
@@ -2194,22 +2232,44 @@
     if (!on) $("chat-input").focus();
   }
 
-  function renderChatDay(staged) {
+  // Phase 89: the whole week next to the chat. Phone: dinner strip + the selected day's slots; PC: 7 columns x 4 slot rows.
+  const weekOf = (day) => Math.floor((day - 1) / 7);
+  function renderChatWeek(staged, flash) {
     if (!chat) return;
-    const day = chat.day, d = plan.days[day - 1];
-    $("chat-day-title").textContent = dayHeading(day);
-    const changed = new Set(chat.changes.filter((c) => c.day === day && !c.rejected).map((c) => c.slot));
-    const host = $("chat-day");
-    host.innerHTML = SLOT_TYPES.map((t) => {
-      const meal = mealAt(day, t), s = d.slots[t];
-      return `<div class="slot-card ${meal ? "" : "empty"}${s && s.locked ? " locked" : ""}${changed.has(t) ? " slot-diff" : ""}" data-slot="${t}" tabindex="0" role="button">
+    const w = weekOf(chat.day), first = w * 7 + 1, last = Math.min(plan.days.length, first + 6);
+    $("chat-day-title").textContent = `Week ${w + 1}`;
+    const changed = new Set(chat.changes.filter((c) => !c.rejected).map((c) => c.day + ":" + c.slot));
+    const dayShortOf = (day) => (plan.startDate ? WEEKDAY[MP.Generator.weekdayOf(plan.startDate, day)] : "Day " + day);
+    const tiles = [], cols = [];
+    for (let day = first; day <= last; day++) {
+      const d = plan.days[day - 1], cm = cookMinsFor(day), dm = mealAt(day, "dinner");
+      const minsTxt = cm.mins ? (cm.est ? "~" : "") + cm.mins + " min" : "";
+      const dot = SLOT_TYPES.some((t) => changed.has(day + ":" + t));
+      const dinnerName = dm ? dm.name : d.slots.dinner && d.slots.dinner.eatingOut ? outName(d.slots.dinner) : "–";
+      tiles.push(`<button type="button" class="cw-tile${day === chat.day ? " sel" : ""}${cm.over ? " over-cap" : ""}" data-day="${day}">
+        <b>${esc(dayShortOf(day))}</b><span class="cw-name">${esc(dinnerName)}</span><span class="cw-mins">${esc(minsTxt)}</span>${dot ? `<i class="cw-dot" aria-label="Changed"></i>` : ""}</button>`);
+      const cells = SLOT_TYPES.map((t) => {
+        const meal = mealAt(day, t), s = d.slots[t];
+        const early = day === 1 && plan.firstSlot && SLOT_TYPES.indexOf(t) < SLOT_TYPES.indexOf(plan.firstSlot);
+        const isD = t === "dinner";
+        return `<div class="slot-card ${meal ? "" : "empty"}${s && s.locked ? " locked" : ""}${changed.has(day + ":" + t) ? " slot-diff" : ""}${early ? " before-start" : ""}${isD && cm.over ? " over-cap" : ""}" data-day="${day}" data-slot="${t}" tabindex="0" role="button">
         <div class="slot-type">${t}${s && s.locked ? ` <span class="lock-icon" aria-label="Locked">🔒</span>` : ""}</div>
-        <div class="slot-meal">${meal ? esc(meal.name) : s && s.eatingOut ? esc(outName(s)) : "tap to add"}</div></div>`;
-    }).join("");
+        <div class="slot-meal">${meal ? esc(meal.name) : s && s.eatingOut ? esc(outName(s)) : early ? "" : "tap to add"}</div>
+        ${isD && minsTxt ? `<div class="cw-cook">${esc(minsTxt)}${cm.over ? ` · over ${cm.cap} min` : ""}</div>` : ""}</div>`;
+      }).join("");
+      cols.push(`<div class="cw-col${day === chat.day ? " sel" : ""}" data-day="${day}"><div class="cw-head">${esc(dayHeading(day))}</div>${cells}</div>`);
+    }
+    const host = $("chat-week");
+    host.innerHTML = `<div class="cw-strip">${tiles.join("")}</div><div class="cw-cols">${cols.join("")}</div>`;
     host.classList.toggle("staging", !!staged);
     if (staged) host.querySelectorAll(".slot-card").forEach((el, i) => { el.style.animationDelay = Math.min(i * STAGE_STEP_MS, STAGE_MAX_MS) + "ms"; });
+    host.querySelectorAll(".cw-tile").forEach((el) => el.addEventListener("click", () => {
+      if (chat.cards && chat.cards.tie) chat.tieDone.add(chat.day);
+      chat.day = +el.dataset.day; renderChatWeek();
+    }));
     host.querySelectorAll(".slot-card").forEach((el) => {
       const open = () => {
+        const day = +el.dataset.day;
         swapCtx = { day, slotType: el.dataset.slot, candidates: candidatesFor(day, el.dataset.slot), mode: "swap" };
         renderDeck();
         $("swap-overlay").classList.remove("hidden");
@@ -2217,7 +2277,21 @@
       el.addEventListener("click", open);
       el.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); open(); } });
     });
+    renderTicker(flash);
     renderChatCards();
+  }
+
+  // Phase 89: the week's cost and gaps against the plan when the chat opened. Display-only, never edits or ranks.
+  function renderTicker(flash) {
+    const el = $("chat-ticker");
+    if (!tagsData) { el.textContent = ""; return; }
+    const t = tickerFor(plan, chat.base, weekOf(chat.day)), sg = (n, f) => (n > 0 ? "+" : n < 0 ? "-" : "±") + f(Math.abs(n));
+    const cost = t.cost === null ? "" : `<span class="tk" data-k="cost">Cost <b>£${t.cost.toFixed(2)}</b> (${sg(Math.round(t.dCost * 100) / 100, (n) => "£" + n.toFixed(2))})</span>`;
+    const html = cost + `<span class="tk" data-k="gaps">Gaps <b>${t.gaps}</b> (${sg(t.dGaps, String)})</span>` + (weekOf(chat.day) > 1 ? `<span class="tk-note">weeks 2-4 counted together</span>` : "");
+    const sig = el.dataset.sig, now = JSON.stringify([t.cost, t.gaps]);
+    el.innerHTML = html;
+    if (flash && sig && sig !== now) el.querySelectorAll(".tk").forEach((n) => n.classList.add("flash"));
+    if (flash || !sig) el.dataset.sig = now; // only a reply moves the baseline, so renderPlan's unflagged re-render can't swallow the flash
   }
 
   // Phase 73 cards. chat.cards = { tie, trade } is what is on screen now (also sent to Hermes as context.cards).
@@ -2269,7 +2343,7 @@
         b.addEventListener("click", () => {
           chat.tieDone.add(tie.day);
           if (i === 1) { cardSwap(tie.day, m.id); renderChatDiff(); renderPlan(); }
-          renderChatDay();
+          renderChatWeek();
         });
         el.appendChild(b);
       });
@@ -2293,7 +2367,7 @@
         ok.addEventListener("click", () => {
           t.swaps.forEach((x) => cardSwap(x.day, x.to.id));
           chatBubble("understood", tradeTotals(t)).classList.add("chat-understood");
-          renderChatDiff(); renderPlan(); renderChatDay();
+          renderChatDiff(); renderPlan(); renderChatWeek();
         });
         const no = document.createElement("button");
         no.type = "button"; no.className = "btn-secondary"; no.textContent = "Not now";
@@ -2338,9 +2412,17 @@
     return f;
   }
 
+  function setChange(c, r) {
+    c.rejected = r;
+    c.askReason = r && !!(c.after && c.after.mealId); // Phase 74: optional one-line reason after a reject
+    plan.days[c.day - 1].slots[c.slot] = (r ? c.before : c.after) || {};
+    renderChatDiff(); renderChatWeek(); renderPlan();
+  }
+
   function renderChatDiff() {
     const ul = $("chat-diff");
     ul.innerHTML = "";
+    $("chat-diff-all").hidden = chat.changes.length < 2;
     chat.changes.forEach((c) => {
       const li = document.createElement("li");
       li.className = "diff-row" + (c.rejected ? " rejected" : "");
@@ -2351,12 +2433,7 @@
       acc.className = "btn-secondary"; acc.textContent = "Accept"; acc.disabled = !c.rejected;
       const rej = document.createElement("button");
       rej.className = "btn-secondary"; rej.textContent = "Reject"; rej.disabled = !!c.rejected;
-      const set = (r) => {
-        c.rejected = r;
-        c.askReason = r && !!(c.after && c.after.mealId); // Phase 74: optional one-line reason after a reject
-        plan.days[c.day - 1].slots[c.slot] = (r ? c.before : c.after) || {};
-        renderChatDiff(); renderChatDay(); renderPlan();
-      };
+      const set = (r) => setChange(c, r);
       acc.addEventListener("click", () => set(false));
       rej.addEventListener("click", () => set(true));
       li.append(txt, acc, rej);
@@ -2379,7 +2456,7 @@
     const res = applyMealEdits([x.edit]);
     x.pending = false;
     if (res.applied[0]) { x.text = res.applied[0].text; x.undo = res.applied[0].undo; } else x.text = res.refused[0] ? res.refused[0].why : "Meal not found";
-    renderChatMeals(); renderPlan(); renderChatDay();
+    renderChatMeals(); renderPlan(); renderChatWeek();
   }
   function renderChatMeals() {
     const ul = $("chat-meals");
@@ -2419,7 +2496,7 @@
   function undoMeal(x) {
     if (!x.rate) MP.Sync.noteLibraryChange("undo in chat: " + x.text);
     x.undo(); x.undone = true;
-    renderChatMeals(); renderPlan(); renderChatDay();
+    renderChatMeals(); renderPlan(); renderChatWeek();
   }
   function undoAllMeals() { liveMealChanges().reverse().forEach(undoMeal); }
 
@@ -2447,7 +2524,7 @@
       renderPlan();
     }
     renderChatDiff();
-    renderChatDay(chat.changes.length > 0);
+    renderChatWeek(chat.changes.length > 0, true);
   }
 
   async function pollChat() {
@@ -2515,7 +2592,8 @@
     $("chat-meals").innerHTML = "";
     $("plan-chat").hidden = false;
     document.body.classList.add("chat-open");
-    renderChatDay();
+    chat.base = planMetrics(JSON.parse(chat.snapshot));
+    renderChatWeek();
     chat.pending = 1; // the opener reply to the open message
     chat.deadline = Date.now() + CHAT_GIVE_UP_MS;
     setChatWaiting(true);
@@ -2544,7 +2622,22 @@
     renderPlan();
   }
 
+  // Phase 89: Save opens a checklist first. Informational only: nothing here blocks Save.
+  function renderWrap() {
+    const w = wrapUp(plan), sec = (h, items) => `<h4>${h}</h4>` + (items.length ? `<ul>${items.map((i) => `<li>${i}</li>`).join("")}</ul>` : `<p class="wrap-none">None</p>`);
+    $("chat-wrap").innerHTML = `<h3>Before you save</h3>`
+      + sec("Nutrient gaps left", w.gaps.map((g, i) => g.length ? `Week ${i + 1}: ${esc(g.join(", "))}` : "").filter(Boolean))
+      + sec("Leftovers", [...w.orphans.map((o) => `Day ${o.day}: ${esc(o.name)} has no earlier cook`), ...w.spare.map((x) => `Day ${x.day}: ${esc(x.name)} leaves ${x.portions} spare portion${x.portions > 1 ? "s" : ""}`)])
+      + sec("To buy", w.shops.map((s) => `Shop day ${s.shopDay}: ${s.lines} item${s.lines === 1 ? "" : "s"}${s.total === null ? "" : ` · £${s.total.toFixed(2)}`}`))
+      + `<div class="wrap-actions"><button id="wrap-back" class="btn-secondary" type="button">Back to chat</button><button id="wrap-save" class="btn-secondary" type="button">Save</button><button id="wrap-shop" class="primary" type="button">Save &amp; shop</button></div>`;
+    $("chat-wrap-overlay").classList.remove("hidden");
+    $("wrap-back").addEventListener("click", () => $("chat-wrap-overlay").classList.add("hidden"));
+    $("wrap-save").addEventListener("click", saveChat);
+    $("wrap-shop").addEventListener("click", () => { saveChat(); location.href = "shopping.html"; });
+  }
+
   function saveChat() {
+    $("chat-wrap-overlay").classList.add("hidden");
     closeChat();
     chat = null;
     savePlan();
@@ -2555,9 +2648,11 @@
   function initChat() {
     $("plan-chat-btn").addEventListener("click", openChat);
     $("chat-exit").addEventListener("click", exitChat);
-    $("chat-save").addEventListener("click", saveChat);
+    $("chat-save").addEventListener("click", () => chat && renderWrap());
+    $("chat-accept-all").addEventListener("click", () => chat && chat.changes.forEach((c) => setChange(c, false)));
+    $("chat-reject-all").addEventListener("click", () => chat && chat.changes.forEach((c) => setChange(c, true)));
     $("chat-fallback").addEventListener("click", () => { exitChat(); location.href = "plan-with-me.html"; });
-    const step = (n) => { if (chat.cards && chat.cards.tie) chat.tieDone.add(chat.day); chat.day = Math.min(plan.days.length, Math.max(1, chat.day + n)); renderChatDay(); };
+    const step = (n) => { if (chat.cards && chat.cards.tie) chat.tieDone.add(chat.day); chat.day = Math.min(weekOf(plan.days.length) , Math.max(0, weekOf(chat.day) + n)) * 7 + 1; renderChatWeek(); };
     $("chat-prev").addEventListener("click", () => chat && step(-1));
     $("chat-next").addEventListener("click", () => chat && step(1));
     $("chat-form").addEventListener("submit", (e) => {
@@ -2568,7 +2663,7 @@
       sendChat(text);
     });
     document.addEventListener("keydown", (e) => {
-      if (e.key === "Escape" && chat && $("swap-overlay").classList.contains("hidden")) exitChat();
+      if (e.key === "Escape" && chat && $("swap-overlay").classList.contains("hidden")) { if ($("chat-wrap-overlay").classList.contains("hidden")) exitChat(); else $("chat-wrap-overlay").classList.add("hidden"); }
     });
   }
 

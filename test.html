@@ -3219,6 +3219,38 @@
     check("fixGap: no closing candidate -> null", MP.Plan.fixGap(none, fixCtx(none, () => bOnly)) === null);
   }
 
+  // Phase 89: wrapUp, cookMinsFor, tickerFor
+  {
+    const L = [
+      { id: "q", name: "Quick", mealTypes: ["dinner"], totalMins: 15, ingredients: [{ key: "chicken", label: "chicken", qty: "1" }] },
+      { id: "e", name: "Est", mealTypes: ["dinner"], method: [{ minutes: 20 }, { minutes: 25 }], ingredients: [] },
+      { id: "n", name: "NoTime", mealTypes: ["dinner"], ingredients: [] },
+      { id: "b", name: "Batch", mealTypes: ["dinner"], servings: 4, totalMins: 50, ingredients: [{ key: "chicken", label: "chicken", qty: "1" }] },
+      { id: "l", name: "BatchLeft", mealTypes: ["dinner"], leftoverOf: "b", ingredients: [] },
+      { id: "o", name: "Orphan", mealTypes: ["dinner"], leftoverOf: "zz", ingredients: [] },
+    ];
+    const byId = Object.fromEntries(L.map((m) => [m.id, m]));
+    const mk = (ids) => ({ startDate: "2026-10-26", days: ids.map((id, i) => ({ day: i + 1, slots: { dinner: id ? { mealId: id } : {} } })) });
+    const pl = mk(["q", "e", "n", "b", "l", "o", null]);
+    const X = { library: L, byId, tags, targets, packData: realPackData, pantry: { items: [] }, fridgeDays: 3 };
+    const w = MP.Plan.wrapUp(pl, X);
+    check("wrapUp: orphan leftover listed with day", w.orphans.length === 1 && w.orphans[0].day === 6 && w.orphans[0].name === "Orphan");
+    check("wrapUp: batch of 4 with one leftover leaves 2 spare", w.spare.length === 1 && w.spare[0].day === 4 && w.spare[0].portions === 2);
+    check("wrapUp: shops have line counts and a total", w.shops.some((s) => s.lines > 0) && w.shops.every((s) => typeof s.total === "number"));
+    check("wrapUp: no packData -> total null", MP.Plan.wrapUp(pl, { ...X, packData: null }).shops.every((s) => s.total === null));
+    check("wrapUp: one gaps array per week", w.gaps.length === 1 && Array.isArray(w.gaps[0]));
+    const cm = (d, caps) => MP.Plan.cookMinsFor(d, { plan: pl, byId, caps });
+    check("cookMins: totalMins is exact", cm(1, {}).mins === 15 && !cm(1, {}).est);
+    check("cookMins: step minutes are an estimate", cm(2, {}).mins === 45 && cm(2, {}).est);
+    check("cookMins: no time -> null", cm(3, {}).mins === null);
+    check("cookMins: leftover = 0", cm(5, {}).mins === 0 && !cm(5, { 5: 10 }).over);
+    check("cookMins: over a weekday cap (Mon=1), not over without one", cm(1, { 1: 10 }).over && cm(1, { 1: 10 }).cap === 10 && !cm(1, {}).over && !cm(1, { 1: 15 }).over);
+    const snap = JSON.parse(JSON.stringify(pl)), baseM = MP.Plan.planMetrics(snap, X);
+    pl.days[2].slots.dinner = { mealId: "q" };
+    const tk = MP.Plan.tickerFor(pl, baseM, 0, X), now = MP.Plan.planMetrics(pl, X);
+    check("ticker: deltas equal planMetrics differences", Math.abs(tk.dCost - (now.weekCost[0] - baseM.weekCost[0])) < 1e-9 && tk.dGaps === now.weekGaps[0].length - baseM.weekGaps[0].length);
+  }
+
   // Phase 73: gapScore, tieFor, budgetSwaps
   {
     const ironC = [

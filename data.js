@@ -471,16 +471,16 @@
   }
 
   /** Phase 82: leftover dinners with no earlier cook of their meal in the plan (a swap must not add any). */
-  function orphanLeftovers(plan, mealsById) {
-    const seen = new Set();
-    let n = 0;
+  function orphanDays(plan, mealsById) {
+    const seen = new Set(), out = [];
     plan.days.forEach((d) => {
       const s = d.slots.dinner, m = s && s.mealId && !s.frozenFrom && mealsById[s.mealId];
-      if (m && m.leftoverOf && !seen.has(m.leftoverOf)) n++;
+      if (m && m.leftoverOf && !seen.has(m.leftoverOf)) out.push({ day: d.day, name: m.name });
       if (s && s.mealId) seen.add(s.mealId);
     });
-    return n;
+    return out;
   }
+  const orphanLeftovers = (plan, mealsById) => orphanDays(plan, mealsById).length;
   /** Phase 82, pure: exchange the contents of slots `a` and `b` (either may be empty or eating-out). Held (eaten, locked,
    *  frozen) slots, batch cooks / leftovers (swap the days instead) and a swap that puts a leftover before its cook are
    *  refused. Never touches the pantry or re-flows. Returns { plan, changes, ignored }. */
@@ -767,6 +767,8 @@
   MP.swapSlots = swapSlots;
   MP.placeSlots = placeSlots;
   MP.estMins = estMins;
+  MP.orphanLeftovers = orphanLeftovers;
+  MP.orphanDays = orphanDays;
   MP.swapDays = swapDays;
   MP.backfillSlot = backfillSlot;
   MP.rollPlan = rollPlan;

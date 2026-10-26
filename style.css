@@ -648,7 +648,7 @@ button.ghost.danger { color: var(--danger); border-color: var(--danger); }
 .slot-card.empty { color: var(--text-dim); font-style: italic; }
 
 @keyframes mp-slot-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
-#plan-root.staging .slot-card, #chat-day.staging .slot-card {
+#plan-root.staging .slot-card, #chat-week.staging .slot-card {
   opacity: 0;
   animation: mp-slot-in 220ms ease-out forwards;
 }
@@ -861,9 +861,47 @@ body.chat-open { overflow: hidden; }
 .chat-day-nav h3 { margin: 0; font-size: .95rem; }
 .chat-day-nav .icon-btn { background: var(--surface); color: var(--text); border: 1px solid var(--border); border-radius: 999px; width: 2.2rem; height: 2.2rem; font-size: 1.2rem; cursor: pointer; transition: transform 150ms; }
 .chat-day-nav .icon-btn:active { transform: scale(.95); }
-.chat-day { display: grid; grid-template-columns: repeat(2, 1fr); gap: .5rem; }
-@media (min-width: 640px) { .chat-day { grid-template-columns: repeat(4, 1fr); } }
-.chat-day .slot-card { background: var(--surface); transition: border-color 200ms, box-shadow 200ms; }
+.chat-main { display: flex; flex-direction: column; gap: .6rem; overflow-y: auto; max-height: 52vh; flex: 0 1 auto; min-height: 0; }
+.chat-side { display: flex; flex-direction: column; gap: .6rem; flex: 1; min-height: 0; }
+.chat-ticker { display: flex; flex-wrap: wrap; gap: .4rem .9rem; font-size: .85rem; color: var(--text-dim); }
+.chat-ticker:empty { display: none; }
+.chat-ticker b { color: var(--text); }
+.chat-ticker .tk.flash { animation: mp-tk-flash 900ms ease-out; }
+@keyframes mp-tk-flash { 0% { color: var(--butter); opacity: .4; } 100% { opacity: 1; } }
+.chat-week .slot-card { background: var(--surface); transition: border-color 200ms, box-shadow 200ms; }
+.cw-strip { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: .25rem; margin-bottom: .5rem; }
+.cw-tile { position: relative; display: flex; flex-direction: column; align-items: center; gap: .1rem; padding: .35rem .15rem; border: 1px solid var(--border); border-radius: .6rem; background: var(--surface); color: var(--text); font: inherit; font-size: .7rem; cursor: pointer; min-width: 0; transition: transform 150ms, border-color 200ms; }
+.cw-tile:active { transform: scale(.95); }
+.cw-tile.sel { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.cw-tile .cw-name { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-dim); }
+.cw-tile .cw-mins { color: var(--text-dim); font-size: .65rem; min-height: .9em; }
+.cw-tile.over-cap .cw-mins { color: var(--danger); font-weight: 700; }
+.cw-dot { position: absolute; top: .2rem; right: .2rem; width: .45rem; height: .45rem; border-radius: 50%; background: var(--butter); }
+.cw-cols { display: block; }
+.cw-col { display: none; grid-template-columns: repeat(2, 1fr); gap: .5rem; }
+.cw-col.sel { display: grid; }
+.cw-head { grid-column: 1 / -1; font-size: .85rem; font-weight: 700; }
+.cw-cook { font-size: .75rem; color: var(--text-dim); }
+.slot-card.over-cap { border-color: var(--danger); }
+.slot-card.over-cap .cw-cook { color: var(--danger); font-weight: 700; }
+.slot-card.before-start { opacity: .45; }
+.chat-diff-all { display: flex; gap: .4rem; }
+.chat-diff-all[hidden] { display: none; }
+.chat-diff-all button { padding: .25rem .7rem; font-size: .8rem; }
+#chat-wrap h4 { margin: .8rem 0 .2rem; font-size: .9rem; }
+#chat-wrap ul { margin: 0; padding-left: 1.1rem; font-size: .85rem; }
+#chat-wrap .wrap-none { margin: 0; color: var(--text-dim); font-size: .85rem; }
+.wrap-actions { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: 1rem; }
+.wrap-actions button { flex: 1 1 auto; }
+@media (min-width: 900px) {
+  .plan-chat { display: grid; grid-template-columns: minmax(0, 1fr) 24rem; grid-template-rows: auto minmax(0, 1fr); column-gap: 1rem; padding-left: 1rem; padding-right: 1rem; }
+  .chat-head { grid-column: 1 / -1; }
+  .chat-main { max-height: none; }
+  .cw-strip { display: none; }
+  .cw-cols { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: .4rem; }
+  .cw-col, .cw-col.sel { display: flex; flex-direction: column; gap: .4rem; }
+  .cw-head { font-size: .75rem; }
+}
 .slot-card.slot-diff { border-color: var(--butter); box-shadow: 0 0 0 2px var(--butter); }
 .chat-diff { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: .3rem; max-height: 22vh; overflow-y: auto; }
 .chat-diff:empty { display: none; }

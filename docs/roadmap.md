@@ -33,7 +33,7 @@ creates or edits a meal and estimated for existing ones from step `minutes`, con
 weeknights") Hermes plans within; and the taste ledger: "that was boring" or "loved that" in chat logs a rating with its reason
 (Phase 74's path). Reworks Phases 72, 84 and 87's limits; the "Hermes never returns meals" invariant changes.
 
-## Phase 89: Weekly plan view with live diff, ticker and wrap-up [L] — not started
+## Phase 89: Weekly plan view with live diff, ticker and wrap-up [L] — built 2026-10-26, live checks pending
 
 Goal: a 7-column week grid with the chat docked beside it; Hermes's changes show as a per-slot or whole-week accept/reject diff
 with a live £ and nutrient-gap delta (the ticker), each dinner card shows its total cook time and a day over its cap is flagged, and a wrap-up checklist (gaps left, uncooked leftovers, items to buy) before

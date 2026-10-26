@@ -266,6 +266,7 @@ for (const [vp, size] of Object.entries({ pc: { width: 1440, height: 900 }, phon
     await page.waitForSelector('.chat-understood', { timeout: 8000 });
     const n = await page.locator('#chat-diff .diff-row').count();
     await page.click('#chat-save');
+    await page.click('#wrap-save');
     await page.waitForSelector('#plan-chat', { state: 'hidden' });
     if (n && await planLS() === before) throw new Error('Save did not change mp_plan');
   });
@@ -304,7 +305,7 @@ for (const [vp, size] of Object.entries({ pc: { width: 1440, height: 900 }, phon
   await step('chat: slot tap opens the deck with Pick for me', async () => {
     chatMock.reply = { text: 'ok', edits: [] };
     await openChat();
-    await page.click('#chat-day .slot-card[data-slot="dinner"]');
+    await page.click('#chat-week .cw-col.sel .slot-card[data-slot="dinner"]');
     await page.waitForSelector('#swap-deck .swipe-card');
     await page.click('.deck-pick');
     await page.waitForSelector('#swap-overlay.hidden', { state: 'attached' });
@@ -318,7 +319,7 @@ for (const [vp, size] of Object.entries({ pc: { width: 1440, height: 900 }, phon
     await page.click('#chat-exit');
     await openChat();
     await page.evaluate(async () => { (await MP.ShoppingList.load()).planning.tieMargin = 1000; });
-    for (let i = 0; i < 13 && !await page.locator('#chat-cards .chat-tie').count(); i++) await page.click('#chat-next');
+    for (let i = 0; i < 14 && !await page.locator('#chat-cards .chat-tie').count(); i++) { if (i === 7) await page.click('#chat-next'); await page.locator('.cw-tile').nth(i % 7).dispatchEvent('click'); }
     if (!await page.locator('#chat-cards .chat-tie').count()) throw new Error('no tie card on any day with tieMargin 1000');
     if (await page.locator('#chat-cards .chat-tie').count() !== 1) throw new Error('expected exactly one tie card');
     await shot('chat-cards'); await page.evaluate(() => { document.documentElement.dataset.theme = 'light'; }); await shot('chat-cards-light');
