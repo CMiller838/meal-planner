@@ -5,7 +5,7 @@
   const { esc, labelize } = MP;
   const LS_PLAN = "mp_plan";
   const LS_COOKS = "mp_cooks";
-  const SLOT_TYPES = ["breakfast", "lunch", "dinner", "snack"];
+  const SLOT_TYPES = ["breakfast", "lunch", "dinner"];
   const STAGE_STEP_MS = 30;
   const STAGE_MAX_MS = 1800;
 
@@ -1469,7 +1469,7 @@
     variantCtx = null;
   }
 
-  const GUIDED_EXTRAS = ["breakfast", "lunch", "snack"];
+  const GUIDED_EXTRAS = ["breakfast", "lunch"];
   // "?slots=lunch,junk,lunch" -> ["dinner","lunch"]; dinner always first, extras in fixed order.
   function parseGuidedSlots(search) {
     const asked = new Set(String(new URLSearchParams(search).get("slots") || "").split(","));

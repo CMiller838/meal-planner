@@ -142,7 +142,7 @@
     }
     if (!threw) {
       for (const d of tinyPlan.days) {
-        if (!d.slots.breakfast.mealId || !d.slots.lunch.mealId || !d.slots.dinner.mealId || !d.slots.snack.mealId) ok = false;
+        if (!d.slots.breakfast.mealId || !d.slots.lunch.mealId || !d.slots.dinner.mealId) ok = false;
       }
       for (let day = 2; day <= 14; day++) {
         if (tinyPlan.days[day - 2].slots.dinner.mealId === tinyPlan.days[day - 1].slots.dinner.mealId) ok = false;
@@ -268,7 +268,7 @@
   // 12. Non-batch repeat is not deduped (both occurrences counted, not folded into one)
   {
     const days = emptyPlanDays();
-    [1, 2].forEach((d) => (days[d - 1].slots.snack = { mealId: "egg-pb-toast-snack" }));
+    [1, 2].forEach((d) => (days[d - 1].slots.lunch = { mealId: "egg-pb-toast-snack" }));
     const plan = { startDate: "2026-09-07", days };
     const eggPack = { items: { egg: { label: "Egg", packSize: 6, unit: "each", price: 1.75 } } };
     const lists = MP.ShoppingList.buildLists(plan, mealsById, eggPack);
@@ -974,7 +974,7 @@
       const g = (q) => MP.Plan.parseGuidedSlots(q).join();
       check("parseGuidedSlots: none -> dinner only", g("?guided=1") === "dinner" && g("?slots=") === "dinner");
       check("parseGuidedSlots: junk/dinner ignored", g("?slots=dinner,foo") === "dinner");
-      check("parseGuidedSlots: dedupe + fixed order", g("?slots=snack,lunch,lunch,breakfast") === "dinner,breakfast,lunch,snack");
+      check("parseGuidedSlots: dedupe + fixed order", g("?slots=snack,lunch,lunch,breakfast") === "dinner,breakfast,lunch");
     }
 
     // newPlacements

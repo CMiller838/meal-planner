@@ -5,7 +5,7 @@
   "use strict";
   const MP = (root.MP = root.MP || {});
 
-  const SLOT_TYPES = ["breakfast", "lunch", "dinner", "snack"];
+  const SLOT_TYPES = ["breakfast", "lunch", "dinner"];
   const UNIT_MULT = { kg: ["g", 1000], l: ["ml", 1000] };
 
   let cache = null;

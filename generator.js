@@ -6,7 +6,7 @@
   "use strict";
   const MP = (root.MP = root.MP || {});
 
-  const OTHER_SLOTS = ["breakfast", "lunch", "snack"];
+  const OTHER_SLOTS = ["breakfast", "lunch"];
 
   function isoToday() {
     const d = new Date();
