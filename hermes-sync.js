@@ -63,6 +63,10 @@ window.MP = window.MP || {};
   }
 
   let inflight = false;
+  let libraryReason = null; // Phase 87: set by a chat meal change, so the next library PUT is logged as Hermes's (undoable via activity)
+
+  /** The next PUT /library carries X-Actor: hermes and this reason (Phase 87). */
+  function noteLibraryChange(reason) { libraryReason = String(reason || "meal change").slice(0, 120); }
 
   /** GET /library, decide, then apply. The re-read of libraryStamp() after
    *  the await is the whole race fix: a local edit made while the GET was
@@ -83,7 +87,9 @@ window.MP = window.MP || {};
         window.dispatchEvent(new Event("mp:library-pulled"));
       } else if (decision === "push") {
         const updatedAt = localStamp || new Date().toISOString();
-        await req("PUT", "/library", { updatedAt, meals: JSON.parse(localStorage.getItem("mp_library") || "[]") });
+        const why = libraryReason;
+        await req("PUT", "/library", { updatedAt, meals: JSON.parse(localStorage.getItem("mp_library") || "[]") }, why ? { "X-Actor": "hermes", "X-Reason": why } : undefined);
+        if (why === libraryReason) libraryReason = null;
         if (!localStamp) localStorage.setItem("mp_library_updated_at", updatedAt);
       }
       return decision;
@@ -824,7 +830,7 @@ window.MP = window.MP || {};
     decide, needsPlan, config, saveConfig, syncLibrary, syncPlanFlag, ackPlanFlag,
     shoppingLines, setLine, fetchShoppingLines, flushShoppingLines,
     fetchItems, fetchPantry, localItems, writeLocalItems, queueOp, applyOps, flushOps,
-    planMirror, pushPlan, pushPrefs, fetchPlanPrefs, fetchDayHints, fetchPlanDraft, ackPlanDraft, fetchRatings, fetchFoodLog, postFoodLog, removeFoodEntry, groupFoodLog, localFoodLog, fetchSettings, settings, hardTerms, fetchDrafts, deleteDraft, pushRating, pushPlanPrefs, newPlacements, newSince, syncPlacements, ackPlacements, syncEatRequests,
+    planMirror, pushPlan, pushPrefs, fetchPlanPrefs, fetchDayHints, fetchPlanDraft, ackPlanDraft, fetchRatings, fetchFoodLog, postFoodLog, removeFoodEntry, groupFoodLog, localFoodLog, fetchSettings, settings, hardTerms, noteLibraryChange, fetchDrafts, deleteDraft, pushRating, pushPlanPrefs, newPlacements, newSince, syncPlacements, ackPlacements, syncEatRequests,
     localEatenLog, logEaten, unlogEaten, pushEatenLog, pushCooks, start,
     syncProducts, localProducts, saveProduct, fetchActivity, undoActivity, resyncKey,
   };

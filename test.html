@@ -3060,6 +3060,33 @@
       const plain = MP.PlanChat.describe([{ type: "swapDay", a: 1, b: 2 }, { type: "out", day: 5, slot: "dinner", name: "Spoons" }], "2026-01-05", 1);
       check("describe: new types read back", plain.includes("swapped with") && plain.includes("eating out (Spoons)"));
     }
+    { // Phase 87: meal edit types, patchMeal, applyMealEdits
+      const ed = (list) => PC.validateReply({ edits: list }, vocab, "2026-01-01").reply.edits;
+      const ing = [{ key: "turkey-mince", name: "Turkey mince", qty: "500 g" }];
+      const ok = ed([{ type: "mealCreate", name: " Turkey chilli ", mealTypes: ["dinner"], servings: 4, ingredients: ing }, { type: "mealEdit", mealId: "m1", patch: { name: "X", id: "evil", source: "x" } }, { type: "mealRemove", mealId: "m1" }]);
+      check("validateReply: meal edit types kept, non-whitelisted patch field ignored", ok.map((e) => e.type).join() === "mealCreate,mealEdit,mealRemove" && ok[0].name === "Turkey chilli" && Object.keys(ok[1].patch).join() === "name");
+      const bad = ed([{ type: "mealCreate", name: "", ingredients: ing }, { type: "mealCreate", name: "A", ingredients: [] }, { type: "mealCreate", name: "A", ingredients: ing, servings: 99 }, { type: "mealEdit", mealId: "m1", patch: { id: "z" } }, { type: "mealEdit", patch: { name: "x" } }, { type: "mealRemove" }]);
+      check("validateReply: bad meal edits dropped", bad.length === 0);
+      check("validateReply: at most 3 meal edits per reply", ed([1, 2, 3, 4].map((i) => ({ type: "mealRemove", mealId: "m" + i }))).length === 3);
+      check("mealFromEdit: same-name creates get distinct ids", MP.mealFromEdit(ok[0], ["turkey-mince"]).id !== MP.mealFromEdit(ok[0], ["turkey-mince"]).id);
+      const base = { id: "m1", name: "Old", source: "seed", servings: 1, mealTypes: ["dinner"], ingredients: [{ key: "rice", qty: "1" }] };
+      const snap = JSON.stringify(base);
+      const pm = MP.patchMeal(base, { name: "New", servings: 4, id: "evil", source: "x" }, ["rice"]);
+      check("patchMeal: pure, whitelist only", JSON.stringify(base) === snap && pm.name === "New" && pm.servings === 4 && pm.id === "m1" && pm.source === "seed");
+      let store = [base, { id: "m2", name: "Other", mealTypes: ["dinner"], servings: 1, ingredients: [{ key: "rice", qty: "1" }] }];
+      const mk = (plan) => ({ library: store, plan, keys: ["rice", "turkey-mince"], terms: ["peanut"], upsert: (m) => (store = store.some((x) => x.id === m.id) ? store.map((x) => (x.id === m.id ? m : x)) : [...store, m]), remove: (id) => (store = store.filter((x) => x.id !== id)) });
+      const noPlan = { days: [] }, inP = { days: [{ day: 3, slots: { dinner: { mealId: "m1" } } }] };
+      let r = MP.Plan.applyMealEdits([{ type: "mealCreate", name: "Turkey chilli", mealTypes: ["dinner"], servings: 4, ingredients: ing }], mk(noPlan));
+      check("applyMealEdits: create adds the meal, Undo deletes it", r.applied.length === 1 && store.length === 3 && (r.applied[0].undo(), store.length === 2));
+      r = MP.Plan.applyMealEdits([{ type: "mealCreate", name: "Mushroom soup", mealTypes: ["dinner"], ingredients: [{ name: "mushrooms", qty: "200 g" }] }, { type: "mealCreate", name: "Satay", mealTypes: ["dinner"], ingredients: [{ name: "peanut butter", qty: "2 tbsp" }] }], mk(noPlan));
+      check("applyMealEdits: mushroom and allergy meals refused, nothing written", r.refused.length === 2 && r.applied.length === 0 && store.length === 2);
+      r = MP.Plan.applyMealEdits([{ type: "mealEdit", mealId: "m1", patch: { name: "Renamed" } }, { type: "mealEdit", mealId: "nope", patch: { name: "z" } }], mk(inP));
+      check("applyMealEdits: edit applies, unknown id dropped, Undo restores", r.applied.length === 1 && store[0].name === "Renamed" && (r.applied[0].undo(), store[0].name === "Old"));
+      r = MP.Plan.applyMealEdits([{ type: "mealRemove", mealId: "m1" }], mk(inP));
+      check("applyMealEdits: remove refused while in the plan", r.refused.length === 1 && /day 3/.test(r.refused[0].why) && store.length === 2);
+      r = MP.Plan.applyMealEdits([{ type: "mealRemove", mealId: "m1" }], mk(noPlan));
+      check("applyMealEdits: remove works outside the plan, Undo restores", r.applied.length === 1 && store.length === 1 && (r.applied[0].undo(), store.length === 2));
+    }
     check("validateReply: garbage input -> empty reply", deepEqual(PC.validateReply("x", vocab), { reply: { text: "", edits: [], ask: false }, dropped: 0 }));
     const o = PC.toOverride([{ type: "noCook", day: 7 }, { type: "chip", id: "comfort" }, { type: "budget", perWeek: 30, days: [2] }, { type: "reroll", day: 9, slot: "dinner" }, { type: "lock", day: 1, slot: "lunch" }], null, 5);
     check("toOverride: noCook -> busy day, chip defaults to focus day", deepEqual(o.chatPrefs.busyDays, [7]) && deepEqual(o.chatPrefs.chips, { 5: ["comfort"] }) && deepEqual(o.chatPrefs.budget, { 2: 30 }));

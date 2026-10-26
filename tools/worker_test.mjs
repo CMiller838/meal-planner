@@ -788,6 +788,12 @@ assert.equal((await call("GET", "/today", "a")).body.water, 3); // /today untouc
   assert.deepEqual([r.status, r.body.dropped], [200, 1]);
   r = await call("GET", "/chat?session=s1&since=" + uid, "h");
   assert.deepEqual([r.body.messages.length, r.body.messages[0].from, r.body.messages[0].edits], [1, "hermes", [{ type: "noCook", day: 7 }]]);
+  // Phase 87: meal edits are accepted and normalised, bad ones dropped
+  r = await call("POST", "/chat/reply", "h", { session: "s1", replyTo: uid, text: "Added", ask: false, edits: [{ type: "mealCreate", name: " Turkey chilli ", mealTypes: ["dinner"], ingredients: [{ name: "turkey mince", qty: "500 g" }] }, { type: "mealEdit", mealId: "m1", patch: { id: "evil" } }, { type: "mealRemove", mealId: "m1" }] }, H);
+  assert.deepEqual([r.status, r.body.dropped], [200, 1]);
+  r = await call("GET", "/chat?session=s1&since=" + uid, "h");
+  assert.deepEqual(r.body.messages.at(-1).edits.map((e) => e.type), ["mealCreate", "mealRemove"]);
+  assert.equal(r.body.messages.at(-1).edits[0].name, "Turkey chilli");
   assert.equal((await call("GET", "/chat?session=old", "h")).status, 409);
   assert.equal((await call("POST", "/chat", "h", { session: "s1", close: true })).status, 200);
   assert.equal((await call("GET", "/chat?session=s1", "h")).body.openAt, null);

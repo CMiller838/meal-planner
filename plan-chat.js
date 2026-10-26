@@ -1,6 +1,7 @@
 // Planning chat with Hermes (Phase 72): the one validator for Hermes's reply, the edit -> generator-override mapping and the
 // "understood" line. Loaded as a browser <script> AND imported into the Worker bundle: no window/document/localStorage at top
-// level. Hermes returns constraints and edits, never meals; the app's generator picks meals.
+// level. Hermes returns constraints and edits; the app's generator picks meals. Phase 87: it may also create, edit and remove library meals
+// (mealCreate/mealEdit/mealRemove), applied by the app only after its own hard checks.
 (function (root) {
   "use strict";
 
@@ -20,6 +21,34 @@
     if (p && p.id) ids.push(p.id);
     return ids;
   }
+
+  // Phase 87 meal fields. Limits: name <= 60, ingredients <= 20, method steps <= 12, 3 meal edits per reply.
+  const MEAL_EDITS = ["mealCreate", "mealEdit", "mealRemove"], MEAL_EDITS_MAX = 3, EFFORT = ["quick", "batch"];
+  const ingredients = (v) => {
+    if (!Array.isArray(v) || !v.length || v.length > 20) return null;
+    const out = v.map((i) => i && typeof i === "object" && (str(i.key, 60) || str(i.name, 60)) && { ...(str(i.key, 60) ? { key: str(i.key, 60) } : {}), ...(str(i.name, 60) ? { name: str(i.name, 60) } : {}), qty: str(typeof i.qty === "number" ? String(i.qty) : i.qty, 40) });
+    return out.every(Boolean) ? out : null;
+  };
+  const types = (v) => { const t = Array.isArray(v) ? [...new Set(v.filter((x) => SLOTS.includes(x)))] : []; return t.length ? t : null; };
+  const method = (v) => (Array.isArray(v) && v.length <= 12 && v.every((x) => typeof x === "string" && x.trim()) ? v.map((x) => x.trim().slice(0, 300)) : null);
+  const servings = (v) => Number.isInteger(v) && v >= 1 && v <= 12;
+  /** Whitelisted patch fields only; any other key is ignored. null = a whitelisted field is invalid. */
+  const PATCH = {
+    name: (v) => str(v, 60) || null, description: (v) => (typeof v === "string" ? v.trim().slice(0, 300) : null),
+    mealTypes: types, servings: (v) => (servings(v) ? v : null), prepEffort: (v) => (EFFORT.includes(v) ? v : null), ingredients, method,
+  };
+  function patchOf(p) {
+    if (!p || typeof p !== "object" || Array.isArray(p)) return null;
+    const out = {};
+    for (const k of Object.keys(PATCH)) {
+      if (!(k in p)) continue;
+      const v = PATCH[k](p[k]);
+      if (v === null) return null;
+      out[k] = v;
+    }
+    return Object.keys(out).length ? out : null;
+  }
+  const mealId = (e) => typeof e.mealId === "string" && e.mealId.length > 0 && e.mealId.length <= 80;
 
   // One normaliser per edit type; null = invalid (the whole edit is dropped).
   const DAYS = (e) => (e.days === undefined ? [] : Array.isArray(e.days) && e.days.length && e.days.every(isDay) ? [...new Set(e.days)] : null);
@@ -41,6 +70,11 @@
     swap: (e) => isPos(e.a) && isPos(e.b) && { type: "swap", a: pos(e.a), b: pos(e.b) },
     swapDay: (e) => isDay(e.a) && isDay(e.b) && e.a !== e.b && { type: "swapDay", a: e.a, b: e.b },
     backfill: (e) => isDay(e.day) && isSlot(e.slot) && (typeof e.mealId === "string" && e.mealId ? { type: "backfill", day: e.day, slot: e.slot, mealId: e.mealId } : str(e.name, 60) && { type: "backfill", day: e.day, slot: e.slot, name: str(e.name, 60), ...(str(e.text, 200) ? { text: str(e.text, 200) } : {}) }),
+    mealCreate: (e) => { const ing = ingredients(e.ingredients), t = e.mealTypes === undefined ? ["dinner"] : types(e.mealTypes), m = e.method === undefined ? undefined : method(e.method);
+      return str(e.name, 60) && ing && t && m !== null && (e.servings === undefined || servings(e.servings)) && (e.prepEffort === undefined || EFFORT.includes(e.prepEffort))
+        && { type: "mealCreate", name: str(e.name, 60), mealTypes: t, ingredients: ing, ...(e.servings ? { servings: e.servings } : {}), ...(e.prepEffort ? { prepEffort: e.prepEffort } : {}), ...(m ? { method: m } : {}) }; },
+    mealEdit: (e) => { const patch = mealId(e) && patchOf(e.patch); return patch && { type: "mealEdit", mealId: e.mealId, patch }; },
+    mealRemove: (e) => mealId(e) && { type: "mealRemove", mealId: e.mealId },
     reroll: (e) => isDay(e.day) && (e.slot === undefined || isSlot(e.slot)) && (e.slot === undefined ? { type: "reroll", day: e.day } : { type: "reroll", day: e.day, slot: e.slot }),
   };
 
@@ -50,7 +84,9 @@
     const list = Array.isArray(r.edits) ? r.edits : [];
     const ids = chipIds(vocab);
     const edits = [];
+    let meals = 0;
     for (const e of list.slice(0, EDITS_MAX)) {
+      if (e && MEAL_EDITS.includes(e.type) && ++meals > MEAL_EDITS_MAX) continue;
       const f = e && typeof e === "object" && Object.prototype.hasOwnProperty.call(NORM, e.type) ? NORM[e.type](e, ids, today) : null;
       if (f) edits.push(f);
     }
@@ -121,6 +157,9 @@
       else if (e.type === "out") parts.push(`${name(e.day)} ${e.slot}: eating out${e.name ? ` (${e.name})` : ""}`);
       else if (e.type === "swap") parts.push(`${name(e.a.day)} ${e.a.slot} swapped with ${name(e.b.day)} ${e.b.slot}`);
       else if (e.type === "swapDay") parts.push(`${name(e.a)} swapped with ${name(e.b)}`);
+      else if (e.type === "mealCreate") parts.push(`new meal: ${e.name}`);
+      else if (e.type === "mealEdit") parts.push(`changed meal ${e.mealId}`);
+      else if (e.type === "mealRemove") parts.push(`removed meal ${e.mealId}`);
       else if (e.type === "backfill") parts.push(`${name(e.day)} ${e.slot}: recorded as eaten${e.name ? ` (${e.name})` : ""}`);
     }
     return parts.join(", ");

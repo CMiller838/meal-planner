@@ -532,6 +532,53 @@
     return changes;
   }
 
+  /** Phase 87: apply mealCreate/mealEdit/mealRemove straight to the library (existing writers only), after the same hard checks as every other path.
+   *  Returns { applied: [{ edit, text, undo() }], refused: [{ edit, why }] }. ctx (tests): { library, plan, keys, terms, upsert, remove }. */
+  function applyMealEdits(edits, ctx) {
+    const c = Object.assign({ library, plan, keys: MP.knownKeys(tagsData && tagsData.tags, packData && packData.items), terms: MP.Sync.hardTerms(), upsert: MP.upsertMeal, remove: MP.removeFromLibrary }, ctx);
+    const applied = [], refused = [];
+    const find = (id) => c.library.find((m) => m.id === id);
+    const refuse = (edit, why) => refused.push({ edit, why });
+    const sync = (arr) => { if (!(ctx && ctx.library)) library = arr; c.library = arr; mealsById = Object.fromEntries(arr.map((m) => [m.id, m])); };
+    const inPlan = (id) => {
+      const hit = [];
+      ((c.plan && c.plan.days) || []).forEach((d) => SLOT_TYPES.forEach((t) => {
+        const s = d.slots[t], m = s && s.mealId && find(s.mealId);
+        if (m && (m.id === id || m.leftoverOf === id)) hit.push(d.day);
+      }));
+      return hit;
+    };
+    const dayList = (ds) => [...new Set(ds)].map((d) => (c.plan.startDate ? dayHeading(d) : "day " + d)).join(", ");
+    for (const e of edits.filter((x) => ["mealCreate", "mealEdit", "mealRemove"].includes(x.type))) {
+      if (e.type === "mealCreate") {
+        const meal = MP.mealFromEdit(e, c.keys);
+        const { ok, reasons } = MP.Exclusions.check(meal, c.terms);
+        if (!ok) { refuse(e, `${e.name}: ${reasons.join(", ")}`); continue; }
+        const twin = c.library.find((m) => m.name.toLowerCase() === meal.name.toLowerCase());
+        sync(c.upsert(meal));
+        applied.push({ edit: e, text: `Added ${meal.name}${twin ? ` (similar to ${twin.name})` : ""}`, undo: () => sync(c.remove(meal.id)) });
+      } else if (e.type === "mealEdit") {
+        const old = find(e.mealId);
+        if (!old) continue; // unknown id: dropped
+        const next = MP.patchMeal(old, e.patch, c.keys);
+        const { ok, reasons } = MP.Exclusions.check(next, c.terms);
+        if (!ok) { refuse(e, `${old.name}: ${reasons.join(", ")}`); continue; }
+        const orphan = MP.isBatch(old) && !MP.isBatch(next) ? c.library.some((m) => m.leftoverOf === old.id && inPlan(m.id).length) : false;
+        if (orphan) { refuse(e, `${old.name}: leftovers in the plan depend on it staying a batch cook`); continue; }
+        sync(c.upsert(next));
+        applied.push({ edit: e, text: `Changed ${old.name}${next.name !== old.name ? ` to ${next.name}` : ""}`, undo: () => sync(c.upsert(old)) });
+      } else {
+        const old = find(e.mealId);
+        if (!old) continue;
+        const days = inPlan(old.id);
+        if (days.length) { refuse(e, `${old.name} is in the plan (${dayList(days)})`); continue; }
+        sync(c.remove(old.id));
+        applied.push({ edit: e, text: `Removed ${old.name}`, undo: () => sync(c.upsert(old)) });
+      }
+    }
+    return { applied, refused };
+  }
+
   // Phase 73: tie questions and trade-off cards. Both are session UI over the chat's working copy; nothing is stored.
   const planningKnob = (k, d) => { const v = packData && packData.planning && packData.planning[k]; return typeof v === "number" ? v : d; };
   // A dinner the cards may touch: not held (locked/eaten), eaten out, frozen, a leftover or a batch head.
@@ -2042,7 +2089,7 @@
     renderPlacementBanner(e.detail);
   });
 
-  MP.Plan = { applyChatEdits, chatContext, tieFor, effectiveBudget, budgetSwaps, resetChatPrefs, reflow, snapshot, restore, planMetrics, whatIf, fixGap, parseGuidedSlots, applyPlacements, logPortion, matchEatRequests, applyEatRequests };
+  MP.Plan = { applyChatEdits, applyMealEdits, chatContext, tieFor, effectiveBudget, budgetSwaps, resetChatPrefs, reflow, snapshot, restore, planMetrics, whatIf, fixGap, parseGuidedSlots, applyPlacements, logPortion, matchEatRequests, applyEatRequests };
 
   // ---- Planning chat with Hermes (Phase 72) ----
   // The working plan is `plan` itself with guidedActive on (no savePlan runs); Exit restores the snapshot, Save commits.
@@ -2237,12 +2284,55 @@
     });
   }
 
+  /** Phase 87: one card per meal change (applied with Undo, or refused with the reason); library changes outlive Exit, so Exit warns. */
+  const liveMealChanges = () => (chat ? chat.meals.filter((x) => x.undo && !x.undone) : []);
+  function renderChatMeals() {
+    const ul = $("chat-meals");
+    ul.innerHTML = "";
+    chat.meals.forEach((x) => {
+      const li = document.createElement("li");
+      li.className = "diff-row chat-meal" + (x.undo ? "" : " refused") + (x.undone ? " rejected" : "");
+      const txt = document.createElement("span");
+      txt.textContent = x.undo ? (x.undone ? "Undone: " : "") + x.text : "Refused: " + x.text;
+      li.appendChild(txt);
+      if (x.undo && !x.undone) {
+        const b = document.createElement("button");
+        b.type = "button"; b.className = "btn-secondary"; b.textContent = "Undo";
+        b.addEventListener("click", () => undoMeal(x));
+        li.appendChild(b);
+      }
+      ul.appendChild(li);
+    });
+    if (liveMealChanges().length > 1) {
+      const li = document.createElement("li");
+      li.className = "diff-row";
+      const b = document.createElement("button");
+      b.type = "button"; b.className = "btn-secondary"; b.id = "chat-meals-undo-all"; b.textContent = "Undo all meal changes";
+      b.addEventListener("click", undoAllMeals);
+      li.appendChild(b);
+      ul.appendChild(li);
+    }
+  }
+  function undoMeal(x) {
+    MP.Sync.noteLibraryChange("undo in chat: " + x.text);
+    x.undo(); x.undone = true;
+    renderChatMeals(); renderPlan(); renderChatDay();
+  }
+  function undoAllMeals() { liveMealChanges().reverse().forEach(undoMeal); }
+
   function onChatReply(m) {
     const { reply } = MP.PlanChat.validateReply(m, vocabAll); // the app re-validates before applying anything
     if (reply.text) chatBubble("hermes", reply.text);
     chat.ask = !!reply.ask;
     if (chat.ask) chat.tieDone.add(chat.day); // a question from Hermes closes any open tie card for good
     chat.changes = [];
+    if (!reply.ask && reply.edits.some((e) => e.type.startsWith("meal"))) {
+      MP.Sync.noteLibraryChange("chat: " + reply.edits.filter((e) => e.type.startsWith("meal")).map((e) => e.name || e.mealId).join(", ")); // before the writes: their save event starts the sync
+      const res = applyMealEdits(reply.edits);
+      res.applied.forEach((a) => chat.meals.push({ text: a.text, undo: a.undo }));
+      res.refused.forEach((r) => chat.meals.push({ text: r.why }));
+      renderChatMeals();
+    }
     if (!reply.ask && reply.edits.length) {
       const changes = applyChatEdits(reply.edits, { focusDay: chat.day });
       const line = MP.PlanChat.describe(reply.edits, plan.startDate, chat.day);
@@ -2314,10 +2404,11 @@
       MP.PlanChat.call("POST", "/chat", { session, close: true }).catch(() => {});
       return goFallback("Hermes isn't answering (the chat bridge on your PC isn't running: python3 tools/hermes_chat_bridge.py).");
     }
-    chat = { session, snapshot: JSON.stringify(plan), day: 1, since: 0, mine: new Set(), pending: 0, deadline: 0, timer: null, changes: [], ask: true, tieDone: new Set(), tradeOff: {}, cards: {} };
+    chat = { session, snapshot: JSON.stringify(plan), day: 1, since: 0, mine: new Set(), pending: 0, deadline: 0, timer: null, changes: [], ask: true, tieDone: new Set(), tradeOff: {}, cards: {}, meals: [] };
     guidedActive = true; // working copy: no savePlan until Save
     $("chat-log").innerHTML = "";
     $("chat-diff").innerHTML = "";
+    $("chat-meals").innerHTML = "";
     $("plan-chat").hidden = false;
     document.body.classList.add("chat-open");
     renderChatDay();
@@ -2341,6 +2432,8 @@
 
   function exitChat() {
     if (!chat) return;
+    const n = liveMealChanges().length;
+    if (n && !chat.exitWarned) { chat.exitWarned = true; renderChatMeals(); return toast(`${n} meal change${n > 1 ? "s" : ""} stay in your library: Undo ${n > 1 ? "them" : "it"} first, or Exit again to keep.`); }
     plan = JSON.parse(chat.snapshot);
     closeChat();
     chat = null;

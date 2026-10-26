@@ -196,6 +196,35 @@
     return meal;
   }
 
+  /** Phase 87: chat ingredients [{key?,name?,qty}] -> meal ingredients; keys snap to `keys`, an unknown name keeps its slug. */
+  function chatIngredients(list, keys) {
+    return list.map((i) => {
+      const slug = slugify(i.key || i.name);
+      const key = (keys || []).includes(i.key) ? i.key : snapKey(slug, keys || []);
+      return { key, qty: i.qty || "", label: i.name || labelize(i.key) };
+    });
+  }
+
+  /** Phase 87: pure whitelist patch of a library meal (name, description, mealTypes, servings, prepEffort, ingredients, method). Never id/source/leftoverOf/tags/cost. */
+  function patchMeal(meal, patch, keys) {
+    const out = { ...meal };
+    const p = patch || {};
+    for (const k of ["name", "description", "mealTypes", "servings", "prepEffort"]) if (p[k] !== undefined) out[k] = p[k];
+    if (p.ingredients) out.ingredients = chatIngredients(p.ingredients, keys);
+    if (p.method) { out.method = p.method; out.methodStatus = "accepted"; }
+    return out;
+  }
+
+  let chatSeq = 0;
+  /** Phase 87: a mealCreate edit -> library meal, through draftToMeal's shape. */
+  function mealFromEdit(edit, keys) {
+    const m = draftToMeal({ id: "chat", source: "hermes", name: edit.name, mealTypes: edit.mealTypes, servings: edit.servings, prepEffort: edit.prepEffort, method: edit.method, ingredients: [] });
+    m.ingredients = chatIngredients(edit.ingredients, keys);
+    delete m.fromDraft;
+    m.id += "-" + (++chatSeq).toString(36); // two same-name creates in one millisecond must not share an id
+    return m;
+  }
+
   /** Parse the ingredients textarea into meal-record ingredient objects.
    *  Never returns an entry with an empty `key` — data.js does
    *  `ing.key.replace(...)` and would throw on one.
@@ -667,6 +696,8 @@
   MP.knownKeys = knownKeys;
   MP.matchDraftIngredients = matchDraftIngredients;
   MP.draftToMeal = draftToMeal;
+  MP.patchMeal = patchMeal;
+  MP.mealFromEdit = mealFromEdit;
   MP.getLibrary = getLibrary;
   MP.saveLibrary = saveLibrary;
   MP.applyRemoteLibrary = applyRemoteLibrary;

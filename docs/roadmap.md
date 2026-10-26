@@ -689,7 +689,7 @@ literals move into tokens. **Verify:** a component inventory in the spec is full
 every page in both themes at both widths show no unstyled or static component, reduced motion disables all non-essential motion.
 Requires Phase 85 (so the Food log view is polished with the rest).
 
-## Phase 87: Plan with Hermes can create and change meals [L] — not started
+## Phase 87: Plan with Hermes can create and change meals [L] — built 2026-10-26, live checks pending (check.py 10/10, worker_test ok, tester PASS: browser run of create/refuse/Undo/Exit warning at PC and 390 px)
 
 **Added 2026-10-26.** With Phases 83 and 84 the chat sets the start date, first meal, length and shop day. This adds meals: Hermes
 can create a new meal, edit one (ingredients, servings, effort, meal types, method) or remove an unused one, from the chat. Changes

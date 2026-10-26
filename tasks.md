@@ -845,3 +845,10 @@ Spec: `.claude/specs/phase86.md`
 
 ## Phase 87: Plan with Hermes can create and change meals
 Spec: `.claude/specs/phase87.md`
+- [x] `NORM` validators for the three types and limits
+- [x] `MP.patchMeal` pure whitelist patch
+- [x] `applyChatEdits` meal branch (`applyMealEdits`) with hard checks, refusal reasons and undo records
+- [x] Worker `/chat/reply` coverage and activity logging (library PUT sent with `X-Actor: hermes`); bridge prompt
+- [x] Result cards with Undo, Exit warning with Undo all
+- [x] CLAUDE.md invariant amendments, `docs/HERMES.md`, bump `sw.js` CACHE
+- [ ] Live: on the phone ask Hermes "add a turkey chilli, 4 servings", plan it, then Undo it
