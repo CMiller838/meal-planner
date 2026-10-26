@@ -129,6 +129,8 @@ the background of your session. By hand:
   "core logic" file list (name it in `CLAUDE.md`'s Architecture invariants
   section). Keep it ponytail-lazy: smallest working diff, no speculative
   abstraction, no unrequested refactor riding along.
+- **Data-driven logic gets one test on the real data file** (`pack-sizes.json`, `shelf-life.json`, etc.), not
+  only a hand-made fixture: a fixture copies the code's assumed shape, so a shape bug passes both.
 - **UI**: every UI change follows the `ui-build` skill: built straight into the app in the house style,
   always animated, checked by eye in both themes and at phone width. `ui-prototyper` is only for when you want new
   visual ideas: it generates standalone mockup variants (fake data, every state) and never touches the real app;
