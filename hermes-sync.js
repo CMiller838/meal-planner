@@ -323,13 +323,14 @@ window.MP = window.MP || {};
           slots[slotType] = { mealId: slot.mealId, eatenAt: slot.eatenAt || null };
           if (slot.variantId) slots[slotType].variantId = slot.variantId;
           if (Number.isInteger(slot.frozenFrom)) slots[slotType].frozenFrom = slot.frozenFrom;
+          if (typeof slot.fromCook === "string" && slot.fromCook) slots[slotType].fromCook = slot.fromCook;
           if (slot.subs && slot.subs.length) slots[slotType].subs = slot.subs;
           if (slot.locked) slots[slotType].locked = true;
         }
       }
       return { day: d.day, slots };
     });
-    return { startDate: plan.startDate || null, ...(plan.shopAnchor ? { shopAnchor: plan.shopAnchor } : {}), ...(plan.firstSlot ? { firstSlot: plan.firstSlot } : {}), days };
+    return { startDate: plan.startDate || null, ...(plan.shopAnchor ? { shopAnchor: plan.shopAnchor } : {}), ...(plan.firstSlot ? { firstSlot: plan.firstSlot } : {}), ...(Array.isArray(plan.bulk) && plan.bulk.length ? { bulk: plan.bulk.map((b) => ({ key: b.key, shopDay: b.shopDay })) } : {}), days };
   }
 
   /** Best-effort, failure-silent — the plan mirror is derived data. */

@@ -78,8 +78,10 @@
     mealEdit: (e) => { const patch = mealId(e) && patchOf(e.patch); return patch && { type: "mealEdit", mealId: e.mealId, patch }; },
     mealRemove: (e) => mealId(e) && { type: "mealRemove", mealId: e.mealId },
     // Phase 88: Hermes places a chosen meal; the app checks it (MP.placeSlots). cap/rate are prefs and rating edits.
-    place: (e) => isDay(e.day) && isSlot(e.slot) && mealId(e) && (e.variantId === undefined || str(e.variantId, 80))
-      && { type: "place", day: e.day, slot: e.slot, mealId: e.mealId, ...(e.variantId ? { variantId: str(e.variantId, 80) } : {}) },
+    place: (e) => isDay(e.day) && isSlot(e.slot) && mealId(e) && (e.variantId === undefined || str(e.variantId, 80)) && (e.cookId === undefined || str(e.cookId, 120))
+      && { type: "place", day: e.day, slot: e.slot, mealId: e.mealId, ...(e.variantId ? { variantId: str(e.variantId, 80) } : {}), ...(e.cookId ? { cookId: str(e.cookId, 120) } : {}) },
+    // Phase 90a: a bulk-buy proposal; the app recomputes the numbers and shows a card (Accept writes plan.bulk).
+    bulk: (e) => str(e.key, 60) && Number.isInteger(e.shopDay) && e.shopDay >= -6 && e.shopDay <= 28 && { type: "bulk", key: str(e.key, 60), shopDay: e.shopDay },
     cap: (e) => Number.isInteger(e.minutes) && (e.minutes === 0 || (e.minutes >= 5 && e.minutes <= 240)) && Array.isArray(e.weekdays) && e.weekdays.length >= 1 && e.weekdays.length <= 7
       && e.weekdays.every((d) => Number.isInteger(d) && d >= 0 && d <= 6) && new Set(e.weekdays).size === e.weekdays.length
       && { type: "cap", minutes: e.minutes, weekdays: [...e.weekdays].sort((a, b) => a - b) },
@@ -94,9 +96,10 @@
     const list = Array.isArray(r.edits) ? r.edits : [];
     const ids = chipIds(vocab);
     const edits = [];
-    let meals = 0;
+    let meals = 0, bulks = 0;
     for (const e of list.slice(0, EDITS_MAX)) {
       if (e && MEAL_EDITS.includes(e.type) && ++meals > MEAL_EDITS_MAX) continue;
+      if (e && e.type === "bulk" && ++bulks > 5) continue;
       const f = e && typeof e === "object" && Object.prototype.hasOwnProperty.call(NORM, e.type) ? NORM[e.type](e, ids, today) : null;
       if (f) edits.push(f);
     }
@@ -170,7 +173,8 @@
       else if (e.type === "mealCreate") parts.push(`new meal: ${e.name}`);
       else if (e.type === "mealEdit") parts.push(`changed meal ${e.mealId}`);
       else if (e.type === "mealRemove") parts.push(`removed meal ${e.mealId}`);
-      else if (e.type === "place") parts.push(`${name(e.day)} ${e.slot}: ${e.mealId} placed`);
+      else if (e.type === "place") parts.push(`${name(e.day)} ${e.slot}: ${e.mealId} placed${e.cookId ? " from the freezer/fridge" : ""}`);
+      else if (e.type === "bulk") parts.push(`bulk buy: ${e.key.replace(/-/g, " ")} on shop ${e.shopDay}`);
       else if (e.type === "cap") parts.push(e.minutes ? `${e.weekdays.map((w) => WEEKDAYS[w]).join("/")}: cooking capped at ${e.minutes} min` : `${e.weekdays.map((w) => WEEKDAYS[w]).join("/")}: time cap cleared`);
       else if (e.type === "rate") parts.push(`${e.mealId}: rated ${e.rating}`);
       else if (e.type === "backfill") parts.push(`${name(e.day)} ${e.slot}: recorded as eaten${e.name ? ` (${e.name})` : ""}`);

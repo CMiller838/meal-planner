@@ -26,6 +26,7 @@
   }
 
   function fmtQty(line) {
+    if (line.bulk) return `${line.packs} × ${line.packSize}${line.unit}${line.extra ? ` + ${line.extra.packs} × ${line.extra.packSize}${line.unit}` : ""}`;
     if (!line.needed) return `${line.packs} × pack`;
     return `${line.packs} × ${line.needed.value}${line.needed.unit}`;
   }
@@ -42,6 +43,7 @@
         <input type="checkbox" data-shop="${shopDay}" data-key="${esc(line.key)}" ${state === "got" ? "checked" : ""}>
         <span class="shop-qty">${esc(fmtQty(line))}</span>
         <span class="shop-name">${esc(line.label)}</span>
+        ${line.bulk && line.bulk.freeze ? `<span class="have">freeze ${esc(line.bulk.freeze >= 1000 ? +(line.bulk.freeze / 1000).toFixed(2) + "kg" : line.bulk.freeze + line.unit)}</span>` : ""}
         ${line.pantryQty ? `<span class="have">have ${esc(line.pantryQty)}</span>` : ""}
         ${showPrice ? `<span class="shop-price${line.estimated ? " estimated" : ""}">${line.price != null ? (line.estimated ? "~£" : "£") + line.lineCost.toFixed(2) : ""}</span>` : ""}
       </label>

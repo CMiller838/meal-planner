@@ -312,3 +312,5 @@ Phase 88 additions:
   ratings, taste, pantry, gaps and the whole library. The bridge re-sends it every turn and adds `spend` from `GET /spend`.
 
 `context.cards` (on `POST /chat`) lists the tie or trade-off cards currently on screen in the app (e.g. `tie Tue: Chicken curry or Chilli`). The app wrote them; Hermes must not pick between them or contradict them.
+
+**Freezer first and bulk buys (Phase 90a).** `place` takes an optional `cookId` (a brief `cooks[].cookId`): the slot is `{ mealId, fromCook }`, eaten from that `MP.Cooks` record (lunch or dinner, on or before its eat-by, no more slots than `portionsLeft`), buys nothing and never touches the pantry. `bulk { key, shopDay }` (max 5 per reply, shopDay -6..28) proposes a bulk buy from the brief's `bulk` list only; the app recomputes the saving, shows an Accept/No card, and only Accept writes `plan.bulk` (the shopping list changes then). The brief gains `cooks`, `shopDays`, `cost` on each meal and variant, and `bulk`.

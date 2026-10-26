@@ -302,6 +302,34 @@ for (const [vp, size] of Object.entries({ pc: { width: 1440, height: 900 }, phon
     await page.waitForSelector('#plan-chat', { state: 'hidden' });
     if (await planLS() !== before) throw new Error('Exit changed mp_plan');
   });
+  await step('chat: bulk cards Accept writes plan.bulk, Undo clears it, Exit leaves mp_plan identical (Phase 90a)', async () => {
+    const orig = await planLS();
+    await page.evaluate(() => { const p = JSON.parse(localStorage.getItem('mp_plan')); p.days.forEach(d => { d.slots = {}; }); [0, 8].forEach(i => { p.days[i].slots.dinner = { mealId: 'chilli-con-carne' }; }); localStorage.setItem('mp_plan', JSON.stringify(p)); });
+    await page.reload();
+    chatMock.reply = { text: 'Bulk it', edits: ['rice', 'pasta', 'oats', 'beef_mince', 'chicken_breast', 'chicken_thighs'].map(key => ({ type: 'bulk', key, shopDay: 1 })) };
+    await openChat();
+    const before = await planLS();
+    await say('buy in bulk');
+    await page.waitForFunction(() => [...document.querySelectorAll('.chat-bubble.hermes')].length > 1, null, { timeout: 8000 });
+    await page.waitForTimeout(500);
+    const cards = page.locator('#chat-meals .chat-meal:has(.chat-meal-add)');
+    const n = await cards.count();
+    if (n) {
+      if (!/Buy .* saves £/.test(await cards.first().innerText())) throw new Error('bulk card text: ' + await cards.first().innerText());
+      await shot('chat-bulk');
+      await page.click('#chat-meals .chat-meal-add');
+      await page.waitForSelector('#chat-meals button:text("Undo")', { timeout: 5000 });
+      await page.click('#chat-meals button:text("Undo")');
+      await page.waitForSelector('#chat-meals .rejected');
+    }
+    await page.click('#chat-exit');
+    await page.waitForSelector('#plan-chat', { state: 'hidden' });
+    const same = await planLS() === before;
+    await page.evaluate(o => localStorage.setItem('mp_plan', o), orig);
+    await page.reload();
+    if (!same) throw new Error('Exit changed mp_plan');
+    if (!n) throw new Error('no bulk card offered for beef mince on shops 1 and 8');
+  });
   await step('chat: slot tap opens the deck with Pick for me', async () => {
     chatMock.reply = { text: 'ok', edits: [] };
     await openChat();

@@ -46,6 +46,8 @@ thighs, part frozen) and cheaper meal variations, and schedules batch-cook days 
 by total cost over several weeks; the shopping list builds up as you chat. Also a "plan from the fridge" mode: you list or photo what is left (fridge, freezer, cupboard) and it plans
 the days before the next shop from that alone. Requires 88; builds on Phases 59, 67, 76.
 
+90a (freezer-first placement, bulk buys, 28-day shop lists) built 2026-10-26, live checks pending; verified by check.py 10/10 and worker_test. 90b still to build.
+
 ## Phase 91: Hermes notes in Obsidian [M] — not started
 
 Goal: standing notes ("hates Sunday cooking", "tight budget last week of the month") live in a vault note the user can edit in

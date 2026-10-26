@@ -3463,6 +3463,52 @@
     ov.remove();
   }
 
+  { // Phase 90a: fromCook, bulk, 28-day shop lists
+    const SL = MP.ShoppingList, PCx = MP.PlanChat;
+    const sh = { cooked_leftovers: { fridgeDays: 3, frozenMonths: 3 }, raw_chicken: { fridgeDays: 2, frozenMonths: 9 }, tinned: { ambient: true } };
+    const mk = (id, o) => ({ id, name: id, mealTypes: ["dinner", "lunch"], servings: 1, ingredients: [{ key: "chicken_thighs", qty: "500g" }], ...o });
+    const byId = { a: mk("a"), b: mk("b", { ingredients: [{ key: "chicken_thighs", qty: "500g" }, { key: "tomato_tin", qty: "1 tin" }] }) };
+    const pack = { items: { chicken_thighs: { label: "Chicken thighs, 600g", packSize: 600, unit: "g", price: 3, bulk: { packSize: 1000, price: 4.2, label: "chicken thighs" } }, tomato_tin: { packSize: 1, unit: "tins", price: 0.5 } } };
+    const days = (n, f) => Array.from({ length: n }, (_, i) => ({ day: i + 1, slots: f(i + 1) }));
+    const plan = { startDate: "2026-09-07", days: days(14, (d) => (d === 1 || d === 9 ? { dinner: { mealId: "a" } } : {})) };
+    check("90a: buildLists covers a 28 and a 21 day plan", Object.keys(SL.buildLists({ ...plan, days: days(28, () => ({})) }, byId, pack)).length === 4 && Object.keys(SL.buildLists({ ...plan, days: days(21, () => ({})) }, byId, pack)).length === 3);
+    const plain = SL.buildLists(plan, byId, pack, null);
+    check("90a: no bulk = unchanged output", deepEqual(plain, SL.buildLists({ ...plan, bulk: [] }, byId, pack, null)) && plain[1].lines[0].packs === 1 && !plain[1].lines[0].bulk);
+    const withB = SL.buildLists({ ...plan, bulk: [{ key: "chicken_thighs", shopDay: 1 }] }, byId, pack, null);
+    const bl = withB[1].lines[0];
+    check("90a: bulk moves later shop to the first with freeze", bl.packs === 1 && bl.packSize === 1000 && bl.lineCost === 4.2 && bl.bulk.freeze === 500 && deepEqual(bl.bulk.coversDays, [8]) && withB[8].lines.length === 0);
+    const opts = SL.bulkOptions(plan, byId, pack, sh);
+    check("90a: bulkOptions saving and kept", opts.length === 1 && opts[0].shopDay === 1 && opts[0].normal === 6 && opts[0].bulk === 4.2 && opts[0].kept === 0 && opts[0].saving === 1.8);
+    check("90a: bulkOptions skips accepted keys, single-shop keys and fridge-only", SL.bulkOptions({ ...plan, bulk: [{ key: "chicken_thighs", shopDay: 1 }] }, byId, pack, sh).length === 0
+      && SL.bulkOptions({ ...plan, days: days(14, (d) => (d === 1 ? { dinner: { mealId: "a" } } : {})) }, byId, pack, sh).length === 0);
+    // fromCook
+    const cook = { id: "a:2026-09-07", mealId: "a", name: "a", cookedAt: "2026-09-07T10:00:00Z", portionsLeft: 1, storage: "freezer" };
+    const ctx = { terms: [], cooks: [cook], shelfData: sh };
+    const p2 = { startDate: "2026-09-07", days: days(6, () => ({})) };
+    let r = MP.placeSlots(p2, [{ day: 2, slot: "dinner", mealId: "a", cookId: cook.id }], byId, ctx);
+    check("90a: placeSlots cookId accepted", r.refused.length === 0 && r.plan.days[1].slots.dinner.fromCook === cook.id);
+    const why = (x) => (x.refused[0] || {}).why || "";
+    check("90a: placeSlots cookId over-allocation refused", /only 1 portion left/.test(why(MP.placeSlots(r.plan, [{ day: 3, slot: "dinner", mealId: "a", cookId: cook.id }], byId, ctx))));
+    check("90a: placeSlots cookId wrong meal, unknown, snack, breakfast refused", /different meal/.test(why(MP.placeSlots(p2, [{ day: 2, slot: "dinner", mealId: "b", cookId: cook.id }], byId, ctx))) && /no such cook/.test(why(MP.placeSlots(p2, [{ day: 2, slot: "dinner", mealId: "a", cookId: "zz" }], byId, ctx))) && /snack/.test(why(MP.placeSlots(p2, [{ day: 2, slot: "snack", mealId: "a", cookId: cook.id }], byId, ctx))));
+    check("90a: placeSlots cookId past eat-by refused", /eat-by/.test(why(MP.placeSlots({ ...p2, days: days(300, () => ({})) }, [{ day: 290, slot: "dinner", mealId: "a", cookId: cook.id }], byId, ctx))));
+    const pf = { startDate: "2026-09-07", days: days(14, (d) => (d === 2 ? { dinner: { mealId: "a", fromCook: cook.id } } : d === 10 ? { dinner: { mealId: "a" } } : {})) };
+    check("90a: purchaseOccurrences skips fromCook", SL.buildLists(pf, byId, pack, null)[1] === undefined || SL.buildLists(pf, byId, pack, null)[1].lines.length === 0);
+    check("90a: defrostNotes with a freezer cook", deepEqual(MP.ShelfLife.defrostNotes(pf, byId, [cook])[1], [{ mealId: "a", forDay: 2 }]) && !MP.ShelfLife.defrostNotes(pf, byId, [])[1]);
+    const mir = MP.Sync.planMirror({ ...pf, bulk: [{ key: "k", shopDay: 1, junk: 1 }] });
+    check("90a: planMirror keeps fromCook and bulk", mir.days[1].slots.dinner.fromCook === cook.id && deepEqual(mir.bulk, [{ key: "k", shopDay: 1 }]));
+    // roll
+    const rolled = MP.rollPlan({ ...plan, bulk: [{ key: "x", shopDay: 8 }, { key: "y", shopDay: 1 }] }, "2026-09-14", (l, t) => ({ startDate: t, days: days(14, () => ({})) }));
+    check("90a: roll shifts plan.bulk and drops below day 1", rolled && deepEqual(rolled.plan.bulk, [{ key: "x", shopDay: 1 }]));
+    // validateReply
+    const vr = (list) => PCx.validateReply({ edits: list }, {}, "2026-01-01").reply.edits;
+    const ve = vr([{ type: "bulk", key: "rice", shopDay: 1 }, { type: "bulk", key: "", shopDay: 1 }, { type: "bulk", key: "rice", shopDay: 40 }, { type: "place", day: 1, slot: "dinner", mealId: "a", cookId: "c1" }]);
+    check("90a: validateReply bulk and cookId", ve.length === 2 && ve[0].key === "rice" && ve[1].cookId === "c1");
+    check("90a: validateReply bulk max 5", vr(Array.from({ length: 8 }, () => ({ type: "bulk", key: "rice", shopDay: 1 }))).length === 5);
+    // applyBulkEdits
+    const pl = { ...plan }; const bk = MP.Plan.applyBulkEdits([{ type: "bulk", key: "chicken_thighs", shopDay: 1 }, { type: "bulk", key: "nope", shopDay: 1 }], { plan: pl, byId, packData: pack, shelfData: sh });
+    check("90a: applyBulkEdits card text, refusal, accept and undo", bk.cards.length === 1 && bk.refused.length === 1 && /Buy 1 kg chicken thighs on shop 1, freeze 500 g, saves £1.80/.test(bk.cards[0].text) && !pl.bulk && (bk.cards[0].accept(), pl.bulk.length === 1) && (bk.cards[0].undo(), !pl.bulk));
+  }
+
   lines.push("", `${pass} passed, ${fail} failed`);
   document.getElementById("out").textContent = lines.join("\n");
 })();

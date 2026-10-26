@@ -283,7 +283,7 @@
   function wrapUp(pl, ctx) {
     const c = Object.assign({ byId: mealsById, library, tags: tagsData && tagsData.tags, targets: tagsData && tagsData.targets, packData, pantry: { items: MP.Sync.localItems("pantry") }, fridgeDays: ((shelfData || {}).cooked_leftovers || {}).fridgeDays || 3 }, ctx);
     const gaps = planMetrics(pl, c).weekGaps.slice(0, Math.ceil(pl.days.length / 7));
-    const dinner = (d) => (d && d.slots.dinner && d.slots.dinner.mealId && !d.slots.dinner.frozenFrom ? c.byId[d.slots.dinner.mealId] : null);
+    const dinner = (d) => (d && d.slots.dinner && d.slots.dinner.mealId && !d.slots.dinner.frozenFrom && !d.slots.dinner.fromCook ? c.byId[d.slots.dinner.mealId] : null);
     const spare = [];
     pl.days.forEach((d, i) => {
       const m = dinner(d);
@@ -305,7 +305,7 @@
     if (!m) return none;
     const wd = c.plan.startDate ? MP.Generator.weekdayOf(c.plan.startDate, day) : null;
     const cap = wd === null ? null : c.caps[wd] || null;
-    if (m.leftoverOf || s.frozenFrom) return { ...none, mins: 0, cap };
+    if (m.leftoverOf || s.frozenFrom || s.fromCook) return { ...none, mins: 0, cap };
     const mins = m.totalMins || MP.estMins(m);
     if (!mins) return { ...none, cap };
     return { mins, est: !m.totalMins, cap, over: !!cap && mins > cap };
@@ -570,7 +570,7 @@
     // Phase 88: Hermes's own picks go in last, so a place beats a re-pick of the same slot. App-side checks live in MP.placeSlots.
     const places = edits.filter((e) => e.type === "place");
     if (places.length) {
-      const res = MP.placeSlots(pl, places, c.byId, { terms: MP.Sync.hardTerms(), ratings: MP.Ratings.get(), fridgeDays: ((shelfData || {}).cooked_leftovers || {}).fridgeDays, caps: (c.prefs && c.prefs.timeCaps) || {}, pending: (ctx && ctx.pending) || [] });
+      const res = MP.placeSlots(pl, places, c.byId, { terms: MP.Sync.hardTerms(), ratings: MP.Ratings.get(), fridgeDays: ((shelfData || {}).cooked_leftovers || {}).fridgeDays, caps: (c.prefs && c.prefs.timeCaps) || {}, pending: (ctx && ctx.pending) || [], cooks: (ctx && ctx.cooks) || MP.Cooks.all(), shelfData });
       res.changes.forEach((ch) => {
         const i = changes.findIndex((x) => x.day === ch.day && x.slot === ch.slot);
         const before = i >= 0 ? changes[i].before : pl.days[ch.day - 1].slots[ch.slot] || null, after = res.plan.days[ch.day - 1].slots[ch.slot] || null;
@@ -612,6 +612,28 @@
     return { applied, refused };
   }
 
+  /** Phase 90a: chat `bulk` proposals. The app recomputes the numbers (Hermes's own saving is never shown); a key with no saving on 2+ shops
+   *  is refused. Nothing is written here: the card's Accept writes plan.bulk. Returns { cards: [{ edit, text, accept(), undo() }], refused }. */
+  function applyBulkEdits(edits, ctx) {
+    const c = Object.assign({ plan, byId: mealsById, packData, shelfData }, ctx);
+    const cards = [], refused = [];
+    const kg = (v) => (v >= 1000 ? `${+(v / 1000).toFixed(2)} kg` : `${Math.round(v)} g`);
+    for (const e of edits.filter((x) => x.type === "bulk")) {
+      const opt = MP.ShoppingList.bulkOptions(c.plan, c.byId, c.packData, c.shelfData).find((o) => o.key === e.key);
+      if (!opt) { refused.push({ edit: e, why: `${MP.labelize(e.key)}: no saving from a bulk buy (needs a keeping item used on 2+ shops where the bulk pack is cheaper)` }); continue; }
+      const entry = { key: opt.key, shopDay: opt.shopDay };
+      const lst = MP.ShoppingList.buildLists({ ...c.plan, bulk: [...(c.plan.bulk || []), entry] }, c.byId, c.packData, null)[opt.shopDay]; const line = (lst.lines.concat(lst.staples)).find((l) => l.key === opt.key);
+      const b = c.packData.items[opt.key].bulk, unit = c.packData.items[opt.key].unit;
+      const fz = line && line.bulk && line.bulk.freeze;
+      const buy = (line ? line.packs : 1) * b.packSize;
+      const what = unit === "g" ? `${kg(buy)} ${opt.label}` : `${line ? line.packs : 1} × ${opt.label}`;
+      cards.push({ edit: e, text: `Buy ${what} on shop ${opt.shopDay}${fz ? `, freeze ${kg(fz)}` : ""}, saves £${opt.saving.toFixed(2)} over the plan`,
+        accept: () => { c.plan.bulk = [...(c.plan.bulk || []).filter((x) => x.key !== entry.key), entry]; },
+        undo: () => { c.plan.bulk = (c.plan.bulk || []).filter((x) => x.key !== entry.key); if (!c.plan.bulk.length) delete c.plan.bulk; } });
+    }
+    return { cards, refused };
+  }
+
   /** Phase 88: the app's briefing for Hermes, built once at chat open (the app is the authority; the bridge adds spend).
    *  Over CHAT_BRIEF_MAX chars: meal descriptions go first, then non-dinner meals' tags. ctx (tests): { plan, library, prefs, ... }. */
   const CHAT_BRIEF_MAX = 60000;
@@ -623,13 +645,16 @@
     const s = c.settings || {};
     const taste = MP.Ratings.tasteProfile(c.ratings, c.library, packData && packData.planning);
     const tokens = Object.entries(taste.tokens || {}).sort((a, b) => b[1] - a[1]);
+    const pk = c.packData || packData, sh = c.shelfData || shelfData;
+    const cost = (m, vid) => (pk && pk.items ? Math.round(MP.ShoppingList.mealCost(vid ? MP.effectiveMeal(m, vid) : m, pk).total * 100) / 100 : 0);
+    const cooks = (c.cooks || MP.Cooks.all()).filter((r) => r && r.portionsLeft > 0).map((r) => ({ cookId: r.id, mealId: r.mealId, name: r.name, portions: r.portionsLeft, storage: r.storage === "freezer" ? "freezer" : "fridge", eatBy: (sh && MP.ShelfLife.leftoverEatBy(r, sh)) || null }));
     const meals = c.library.map((m) => {
       const est = m.totalMins ? null : MP.estMins(m);
       return {
-        id: m.id, name: m.name, mealTypes: m.mealTypes, servings: m.servings || 1,
+        id: m.id, cost: cost(m), name: m.name, mealTypes: m.mealTypes, servings: m.servings || 1,
         ...(m.prepEffort ? { prepEffort: m.prepEffort } : {}), ...(m.leftoverOf ? { leftoverOf: m.leftoverOf } : {}), ...(kids[m.id] ? { leadsTo: kids[m.id] } : {}),
         ...(m.freezable !== undefined ? { freezable: m.freezable } : {}), ...(m.totalMins ? { totalMins: m.totalMins } : est ? { estMins: est } : {}),
-        ...(Array.isArray(m.variants) && m.variants.length ? { variants: m.variants.map((v) => ({ id: v.id, name: v.name })) } : {}),
+        ...(Array.isArray(m.variants) && m.variants.length ? { variants: m.variants.map((v) => ({ id: v.id, name: v.name, cost: cost(m, v.id) })) } : {}),
         ...(m.tags && m.tags.length ? { tags: m.tags } : {}), ...(m.description ? { description: m.description } : {}),
       };
     });
@@ -642,6 +667,8 @@
       taste: { rated: taste.n, liked: tokens.filter((t) => t[1] > 0).slice(0, 8).map((t) => t[0]), disliked: tokens.filter((t) => t[1] < 0).slice(-8).map((t) => t[0]) },
       pantry: c.pantry.map((i) => ({ name: i.name, qty: MP.qtyText(i.qty), ...(i.useBy ? { useBy: i.useBy } : {}), ...(i.storage ? { storage: i.storage } : {}) })),
       gaps: c.metrics.weekGaps,
+      cooks, shopDays: pk && pk.items ? Object.keys(MP.ShoppingList.buildLists(c.plan, mealsById, pk, null)).map(Number).sort((a, b) => a - b) : [],
+      bulk: pk && pk.items ? MP.ShoppingList.bulkOptions(c.plan, mealsById, pk, sh) : [],
       meals,
       plan: c.plan.days.map((d) => ({ day: d.day, slots: Object.fromEntries(SLOT_TYPES.map((t) => { const x = d.slots[t]; return [t, x ? (x.eatingOut ? "out" : x.mealId || null) : null]; })) })),
     };
@@ -1178,7 +1205,7 @@
     const todayIso = new Date().toLocaleDateString("en-CA");
     const lefts = shelfData ? MP.ShelfLife.leftoverView(MP.Cooks.all(), todayIso, shelfData) : [];
     const todayDay = plan && plan.startDate ? planDayOf(plan.startDate, todayIso, plan.days.length) : null;
-    const defrost = todayDay && shelfData ? (MP.ShelfLife.defrostNotes(plan, mealsById)[todayDay] || []) : [];
+    const defrost = todayDay && shelfData ? (MP.ShelfLife.defrostNotes(plan, mealsById, MP.Cooks.all())[todayDay] || []) : [];
     const leftoverRow = (l) => `<li class="leftover-row${l.lastDay ? " last-day" : ""}"><span class="leftover-name">${esc(l.name)} · ${l.portionsLeft} left · ${l.storage}</span>
         <span class="leftover-when">${l.lastDay ? "eat or freeze today" : `eat by ${esc(l.eatBy)} (est.)`}</span>
         ${mealsById[l.mealId] ? `<button class="btn" data-left-eat="${esc(l.id)}">Ate one</button>` : ""}
@@ -1726,7 +1753,9 @@
     const from = slotType === "dinner" ? MP.frozenParentDay(plan, day, slot) : null;
     const next = plan.days[day] && plan.days[day].slots.dinner;
     const defrost = MP.frozenParentDay(plan, day + 1, next) && mealsById[next.mealId];
+    const cook = slot && slot.fromCook ? MP.Cooks.all().find((r) => r.id === slot.fromCook) : null;
     return (from ? `<p class="day-slot-note frozen-note">❄ Frozen portion of day ${from}</p>` : "") +
+      (slot && slot.fromCook ? `<p class="day-slot-note frozen-note">${cook && cook.storage === "freezer" ? "❄ From the freezer" : "From a cook you have"}</p>` : "") +
       (defrost ? `<p class="day-slot-note defrost-note">Defrost tonight for ${esc(mealsById[next.mealId].name)} tomorrow</p>` : "");
   }
 
@@ -1852,11 +1881,14 @@
     });
   }
 
+  /** Phase 90a: a slot placed from a cook eats that record first when it is still open (else the usual order). */
+  const firstFromCook = (open, slot) => { const i = slot && slot.fromCook ? open.findIndex((r) => r.id === slot.fromCook) : -1; return i > 0 ? [open[i], ...open.slice(0, i), ...open.slice(i + 1)] : open; };
+
   /** Router: branch A (an open cook exists) skips the pantry fetch entirely;
    *  branch B/C fetches pantry as before. Computed before any pantry I/O. */
   async function openEatSheet(meal, day, slotType, variantId) {
     eatCtx = { meal, day, slotType, variantId: variantId || null, open: null };
-    const open = MP.Cooks.openFor(meal.id);
+    const open = firstFromCook(MP.Cooks.openFor(meal.id), day && plan.days[day - 1].slots[slotType]);
     document.getElementById("eat-overlay").classList.remove("hidden");
     if (open.length > 0) {
       eatCtx.open = open;
@@ -2143,8 +2175,8 @@
     if (!result.applied.length && !result.offPlan.length) return result;
     let pantry = await MP.Sync.fetchItems("pantry");
     // Shared cook branch: an open cook is a portion (no pantry), else a cook at the planned quantities.
-    const eatOne = (meal, variantId, eatenAt) => {
-      const open = MP.Cooks.openFor(meal.id);
+    const eatOne = (meal, variantId, eatenAt, slot) => {
+      const open = firstFromCook(MP.Cooks.openFor(meal.id), slot);
       if (open.length) {
         MP.Cooks.take(open[0].id);
       } else {
@@ -2158,7 +2190,7 @@
     };
     for (const a of result.applied) {
       const slot = plan.days[a.day - 1].slots[a.slotType];
-      eatOne(MP.effectiveMeal(mealsById[a.mealId], slot.variantId, slot.subs), slot.variantId, a.eatenAt);
+      eatOne(MP.effectiveMeal(mealsById[a.mealId], slot.variantId, slot.subs), slot.variantId, a.eatenAt, slot);
       slot.eatenAt = a.eatenAt;
     }
     // Phase 80b: off-plan, no slot written.
@@ -2208,7 +2240,7 @@
     renderPlacementBanner(e.detail);
   });
 
-  MP.Plan = { applyChatEdits, applyMealEdits, applyRateEdits, chatBriefing, chatContext, tieFor, effectiveBudget, budgetSwaps, resetChatPrefs, reflow, snapshot, restore, planMetrics, whatIf, fixGap, wrapUp, cookMinsFor, tickerFor, parseGuidedSlots, applyPlacements, logPortion, matchEatRequests, applyEatRequests };
+  MP.Plan = { applyBulkEdits, applyChatEdits, applyMealEdits, applyRateEdits, chatBriefing, chatContext, tieFor, effectiveBudget, budgetSwaps, resetChatPrefs, reflow, snapshot, restore, planMetrics, whatIf, fixGap, wrapUp, cookMinsFor, tickerFor, parseGuidedSlots, applyPlacements, logPortion, matchEatRequests, applyEatRequests };
 
   // ---- Planning chat with Hermes (Phase 72) ----
   // The working plan is `plan` itself with guidedActive on (no savePlan runs); Exit restores the snapshot, Save commits.
@@ -2443,15 +2475,16 @@
   }
 
   /** Phase 87: one card per meal change (applied with Undo, or refused with the reason); library changes outlive Exit, so Exit warns. */
-  const liveMealChanges = () => (chat ? chat.meals.filter((x) => x.undo && !x.undone && !x.rate) : []);
+  const liveMealChanges = () => (chat ? chat.meals.filter((x) => x.undo && !x.undone && !x.rate && !x.bulk) : []);
   const pendingText = (e) => {
     const old = e.mealId && mealsById[e.mealId], nm = old ? old.name : e.mealId;
     return e.type === "mealCreate" ? `Hermes wants to add ${e.name}` : e.type === "mealEdit" ? `Hermes wants to change ${nm}${e.patch.totalMins ? ` (${e.patch.totalMins} min)` : ""}` : `Hermes wants to remove ${nm}`;
   };
   /** Slugs of meals Hermes proposed but the user hasn't added yet: a place of one is refused ("add the meal first"). */
-  const pendingMealIds = () => chat.meals.filter((x) => x.pending && x.edit.type === "mealCreate").flatMap((x) => { const sl = x.edit.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, ""); return [sl, "user-" + sl, MP.slugify(x.edit.name)]; });
+  const pendingMealIds = () => chat.meals.filter((x) => x.pending && x.edit && x.edit.type === "mealCreate").flatMap((x) => { const sl = x.edit.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, ""); return [sl, "user-" + sl, MP.slugify(x.edit.name)]; });
   function answerMeal(x, yes) {
     if (!yes) { chat.meals.splice(chat.meals.indexOf(x), 1); return renderChatMeals(); }
+    if (x.bulk) { x.accept(); x.pending = false; x.undo = x.undoBulk; renderChatMeals(); renderPlan(); return; }
     MP.Sync.noteLibraryChange("chat: " + (x.edit.name || x.edit.mealId)); // before the write: its save event starts the sync
     const res = applyMealEdits([x.edit]);
     x.pending = false;
@@ -2468,7 +2501,7 @@
       txt.textContent = x.pending ? x.text : x.undo ? (x.undone ? "Undone: " : "") + x.text : "Refused: " + x.text;
       li.appendChild(txt);
       if (x.pending) {
-        [["Add", true, "btn-secondary chat-meal-add"], ["No", false, "btn-secondary chat-meal-no"]].forEach(([label, yes, cls]) => {
+        [[x.bulk ? "Accept" : "Add", true, "btn-secondary chat-meal-add"], ["No", false, "btn-secondary chat-meal-no"]].forEach(([label, yes, cls]) => {
           const b = document.createElement("button");
           b.type = "button"; b.className = cls; b.textContent = label;
           b.addEventListener("click", () => answerMeal(x, yes));
@@ -2494,7 +2527,7 @@
     }
   }
   function undoMeal(x) {
-    if (!x.rate) MP.Sync.noteLibraryChange("undo in chat: " + x.text);
+    if (!x.rate && !x.bulk) MP.Sync.noteLibraryChange("undo in chat: " + x.text);
     x.undo(); x.undone = true;
     renderChatMeals(); renderPlan(); renderChatWeek();
   }
@@ -2509,11 +2542,14 @@
     // Phase 88: meal create/edit/remove wait for an Add/No card; ratings apply at once with Undo
     const mealEdits = reply.edits.filter((e) => e.type.startsWith("meal"));
     mealEdits.forEach((e) => chat.meals.push({ edit: e, pending: true, text: pendingText(e) }));
+    const bulked = applyBulkEdits(reply.edits);
+    bulked.cards.forEach((k) => chat.meals.push({ bulk: true, pending: true, text: k.text, accept: k.accept, undoBulk: k.undo }));
+    bulked.refused.forEach((r) => chat.meals.push({ text: r.why }));
     const rated = applyRateEdits(reply.edits);
     rated.applied.forEach((a) => chat.meals.push({ rate: true, text: a.text, undo: a.undo }));
     rated.refused.forEach((r) => chat.meals.push({ text: r.why }));
-    if (mealEdits.length || reply.edits.some((e) => e.type === "rate")) renderChatMeals();
-    const rest = reply.edits.filter((e) => !e.type.startsWith("meal") && e.type !== "rate");
+    if (mealEdits.length || reply.edits.some((e) => e.type === "rate" || e.type === "bulk")) renderChatMeals();
+    const rest = reply.edits.filter((e) => !e.type.startsWith("meal") && e.type !== "rate" && e.type !== "bulk");
     if (rest.length) {
       const changes = applyChatEdits(rest, { focusDay: chat.day, pending: pendingMealIds() });
       const line = MP.PlanChat.describe(rest, plan.startDate, chat.day);

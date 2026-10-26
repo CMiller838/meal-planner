@@ -275,7 +275,7 @@
     plan.days.forEach((day, idx) => {
       SLOT_TYPES.forEach((slotType) => {
         const slot = day.slots[slotType];
-        if (!slot || !slot.mealId) return;
+        if (!slot || !slot.mealId || slot.fromCook) return; // Phase 90a: eaten from an existing cook, buys nothing
         const meal = mealsById[slot.mealId];
         if (!meal) return;
         if (slotType === "dinner" && MP.frozenParentDay(plan, day.day, slot)) return; // frozen portion: cooked once, no new ingredients (Phase 59)
@@ -289,10 +289,25 @@
     return occ;
   }
 
+  /** Phase 90a: cost of `need` (a {value,unit} in bulk.unit) bought as bulk packs, plus normal packs for the remainder when that is
+   *  cheaper (ponytail: greedy, bulk packs first, then the cheapest normal mix; enough for two pack sizes). */
+  function bulkBuy(need, bulk, normal) {
+    const whole = Math.floor(need / bulk.packSize);
+    let best = { bulkPacks: Math.ceil(need / bulk.packSize), extra: 0 };
+    best.cost = best.bulkPacks * bulk.price;
+    if (whole >= 1 && normal) {
+      const extra = Math.ceil((need - whole * bulk.packSize) / normal.packSize);
+      const cost = whole * bulk.price + extra * normal.price;
+      if (cost < best.cost) best = { bulkPacks: whole, extra, cost };
+    }
+    best.bought = best.bulkPacks * bulk.packSize + best.extra * (normal ? normal.packSize : 0);
+    return best;
+  }
+
   function buildLists(plan, mealsById, packData, pantry) {
     const have = pantryIndex(pantry);
     const offset = MP.ShelfLife.shopOffset(plan); // Phase 68: shop cycles are every 7 days from shopAnchor
-    const shopDays = [...new Set(Array.from({ length: 14 }, (_, i) => MP.ShelfLife.shopDayFor(i + 1, offset)))];
+    const shopDays = [...new Set(Array.from({ length: Math.max(14, (plan.days && plan.days.length) || 0) }, (_, i) => MP.ShelfLife.shopDayFor(i + 1, offset)))];
     const lists = {};
     // shopDay -> key -> { parses: [{value,unit}|null], meals: Set, label }
     const groups = {};
@@ -301,6 +316,7 @@
       groups[d] = {};
     });
 
+    const bulkInfo = {}; // shopDay -> key -> { coversDays, ownNeed }
     purchaseOccurrences(plan, mealsById).forEach(({ day, meal }) => {
       const shopDay = MP.ShelfLife.shopDayFor(day, offset);
       const group = groups[shopDay];
@@ -310,6 +326,23 @@
         g.parses.push(parseQty(ing.qty));
         if (!g.meals.includes(meal.name)) g.meals.push(meal.name);
       });
+    });
+
+    // Phase 90a: plan.bulk moves a key's later shops onto the bulk shop (only when every need is known in the bulk pack's unit)
+    ((plan && plan.bulk) || []).forEach(({ key, shopDay }) => {
+      const b = packData.items[key] && packData.items[key].bulk;
+      if (!b || !groups[shopDay] || !groups[shopDay][key]) return;
+      const later = shopDays.filter((d) => d > shopDay && groups[d][key]);
+      const all = [shopDay, ...later].flatMap((d) => groups[d][key].parses);
+      if (!all.length || !all.every((p) => p && p.unit === packData.items[key].unit)) return;
+      const own = groups[shopDay][key].parses.reduce((a, p) => a + p.value, 0);
+      later.forEach((d) => {
+        const g = groups[d][key];
+        groups[shopDay][key].parses.push(...g.parses);
+        g.meals.forEach((m) => { if (!groups[shopDay][key].meals.includes(m)) groups[shopDay][key].meals.push(m); });
+        delete groups[d][key];
+      });
+      (bulkInfo[shopDay] = bulkInfo[shopDay] || {})[key] = { coversDays: later, ownNeed: own };
     });
 
     shopDays.forEach((shopDay) => {
@@ -335,14 +368,23 @@
           }
         }
 
-        const packs = packsFor(needed, resolved);
-        const price = resolved ? resolved.price : null;
-        const lineCost = price != null ? packs * price : 0;
+        let packs = packsFor(needed, resolved);
+        let price = resolved ? resolved.price : null;
+        let lineCost = price != null ? packs * price : 0;
+        let packSize = resolved ? resolved.packSize : null;
+        const bi = bulkInfo[shopDay] && bulkInfo[shopDay][key];
+        let bulkNote, extra;
+        if (bi && needed && needed.value > 0) {
+          const bb = bulkBuy(needed.value, item.bulk, resolved);
+          packs = bb.bulkPacks; price = item.bulk.price; packSize = item.bulk.packSize; lineCost = bb.cost;
+          if (bb.extra) extra = { packs: bb.extra, packSize: resolved.packSize, price: resolved.price };
+          bulkNote = { freeze: Math.max(0, Math.round(bb.bought - bi.ownNeed)), coversDays: bi.coversDays };
+        }
         const line = {
           key,
           label: item && item.label ? item.label : g.label,
           needed,
-          packSize: resolved ? resolved.packSize : null,
+          packSize,
           unit: resolved ? resolved.unit : null,
           packs,
           price,
@@ -350,6 +392,8 @@
           estimated: resolved ? resolved.estimated : false,
           meals: g.meals,
         };
+        if (bulkNote) line.bulk = bulkNote;
+        if (extra) line.extra = extra;
         if (pantryQty !== undefined) line.pantryQty = pantryQty;
         if (raw !== undefined) line.onHand = onHand;
         if (!resolved) list.estimated.push(line);
@@ -368,6 +412,34 @@
     });
 
     return lists;
+  }
+
+  /** Phase 90a: bulk-able keys used on 2+ shops where one bulk buy beats the normal packs over the whole plan.
+   *  saving = normal - (bulk - kept); kept = pro-rata £ value of what is left over after the plan. Keys already in plan.bulk are skipped. */
+  function bulkOptions(plan, byId, packData, shelfData) {
+    if (!plan || !Array.isArray(plan.days) || !packData || !packData.items) return [];
+    const done = new Set(((plan.bulk) || []).map((b) => b.key));
+    const bare = { ...plan, bulk: undefined };
+    const lists = buildLists(bare, byId, packData, null);
+    const shops = Object.keys(lists).map(Number).sort((a, b) => a - b);
+    const cats = (MP.ShelfLife && MP.ShelfLife.INGREDIENT_CATEGORY) || {};
+    const out = [];
+    Object.entries(packData.items).forEach(([key, item]) => {
+      const b = item.bulk;
+      if (!b || done.has(key)) return;
+      const info = (shelfData || {})[cats[key]];
+      if (info && info.frozenMonths == null && info.fridgeDays != null) return; // fridge-only: does not keep
+      const lines = shops.map((d) => [d, lists[d].lines.concat(lists[d].staples).find((l) => l.key === key)]).filter((x) => x[1]);
+      if (lines.length < 2 || !lines.every(([, l]) => l.needed && l.needed.unit === item.unit && l.unit === item.unit)) return;
+      const need = lines.reduce((a, [, l]) => a + l.needed.value, 0);
+      const normal = lines.reduce((a, [, l]) => a + l.lineCost, 0);
+      const bb = bulkBuy(need, b, item);
+      const kept = Math.max(0, (bb.bought - need) / b.packSize * b.price);
+      const r2 = (n) => Math.round(n * 100) / 100;
+      const saving = r2(normal - (bb.cost - kept));
+      if (saving > 0) out.push({ key, label: b.label || item.label || MP.labelize(key), shopDay: lines[0][0], normal: r2(normal), bulk: r2(bb.cost), saving, kept: r2(kept) });
+    });
+    return out.sort((a, b) => b.saving - a.saving);
   }
 
   // ponytail: both shop days subtract the same pantry amount, so buildLists
@@ -550,5 +622,5 @@
     return out;
   }
 
-  MP.ShoppingList = { useUpItems, scaleMeal, scaleShortfall, mealsUsing, load, loadGroups, groupIndex, buildLists, parseQty, packsFor, normalizeKey, aisleFor, groupByAisle, lineId, planLineId, mergeLines, adhocView, adhocToLines, LINE_STATES, LINE_SOURCES, pantryIndex, pantryOverlap, hasEnough, cookable, quickPicks, remainingQty, eatPlan, priceFor, mealCost, costIndex, costTier, costBadgeHtml };
+  MP.ShoppingList = { bulkOptions, useUpItems, scaleMeal, scaleShortfall, mealsUsing, load, loadGroups, groupIndex, buildLists, parseQty, packsFor, normalizeKey, aisleFor, groupByAisle, lineId, planLineId, mergeLines, adhocView, adhocToLines, LINE_STATES, LINE_SOURCES, pantryIndex, pantryOverlap, hasEnough, cookable, quickPicks, remainingQty, eatPlan, priceFor, mealCost, costIndex, costTier, costBadgeHtml };
 })(typeof globalThis !== "undefined" ? globalThis : this);

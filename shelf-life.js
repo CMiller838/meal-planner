@@ -12,6 +12,9 @@
   const INGREDIENT_CATEGORY = {
     chicken_breast: "raw_chicken",
     chicken_roast: "raw_chicken",
+    chicken_thighs: "raw_chicken",
+    frozen_peas: "frozen_vegetables",
+    cheddar: "hard_cheese",
     leftover_chicken: "cooked_leftovers",
     beef_mince: "raw_beef_mince",
     salmon: "raw_fish",
@@ -54,7 +57,7 @@
     const occ = {};
     plan.days.forEach((day) => {
       Object.values(day.slots).forEach((slot) => {
-        if (!slot || !slot.mealId || MP.frozenParentDay(plan, day.day, slot)) return;
+        if (!slot || !slot.mealId || slot.fromCook || MP.frozenParentDay(plan, day.day, slot)) return;
         (occ[slot.mealId] = occ[slot.mealId] || []).push(day.day);
       });
     });
@@ -132,7 +135,7 @@
         if (!slot || !slot.mealId) return;
         const meal = mealsById[slot.mealId];
         if (!meal) return;
-        if (MP.frozenParentDay(plan, day.day, slot)) return; // frozen shelf life is months (Phase 59)
+        if (slot.fromCook || MP.frozenParentDay(plan, day.day, slot)) return; // frozen shelf life is months (Phase 59)
         const effMeal = MP.effectiveMeal(meal, slot.variantId, slot.subs);
         const w = evaluateSlot(day.day, effMeal, occ, shelfData, offset);
         if (w) warnings[`${day.day}-${slotType}`] = w;
@@ -142,11 +145,12 @@
   }
 
   /** { [day]: [{ mealId, forDay }] } — defrost reminder on the day before each frozen portion (Phase 59). */
-  function defrostNotes(plan, mealsById) {
+  function defrostNotes(plan, mealsById, cooks) {
     const notes = {};
+    const freezer = new Set((cooks || []).filter((r) => r && r.storage === "freezer").map((r) => r.id)); // Phase 90a: a slot eaten from a freezer cook
     ((plan && plan.days) || []).forEach((day) => {
       const slot = day.slots && day.slots.dinner;
-      if (!slot || !slot.mealId || !mealsById[slot.mealId] || !MP.frozenParentDay(plan, day.day, slot) || day.day < 2) return;
+      if (!slot || !slot.mealId || !mealsById[slot.mealId] || !(MP.frozenParentDay(plan, day.day, slot) || (slot.fromCook && freezer.has(slot.fromCook))) || day.day < 2) return;
       (notes[day.day - 1] = notes[day.day - 1] || []).push({ mealId: slot.mealId, forDay: day.day });
     });
     return notes;

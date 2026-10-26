@@ -413,11 +413,25 @@
       const chk = mx ? mx.check(m, c.terms || []) : { ok: true, reasons: [] };
       if (!chk.ok) { no(chk.reasons.join(", ")); continue; }
       if (c.ratings && c.ratings[m.id] && c.ratings[m.id].never) { no("rated never"); continue; }
-      if (m.leftoverOf) {
+      let cookRec = null;
+      if (p.cookId) {
+        if (!["dinner", "lunch"].includes(p.slot)) { no("a cook can only fill lunch or dinner"); continue; }
+        cookRec = (c.cooks || []).find((r) => r && r.id === p.cookId);
+        if (!cookRec || !(cookRec.portionsLeft > 0)) { no("no such cook, or none left"); continue; }
+        if (cookRec.mealId !== m.id) { no("that cook is a different meal"); continue; }
+        const taken = cur.days.reduce((n, d) => n + Object.entries(d.slots).filter(([t, x]) => x && x.fromCook === p.cookId && !(d.day === p.day && t === p.slot)).length, 0);
+        if (taken >= cookRec.portionsLeft) { no(`only ${cookRec.portionsLeft} portion${cookRec.portionsLeft === 1 ? "" : "s"} left`); continue; }
+        const eatBy = MP.ShelfLife && MP.ShelfLife.leftoverEatBy(cookRec, c.shelfData);
+        const slotDate = cur.startDate && new Date(`${cur.startDate}T12:00:00Z`);
+        if (slotDate) slotDate.setUTCDate(slotDate.getUTCDate() + p.day - 1);
+        if (eatBy && slotDate && slotDate.toISOString().slice(0, 10) > eatBy) { no(`past its eat-by (${eatBy})`); continue; }
+      }
+      if (!cookRec && m.leftoverOf) {
         const ok = cur.days.some((d) => d.day < p.day && p.day - d.day <= fridge && d.slots.dinner && d.slots.dinner.mealId === m.leftoverOf);
         if (!ok) { no("no cook of its parent dinner in the days before"); continue; }
       }
       const slotValue = { mealId: m.id };
+      if (cookRec) slotValue.fromCook = cookRec.id;
       if (p.variantId && findVariant(m, p.variantId)) slotValue.variantId = p.variantId;
       cur.days[p.day - 1].slots[p.slot] = slotValue;
       const mins = m.totalMins || estMins(m), wd = cur.startDate ? new Date(`${cur.startDate}T12:00:00Z`) : null;
@@ -618,6 +632,8 @@
       ...d, day: i + 1,
       slots: Object.fromEntries(Object.entries(d.slots).map(([t, sl]) => [t, sl && Number.isInteger(sl.frozenFrom) ? { ...sl, frozenFrom: Math.min(sl.frozenFrom - shift, sl.frozenFrom - shift < 1 ? -1 : Infinity) } : sl])),
     }));
+    const bulk = (plan.bulk || []).map((b) => ({ ...b, shopDay: b.shopDay - shift })).filter((b) => b.shopDay >= 1);
+    stamp.bulk = bulk.length ? bulk : undefined;
     const locked = {};
     kept.forEach((d) => SLOTS.forEach((t) => { if (d.slots[t] && d.slots[t].mealId) (locked[d.day] = locked[d.day] || {})[t] = d.slots[t]; }));
     const gen = generate(locked, todayIso);

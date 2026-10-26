@@ -27,7 +27,8 @@ RESPONDER_TIMEOUT = 120
 FALLBACK = {"text": "Sorry, could you say that another way?", "edits": [], "ask": False}
 GIVE_UP = {"text": "I didn't follow, could you put it another way?", "edits": [], "ask": False}
 EDIT_TYPES = """Edit types (day is 1-14, slot is breakfast|lunch|dinner|snack):
-  {"type":"place","day":N,"slot":S,"mealId":ID,"variantId":ID}  (puts a library meal in a slot; the app refuses a held slot, wrong slot type, hard exclusions, "never" meals, orphan leftovers)
+  {"type":"place","day":N,"slot":S,"mealId":ID,"variantId":ID,"cookId":ID}  (puts a library meal in a slot; cookId = a briefing "cooks" entry for that meal, eaten from the freezer/fridge, buys nothing; the app refuses a held slot, wrong slot type, hard exclusions, "never" meals, orphan leftovers)
+  {"type":"bulk","key":"<a briefing bulk key>","shopDay":N}  (proposes a bulk buy from the briefing's "bulk" list only; the user accepts on a card, max 5)
   {"type":"busy","day":N}  {"type":"free","day":N}  {"type":"noCook","day":N}
   {"type":"chip","id":"comfort|light|no-spice|less-red-meat|no-pasta|protein-boost","days":[N]}
   {"type":"budget","perWeek":POUNDS,"days":[N]}
@@ -75,6 +76,8 @@ def build_prompt(messages, context, opener=False, strict=False, brief=None, spen
         "You know their whole plan and library from the briefing below. You may place library meals into slots yourself with place edits;"
         " new or changed meals only wait for the user's OK. The app checks every edit.",
         EDIT_TYPES,
+        "Shop once a week (briefing shopDays). Use the briefing's cooks (freezer first) before buying anything, propose bulk buys from its bulk list only,"
+        " pick the cheaper variant or meal by cost, and plan batch cooks with leftover and freezer chains.",
         'Reply with ONLY one JSON object: {"text":"your reply","edits":[...],"ask":false}. "ask":true only closes a tie-break card; edits apply whatever it says.',
     ]
     if strict:

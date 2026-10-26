@@ -730,6 +730,12 @@ assert.equal((await call("GET", "/today", "a")).body.water, 3); // /today untouc
   r = await call("GET", "/shopping", "a");
   assert.deepEqual(Object.keys(r.body.lists).sort(), ["-2", "12", "5"]);
   assert.equal(Object.values(r.body.lists).flatMap((l) => l.lines).find((l) => l.key === "rice").id, "p:2026-10-23:1:rice");
+  // Phase 90a: plan.bulk in the mirror moves the later shop onto the first, same as the app
+  kv.set("library", JSON.stringify({ meals: [{ id: "m", name: "M", servings: 1, mealTypes: ["dinner"], ingredients: [{ key: "oats", qty: "800g" }] }] }));
+  kv.set("plan", JSON.stringify({ startDate: "2026-10-26", bulk: [{ key: "oats", shopDay: 1 }], days: [{ day: 1, slots: { dinner: { mealId: "m" } } }, ...Array(7).fill({ slots: {} }), { day: 9, slots: { dinner: { mealId: "m" } } }] }));
+  r = await call("GET", "/shopping", "a");
+  const bulkOats = Object.values(r.body.lists).flatMap((l) => l.lines).filter((l) => l.key === "oats");
+  assert.ok(bulkOats.length === 1 && bulkOats[0].bulk && bulkOats[0].packSize === 2000, "bulk oats merged");
   // assistant is logged under `shopping`; undo restamps
   kv.delete("activity");
   await call("POST", "/shopping/lines", "a", { lines: [X("oats", "needed", ago(-50), "assistant")] }, { "X-Reason": "test" });
