@@ -278,6 +278,7 @@
         if (!slot || !slot.mealId || slot.fromCook) return; // Phase 90a: eaten from an existing cook, buys nothing
         const meal = mealsById[slot.mealId];
         if (!meal) return;
+        if (slot.leftover) return; // Phase 80: already cooked (Hermes-marked leftover), nothing to buy
         if (slotType === "dinner" && MP.frozenParentDay(plan, day.day, slot)) return; // frozen portion: cooked once, no new ingredients (Phase 59)
         if (slotType === "dinner" && idx > 0) {
           const prevSlot = plan.days[idx - 1].slots.dinner;

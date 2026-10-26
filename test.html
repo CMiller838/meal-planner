@@ -1167,6 +1167,27 @@
       check("applyPlacements: a mixed queue yields both applied and rejected", mixed.applied.length === 1 && mixed.rejected.length === 1);
     }
 
+    // Phase 80: leftover placements
+    {
+      const lib = [{ id: "m1", name: "Meal One", servings: 4, ingredients: [{ key: "beef_mince", qty: "500g" }] }];
+      const p = { startDate: "2026-09-07", days: [{ day: 1, slots: { dinner: null } }, { day: 2, slots: { dinner: null } }] };
+      const r = applyPlacements(p, [{ day: 1, slot: "dinner", mealId: "m1", leftover: true, portions: 3 }, { day: 2, slot: "dinner", mealId: "m1" }], lib);
+      check("leftover: slot is flagged with its portions", r.plan.days[0].slots.dinner.leftover === true && r.plan.days[0].slots.dinner.leftoverPortions === 3);
+      check("leftover: a normal placement is not flagged", !r.plan.days[1].slots.dinner.leftover);
+      check("leftover: applied entry says leftover", r.applied[0].leftover === true && !r.applied[1].leftover);
+      const fx = { startDate: "2026-09-07", days: Array.from({ length: 14 }, (_, i) => ({ day: i + 1, slots: {} })) };
+      const mine = (leftover) => { const pl = JSON.parse(JSON.stringify(fx)); pl.days[4].slots.dinner = { mealId: "chilli-con-carne", ...(leftover ? { leftover: true } : {}) }; return pl; };
+      const mince = (pl) => { const l = MP.ShoppingList.buildLists(pl, mealsById, packData); return Object.values(l).flatMap((x) => x.lines).filter((x) => x.key === "beef_mince").length; };
+      check("leftover: control, a normal chilli slot buys mince", mince(mine(false)) === 1);
+      check("leftover: a leftover chilli slot buys no mince", mince(mine(true)) === 0);
+      const baseline = MP.Cooks.all().length;
+      const slotted = { ...r.plan, days: r.plan.days.map((d) => ({ ...d, slots: { ...d.slots } })) };
+      const changed = MP.Plan.openLeftoverCooks(slotted, lib);
+      check("leftover: opens one Cooks record with the portions", changed && MP.Cooks.all().length === baseline + 1 && MP.Cooks.openFor("m1")[0].portionsLeft === 3);
+      check("leftover: a second pass opens nothing", !MP.Plan.openLeftoverCooks(slotted, lib) && MP.Cooks.all().length === baseline + 1);
+      MP.Cooks.discard(MP.Cooks.openFor("m1")[0].id);
+    }
+
     // methodOf / fillMethods (cooking-mode steps)
     {
       const st = [{ text: " Boil ", minutes: 10 }, { text: "Serve" }];

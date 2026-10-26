@@ -61,6 +61,19 @@ Goal: press Eat on any meal or snack in Browse, pick portions (and optionally wh
 
 # Built, live checks pending
 
+## Phase 93: Leftover placements [S] — built 2026-10-26, live checks pending
+
+**Added 2026-10-26.** `PUT /placements` entries take `leftover: true` (and `portions` 1-12) for a meal the user has already
+cooked. Before this, Hermes could place a meal but not say it was already made, so the shopping list bought its ingredients
+again and the Cooks record (app-owned, never written by Hermes) was missing. The app flags the slot, `buildLists` skips it,
+and the app itself opens the Cooks record once (idempotent, none if one is already open), so the pantry is never deducted.
+**Verify:** a leftover slot adds no ingredient to the shopping list while a normal one does; one Cooks record opens with the
+portions and a second pass opens none; the Worker rejects a non-boolean `leftover` and `portions` without it.
+Assistant side: none (it already places through `PUT /placements`).
+
+**Built 2026-10-26.** Worker validation, `applyPlacements` flag, `openLeftoverCooks` (on placements-applied and page load),
+`buildLists` skip. Verified: `node tools/worker_test.mjs`, `test.html` (6 new assertions) and the walk. Live check pending.
+
 Full specs: `.claude/archive/roadmap_20261026.md` (v5 and v6 prose and every phase section). `/live` ticks `tasks.md` and marks these `— done`.
 
 ## Phase 33: Product nutrition reference (scan a barcode, read a photo) [L] — built 2026-10-22, live checks pending

@@ -791,6 +791,12 @@ Spec: `.claude/specs/phase78.md`
 - [x] `CLAUDE.md` invariant line, HERMES.md route row; Phase 78 marked in `docs/roadmap.md`
 - [ ] Live: with the assistant, run a fridge audit against the deployed Worker, confirm two items and snooze one finding, confirm `GET /pantry/sanity` withholds it
 
+## Phase 93: Leftover placements
+- [x] Worker `placementsError`: `leftover` boolean, `portions` 1-12 only with `leftover: true`; `routes.json` rebuilt
+- [x] `applyPlacements` flags the slot; `openLeftoverCooks` opens the Cooks record once; `buildLists` skips leftover slots
+- [x] `worker_test.mjs` and `test.html` cases; `sw.js` bumped; HERMES.md `/placements` section; Phase 93 in `docs/roadmap.md`
+- [ ] Live: place a meal with `leftover: true, portions: 3` for tomorrow, open the app, confirm the shopping list drops its ingredients and Leftovers shows 3 portions
+
 ## Phase 79: Cooking mode
 - [x] Spec [M]: `.claude/specs/phase79.md`
 - [ ] Live: cook a meal step by step on the phone PWA with a timer running, confirm cook, check the pantry deducted once

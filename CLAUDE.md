@@ -79,6 +79,8 @@ Installable as a PWA on Android Chrome via `manifest.json` + `sw.js`.
   Hermes's; `ASSISTANT_TOKEN` is the personal assistant's, scoped by
   `ASSISTANT_ALLOWED` to reading the plan side, the `/eat-requests` queue and everyday edits (pantry, ad-hoc list,
   plan flag, placements; `/library` append only, 2026-10-17).
+  A placement may carry `leftover: true` (Phase 93): the app flags the slot, skips it in `buildLists` and opens the Cooks
+  record itself; Hermes still never writes `/cooks` for it.
   Don't widen it to a key the assistant doesn't need. `rankSlot` (`generator.js`) now has
   a fourth caller (the Worker) alongside `plan.js`'s three — it's still the
   one ranking implementation; a fourth caller reimplementing any part of it

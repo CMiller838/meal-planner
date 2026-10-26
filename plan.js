@@ -2049,10 +2049,31 @@
       const meal = library.find((m) => m.id === p.mealId);
       const slotValue = { mealId: p.mealId };
       if (p.variantId && MP.findVariant(meal, p.variantId)) slotValue.variantId = p.variantId;
+      // Phase 80: leftover === true means "already cooked, portions in the fridge": the slot buys nothing (buildLists
+      // skips it) and the sync step opens a Cooks record, so eating it takes a portion and never deducts the pantry.
+      if (p.leftover === true) {
+        slotValue.leftover = true;
+        slotValue.leftoverPortions = Number.isInteger(p.portions) && p.portions >= 1 && p.portions <= 12 ? p.portions : 1;
+      }
       dayRec.slots = { ...dayRec.slots, [p.slot]: slotValue };
-      applied.push({ day: p.day, slot: p.slot, mealId: p.mealId, name });
+      applied.push({ day: p.day, slot: p.slot, mealId: p.mealId, name, ...(p.leftover === true ? { leftover: true } : {}) });
     }
     return { plan: { ...planIn, days }, applied, rejected };
+  }
+
+  /** Phase 80: opens a Cooks record for each Hermes-marked leftover slot not yet opened (idempotent via slot.cookOpened),
+   *  unless a record for that meal is already open. Returns true if the plan was changed. */
+  function openLeftoverCooks(planIn, libraryIn) {
+    let changed = false;
+    planIn.days.forEach((d) => Object.values(d.slots).forEach((s) => {
+      if (!s || !s.leftover || s.cookOpened || s.eatenAt) return;
+      const meal = (libraryIn || []).find((m) => m.id === s.mealId);
+      if (!meal) return;
+      if (!MP.Cooks.openFor(meal.id).length) MP.Cooks.open(meal, s.variantId, s.leftoverPortions || 1);
+      s.cookOpened = true;
+      changed = true;
+    }));
+    return changed;
   }
 
   function placementBannerHtml(applied, rejected) {
@@ -2226,6 +2247,11 @@
   function eatBannerHtml(applied, rejected, offPlan) {
     const reasonText = { eaten: "already eaten", "not-planned": "not on that day's plan", "unknown-meal": "not in your library" };
     let html = `<button class="ghost dismiss" aria-label="Dismiss">✕</button>`;
+    if (offPlan && offPlan.length) {
+      html += `<p>Logged as eaten, off plan:</p><ul>`;
+      html += offPlan.map((a) => `<li>${esc(a.name || "")}</li>`).join("");
+      html += `</ul>`;
+    }
     if (applied.length) {
       html += `<p>Marked eaten from your assistant:</p><ul>`;
       html += applied.map((a) => `<li>Day ${a.day} ${esc(a.slotType)} — ${esc(a.name || "")}</li>`).join("");
@@ -2256,11 +2282,12 @@
 
   window.addEventListener("mp:placements-applied", (e) => {
     plan = JSON.parse(localStorage.getItem(LS_PLAN) || "null") || plan;
+    if (openLeftoverCooks(plan, library)) savePlan();
     renderPlan();
     renderPlacementBanner(e.detail);
   });
 
-  MP.Plan = { fridgeWindow, fridgeHave, applyBulkEdits, applyChatEdits, applyMealEdits, applyRateEdits, chatBriefing, chatContext, tieFor, effectiveBudget, budgetSwaps, resetChatPrefs, reflow, snapshot, restore, planMetrics, whatIf, fixGap, wrapUp, cookMinsFor, tickerFor, parseGuidedSlots, applyPlacements, logPortion, matchEatRequests, applyEatRequests };
+  MP.Plan = { fridgeWindow, fridgeHave, applyBulkEdits, applyChatEdits, applyMealEdits, applyRateEdits, chatBriefing, chatContext, tieFor, effectiveBudget, budgetSwaps, resetChatPrefs, reflow, snapshot, restore, planMetrics, whatIf, fixGap, wrapUp, cookMinsFor, tickerFor, parseGuidedSlots, applyPlacements, openLeftoverCooks, logPortion, matchEatRequests, applyEatRequests };
 
   // ---- Planning chat with Hermes (Phase 72) ----
   // The working plan is `plan` itself with guidedActive on (no savePlan runs); Exit restores the snapshot, Save commits.
@@ -2857,6 +2884,7 @@
     } else {
       plan = loadPlan();
       if (rollIfDue()) applyHints(plan.startDate);
+      openLeftoverCooks(plan, library); // Phase 80: placements may have synced on another page
       savePlan();
       renderPlan();
     }

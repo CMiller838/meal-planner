@@ -372,6 +372,17 @@ assert.equal((await call("GET", "/why?meal=m1&day=0", "a")).status, 400);
   assert.equal((await call("GET", "/quick?today=2026-10-20", "a")).status, 200); // malformed KV = empty, never 500
 }
 
+// Phase 80: a leftover placement validates (shape only)
+{
+  const pl = { mealId: "chilli", day: 1, slot: "dinner", mealName: "Chilli", requestedAt: "2026-10-26T10:00:00Z" };
+  assert.equal((await call("PUT", "/placements", "h", { placements: [{ ...pl, leftover: true, portions: 3 }] })).status, 204);
+  assert.equal((await call("PUT", "/placements", "h", { placements: [{ ...pl, leftover: true }] })).status, 204);
+  for (const bad of [{ leftover: "yes" }, { leftover: true, portions: 0 }, { leftover: true, portions: 13 }, { leftover: true, portions: 1.5 }, { portions: 2 }])
+    assert.equal((await call("PUT", "/placements", "h", { placements: [{ ...pl, ...bad }] })).status, 400, JSON.stringify(bad));
+  assert.equal((await call("PUT", "/placements", "a", { placements: [{ ...pl, leftover: true }] })).status, 204); // the assistant token proposes placements, leftover included
+  assert.equal((await call("PUT", "/placements", "a", { placements: [{ ...pl, leftover: 1 }] })).status, 400);
+}
+
 // the assistant token still can't reach other writes
 assert.equal((await call("PUT", "/plan", "a", { days: [] })).status, 403);
 assert.equal((await call("PUT", "/planPrefs", "a", {})).status, 403);

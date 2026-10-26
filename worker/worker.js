@@ -1311,6 +1311,8 @@ function placementsError(parsed) {
     if (typeof p.mealId !== "string" || !p.mealId) return "each placement needs a non-empty mealId";
     if (typeof p.day !== "number" || p.day < 1 || p.day > 28) return "each placement needs day 1-28";
     if (!SLOT_TYPES.includes(p.slot)) return "each placement needs a valid slot";
+    if (p.leftover !== undefined && typeof p.leftover !== "boolean") return "leftover must be a boolean";
+    if (p.portions !== undefined && (p.leftover !== true || !Number.isInteger(p.portions) || p.portions < 1 || p.portions > 12)) return "portions must be an integer 1-12 and needs leftover: true";
   }
   return null;
 }

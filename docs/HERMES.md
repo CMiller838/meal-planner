@@ -236,7 +236,7 @@ entry is re-checked against the live local plan before it's applied.
 A request queue, not a direct write — Hermes proposes, the app applies (or
 rejects) on its own next load/resume. Body: `{ placements: [{ id, day
 (1-14), slot ("breakfast"|"lunch"|"dinner"|"snack"), mealId, mealName,
-variantId?, requestedAt }] }`. **Replace the whole array on every PUT** —
+variantId?, leftover?, portions?, requestedAt }] }`. **Replace the whole array on every PUT** —
 there is no append semantics server-side, and the app tracks its own ack
 watermark by `requestedAt` so replays and reorders are harmless. A placement
 is rejected, never silently dropped, when:
@@ -244,6 +244,14 @@ is rejected, never silently dropped, when:
 - the target slot already has `eatenAt` set — never overwrites eaten
   history, or
 - `mealId` isn't in the person's local library.
+
+`leftover: true` (Phase 93, optional, with `portions` 1-12, default 1) says the meal is
+**already cooked and in the fridge**: the slot is flagged, the shopping list buys
+nothing for it, and the app opens one Cooks record with those portions (skipped
+if a record for that meal is already open), so eating it takes a portion and never
+deducts the pantry. Use it when the user says they already have the cooked meal
+(e.g. leftover chilli on Monday). Never set it for a meal that still has to be
+cooked. `portions` without `leftover: true`, or a non-boolean `leftover`, is a 400.
 
 `variantId` is optional; if given but not one of that meal's variant ids, the
 placement still applies — just against the base recipe rather than bouncing
