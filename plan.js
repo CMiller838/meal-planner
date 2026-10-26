@@ -1335,7 +1335,7 @@
 
   function renderPlan(staged) {
     mealsById = Object.fromEntries(library.map((m) => [m.id, m]));
-    warnings = MP.ShelfLife.checkPlanWarnings(plan, mealsById, shelfData);
+    warnings = MP.ShelfLife.checkPlanWarnings(plan, mealsById, shelfData, MP.Sync.localItems("pantry"));
     const root = document.getElementById("plan-root");
     let html = "";
     for (const weekStart of [1, 8]) {

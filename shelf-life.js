@@ -126,7 +126,8 @@
   }
 
   /** Returns { "day-slotType": {message, moveToDay, category} } for the whole plan. */
-  function checkPlanWarnings(plan, mealsById, shelfData) {
+  function checkPlanWarnings(plan, mealsById, shelfData, pantryItems) {
+    if (Array.isArray(pantryItems)) return enteredUseByWarnings(plan, mealsById, pantryItems);
     const occ = buildOccurrences(plan);
     const offset = shopOffset(plan);
     const warnings = {};
@@ -139,6 +140,32 @@
         const effMeal = MP.effectiveMeal(meal, slot.variantId, slot.subs);
         const w = evaluateSlot(day.day, effMeal, occ, shelfData, offset);
         if (w) warnings[`${day.day}-${slotType}`] = w;
+      });
+    });
+    return warnings;
+  }
+
+  /** Warnings only for pantry items whose use-by date the user entered: a slot using that ingredient on a later date. */
+  function enteredUseByWarnings(plan, mealsById, pantryItems) {
+    const norm = MP.ShoppingList.normalizeKey;
+    const byName = {};
+    pantryItems.forEach((i) => { if (i && typeof i.name === "string" && isIsoDate(i.useBy)) byName[norm(i.name)] = i; });
+    const warnings = {};
+    if (!Object.keys(byName).length || !isIsoDate(plan.startDate)) return warnings;
+    plan.days.forEach((day) => {
+      const date = addDays(plan.startDate, day.day - 1);
+      Object.entries(day.slots).forEach(([slotType, slot]) => {
+        if (!slot || !slot.mealId || slot.fromCook) return;
+        const meal = mealsById[slot.mealId];
+        if (!meal) return;
+        const eff = MP.effectiveMeal(meal, slot.variantId, slot.subs);
+        for (const ing of eff.ingredients || []) {
+          const item = byName[norm(ing.key || "")] || byName[norm(ing.name || "")];
+          if (!item || date <= item.useBy) continue;
+          const lastDay = Math.round((isoMs(item.useBy) - isoMs(plan.startDate)) / DAY) + 1;
+          warnings[`${day.day}-${slotType}`] = { message: `⚠ ${item.name} use-by ${item.useBy} — move this meal earlier or freeze it`, moveToDay: Math.max(1, lastDay), category: "entered_use_by" };
+          break;
+        }
       });
     });
     return warnings;
