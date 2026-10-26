@@ -1841,7 +1841,7 @@
       const m = c.after && mealsById[c.after.mealId];
       return `<li>Day ${c.day} ${esc(c.slot)} — ${!c.after ? "cleared" : c.after.eatingOut ? "Eating out" : esc(m ? m.name : c.after.mealId)}</li>`;
     }).join("");
-    const lead = draft.start ? `The assistant drafted a new ${draft.start.days}-day plan from ${esc(draft.startDate)}` : `The assistant drafted ${changes.length} change${changes.length === 1 ? "" : "s"} to your plan`;
+    const lead = draft.start ? `The assistant drafted a new ${Number(draft.start.days)}-day plan from ${esc(draft.startDate)}` : `The assistant drafted ${changes.length} change${changes.length === 1 ? "" : "s"} to your plan`;
     el.innerHTML = `<p>${lead}:</p><ul>${rows}</ul>
       <button class="btn" data-act="apply">Apply</button> <button class="btn" data-act="dismiss">Dismiss</button>`;
     el.hidden = false;

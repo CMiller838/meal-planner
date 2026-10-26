@@ -358,6 +358,14 @@ async function applyDraft(body, env, who) {
   return json(200, await parkDraft(env, who, d));
 }
 
+/** Phase 84: a draft's `start` options, or null unless days is 1-28, firstSlot a slot (if set) and shopAnchor an ISO date. */
+function cleanStart(st) {
+  if (!st || typeof st !== "object" || !Number.isInteger(st.days) || st.days < 1 || st.days > 28) return null;
+  if (typeof st.shopAnchor !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(st.shopAnchor) || isNaN(Date.parse(st.shopAnchor))) return null;
+  if (st.firstSlot !== undefined && !SLOT_TYPES.includes(st.firstSlot)) return null;
+  return { days: st.days, ...(st.firstSlot ? { firstSlot: st.firstSlot } : {}), shopAnchor: st.shopAnchor };
+}
+
 /** Park a draft in KV planDraft (once per id) and log it. `reflow` marks a Phase 63 re-flow draft. */
 async function parkDraft(env, who, d, reflow = false) {
   const cur = await readJSON(env, "planDraft");
@@ -365,7 +373,7 @@ async function parkDraft(env, who, d, reflow = false) {
     if (cur.pending) return { id: d.id, status: "already pending" };
     if (cur.ackedId === d.id) return { id: d.id, status: "already applied" };
   }
-  const next = { id: d.id, at: new Date().toISOString(), pending: true, ...(reflow ? { reflow: true } : {}), startDate: d.startDate, ...(d.start ? { start: d.start } : {}), changes: d.changes.map(({ day, slot, before, after }) => ({ day, slot, before: before && before.eatingOut ? before : slotRef(before), after: after && after.eatingOut ? after : slotRef(after) })) };
+  const next = { id: d.id, at: new Date().toISOString(), pending: true, ...(reflow ? { reflow: true } : {}), startDate: d.startDate, ...(cleanStart(d.start) ? { start: cleanStart(d.start) } : {}), changes: d.changes.map(({ day, slot, before, after }) => ({ day, slot, before: before && before.eatingOut ? before : slotRef(before), after: after && after.eatingOut ? after : slotRef(after) })) };
   await env.MP_KV.put("planDraft", JSON.stringify(next));
   await logWrite(env, { who, key: "planDraft", why: reflow ? "re-flow" : "", changes: diffItems("planDraft", cur, next) });
   return { id: d.id, status: "pending" };
