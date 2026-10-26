@@ -534,3 +534,12 @@ never writes the pantry: the assistant's intake preview is the only path in.
 
 ## v11 - planning chat (Phase 72)
 The "Plan with Hermes" chat thread lives in one SQLite-backed Durable Object, `ChatRoom` (`idFromName("plan")`, binding `CHAT`, migration `v1`), not KV: KV is eventually consistent and caches reads for up to ~60 s, which a ~1 s chat poll can't use. It holds only the current session (cap 40 messages); KV stays the store for everything else and plan state stays in `localStorage`/KV. Hermes is reached by a PC-side bridge (`tools/hermes_chat_bridge.py`) that polls the Worker, so no inbound path to the PC is needed (a Worker call out to Hermes was deferred: public endpoint, secret, rate limiting). Replies are constraints and edits only, validated by `MP.PlanChat.validateReply` in both Worker and app; the app applies them through `generatePlan(override, lockedMap(days))`, so `rankSlot` stays the one ranker. Session constraints (`chatPrefs`) are never stored.
+
+## v12 - Hermes places meals (Phase 88)
+Hermes may now choose meals: a `place` edit puts a library meal in a slot, so for those slots `rankSlot` is no longer the
+picker. The safety line moves from "Hermes never returns meals" to "every placement passes the same hard checks"
+(`MP.placeSlots`, `data.js`: exclusions, allergies, `never`, slot type, held slots, leftover order); nutrition is shown
+by the meter, never re-scored. The briefing is built by the app (the localStorage authority) once per session and
+carried in the `ChatRoom` open message (up to 60 000 chars); the bridge re-sends it each turn and adds KV-only `spend`.
+Meal create/edit/remove wait for a user confirm card; per-weekday time caps are stored in `mp_planPrefs.timeCaps`.
+One-tap Generate and Plan with me stay the offline fallback, unchanged.
