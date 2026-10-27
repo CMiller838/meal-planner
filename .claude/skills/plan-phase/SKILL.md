@@ -125,6 +125,8 @@ wrong, say so in one line and update the heading.
    caller its own task; a return value nobody consumes is a gap the tester will flag.
    Browser steps: `tools/browser-check/ui-check.mjs` is only the page smoke check; click-through/interaction steps
    (drag, sheets, plan generation, shopping) go in `walk.mjs`. Name the right file in Files touched and Verification.
+   Every behaviour Verification names (incl. negatives like "No leaves the record alone") gets its own `walk.mjs`
+   task/assertion, so the tester finds it covered.
    Before moving on run `python3 tools/spec_lint.py phaseN`: it fails a spec with no tier tag, no `## Files touched`,
    or a `## Verification` without a runnable command in backticks (`/overnight` refuses to start on the same check).
    Under the first line add `Plain: <one everyday sentence on what this gives the user>`: the building-now pane shows it.
