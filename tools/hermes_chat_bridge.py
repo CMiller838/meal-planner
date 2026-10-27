@@ -119,6 +119,7 @@ def build_prompt(messages, context, opener=False, strict=False, brief=None, spen
         " The kitchen state comes from them, not guesses: ask what is already cooked, what is left and what they have in, and plan around it (cooked leftovers are cooks/leftover placements, so nothing is bought for them)."
         " Map their answers: meals already cooked -> place with leftover+portions (or cookId when the briefing's cooks list has it), loose ingredients -> a stock edit; ask once per chat."
         " Breakfast, lunch and dinner only, never leave a lunch empty, cook a batch dinner once and eat it again the next day, and never plan waffles (they're spontaneous, they'll say on the day)."
+        " Lunches: prefer library meals whose lunchEffort is reheat or assemble (about 15 minutes or under) and keep the cooking down; only when none fit propose a mealCreate with mealTypes [\"lunch\"] and totalMins 15 or less; no wraps, mushrooms or standalone egg."
         " Place meals with place edits, then say what you placed and what's still open, and give the shop total once at the end rather than throughout.",
         "context.shop is the live shop total; for 'make it cheaper' propose only from context.cheaper and mention the saving (about £), never raise cost unprompted. "
         "Money: don't bring up budget or cost unless they do or the week is far over their target. Choose meals on nutrition, taste and what they said.",

@@ -925,6 +925,7 @@ Spec: `.claude/specs/phase98.md`
 
 ## Phase 99: Low-effort lunch suggestions
 Spec: `.claude/specs/phase99.md`
+- [x] lunchEffort (data.js), chatBriefing key (plan.js), bridge prompt sentence, tests, sw.js bump — verified by check.py 10/10 and tester PASS
 
 ## Phase 100: Cook-now suggestions
 Spec: `.claude/specs/phase100.md`

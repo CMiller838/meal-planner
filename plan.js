@@ -715,6 +715,7 @@
         id: m.id, cost: cost(m), name: m.name, mealTypes: m.mealTypes, servings: m.servings || 1,
         ...(m.prepEffort ? { prepEffort: m.prepEffort } : {}), ...(m.leftoverOf ? { leftoverOf: m.leftoverOf } : {}), ...(kids[m.id] ? { leadsTo: kids[m.id] } : {}),
         ...(m.freezable !== undefined ? { freezable: m.freezable } : {}), ...(m.totalMins ? { totalMins: m.totalMins } : est ? { estMins: est } : {}),
+        ...((m.mealTypes || []).includes("lunch") ? { lunchEffort: MP.lunchEffort(m) } : {}),
         ...(Array.isArray(m.variants) && m.variants.length ? { variants: m.variants.map((v) => ({ id: v.id, name: v.name, cost: cost(m, v.id) })) } : {}),
         ...(m.tags && m.tags.length ? { tags: m.tags } : {}), ...(m.description ? { description: m.description } : {}),
       };

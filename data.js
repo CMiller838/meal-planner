@@ -400,6 +400,14 @@
     return n > 0 ? n : null;
   }
 
+  /** Phase 99, pure: how much work a lunch is. reheat = a leftover child; assemble = 15 min or under (no mins known: prepEffort quick); else cook. */
+  function lunchEffort(meal) {
+    if (meal.leftoverOf) return "reheat";
+    if (meal.servings >= 2) return "cook";
+    const mins = meal.totalMins || estMins(meal);
+    return (mins ? mins <= 15 : (meal.prepEffort || "quick") === "quick") ? "assemble" : "cook";
+  }
+
   /** Phase 88, pure: put Hermes-chosen meals into slots (last place per slot wins; applied in order, so a cook can precede its
    *  leftover in one reply). ctx = { terms, ratings, fridgeDays, caps: {weekday: mins}, pending: [mealId] }. Each refusal says why;
    *  an over-cap meal is placed with a note. Never ranks, never touches the pantry. Returns { plan, changes, refused, notes }. */
@@ -844,6 +852,7 @@
   MP.swapSlots = swapSlots;
   MP.placeSlots = placeSlots;
   MP.estMins = estMins;
+  MP.lunchEffort = lunchEffort;
   MP.orphanLeftovers = orphanLeftovers;
   MP.orphanDays = orphanDays;
   MP.swapDays = swapDays;

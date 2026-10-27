@@ -106,7 +106,7 @@ Goal: every chat turn carries the working plan's shop total and per-shop split, 
 
 Verified 2026-10-27: check.py 10/10, worker_test and bridge test green, tester PASS; ingredient swaps only on cards (meal swaps stay on `place`); chat card not driven live.
 
-## Phase 99: Low-effort lunch suggestions [M] — not started
+## Phase 99: Low-effort lunch suggestions [M] — done (2026-10-27; check.py 10/10, tester PASS: lunchEffort cases in test.html, bridge prompt assert)
 
 Goal: Hermes suggests lunches that need almost no cooking (toasties, assembled bowls, reheated batch leftovers, 15 minutes or
 under), drawn from the library first and offered as new meals via `mealCreate` (Add/No card) only when nothing fits. Honours

@@ -3303,7 +3303,10 @@
       check("chatBriefing: the spec fields", br.start === "2026-09-07" && br.days === 6 && deepEqual(br.timeCaps, { 1: 30 }) && deepEqual(br.profile.allergies, ["peanut"]) && br.ratings.e.rating === "up" && br.pantry[0].name === "rice" && deepEqual(br.gaps, [["iron"], []]) && br.plan.length === 6 && br.plan[1].slots.dinner === "e" && br.meals.length === 8);
       const bm = br.meals.find((m) => m.id === "p"), ba = br.meals.find((m) => m.id === "a");
       check("chatBriefing: totalMins wins over estMins, leadsTo on a batch parent, leftoverOf on its child", bm.totalMins === 60 && !bm.estMins && deepEqual(ba.leadsTo, ["b"]) && br.meals.find((m) => m.id === "b").leftoverOf === "a");
-      const big = Array.from({ length: 700 }, (_, i) => meal("x" + i, { description: "d".repeat(80), tags: ["t".repeat(20)], mealTypes: ["lunch"] }));
+      const le = MP.lunchEffort;
+      check("lunchEffort: reheat / assemble / cook by leftoverOf, mins, prepEffort", le({ leftoverOf: "a" }) === "reheat" && le({ totalMins: 10 }) === "assemble" && le({ totalMins: 40 }) === "cook" && le({ prepEffort: "quick" }) === "assemble" && le({ prepEffort: "batch" }) === "cook" && le({ method: [{ minutes: 5 }, { minutes: 8 }] }) === "assemble" && le({ method: [{ minutes: 30 }] }) === "cook");
+      check("chatBriefing: lunchEffort on a lunch meal, omitted on dinner-only", br.meals.filter((m) => (m.mealTypes || []).includes("lunch")).every((m) => m.lunchEffort) && br.meals.filter((m) => !(m.mealTypes || []).includes("lunch")).every((m) => m.lunchEffort === undefined) && br.meals.some((m) => m.lunchEffort) && br.meals.some((m) => !m.lunchEffort));
+      const big = Array.from({ length: 600 }, (_, i) => meal("x" + i, { description: "d".repeat(80), tags: ["t".repeat(20)], mealTypes: ["lunch"] }));
       const bb = MP.Plan.chatBriefing({ plan: mkPlan(), library: big, prefs: {}, base: {}, settings: null, ratings: {}, pantry: [], metrics: { weekGaps: [[], []] } });
       check("chatBriefing: over 60000 drops descriptions, then non-dinner tags", JSON.stringify(bb).length <= 60000 && !bb.meals[0].description && !bb.meals[0].tags);
     }
