@@ -98,11 +98,13 @@ Goal: (a) a chat `sub` edit ("thighs instead of breast this week") writes `slot.
 swap); (b) "less sauce, add peppers" becomes a meal edit offered as "just this week" (a variant on the slot) or "change the
 meal" (Phase 87's library edit); (c) a batch of edits is approved with one tap instead of one card each.
 
-## Phase 98: Make it cheaper, with the live total [M] — not started
+## Phase 98: Make it cheaper, with the live total [M] — built 2026-10-27, live checks pending
 
 Goal: every chat turn carries the working plan's shop total and per-shop split, so Hermes can say "that saves about £3"
 (it still does not raise cost unprompted); and "make it cheaper" gives ingredient or meal swaps with the £ difference from
 `pack-sizes.json` on an Add/No card each, using the Phase 76 swaps logic in-app. Never reorders nutrition ranking.
+
+Verified 2026-10-27: check.py 10/10, worker_test and bridge test green, tester PASS; ingredient swaps only on cards (meal swaps stay on `place`); chat card not driven live.
 
 ## Phase 99: Low-effort lunch suggestions [M] — not started
 

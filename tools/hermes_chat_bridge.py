@@ -33,6 +33,7 @@ FALLBACK = {"text": "Sorry, could you say that another way?", "edits": [], "ask"
 GIVE_UP = {"text": "I didn't follow, could you put it another way?", "edits": [], "ask": False}
 EDIT_TYPES = """Edit types (day is 1-14, slot is breakfast|lunch|dinner|snack):
   {"type":"place","day":N,"slot":S,"mealId":ID,"variantId":ID,"cookId":ID,"leftover":true,"portions":1-12}  (puts a library meal in a slot; leftover+portions = the user already cooked it and N portions are in the fridge, buys nothing, not with cookId; cookId = a briefing "cooks" entry for that meal, eaten from the freezer/fridge, buys nothing; the app refuses a held slot, wrong slot type, hard exclusions, "never" meals, orphan leftovers)
+  {"type":"cheaper","key":"<a context.cheaper key>","to":"<its to>","shopDay":N}  (swaps an ingredient for a cheaper one on that shop's meals, only from context.cheaper; the user accepts on a card, max 3)
   {"type":"bulk","key":"<a briefing bulk key>","shopDay":N}  (proposes a bulk buy from the briefing's "bulk" list only; the user accepts on a card, max 5)
   {"type":"stock","items":[{"name":"<=60 chars","qty":"<=30 chars"}]}  (any chat: loose ingredients the user says they have in, 1-40 items; session-only, never the pantry or shopping list)
   {"type":"busy","day":N}  {"type":"free","day":N}  {"type":"noCook","day":N}
@@ -119,6 +120,7 @@ def build_prompt(messages, context, opener=False, strict=False, brief=None, spen
         " Map their answers: meals already cooked -> place with leftover+portions (or cookId when the briefing's cooks list has it), loose ingredients -> a stock edit; ask once per chat."
         " Breakfast, lunch and dinner only, never leave a lunch empty, cook a batch dinner once and eat it again the next day, and never plan waffles (they're spontaneous, they'll say on the day)."
         " Place meals with place edits, then say what you placed and what's still open, and give the shop total once at the end rather than throughout.",
+        "context.shop is the live shop total; for 'make it cheaper' propose only from context.cheaper and mention the saving (about £), never raise cost unprompted. "
         "Money: don't bring up budget or cost unless they do or the week is far over their target. Choose meals on nutrition, taste and what they said.",
         "You know their whole plan and library from the briefing below. You may place library meals into slots yourself with place edits;"
         " new or changed meals only wait for the user's OK. The app checks every edit.",

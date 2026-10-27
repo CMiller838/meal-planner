@@ -634,6 +634,47 @@
     return { cards, refused };
   }
 
+  /** Phase 98: cheaper-ingredient candidates for the working plan, one shop list at a time, through the one ShoppingList.cheaperSwaps. */
+  function cheaperCandidates(c, limit) {
+    if (!c.packData || !c.packData.items || !c.groupsData) return [];
+    const lists = MP.ShoppingList.buildLists(c.plan, c.byId, c.packData, c.pantry);
+    const terms = MP.Sync.hardTerms(), meals = Object.values(c.byId), idx = MP.ShoppingList.groupIndex(c.groupsData);
+    return Object.values(lists).flatMap((l) => MP.ShoppingList.cheaperSwaps(l, (line) => meals.filter((m) => line.meals.includes(m.name)), {
+      groupIdx: idx, pack: c.packData, tags: (c.tagsData && c.tagsData.tags) || {}, limit,
+      ok: (using, sub) => using.every((m) => MP.Exclusions.check(MP.applySubs(m, sub), terms).ok),
+    }).map((x) => ({ ...x, shopDay: l.shopDay }))).sort((a, b) => b.saving - a.saving);
+  }
+
+  /** Phase 98: chat `cheaper` proposals. The saving is recomputed here (Hermes's number is never shown); a pair cheaperSwaps doesn't offer, or one
+   *  with no unheld uneaten slot using the key in that shop's days, is refused. Accept writes slot.subs on exactly those slots; Undo removes them. */
+  function applyCheaperEdits(edits, ctx) {
+    const c = Object.assign({ plan, byId: mealsById, packData, groupsData, tagsData, pantry: { items: MP.Sync.localItems("pantry") } }, ctx);
+    const cards = [], refused = [];
+    const off = MP.ShelfLife.shopOffset(c.plan);
+    let cands = null;
+    for (const e of edits.filter((x) => x.type === "cheaper")) {
+      cands = cands || cheaperCandidates(c, 10);
+      const opt = cands.find((o) => o.key === e.key && o.to.key === e.to && o.shopDay === e.shopDay);
+      if (!opt) { refused.push({ edit: e, why: `${MP.labelize(e.key)} to ${MP.labelize(e.to)}: no cheaper swap on shop ${e.shopDay}` }); continue; }
+      const slots = [];
+      c.plan.days.forEach((d) => {
+        if (MP.ShelfLife.shopDayFor(d.day, off) !== opt.shopDay) return;
+        SLOT_TYPES.forEach((t) => {
+          const sl = d.slots[t], m = sl && sl.mealId && c.byId[sl.mealId];
+          if (!m || sl.locked || sl.eatenAt || sl.frozenFrom || sl.fromCook) return;
+          if ((MP.effectiveMeal(m, sl.variantId, sl.subs).ingredients || []).some((i) => i.key === opt.key)) slots.push(sl);
+        });
+      });
+      if (!slots.length) { refused.push({ edit: e, why: `${opt.label}: no open meal on shop ${opt.shopDay} uses it` }); continue; }
+      const sub = { from: opt.key, to: opt.to.key, label: opt.to.label };
+      const tags = opt.tagChanges.filter((t) => t.from && (!t.to || t.to !== t.from)).map((t) => `less ${t.nutrient.replace(/_/g, " ")}`);
+      cards.push({ edit: e, text: `Swap ${opt.label} for ${opt.to.label} on shop ${opt.shopDay}, saves about £${opt.saving.toFixed(2)}${tags.length ? ` (${tags.join(", ")})` : ""}`,
+        accept: () => { slots.forEach((sl) => { sl.subs = [...(sl.subs || []), sub]; }); },
+        undo: () => { slots.forEach((sl) => { sl.subs = (sl.subs || []).filter((x) => x !== sub); if (!sl.subs.length) delete sl.subs; }); } });
+    }
+    return { cards, refused };
+  }
+
   /** Phase 90b: the days from today to the day before the next shop day, [from, to] (empty when to < from). `fresh` = no current plan:
    *  the window is for a new plan starting today, counted from the old plan's shopAnchor. Pure. */
   function fridgeWindow(pl, today) {
@@ -820,13 +861,24 @@
     const dayMeals = {};
     SLOT_TYPES.forEach((t) => { const s = d.slots[t]; if (s && s.mealId) dayMeals[t] = (mealsById[s.mealId] || {}).name || s.mealId; });
     const today = MP.Generator.isoToday();
-    return {
+    const ctx = {
       day, startDate: plan.startDate, dayMeals,
       gaps: m.weekGaps[wk].slice(0, 3), proteinG: m.proteinG[wk], weekCost: m.weekCost[wk],
       budgetTarget: Number(prefs.budgetTarget) || 0,
       cards: chatCardLines(),
       expiring: MP.ShoppingList.useUpItems(MP.Sync.localItems("pantry"), plan, today, shelfData).slice(0, 5).map((x) => x.name),
     };
+    // Phase 98: the live shop total and cheaper-ingredient candidates ride every turn (the briefing is not resent); the Worker rejects a context over 4000 chars
+    const perShop = packData ? Object.values(MP.ShoppingList.buildLists(plan, mealsById, packData, { items: MP.Sync.localItems("pantry") }))
+      .filter((l) => l.total !== null && l.total !== undefined).map((l) => ({ shopDay: l.shopDay, total: l.total })) : [];
+    if (perShop.length) {
+      ctx.shop = { total: Math.round(perShop.reduce((a, x) => a + x.total, 0) * 100) / 100, perShop };
+      ctx.cheaper = cheaperCandidates({ plan, byId: mealsById, packData, groupsData, tagsData, pantry: { items: MP.Sync.localItems("pantry") } }, 3)
+        .slice(0, 3).map((x) => ({ key: x.key, to: x.to.key, shopDay: x.shopDay, saving: x.saving }));
+      if (JSON.stringify(ctx).length > 4000) delete ctx.cheaper;
+      if (JSON.stringify(ctx).length > 4000) delete ctx.shop.perShop;
+    }
+    return ctx;
   }
 
   function toggleLock(day, slotType) {
@@ -2292,7 +2344,7 @@
     renderPlacementBanner(e.detail);
   });
 
-  MP.Plan = { fridgeWindow, fridgeHave, applyBulkEdits, applyChatEdits, applyMealEdits, applyRateEdits, chatBriefing, chatContext, tieFor, effectiveBudget, budgetSwaps, resetChatPrefs, reflow, snapshot, restore, planMetrics, whatIf, fixGap, wrapUp, cookMinsFor, tickerFor, parseGuidedSlots, applyPlacements, openLeftoverCooks, logPortion, matchEatRequests, applyEatRequests };
+  MP.Plan = { applyCheaperEdits, cheaperCandidates, fridgeWindow, fridgeHave, applyBulkEdits, applyChatEdits, applyMealEdits, applyRateEdits, chatBriefing, chatContext, tieFor, effectiveBudget, budgetSwaps, resetChatPrefs, reflow, snapshot, restore, planMetrics, whatIf, fixGap, wrapUp, cookMinsFor, tickerFor, parseGuidedSlots, applyPlacements, openLeftoverCooks, logPortion, matchEatRequests, applyEatRequests };
 
   // ---- Planning chat with Hermes (Phase 72) ----
   // The working plan is `plan` itself with guidedActive on (no savePlan runs); Exit restores the snapshot, Save commits.
@@ -2693,6 +2745,9 @@
     const bulked = applyBulkEdits(reply.edits);
     bulked.cards.forEach((k) => chat.meals.push({ bulk: true, pending: true, text: k.text, accept: k.accept, undoBulk: k.undo }));
     bulked.refused.forEach((r) => chat.meals.push({ text: r.why }));
+    const cheap = applyCheaperEdits(reply.edits);
+    cheap.cards.forEach((k) => chat.meals.push({ bulk: true, pending: true, text: k.text, accept: k.accept, undoBulk: k.undo }));
+    cheap.refused.forEach((r) => chat.meals.push({ text: r.why }));
     const noted = reply.edits.filter((e) => e.type === "note");
     noted.forEach((e) => {
       const x = { note: true, edit: e, pending: true, text: `Hermes suggests a standing note: ${e.text}` };

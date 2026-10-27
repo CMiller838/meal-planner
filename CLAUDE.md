@@ -144,7 +144,7 @@ Installable as a PWA on Android Chrome via `manifest.json` + `sw.js`.
   nutrition, never filters a meal out of the pool, and a swap is dropped
   (never the meal) when `MP.Exclusions.check` rejects the swapped recipe —
   the hard exclusions run *after* substitution, never bypassed by it.
-  `slot.subs` (`[{ from, to, label, qty? }]`; Phase 97: `from` null = add, `to` null = remove, `from === to` + `qty` = amount change; written by the generator or a chat `sub` edit, always through the Exclusions check, alongside the
+  `slot.subs` (`[{ from, to, label, qty? }]`; Phase 97: `from` null = add, `to` null = remove, `from === to` + `qty` = amount change; written by the generator, a chat `sub` edit or an accepted chat `cheaper` card (Phase 98, same group swaps as `GET /swaps`), always through the Exclusions check, alongside the
   existing `variantId`) is resolved through `MP.effectiveMeal`/`MP.applySubs`,
   the same chokepoint the shopping list, pantry deduction, shelf-life pass
   and detail sheet already read `variantId` through. `substitutions.json`

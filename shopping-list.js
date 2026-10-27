@@ -627,5 +627,48 @@
     return out;
   }
 
-  MP.ShoppingList = { bulkOptions, useUpItems, scaleMeal, scaleShortfall, mealsUsing, load, loadGroups, groupIndex, buildLists, parseQty, packsFor, normalizeKey, aisleFor, groupByAisle, lineId, planLineId, mergeLines, adhocView, adhocToLines, LINE_STATES, LINE_SOURCES, pantryIndex, pantryOverlap, hasEnough, isSkippedIngredient, cookable, quickPicks, remainingQty, eatPlan, priceFor, mealCost, costIndex, costTier, costBadgeHtml };
+  /** Phase 76/98: cheaper like-for-like swaps for the priciest grouped lines of one shop list (GET /swaps and the chat `cheaper` card).
+   *  usingMealsOf(line) -> meals; ok(meals, sub[]) -> bool re-checks hard exclusions. Pure; reorders nothing but its own result. */
+  function cheaperSwaps(list, usingMealsOf, o) {
+    const { groupIdx, pack, tags = {}, limit = 5, ok = () => true } = o;
+    const pence = (n) => Math.round(n * 100);
+    const out = [];
+    const top = list.lines.filter((l) => (l.state || "needed") === "needed" && l.lineCost > 0).sort((a, b) => b.lineCost - a.lineCost);
+    for (const line of top) {
+      if (out.length >= limit) break;
+      const g = groupIdx[normalizeKey(line.key)];
+      if (!g) continue;
+      const using = usingMealsOf(line);
+      let best = null;
+      for (const mate of g.members) {
+        if (normalizeKey(mate.key) === normalizeKey(line.key)) continue;
+        const item = priceFor(mate.key, pack);
+        if (!item) continue;
+        const packs = packsFor(line.needed, item);
+        const cost = packs * item.price;
+        if (pence(cost) > pence(line.lineCost) - 1) continue;
+        if (!ok(using, [{ from: line.key, to: mate.key, label: mate.label }])) continue;
+        if (best && cost >= best.now.cost) continue;
+        const tagFrom = tags[line.key] || {}, tagTo = tags[mate.key] || {};
+        const tagChanges = [...new Set([...Object.keys(tagFrom), ...Object.keys(tagTo)])]
+          .filter((n) => (tagFrom[n] || null) !== (tagTo[n] || null))
+          .map((nutrient) => ({ nutrient, from: tagFrom[nutrient] || null, to: tagTo[nutrient] || null }));
+        const sameUnit = line.needed && line.needed.unit === item.unit;
+        const qtyVal = packs * item.packSize;
+        best = {
+          lineId: line.id, key: line.key, label: line.label, meals: line.meals,
+          to: { key: mate.key, label: mate.label, qty: { value: qtyVal, unit: item.unit, raw: `${qtyVal}${item.unit === "each" ? "" : item.unit}` } },
+          was: { packs: line.packs, cost: line.lineCost },
+          now: { packs, cost: Math.round(cost * 100) / 100 },
+          saving: Math.round((line.lineCost - cost) * 100) / 100,
+          estimated: !sameUnit || item.estimated,
+          tagChanges,
+        };
+      }
+      if (best) out.push(best);
+    }
+    return out.sort((a, b) => b.saving - a.saving);
+  }
+
+  MP.ShoppingList = { cheaperSwaps, bulkOptions, useUpItems, scaleMeal, scaleShortfall, mealsUsing, load, loadGroups, groupIndex, buildLists, parseQty, packsFor, normalizeKey, aisleFor, groupByAisle, lineId, planLineId, mergeLines, adhocView, adhocToLines, LINE_STATES, LINE_SOURCES, pantryIndex, pantryOverlap, hasEnough, isSkippedIngredient, cookable, quickPicks, remainingQty, eatPlan, priceFor, mealCost, costIndex, costTier, costBadgeHtml };
 })(typeof globalThis !== "undefined" ? globalThis : this);

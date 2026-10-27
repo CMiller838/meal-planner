@@ -3675,6 +3675,35 @@
     check("90a: applyBulkEdits card text, refusal, accept and undo", bk.cards.length === 1 && bk.refused.length === 1 && /Buy 1 kg chicken thighs on shop 1, freeze 500 g, saves £1.80/.test(bk.cards[0].text) && !pl.bulk && (bk.cards[0].accept(), pl.bulk.length === 1) && (bk.cards[0].undo(), !pl.bulk));
   }
 
+  { // Phase 98: cheaperSwaps, cheaper edit, chatContext
+    const SL = MP.ShoppingList, PCx = MP.PlanChat;
+    const mk = (id, ing) => ({ id, name: id, mealTypes: ["dinner"], servings: 1, ingredients: ing });
+    const byId = { a: mk("a", [{ key: "onion", qty: "400g" }]), b: mk("b", [{ key: "onion", qty: "400g" }]) };
+    const pack = { items: { onion: { label: "Onion", packSize: 100, unit: "g", price: 1, }, shallot: { label: "Shallot", packSize: 100, unit: "g", price: 0.4 } } };
+    const groups = { groups: [{ id: "g", label: "g", members: [{ key: "onion", label: "Onion" }, { key: "shallot", label: "Shallot" }] }] };
+    const days = (n, f) => Array.from({ length: n }, (_, i) => ({ day: i + 1, slots: f(i + 1) }));
+    const plan = { startDate: "2026-09-07", days: days(14, (d) => (d === 1 ? { dinner: { mealId: "a" } } : d === 2 ? { dinner: { mealId: "b", locked: true } } : {})) };
+    const lists = SL.buildLists(plan, byId, pack, null);
+    const opts = (ok) => SL.cheaperSwaps(lists[1], (l) => Object.values(byId).filter((m) => l.meals.includes(m.name)), { groupIdx: SL.groupIndex(groups), pack, tags: {}, ok });
+    const o1 = opts(() => true);
+    check("98: cheaperSwaps offers the cheaper mate", o1.length === 1 && o1[0].to.key === "shallot" && o1[0].saving > 0);
+    check("98: cheaperSwaps ok() rejection drops the mate; no group = empty", opts(() => false).length === 0 && SL.cheaperSwaps(lists[1], () => [], { groupIdx: {}, pack }).length === 0);
+    const vr = (list) => PCx.validateReply({ edits: list }, {}, "2026-01-01").reply.edits;
+    const ve = vr([{ type: "cheaper", key: "onion", to: "shallot", shopDay: 1 }, { type: "cheaper", key: "onion", shopDay: 1 }, { type: "cheaper", key: "onion", to: "shallot", shopDay: 99 }]);
+    check("98: validateReply cheaper accepted, missing to / bad shopDay dropped", ve.length === 1 && ve[0].to === "shallot");
+    check("98: validateReply cheaper max 3", vr(Array.from({ length: 5 }, () => ({ type: "cheaper", key: "onion", to: "shallot", shopDay: 1 }))).length === 3);
+    const ctx = { plan, byId, packData: pack, groupsData: groups, tagsData: { tags: {} }, pantry: null };
+    const r = MP.Plan.applyCheaperEdits([{ type: "cheaper", key: "onion", to: "shallot", shopDay: 1 }, { type: "cheaper", key: "onion", to: "leek", shopDay: 1 }], ctx);
+    check("98: applyCheaperEdits card with £ and refusal for an unoffered pair", r.cards.length === 1 && r.refused.length === 1 && /Swap Onion for Shallot on shop 1, saves about £\d/.test(r.cards[0].text));
+    r.cards[0].accept();
+    const s1 = plan.days[0].slots.dinner, s2 = plan.days[1].slots.dinner;
+    check("98: accept writes subs on the unheld slot only", s1.subs && s1.subs.length === 1 && s1.subs[0].to === "shallot" && !s2.subs);
+    r.cards[0].undo();
+    check("98: undo restores exactly", !("subs" in s1));
+    const none = MP.Plan.applyCheaperEdits([{ type: "cheaper", key: "onion", to: "shallot", shopDay: 1 }], { ...ctx, packData: null });
+    check("98: no packData refuses with a line, no throw", none.cards.length === 0 && none.refused.length === 1);
+  }
+
   lines.push("", `${pass} passed, ${fail} failed`);
   document.getElementById("out").textContent = lines.join("\n");
 })();

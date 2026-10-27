@@ -915,6 +915,13 @@ No spec ([S]); all in `tools/hermes_chat_bridge.py` + `tools/test_hermes_chat_br
 
 ## Phase 98: Make it cheaper, with the live total
 Spec: `.claude/specs/phase98.md`
+- [x] `ShoppingList.cheaperSwaps` extracted; Worker `swaps()` calls it
+- [x] `validateReply` `cheaper`
+- [x] `applyCheaperEdits`
+- [x] `chatContext` `shop`/`cheaper`
+- [x] Bridge `EDIT_TYPES` + prompt line
+- [x] Reply handler cards, `sw.js` CACHE, CLAUDE.md invariant
+- [ ] Live: in Plan with Hermes ask "make it cheaper": a swap card shows a £ saving, Add changes the shopping list total by about that, Undo restores it, and later turns quote the new total.
 
 ## Phase 99: Low-effort lunch suggestions
 Spec: `.claude/specs/phase99.md`

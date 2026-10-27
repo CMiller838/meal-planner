@@ -786,45 +786,10 @@ async function swaps(params, env) {
   const list = lists[shopDay];
   const settings = await readSettings(env);
   const hardTerms = [...new Set([...((settings && settings.allergies) || []), ...((settings && settings.never) || [])])];
-  const idx = ShoppingList.groupIndex(SUB_GROUPS);
-  const pence = (n) => Math.round(n * 100);
-  const out = [];
-  const top = list.lines.filter((l) => l.state === "needed" && l.lineCost > 0).sort((a, b) => b.lineCost - a.lineCost);
-  for (const line of top) {
-    if (out.length >= limit) break;
-    const g = idx[ShoppingList.normalizeKey(line.key)];
-    if (!g) continue;
-    const using = meals.filter((m) => line.meals.includes(m.name));
-    let best = null;
-    for (const mate of g.members) {
-      if (ShoppingList.normalizeKey(mate.key) === ShoppingList.normalizeKey(line.key)) continue;
-      const item = ShoppingList.priceFor(mate.key, PACK_DATA);
-      if (!item) continue;
-      const packs = ShoppingList.packsFor(line.needed, item);
-      const cost = packs * item.price;
-      if (pence(cost) > pence(line.lineCost) - 1) continue;
-      const sub = [{ from: line.key, to: mate.key, label: mate.label }];
-      if (using.some((m) => !Exclusions.check(globalThis.MP.applySubs(m, sub), hardTerms).ok)) continue;
-      if (best && cost >= best.now.cost) continue;
-      const tagFrom = TAGS[line.key] || {}, tagTo = TAGS[mate.key] || {};
-      const tagChanges = [...new Set([...Object.keys(tagFrom), ...Object.keys(tagTo)])]
-        .filter((n) => (tagFrom[n] || null) !== (tagTo[n] || null))
-        .map((nutrient) => ({ nutrient, from: tagFrom[nutrient] || null, to: tagTo[nutrient] || null }));
-      const sameUnit = line.needed && line.needed.unit === item.unit;
-      const qtyVal = packs * item.packSize;
-      best = {
-        lineId: line.id, key: line.key, label: line.label, meals: line.meals,
-        to: { key: mate.key, label: mate.label, qty: { value: qtyVal, unit: item.unit, raw: `${qtyVal}${item.unit === "each" ? "" : item.unit}` } },
-        was: { packs: line.packs, cost: line.lineCost },
-        now: { packs, cost: Math.round(cost * 100) / 100 },
-        saving: Math.round((line.lineCost - cost) * 100) / 100,
-        estimated: !sameUnit || item.estimated,
-        tagChanges,
-      };
-    }
-    if (best) out.push(best);
-  }
-  out.sort((a, b) => b.saving - a.saving);
+  const out = ShoppingList.cheaperSwaps(list, (line) => meals.filter((m) => line.meals.includes(m.name)), {
+    groupIdx: ShoppingList.groupIndex(SUB_GROUPS), pack: PACK_DATA, tags: TAGS, limit,
+    ok: (using, sub) => using.every((m) => Exclusions.check(globalThis.MP.applySubs(m, sub), hardTerms).ok),
+  });
   return json(200, { updatedAt: plan.updatedAt || null, shopDay, swaps: out });
 }
 
