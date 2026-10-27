@@ -325,11 +325,11 @@
       if (meal && budget && countsTowardBudget !== false) {
         const entry = budget.costIndex[meal.id];
         if (entry) {
-          const subFrom = subs.length ? MP.ShoppingList.normalizeKey(subs[0].from) : null;
-          const subTo = subs.length ? MP.ShoppingList.normalizeKey(subs[0].to) : null;
+          const nk = subs.map((x) => ({ from: x.from && MP.ShoppingList.normalizeKey(x.from), to: x.to && MP.ShoppingList.normalizeKey(x.to) }));
           // a pack already bought this shop cycle (key in `half`) adds nothing, as on the shopping list
           const extra = entry.parts ? entry.keys.reduce((n, k) => n + (half.has(k) ? 0 : entry.parts[k] || 0), 0) : entry.cost;
-          entry.keys.forEach((k) => half.add(k === subFrom ? subTo : k));
+          entry.keys.forEach((k) => { const x = nk.find((y) => y.from === k); if (!x) half.add(k); else if (x.to) half.add(x.to); });
+          nk.forEach((x) => { if (!x.from && x.to) half.add(x.to); });
           spent[cycleOf(day)] = (spent[cycleOf(day)] || 0) + extra;
         }
       }
@@ -346,12 +346,11 @@
         const entry = budget && budget.costIndex && budget.costIndex[slot.mealId];
         if (entry) {
           const half = halfOf(day);
-          const sub = slot.subs && slot.subs[0];
-          const subFrom = sub ? MP.ShoppingList.normalizeKey(sub.from) : null;
-          const subTo = sub ? MP.ShoppingList.normalizeKey(sub.to) : null;
+          const subs = (slot.subs || []).map((x) => ({ from: x.from && MP.ShoppingList.normalizeKey(x.from), to: x.to && MP.ShoppingList.normalizeKey(x.to) }));
           // a pack already bought this shop cycle (key in `half`) adds nothing, as on the shopping list
           const extra = entry.parts ? entry.keys.reduce((n, k) => n + (half.has(k) ? 0 : entry.parts[k] || 0), 0) : entry.cost;
-          entry.keys.forEach((k) => half.add(k === subFrom ? subTo : k));
+          entry.keys.forEach((k) => { const x = subs.find((y) => y.from === k); if (!x) half.add(k); else if (x.to) half.add(x.to); });
+          subs.forEach((x) => { if (!x.from && x.to) half.add(x.to); });
           spent[cycleOf(day)] = (spent[cycleOf(day)] || 0) + extra;
         }
       }

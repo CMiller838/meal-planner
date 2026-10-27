@@ -91,7 +91,7 @@ and never generator input except through the existing exclusion and chip layers.
 
 Verified 2026-10-27: worker_test (DELETE ok/404/403), test.html kind + sync cases, bridge test, check.py 10/10. Live: chat dislike -> Saved + Undo.
 
-## Phase 97: Change meals and ingredients to suit you [L] — not started
+## Phase 97: Change meals and ingredients to suit you [L] — built 2026-10-27, live checks pending
 
 Goal: (a) a chat `sub` edit ("thighs instead of breast this week") writes `slot.subs` for the slot or slots named through
 `MP.applySubs`, without touching the library meal (today `slot.subs` is generator-written only; hard exclusions run after the

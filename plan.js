@@ -506,11 +506,11 @@
     changes.notes = [];
     const held = (s) => !!(s && s.mealId && (s.locked || s.eatenAt));
     // Phase 84: plan actions go through MP.applyPlanEdits (the Worker's /plan/edit uses the same one); the diff keeps the real slots so Reject restores them
-    const acts = edits.filter((e) => ["skip", "out", "swap", "swapDay", "backfill"].includes(e.type));
+    const acts = edits.filter((e) => ["skip", "out", "swap", "swapDay", "backfill", "sub"].includes(e.type));
     if (acts.length) {
       const today = new Date().toLocaleDateString("sv");
       const gen = (locked, ranOut, avoid) => generatePlan({ shopOffset: MP.ShelfLife.shopOffset(pl) }, locked, ranOut, avoid);
-      const res = MP.applyPlanEdits(pl, acts, c.byId, MP.reflowFromDay(pl.startDate, today), (ctx && ctx.generate) || gen, today);
+      const res = MP.applyPlanEdits(pl, acts, c.byId, MP.reflowFromDay(pl.startDate, today), (ctx && ctx.generate) || gen, today, { terms: (ctx && ctx.terms) || MP.Sync.hardTerms(), pending: c.pending });
       res.changes.forEach((ch) => changes.push({ day: ch.day, slot: ch.slot, before: pl.days[ch.day - 1].slots[ch.slot] || null, after: res.plan.days[ch.day - 1].slots[ch.slot] || null }));
       pl.days = res.plan.days;
       res.ignored.forEach((i) => changes.notes.push(`Day ${i.day} ${i.slot}: ${i.reason}`));
@@ -2049,6 +2049,11 @@
       const meal = library.find((m) => m.id === p.mealId);
       const slotValue = { mealId: p.mealId };
       if (p.variantId && MP.findVariant(meal, p.variantId)) slotValue.variantId = p.variantId;
+      if (Array.isArray(p.subs) && p.subs.length && p.subs.length <= 8) { // Phase 97: a drafted ingredient change rides along
+        const t = (v) => typeof v === "string" && v.length <= 60;
+        const subs = p.subs.filter((x) => x && (x.from === null || t(x.from)) && (x.to === null || t(x.to)) && (x.from || x.to)).map((x) => ({ from: x.from, to: x.to, ...(t(x.label) ? { label: x.label } : {}), ...(t(x.qty) ? { qty: x.qty } : {}) }));
+        if (subs.length) slotValue.subs = subs;
+      }
       // Phase 80: leftover === true means "already cooked, portions in the fridge": the slot buys nothing (buildLists
       // skips it) and the sync step opens a Cooks record, so eating it takes a portion and never deducts the pantry.
       if (p.leftover === true) {
@@ -2117,7 +2122,7 @@
     if (!changes.length) { el.hidden = true; MP.Sync.ackPlanDraft(draft); return; }
     const rows = changes.map((c) => {
       const m = c.after && mealsById[c.after.mealId];
-      return `<li>Day ${c.day} ${esc(c.slot)} — ${!c.after ? "cleared" : c.after.eatingOut ? "Eating out" : esc(m ? m.name : c.after.mealId)}</li>`;
+      return `<li>Day ${c.day} ${esc(c.slot)} — ${!c.after ? "cleared" : c.after.eatingOut ? "Eating out" : esc(m ? m.name : c.after.mealId)}${c.after.subs ? esc(" (" + MP.subsLabel(c.after.subs) + ")") : ""}</li>`;
     }).join("");
     const lead = draft.start ? `The assistant drafted a new ${Number(draft.start.days)}-day plan from ${esc(draft.startDate)}` : `The assistant drafted ${changes.length} change${changes.length === 1 ? "" : "s"} to your plan`;
     el.innerHTML = `<p>${lead}:</p><ul>${rows}</ul>
@@ -2141,7 +2146,7 @@
         }
         changes.filter((c) => !c.after).forEach((c) => { delete plan.days[c.day - 1].slots[c.slot]; }); // Phase 84: a push can empty a slot
         const outs = changes.filter((c) => c.after && c.after.eatingOut);
-        const placements = changes.filter((c) => c.after && !c.after.eatingOut).map((c) => ({ day: c.day, slot: c.slot, mealId: c.after.mealId, variantId: c.after.variantId }));
+        const placements = changes.filter((c) => c.after && !c.after.eatingOut).map((c) => ({ day: c.day, slot: c.slot, mealId: c.after.mealId, variantId: c.after.variantId, subs: c.after.subs }));
         const res = MP.Plan.applyPlacements(plan, placements, library);
         plan = res.plan;
         outs.forEach((c) => { const sl = plan.days[c.day - 1].slots; if (!(sl[c.slot] && sl[c.slot].eatenAt)) sl[c.slot] = { eatingOut: true }; });
@@ -2576,6 +2581,27 @@
     if (r.ok) chat.meals.splice(chat.meals.indexOf(x), 1); else x.err = r.error;
     if (chat) renderChatMeals();
   }
+  /** Phase 97: a scope-less/`meal` sub card. "week" = a plan-only sub (a highlighted row); "meal" = a library mealEdit via applyMealEdits. */
+  function answerSub(x, how) {
+    if (how === "no") { chat.meals.splice(chat.meals.indexOf(x), 1); return renderChatMeals(); }
+    const e = x.edit;
+    if (how === "week") {
+      const ch = applyChatEdits([{ ...e, scope: "week" }], { focusDay: chat.day, pending: pendingMealIds() });
+      ch.notes.forEach((n) => { toast(n); chatBubble("understood", n); });
+      chat.changes = (chat.changes || []).concat(ch);
+      chat.meals.splice(chat.meals.indexOf(x), 1);
+      renderChatMeals(); renderPlan(); renderChatDiff(); renderChatWeek(true, true);
+      return;
+    }
+    const s = plan.days[e.day - 1] && plan.days[e.day - 1].slots[e.slot], meal = s && s.mealId && mealsById[s.mealId];
+    if (!meal) { x.pending = false; x.text = "No meal there any more"; return renderChatMeals(); }
+    const ingredients = MP.applySubs(meal, e.subs).ingredients.map((i) => ({ key: i.key, name: i.label, qty: i.qty || "" }));
+    MP.Sync.noteLibraryChange("chat: " + meal.name);
+    const res = ingredients.length ? applyMealEdits([{ type: "mealEdit", mealId: meal.id, patch: { ingredients } }]) : { applied: [], refused: [{ why: "nothing left to cook" }] };
+    x.pending = false;
+    if (res.applied[0]) { x.text = res.applied[0].text; x.undo = res.applied[0].undo; } else x.text = res.refused[0] ? res.refused[0].why : "Meal not found";
+    renderChatMeals(); renderPlan(); renderChatWeek();
+  }
   function answerMeal(x, yes) {
     if (x.note) return answerNote(x, yes);
     if (!yes) { chat.meals.splice(chat.meals.indexOf(x), 1); return renderChatMeals(); }
@@ -2589,13 +2615,32 @@
   function renderChatMeals() {
     const ul = $("chat-meals");
     ul.innerHTML = "";
+    const waiting = chat.meals.filter((x) => x.pending && x.edit && ["mealCreate", "mealEdit", "mealRemove"].includes(x.edit.type));
+    if (waiting.length > 1) { // Phase 97: one tap for several waiting library changes
+      const li = document.createElement("li");
+      li.className = "diff-row chat-meal chat-meal-all";
+      [["Add all", true, "chat-meals-add-all"], ["No all", false, "chat-meals-no-all"]].forEach(([label, yes, id]) => {
+        const b = document.createElement("button");
+        b.type = "button"; b.className = "btn-secondary"; b.id = id; b.textContent = label;
+        b.addEventListener("click", () => waiting.forEach((x) => answerMeal(x, yes)));
+        li.appendChild(b);
+      });
+      ul.appendChild(li);
+    }
     chat.meals.forEach((x) => {
       const li = document.createElement("li");
       li.className = "diff-row chat-meal" + (x.undo || x.pending || x.saved ? "" : " refused") + (x.undone ? " rejected" : "");
       const txt = document.createElement("span");
       txt.textContent = x.pending || x.saved ? x.text : x.undo ? (x.undone ? "Undone: " : "") + x.text : "Refused: " + x.text;
       li.appendChild(txt);
-      if (x.pending) {
+      if (x.pending && x.sub) {
+        [["Just this week", "week"], ["Change the meal", "meal"], ["No", "no"]].forEach(([label, how]) => {
+          const b = document.createElement("button");
+          b.type = "button"; b.className = "btn-secondary chat-sub-" + how; b.textContent = label;
+          b.addEventListener("click", () => answerSub(x, how));
+          li.appendChild(b);
+        });
+      } else if (x.pending) {
         if (!(x.note && x.edit.kind === "dislike" && !x.err)) [[x.bulk || x.note ? "Accept" : "Add", true, "btn-secondary chat-meal-add"], [x.note ? "Dismiss" : "No", false, "btn-secondary chat-meal-no"]].forEach(([label, yes, cls]) => {
           const b = document.createElement("button");
           b.type = "button"; b.className = cls; b.textContent = label;
@@ -2654,14 +2699,16 @@
       chat.meals.push(x);
       if (e.kind === "dislike") answerNote(x, true); // Phase 96: a plainly stated dislike saves at once, with Undo
     });
+    const subCards = reply.edits.filter((e) => e.type === "sub" && e.scope !== "week");
+    subCards.forEach((e) => chat.meals.push({ sub: true, edit: e, pending: true, text: `Hermes wants ${MP.PlanChat.describe([e], plan.startDate, chat.day)}` }));
     const rated = applyRateEdits(reply.edits);
     rated.applied.forEach((a) => chat.meals.push({ rate: true, text: a.text, undo: a.undo }));
     rated.refused.forEach((r) => chat.meals.push({ text: r.why }));
-    if (mealEdits.length || noted.length || reply.edits.some((e) => e.type === "rate" || e.type === "bulk")) renderChatMeals();
+    if (mealEdits.length || noted.length || subCards.length || reply.edits.some((e) => e.type === "rate" || e.type === "bulk")) renderChatMeals();
     reply.edits.filter((e) => e.type === "stock").forEach((e) => { // session-only: never the pantry
       e.items.forEach((i) => { const k = MP.ShoppingList.normalizeKey(i.name); chat.stock = [...chat.stock.filter((x) => MP.ShoppingList.normalizeKey(x.name) !== k), i]; });
     });
-    const rest = reply.edits.filter((e) => !e.type.startsWith("meal") && e.type !== "rate" && e.type !== "bulk" && e.type !== "stock" && e.type !== "note");
+    const rest = reply.edits.filter((e) => !e.type.startsWith("meal") && e.type !== "rate" && e.type !== "bulk" && e.type !== "stock" && e.type !== "note" && !(e.type === "sub" && e.scope !== "week"));
     if (rest.length) {
       const changes = applyChatEdits(rest, { focusDay: chat.day, pending: pendingMealIds(), fridge: chat.fridge ? { window: chat.fridge.window, have: fridgeHave(chat.stock) } : undefined });
       const line = MP.PlanChat.describe(rest, plan.startDate, chat.day);

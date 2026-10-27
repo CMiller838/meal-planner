@@ -493,7 +493,7 @@
     "assistant": true,
     "kind": "write",
     "log": "logged",
-    "note": "Phase 84: validates chat-style edits (start, skip, out, swap, swapDay, backfill), applies them to the mirrored plan and parks the result in planDraft"
+    "note": "Phase 84: validates chat-style edits (start, skip, out, swap, swapDay, backfill, sub with scope week or absent: add/remove/change an ingredient of one slot's meal), applies them to the mirrored plan and parks the result in planDraft"
   },
   {
     "method": "POST",

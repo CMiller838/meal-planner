@@ -669,6 +669,14 @@ assert.equal((await call("GET", "/today", "a")).body.water, 3); // /today untouc
     const e2 = await call("POST", "/plan/edit", "a", { edits: [{ type: "out", day: 6, slot: "dinner", name: "Spoons" }, { type: "out", day: 6, slot: "dinner", name: "Pret" }] });
     assert.equal(e2.body.ignored[0].reason, "overridden by a later edit"); // last wins
     assert.equal(JSON.parse(kv.get("planDraft")).changes[0].after.name, "Pret");
+    // Phase 97: a week-scoped sub parks a draft; scope "meal" is dropped; a mushroom add is refused
+    const sub = (subs, scope) => ({ type: "sub", day: 3, slot: "dinner", subs, ...(scope ? { scope } : {}) });
+    const s1 = await call("POST", "/plan/edit", "a", { edits: [sub([{ from: null, to: "peppers", label: "Peppers", qty: "1" }], "week")] });
+    assert.deepEqual([s1.status, s1.body.status], [200, "parked"]);
+    assert.deepEqual(JSON.parse(kv.get("planDraft")).changes[0].after.subs, [{ from: null, to: "peppers", label: "Peppers", qty: "1" }]);
+    assert.equal((await call("POST", "/plan/edit", "a", { edits: [sub([{ from: null, to: "peppers", label: "Peppers" }], "meal")] })).status, 400);
+    const s3 = await call("POST", "/plan/edit", "a", { edits: [sub([{ from: null, to: "mushroom", label: "Mushroom" }])] });
+    assert.deepEqual([s3.body.status, s3.body.ignored.length], ["no changes", 1]);
     // start: a fresh plan, carried alone with its Phase 83 options
     const e3 = await call("POST", "/plan/edit", "a", { edits: [{ type: "start", date: "2999-02-03", firstSlot: "dinner", days: 7, shopDay: 5 }, { type: "swapDay", a: 1, b: 2 }] });
     assert.deepEqual([e3.status, e3.body.status, e3.body.dropped], [200, "parked", 1]);

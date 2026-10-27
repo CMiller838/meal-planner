@@ -104,7 +104,7 @@ Nine keys, all plain JSON values, no versioning scheme beyond `updatedAt`:
   read-after-write) and **the app never reads it back** — if the mirror and
   `mp_plan` ever disagree, `mp_plan` wins. `variantId` (Phase 14) is present
   only when the slot has one, never written as `null`; `subs` (Phase 28,
-  `[{from, to, label}]`) likewise only when a swap applies.
+  `[{from, to, label, qty?}]`; Phase 97: `from` null = add, `to` null = remove, `from === to` + `qty` = amount) likewise only when a sub applies.
 - `placements` (Phase 13) → `{ updatedAt, placements: [{id, day, slot,
   mealId, mealName, variantId?, requestedAt}] }`. Hermes-owned request queue,
   replaced wholesale on each PUT; the app drains it, applies each entry

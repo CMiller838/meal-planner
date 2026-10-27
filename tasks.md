@@ -910,7 +910,7 @@ No spec ([S]); all in `tools/hermes_chat_bridge.py` + `tools/test_hermes_chat_br
 - [ ] Live: on the installed phone PWA, use every tab, open and drag-close a meal sheet, and swipe a Discover card: nothing janks, nothing is cut off, the bottom bar never covers a button
 
 ## Phase 97: Change meals and ingredients to suit you
-- [ ] Spec [L]: `.claude/specs/phase97.md`
+- [x] Spec [L]: `.claude/specs/phase97.md`
 - [ ] Live: in Plan with Hermes say "thighs instead of breast on Tuesday this week" (row appears, Reject restores), then "less sauce, add peppers on Thursday": the card offers Just this week / Change the meal / No, and the shopping list follows the choice; with 2 meal changes waiting, Add all applies both
 
 ## Phase 98: Make it cheaper, with the live total

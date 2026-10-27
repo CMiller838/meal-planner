@@ -308,17 +308,26 @@
    *  than throwing. Never mutates `meal`; always keeps `meal.id`. */
   function applySubs(meal, subs) {
     if (!meal || !Array.isArray(subs) || !subs.length || !Array.isArray(meal.ingredients)) return meal;
-    const ingredients = meal.ingredients.map((ing) => {
-      const sub = subs.find((s) => s.from === ing.key);
-      return sub ? { ...ing, key: sub.to, label: sub.label } : ing;
+    // Phase 97: from null = add `to`, to null = remove `from`, from === to with qty = amount change, else swap
+    const ingredients = [];
+    meal.ingredients.forEach((ing) => {
+      const sub = subs.find((s) => s.from && s.from === ing.key);
+      if (!sub) return ingredients.push(ing);
+      if (sub.to === null) return;
+      const next = { ...ing, key: sub.to };
+      if (sub.label) next.label = sub.label;
+      if (sub.qty) next.qty = sub.qty;
+      ingredients.push(next);
     });
+    subs.forEach((s) => { if (!s.from && s.to) ingredients.push({ key: s.to, label: s.label, qty: s.qty || "" }); });
     return { ...meal, ingredients };
   }
 
-  /** "" when there are no subs, else "with <label>[, <label>...]". */
+  /** "" when there are no subs, else "with X" / "without X" / "plus X" / "X (qty)", comma-joined. */
   function subsLabel(subs) {
     if (!Array.isArray(subs) || !subs.length) return "";
-    return `with ${subs.map((s) => s.label).join(", ")}`;
+    const one = (s) => (!s.to ? `without ${s.label || String(s.from).replace(/_/g, " ")}` : !s.from ? `plus ${s.label}` : s.from === s.to ? `${s.label || s.to.replace(/_/g, " ")} (${s.qty})` : `with ${s.label}`);
+    return subs.map(one).join(", ");
   }
 
   /** True if this meal yields leftovers worth chaining: multi-serving and not
@@ -366,7 +375,7 @@
   }
 
   /** Slot as the change log sees it: eating-out keeps its name/text, a meal its variant. */
-  const slotRef = (s) => (s && s.eatingOut ? { eatingOut: true, ...(s.name ? { name: s.name } : {}), ...(s.text ? { text: s.text } : {}) } : s && s.mealId ? { mealId: s.mealId, ...(s.variantId ? { variantId: s.variantId } : {}) } : null);
+  const slotRef = (s) => (s && s.eatingOut ? { eatingOut: true, ...(s.name ? { name: s.name } : {}), ...(s.text ? { text: s.text } : {}) } : s && s.mealId ? { mealId: s.mealId, ...(s.variantId ? { variantId: s.variantId } : {}), ...(s.subs && s.subs.length ? { subs: s.subs } : {}) } : null);
   const SLOT_ORDER = ["breakfast", "lunch", "dinner", "snack"];
   /** Phase 81: eating-out slot from an input entry; a bare re-mark keeps the name/text already there. */
   function outSlot(e, prev) {
@@ -611,10 +620,38 @@
     return { plan: out, changes: diffPlans(plan, out), ignored };
   }
 
+  /** Phase 97, pure: add chat `subs` ({ from, to, label?, qty? }; from null = add, to null = remove, from === to + qty = amount)
+   *  to the slot's meal for this plan only. A sub whose `from` matches no ingredient of the effective meal is dropped; the same
+   *  `from` (or same added `to`) replaces an existing sub. Refused: no meal, held, eating out, leftover, pending meal, empty
+   *  result, Exclusions.check failure (with `terms`). Never touches the library or pantry. Returns { plan, ignored }. */
+  function subSlot(plan, day, slot, subs, mealsById, fromDay, terms, pending) {
+    const ignore = (reason) => ({ plan, ignored: [{ day, slot, reason }] });
+    const s = plan.days[day - 1] && SLOT_ORDER.includes(slot) ? plan.days[day - 1].slots[slot] : null;
+    if (!s || !s.mealId) return ignore(s && s.eatingOut ? "eating out" : "no meal there");
+    if ((pending || []).includes(s.mealId)) return ignore("add the meal first");
+    if (heldAt(plan, fromDay)(day, slot)) return ignore("eaten, locked or past");
+    const meal = mealsById[s.mealId];
+    if (!meal) return ignore("unknown meal");
+    if (meal.leftoverOf) return ignore("change the cook day instead");
+    const base = effectiveMeal(meal, s.variantId), has = (k) => (base.ingredients || []).some((i) => i.key === k);
+    const keep = (subs || []).filter((x) => !x.from || has(x.from));
+    if (!keep.length) return ignore("no such ingredient");
+    const same = (a, b) => (a.from ? a.from === b.from : !b.from && a.to === b.to);
+    const merged = (s.subs || []).filter((o) => !keep.some((n) => same(n, o))).concat(keep.map((n) => ({ from: n.from || null, to: n.to || null, ...(n.label ? { label: n.label } : {}), ...(n.qty ? { qty: n.qty } : {}) })));
+    if (merged.length > 8) return ignore("too many changes on one meal");
+    const eff = applySubs(base, merged);
+    if (!eff.ingredients.length) return ignore("nothing left to cook");
+    const mx = MP.Exclusions, chk = mx ? mx.check(eff, terms || []) : { ok: true, reasons: [] };
+    if (!chk.ok) return ignore(chk.reasons.join(", "));
+    const days = plan.days.map((d) => (d.day === day ? { ...d, slots: { ...d.slots, [slot]: { ...s, subs: merged } } } : d));
+    return { plan: { ...plan, days }, ignored: [] };
+  }
+  MP.subSlot = subSlot;
+
   /** Phase 84, pure: apply validated chat/assistant plan edits (skip, out, swap, swapDay, backfill) in order through the
    *  Phase 81-83 helpers only. Two edits on one slot: the last wins (the earlier is reported in `ignored`).
    *  Returns { plan, changes, ignored, backfilled } where backfilled = [{ day, slot, entry, replaced }] for the caller's food log. */
-  function applyPlanEdits(plan, edits, mealsById, fromDay, generate, todayIso) {
+  function applyPlanEdits(plan, edits, mealsById, fromDay, generate, todayIso, opts) {
     const ignored = [], backfilled = [], key = (e) => (e.type === "swap" ? "" : e.day + ":" + e.slot);
     const last = new Map();
     edits.forEach((e, i) => { if (["skip", "out", "backfill"].includes(e.type)) last.set(key(e), i); });
@@ -628,6 +665,7 @@
       else if (e.type === "out") res = reflowPlan(cur, { eatingOut: [{ day: e.day, slot: e.slot, name: e.name, text: e.text }] }, mealsById, fromDay, generate);
       else if (e.type === "swap") res = swapSlots(cur, e.a, e.b, mealsById);
       else if (e.type === "swapDay") res = swapDays(cur, e.a, e.b, mealsById);
+      else if (e.type === "sub") res = subSlot(cur, e.day, e.slot, e.subs, mealsById, fromDay, opts && opts.terms, opts && opts.pending);
       else if (e.type === "backfill") {
         const when = (cur.startDate ? new Date(Date.parse(cur.startDate) + (e.day - 1) * 86400000).toISOString().slice(0, 10) : todayIso) + "T12:00:00.000Z";
         const entry = e.mealId ? { mealId: e.mealId } : { eatingOut: true, name: e.name, text: e.text };

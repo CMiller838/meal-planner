@@ -93,6 +93,12 @@
     rate: (e) => mealId(e) && (e.rating === "up" || e.rating === "down") && (e.note === undefined || typeof e.note === "string")
       && { type: "rate", mealId: e.mealId, rating: e.rating, ...(str(e.note, 200) ? { note: str(e.note, 200) } : {}) },
     note: (e) => typeof e.text === "string" && e.text.trim() && e.text.trim().length <= 200 && { type: "note", text: e.text.trim(), ...(e.kind === "dislike" || e.kind === "rule" ? { kind: e.kind } : {}) },
+    // Phase 97: change ingredients of one slot's meal. from null = add, to null = remove, from === to + qty = amount.
+    sub: (e) => { const k = (v) => (v === null || v === undefined ? null : str(v, 60) || false);
+      const subs = Array.isArray(e.subs) && e.subs.length >= 1 && e.subs.length <= 5 && e.subs.map((x) => { if (!x || typeof x !== "object") return false;
+        const from = k(x.from), to = k(x.to), label = x.label === undefined ? undefined : str(x.label, 60), qty = x.qty === undefined ? undefined : str(x.qty, 40);
+        return from !== false && to !== false && (from || to) && (!to || from === to || label) && (x.qty === undefined || qty) && !(from && from === to && !qty) && { from, to, ...(label ? { label } : {}), ...(qty ? { qty } : {}) }; });
+      return isDay(e.day) && isSlot(e.slot) && subs && subs.every(Boolean) && (e.scope === undefined || e.scope === "week" || e.scope === "meal") && { type: "sub", day: e.day, slot: e.slot, subs, ...(e.scope ? { scope: e.scope } : {}) }; },
     reroll: (e) => isDay(e.day) && (e.slot === undefined || isSlot(e.slot)) && (e.slot === undefined ? { type: "reroll", day: e.day } : { type: "reroll", day: e.day, slot: e.slot }),
   };
 
@@ -178,6 +184,7 @@
       else if (e.type === "out") parts.push(`${name(e.day)} ${e.slot}: eating out${e.name ? ` (${e.name})` : ""}`);
       else if (e.type === "swap") parts.push(`${name(e.a.day)} ${e.a.slot} swapped with ${name(e.b.day)} ${e.b.slot}`);
       else if (e.type === "swapDay") parts.push(`${name(e.a)} swapped with ${name(e.b)}`);
+      else if (e.type === "sub") parts.push(`${name(e.day)} ${e.slot}: ${MP.subsLabel(e.subs)}${e.scope === "week" ? " (this week)" : ""}`);
       else if (e.type === "mealCreate") parts.push(`new meal: ${e.name}`);
       else if (e.type === "mealEdit") parts.push(`changed meal ${e.mealId}`);
       else if (e.type === "mealRemove") parts.push(`removed meal ${e.mealId}`);

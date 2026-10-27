@@ -2468,6 +2468,50 @@
       check("applySubs: unmatched from -> unchanged", deepEqual(MP.applySubs(meal, [{ from: "nope", to: "x", label: "X" }]), meal));
     }
 
+    // Phase 97: add / remove / qty subs, subSlot, NORM.sub
+    {
+      const meal = { id: "m1", mealTypes: ["dinner"], ingredients: [{ key: "chicken_breast", qty: "2", label: "Chicken breast" }, { key: "sauce", qty: "200ml", label: "Sauce" }] };
+      const keys = (m) => m.ingredients.map((i) => i.key).join();
+      check("applySubs: add appends", keys(MP.applySubs(meal, [{ from: null, to: "peppers", label: "Peppers", qty: "1" }])) === "chicken_breast,sauce,peppers");
+      check("applySubs: remove filters", keys(MP.applySubs(meal, [{ from: "sauce", to: null }])) === "chicken_breast");
+      const q = MP.applySubs(meal, [{ from: "sauce", to: "sauce", qty: "100ml" }]);
+      check("applySubs: qty override keeps key and label", q.ingredients[1].key === "sauce" && q.ingredients[1].qty === "100ml" && q.ingredients[1].label === "Sauce");
+      check("applySubs: stale from + remove is a no-op", keys(MP.applySubs(meal, [{ from: "nope", to: null }])) === "chicken_breast,sauce");
+      check("subsLabel: without / plus / qty", MP.subsLabel([{ from: "sauce", to: null, label: "Sauce" }, { from: null, to: "peppers", label: "Peppers" }, { from: "sauce", to: "sauce", label: "Sauce", qty: "100ml" }]) === "without Sauce, plus Peppers, Sauce (100ml)");
+      const plan = { startDate: "2999-01-01", days: [1, 2, 3].map((d) => ({ day: d, slots: {} })) };
+      plan.days[1].slots.dinner = { mealId: "m1" };
+      plan.days[2].slots.dinner = { mealId: "m1", locked: true };
+      plan.days[0].slots.dinner = { mealId: "kid" };
+      plan.days[0].slots.lunch = { eatingOut: true };
+      const byId = { m1: meal, kid: { id: "kid", leftoverOf: "m1", ingredients: [{ key: "a", label: "A" }] } };
+      const ss = (day, slot, subs, terms, pending) => MP.subSlot(plan, day, slot, subs, byId, 1, terms, pending);
+      const add = { from: null, to: "peppers", label: "Peppers" };
+      const ok = ss(2, "dinner", [add]);
+      check("subSlot: add lands on the slot only", ok.ignored.length === 0 && ok.plan.days[1].slots.dinner.subs[0].to === "peppers" && !plan.days[1].slots.dinner.subs);
+      const again = MP.subSlot(ok.plan, 2, "dinner", [{ from: null, to: "peppers", label: "Pepper", qty: "2" }, { from: "sauce", to: null }], byId, 1);
+      check("subSlot: same added `to` replaces, others append", again.plan.days[1].slots.dinner.subs.length === 2 && again.plan.days[1].slots.dinner.subs[0].qty === "2");
+      const why = (r) => r.ignored.map((i) => i.reason).join();
+      check("subSlot: refuses no meal", why(ss(1, "snack", [add])) === "no meal there");
+      check("subSlot: refuses held", why(ss(3, "dinner", [add])) !== "" && ss(3, "dinner", [add]).plan === plan);
+      check("subSlot: refuses eating out", why(ss(1, "lunch", [add])) === "eating out");
+      check("subSlot: refuses leftover slot", why(ss(1, "dinner", [add])) === "change the cook day instead");
+      check("subSlot: stale from ignored", why(ss(2, "dinner", [{ from: "nope", to: null }])) === "no such ingredient");
+      check("subSlot: refuses emptying the meal", why(ss(2, "dinner", [{ from: "chicken_breast", to: null }, { from: "sauce", to: null }])) === "nothing left to cook");
+      check("subSlot: mushroom add refused, nothing written", why(ss(2, "dinner", [{ from: null, to: "mushroom", label: "Mushroom" }])).includes("mushroom") && ss(2, "dinner", [{ from: null, to: "mushroom", label: "Mushroom" }]).plan === plan);
+      check("subSlot: hard term refused", why(ss(2, "dinner", [add], ["pepper"])).includes("pepper"));
+      check("subSlot: pending meal refused", why(ss(2, "dinner", [add], [], ["m1"])) === "add the meal first");
+      let cur = plan;
+      for (let i = 0; i < 9; i++) cur = MP.subSlot(cur, 2, "dinner", [{ from: null, to: "x" + i, label: "X" }], byId, 1).plan;
+      check("subSlot: cap of 8 per slot", cur.days[1].slots.dinner.subs.length === 8);
+      const pe = MP.applyPlanEdits(plan, [{ type: "sub", day: 2, slot: "dinner", subs: [add] }, { type: "swapDay", a: 1, b: 3 }], byId, 1, null, "2000-01-01");
+      check("applyPlanEdits: sub + swapDay in one call, diff shows the sub", pe.changes.some((c) => c.day === 2 && c.slot === "dinner" && c.after.subs && c.after.subs[0].to === "peppers"));
+      const N = MP.PlanChat.validateReply;
+      const v = (subs, extra) => N({ edits: [{ type: "sub", day: 1, slot: "dinner", subs, ...extra }] }).reply.edits.length;
+      check("NORM.sub: valid add/remove/qty", v([add]) === 1 && v([{ from: "sauce", to: null }]) === 1 && v([{ from: "sauce", to: "sauce", qty: "1 tbsp" }]) === 1);
+      check("NORM.sub: 0 or 6 entries, both null, from===to without qty, bad scope, long label dropped", v([]) + v(Array(6).fill(add)) + v([{ from: null, to: null }]) + v([{ from: "a", to: "a" }]) + v([add], { scope: "year" }) + v([{ from: null, to: "a", label: "x".repeat(61) }].map((x) => ({ ...x, label: "" }))) === 0);
+      check("NORM.sub: scope week/meal kept", v([add], { scope: "week" }) === 1 && v([add], { scope: "meal" }) === 1);
+    }
+
     // MP.effectiveMeal(meal, variantId, subs)
     {
       const variant = { id: "v1", name: "Spicy", ingredients: [{ key: "peppers", qty: "1", label: "Peppers" }] };

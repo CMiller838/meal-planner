@@ -301,7 +301,7 @@ function draftId(changes) {
 
 const readJSON = async (env, k) => parseKV(await env.MP_KV.get(k));
 const libraryOf = (v) => (Array.isArray(v) ? v : v && Array.isArray(v.meals) ? v.meals : []);
-const slotRef = (v) => (v && v.mealId ? { mealId: v.mealId, ...(v.variantId ? { variantId: v.variantId } : {}) } : null);
+const slotRef = (v) => (v && v.mealId ? { mealId: v.mealId, ...(v.variantId ? { variantId: v.variantId } : {}), ...(Array.isArray(v.subs) && v.subs.length && v.subs.length <= 8 ? { subs: v.subs } : {}) } : null); // Phase 97: subs ride in a draft; the app re-validates them on apply
 
 /** Phase 63: the KV reads and prefs both /plan/draft and /plan/reflow generate from. */
 async function planInputs(env, { useUp = false, budget = null } = {}) {
@@ -475,7 +475,7 @@ async function editRoute(body, env, who) {
   if (body.source !== undefined && typeof body.source !== "string") return json(400, "source must be a string");
   const today = Generator.isoToday();
   const { reply, dropped } = PlanChat.validateReply({ edits: body.edits }, PLAN_VOCAB, today);
-  const edits = reply.edits.filter((e) => ["start", "skip", "out", "swap", "swapDay", "backfill"].includes(e.type));
+  const edits = reply.edits.filter((e) => ["start", "skip", "out", "swap", "swapDay", "backfill", "sub"].includes(e.type) && !(e.type === "sub" && e.scope === "meal")); // a draft carries slot changes, not library edits
   const dropAll = dropped + (reply.edits.length - edits.length);
   if (!edits.length) return json(400, "no valid edits");
   const inp = await planInputs(env);
@@ -492,7 +492,8 @@ async function editRoute(body, env, who) {
   const { library, mirror, startDate } = inp;
   const planIn = { ...mirror, days: Array.from({ length: inp.nDays }, (_, i) => mirror.days[i] || { day: i + 1, slots: {} }) };
   const res = globalThis.MP.applyPlanEdits(planIn, edits, Object.fromEntries(library.map((m) => [m.id, m])), globalThis.MP.reflowFromDay(startDate, today),
-    (locked, ranOut, avoid) => runGenerator(inp, library.filter((m) => !avoid.includes(m.id)), locked, ranOut), today);
+    (locked, ranOut, avoid) => runGenerator(inp, library.filter((m) => !avoid.includes(m.id)), locked, ranOut), today,
+    { terms: [...new Set([...((inp.settings && inp.settings.allergies) || []), ...((inp.settings && inp.settings.never) || [])])] });
   if (!res.changes.length) return json(200, { id: null, status: "no changes", dropped: dropAll, ignored: res.ignored });
   const draft = { id: draftId(res.changes), startDate, changes: res.changes };
   await parkDraft(env, who, draft, true);
@@ -1538,7 +1539,7 @@ export const ROUTES = [
   row("DELETE", "/drafts/:id", "write", { assistant: true, ...quiet("inert until the app accepts") }),
   row("POST", "/plan/draft", "read", { note: "computes a draft, stores nothing; useUp:true cooks expiring pantry items first" }),
   row("POST", "/plan/apply", "write", { log: "logged", note: "parks the draft in planDraft" }),
-  row("POST", "/plan/edit", "write", { log: "logged", note: "Phase 84: validates chat-style edits (start, skip, out, swap, swapDay, backfill), applies them to the mirrored plan and parks the result in planDraft" }),
+  row("POST", "/plan/edit", "write", { log: "logged", note: "Phase 84: validates chat-style edits (start, skip, out, swap, swapDay, backfill, sub with scope week or absent: add/remove/change an ingredient of one slot's meal), applies them to the mirrored plan and parks the result in planDraft" }),
   row("POST", "/plan/reflow", "write", { log: "logged", note: "re-plans only skipped / eatingOut / ranOut slots and parks the result in planDraft" }),
   row("POST", "/activity/undo", "write", { log: "logged" }),
   row("POST", "/chat", "write", quiet("ephemeral planning-chat thread (ChatRoom DO), not planning data")),
