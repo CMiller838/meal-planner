@@ -145,7 +145,7 @@ Goal: on the plan grid, drag a slot onto another slot or day to swap or move it 
 `MP.swapSlots`/`swapDays`, so held slots and a leftover before its cook are still refused; shopping list and leftover chains
 update. Undo through `mp_planUndo`.
 
-## Phase 104: Portion and leftover adjust [M] — not started
+## Phase 104: Portion and leftover adjust [M] — built 2026-10-27, live checks pending
 
 Verified 2026-10-27: check.py 10/10; tester PASS (bar on all five pages, free text, needs-grams, chip, Undo, sync-off, sheet hide).
 Goal: on a logged meal, slide the portion (half to double). "Keep the rest" opens a Cooks leftover record for tomorrow. A

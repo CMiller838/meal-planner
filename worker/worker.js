@@ -1357,7 +1357,7 @@ function eatenLogError(parsed) {
   if (!Array.isArray(parsed)) return "expected an array";
   if (parsed.length > 200) return "at most 200 entries";
   const seenIds = new Set();
-  const ALLOWED_KEYS = new Set(["id", "mealId", "name", "eatenAt", "tags"]);
+  const ALLOWED_KEYS = new Set(["id", "mealId", "name", "eatenAt", "tags", "portion"]);
   for (const entry of parsed) {
     if (typeof entry !== "object" || entry === null || Array.isArray(entry)) return "each entry must be an object";
     for (const key of Object.keys(entry)) {
@@ -1369,6 +1369,7 @@ function eatenLogError(parsed) {
     if (!Array.isArray(entry.tags) || entry.tags.some((t) => typeof t !== "string")) {
       return "each entry needs a tags array of strings";
     }
+    if ("portion" in entry && (typeof entry.portion !== "number" || !(entry.portion >= 0.5 && entry.portion <= 2))) return "portion must be a number from 0.5 to 2";
     if (seenIds.has(entry.id)) return "duplicate entry id: " + entry.id;
     seenIds.add(entry.id);
   }

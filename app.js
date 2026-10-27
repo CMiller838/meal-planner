@@ -313,21 +313,39 @@
     const row = document.createElement("div");
     row.className = "rating-row eat-row";
     row.innerHTML = `<div class="rating-btns"><button class="ghost" data-d="-1" aria-label="Fewer portions">−</button><output class="eat-n" aria-live="polite">1</output><button class="ghost" data-d="1" aria-label="More portions">+</button><span class="muted">portion(s)</span></div>
+      <label class="muted eat-size-l">Size <input type="range" class="eat-size" min="0.5" max="2" step="0.25" value="1"> <output class="eat-size-o">1×</output></label>
+      ${MP.isBatch(meal) ? '<label class="muted eat-keep-l hidden"><input type="checkbox" class="eat-keep"> <span class="eat-keep-t"></span></label>' : ""}
       <label class="muted">When <input type="datetime-local" class="eat-when" max="${nowLocal()}" value="${nowLocal()}"></label>
       <div class="rating-btns"><button class="btn eat-log">Log</button><button class="ghost eat-cancel">Cancel</button></div>`;
     sheet.querySelector(".modal-actions").after(row);
     const out = row.querySelector(".eat-n");
-    row.querySelectorAll("[data-d]").forEach((b) => b.addEventListener("click", () => { out.textContent = Math.min(6, Math.max(1, +out.textContent + +b.dataset.d)); }));
+    const sizeIn = row.querySelector(".eat-size"), keepL = row.querySelector(".eat-keep-l");
+    const restNow = () => Math.floor((meal.servings || 1) - (+out.textContent) * (+sizeIn.value));
+    const refresh = () => {
+      row.querySelector(".eat-size-o").textContent = `${+sizeIn.value}×`;
+      if (!keepL) return;
+      const rest = restNow();
+      keepL.classList.toggle("hidden", rest < 1);
+      keepL.querySelector(".eat-keep-t").textContent = `Keep the rest (${rest} portion${rest === 1 ? "" : "s"})`;
+      if (rest < 1) keepL.querySelector(".eat-keep").checked = false;
+    };
+    sizeIn.addEventListener("input", refresh);
+    refresh();
+    row.querySelectorAll("[data-d]").forEach((b) => b.addEventListener("click", () => { out.textContent = Math.min(6, Math.max(1, +out.textContent + +b.dataset.d)); refresh(); }));
     row.querySelector(".eat-cancel").addEventListener("click", () => row.remove());
     row.querySelector(".eat-log").addEventListener("click", () => {
       const n = Math.min(6, Math.max(1, Math.floor(+out.textContent) || 1));
       const picked = new Date(row.querySelector(".eat-when").value);
       const when = isNaN(picked) || picked > new Date() ? new Date() : picked;
       const whenIso = when.toISOString();
-      const { ticked } = MP.eatMeal(meal, whenIso, n);
+      const size = +sizeIn.value;
+      const rest = restNow();
+      const keep = keepL && !keepL.classList.contains("hidden") && keepL.querySelector(".eat-keep").checked && rest >= 1;
+      const { ticked } = MP.eatMeal(meal, whenIso, n, size);
+      const kept = keep && MP.Cooks && MP.Cooks.open(meal, null, rest) ? ` — kept ${rest}` : "";
       if (MP.Prefs) MP.Prefs.bump(meal, "eaten");
       closeDetail();
-      toast(`Logged ${n} × ${meal.name}${ticked ? " — plan ticked" : ""}`);
+      toast(`Logged ${n} × ${meal.name}${size !== 1 ? ` (${size}×)` : ""}${ticked ? " — plan ticked" : ""}${kept}`);
     });
   }
 

@@ -685,11 +685,12 @@ window.MP = window.MP || {};
   }
 
   /** Phase 92: one eaten-log entry per portion (ids `${meal.id}:${eatenAt}`, then `#2`..). Never touches the pantry. */
-  function logPortion(meal, eatenAt, n = 1) {
+  function logPortion(meal, eatenAt, n = 1, size = 1) {
+    const sz = Math.min(2, Math.max(0.5, Math.round((Number(size) || 1) * 4) / 4)); // Phase 104: NaN = 1, clamp 0.5-2 step 0.25
     const count = Math.min(6, Math.max(1, Math.floor(Number(n)) || 1));
     return MP.Nutrition.load()
       .then(({ tags }) => MP.Nutrition.tagsForMeal(meal, tags), () => [])
-      .then((tags) => { for (let i = 1; i <= count; i++) logEaten({ id: `${meal.id}:${eatenAt}${i > 1 ? "#" + i : ""}`, mealId: meal.id, name: meal.name, eatenAt, tags }); });
+      .then((tags) => { for (let i = 1; i <= count; i++) logEaten({ id: `${meal.id}:${eatenAt}${i > 1 ? "#" + i : ""}`, mealId: meal.id, name: meal.name, eatenAt, tags, ...(sz !== 1 ? { portion: sz } : {}) }); });
   }
 
   /** Remove one entry (routine undo) and push the shorter log. */

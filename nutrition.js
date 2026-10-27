@@ -103,11 +103,16 @@
   /** One day's eaten-log entries scored with dayCoverage. Entries whose meal left the
    *  library carry frozen tags with no levels: their nutrients count as partial, never covered. */
   function eatenDayCoverage(entries, byId, tags, targets) {
-    const known = entries.map((e) => byId[e.mealId]).filter(Boolean);
+    // Phase 104: portion < 1 counts partial (frozen tags join orphanTags); protein grams scale both ways.
+    const sized = (e) => byId[e.mealId] && Number.isFinite(e.portion) && e.portion !== 1;
+    const known = entries.filter((e) => byId[e.mealId] && !(sized(e) && e.portion < 1)).map((e) => byId[e.mealId]);
     const cov = dayCoverage(known, tags, targets);
-    const orphans = entries.filter((e) => !byId[e.mealId]);
+    const orphans = entries.filter((e) => !byId[e.mealId] || (sized(e) && e.portion < 1));
     const orphanTags = new Set(orphans.flatMap((e) => e.tags || []));
-    const extraProtein = orphans.reduce((s, e) => s + (e.proteinGrams || 0), 0); // Phase 80: real grams from the food log
+    const extraProtein = entries.reduce((s, e) => {
+      if (!byId[e.mealId]) return s + (e.proteinGrams || 0); // Phase 80: real grams from the food log
+      return sized(e) ? s + (e.portion - (e.portion < 1 ? 0 : 1)) * dayCoverage([byId[e.mealId]], tags, targets).proteinGramsApprox : s;
+    }, 0);
     return {
       cov: extraProtein ? { ...cov, proteinGramsApprox: Math.round((cov.proteinGramsApprox + extraProtein) * 100) / 100 } : cov,
       missing: cov.missing.filter((n) => !orphanTags.has(n)),

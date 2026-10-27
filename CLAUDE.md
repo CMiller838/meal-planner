@@ -119,7 +119,7 @@ Installable as a PWA on Android Chrome via `manifest.json` + `sw.js`.
   nutrient-log entry per sitting and must never call anything pantry-related
   (`eatPlan`, `applyOps`, `writeLocalItems`, `queueOp`). Don't add a
   convenience path that lets a portion-eat touch the pantry. Browse Eat (Phase 92) is a portion-eat via
-  `MP.Sync.logPortion`: it may tick a matching plan slot today (`MP.tickPlanEaten`), never touches pantry or Cooks.
+  `MP.Sync.logPortion`: it may tick a matching plan slot today (`MP.tickPlanEaten`), never touches the pantry, and opens a Cooks record only via the explicit "Keep the rest" tick (Phase 104, `cooks.js`). `eatenLog` entries may carry `portion` (0.5-2, only when != 1).
 - **The docked "I ate" bar (Phase 102, `ate-box.js`) is a portion-eat / food-log writer only**: a library pick goes through `MP.eatMeal` (`logPortion` + `tickPlanEaten`, shared with Browse Eat), free text/recents through `postFoodLog` (the Worker parses and owns nutrients); it never writes the pantry or Cooks itself and never filters by exclusions.
 - **`mp_planUndo` (Phase 63) is a one-level snapshot of the plan taken just before a re-flow, not plan state**: `MP.Plan.restore` is its only reader. A re-flow (`MP.reflowPlan`, `data.js`) only regenerates freed slots and never writes the pantry; `ranOut` keys are dropped from the generator's `have` index for that call.
 - **`mp_planPrefs` is settings, not plan state** (Phase 23): it holds only

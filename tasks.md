@@ -956,6 +956,13 @@ Spec: `.claude/specs/phase103.md`
 
 ## Phase 104: Portion and leftover adjust
 Spec: `.claude/specs/phase104.md`
+- [x] Extract Cooks to `cooks.js` + `setShelf`
+- [x] `eatenDayCoverage` honest-partial + asserts
+- [x] `MP.Sync.logPortion` `size` + asserts
+- [x] Worker `eatenLogError` `portion` + worker_test
+- [x] Eat row: size slider, Keep the rest, Log handler
+- [x] CLAUDE.md invariant, `sw.js` CACHE bump, `python3 check.py`
+- [ ] Live: on the phone PWA, log half a batch meal with Keep the rest and see the leftover on the Plan page
 
 ## Phase 105: Freeze-ahead prompts
 Spec: `.claude/specs/phase105.md` (planned batches via `place.freezeFrom`, cooked batches via a `freeze` card; Requires Phase 88/59/90a).

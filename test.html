@@ -8,6 +8,7 @@
 <pre id="out">Running...</pre>
 
 <script src="data.js"></script>
+<script src="cooks.js"></script>
 <script src="prefs.js"></script>
 <script src="nutrition.js"></script>
 <script src="shelf-life.js"></script>
@@ -1128,6 +1129,11 @@
         check("Sync.logPortion: n entries, distinct ids, pantry untouched", l.length === 3 && new Set(l.map((e) => e.id)).size === 3 && MP.Sync.localEatenLog().length === lbefore + 3 && localStorage.getItem("mp_planItems") === pbefore);
         l.forEach((e) => MP.Sync.unlogEaten(e.id));
       });
+      MP.Sync.logPortion({ id: "t104", name: "T", ingredients: [] }, "2026-01-02T10:00:00.000Z", 1, 0.5).then(() => MP.Sync.logPortion({ id: "t104b", name: "T", ingredients: [] }, "2026-01-02T10:00:00.000Z", 1, 9)).then(() => MP.Sync.logPortion({ id: "t104c", name: "T", ingredients: [] }, "2026-01-02T10:00:00.000Z", 1, "x")).then(() => {
+        const g = (id) => MP.Sync.localEatenLog().filter((e) => e.mealId === id);
+        check("Sync.logPortion size: 0.5 kept, 9 clamps to 2, NaN omits field", g("t104")[0].portion === 0.5 && g("t104b")[0].portion === 2 && !("portion" in g("t104c")[0]));
+        ["t104", "t104b", "t104c"].forEach((id) => g(id).forEach((e) => MP.Sync.unlogEaten(e.id)));
+      });
       const o1 = MP.reflowPlan(p1, { eatingOut: [{ day: 2, slot: "dinner", name: "Spoons", text: "burger and chips" }] }, lib, 1, gen);
       const o2 = MP.reflowPlan(o1.plan, { eatingOut: [{ day: 2, slot: "dinner" }], skipped: [{ day: 1, slot: "dinner" }] }, lib, 1, gen);
       check("eating out: name/text kept and survive a later re-flow", ser(o1.plan.days[1].slots.dinner) === '{"eatingOut":true,"name":"Spoons","text":"burger and chips"}' && ser(o2.plan.days[1].slots.dinner) === ser(o1.plan.days[1].slots.dinner));
@@ -2166,6 +2172,12 @@
       check("weekGaps: empty log => no flags, all notLogged", e0.notLogged.length === 1 && e0.nutrients.every((x) => x.loggedDays === 0 && !x.flag));
       const ec = N.eatenDayCoverage([ent("a", "x"), ent("gone", "x", { tags: ["fibre"] })], byId, tg, tr);
       check("eatenDayCoverage: orphan tag moves missing->partial", ec.partial.includes("fibre") && !ec.missing.includes("fibre"));
+      {
+        const base = [ent("a", "x")], half = [ent("a", "x", { portion: 0.5, tags: ["protein", "iron"] })], big = [ent("a", "x", { portion: 1.5 })];
+        const c1 = N.eatenDayCoverage(base, byId, tg, tr), c05 = N.eatenDayCoverage(half, byId, tg, tr), c15 = N.eatenDayCoverage(big, byId, tg, tr);
+        check("eatenDayCoverage: portion 0.5 makes a covered nutrient partial", !c1.partial.includes("iron") && c05.partial.includes("iron") && !c05.missing.includes("iron"));
+        check("eatenDayCoverage: portion 1.5 stays covered, protein scales", !c15.partial.includes("iron") && Math.abs(c15.cov.proteinGramsApprox - 1.5 * c1.cov.proteinGramsApprox) < 0.02 && Math.abs(c05.cov.proteinGramsApprox - 0.5 * c1.cov.proteinGramsApprox) < 0.02);
+      }
       const gt = N.withGymDay(tr);
       check("withGymDay: raises protein only, input untouched", gt.protein_g === 180 && gt.energy_kcal === 2900 && tr.protein_g === 160);
       check("withGymDay: no block => same object", N.withGymDay({ protein_g: 1 }).protein_g === 1);

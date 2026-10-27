@@ -530,6 +530,11 @@ r = await call("GET", `/day?date=${D}`, "a");
 assert.deepEqual(r.body.cards.map((c) => c.type), ["meal", "routine", "counter", "counter", "expiring", "coverage"]);
 assert.deepEqual([r.body.cards[0].state, r.body.cards[1].done, r.body.cards[2].count, r.body.cards[4].daysLeft], ["planned", true, 3, 0]);
 assert.equal(typeof r.body.assembledAt, "string");
+{ // Phase 104: portion 0.5-2 only
+  const ent = (portion) => [{ id: "p1", mealId: "d1", name: "D", eatenAt: `${D}T12:00:00.000Z`, tags: [], portion }];
+  for (const ok of [0.5, 2]) assert.equal((await call("PUT", "/eaten-log", "h", ent(ok))).status, 204);
+  for (const bad of [0.4, 3, "1"]) assert.equal((await call("PUT", "/eaten-log", "h", ent(bad))).status, 400);
+}
 assert.equal((await call("PUT", "/eaten-log", "h", [{ id: "e1", mealId: "d1", name: "Dinner One", eatenAt: `${D}T12:00:00.000Z`, tags: [] }])).status, 204);
 r = await call("GET", `/day?date=${D}`, "a");
 const meals54 = r.body.cards.filter((c) => c.type === "meal");

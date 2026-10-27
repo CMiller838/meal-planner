@@ -603,8 +603,8 @@
   }
 
   /** Phase 102: log `n` portions of `meal` (log only, never pantry/Cooks) and tick today's matching plan slot. The one place that pairs log and tick. */
-  function eatMeal(meal, whenIso, n) {
-    MP.Sync.logPortion(meal, whenIso, n);
+  function eatMeal(meal, whenIso, n, size) {
+    MP.Sync.logPortion(meal, whenIso, n, size);
     const london = (d) => new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/London" }).format(d);
     let ticked = null;
     try {
