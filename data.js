@@ -491,6 +491,23 @@
     return { plan: out, changes: diffPlans(plan, out), ignored: [] };
   }
 
+  /** Phase 101, pure: the sensible next step for a skipped meal, preselected in the Skip sheet, never forced.
+   *  freeze (a leftover slot with an open fridge Cook record), else drop (next day is raw-unsafe or past the plan end), else push.
+   *  `cooks` = open Cook records. Returns { how, why, cookId? }. */
+  function suggestSkipMove(plan, day, slot, mealsById, shelfData, fromDay, cooks) {
+    const sl = plan.days[day - 1] && plan.days[day - 1].slots[slot], meal = sl && sl.mealId && mealsById[sl.mealId];
+    if (!meal) return { how: "drop", why: "Nothing planned here" };
+    if (meal.leftoverOf) {
+      const rec = (cooks || []).find((r) => r.storage !== "freezer" && r.portionsLeft > 0 && (r.mealId === meal.leftoverOf || r.mealId === meal.id));
+      if (rec) return { how: "freeze", why: "A portion is cooked and in the fridge: freeze it for later", cookId: rec.id };
+    }
+    if (day + 1 > plan.days.length) return { how: "drop", why: "That is the last day of the plan" };
+    const SL = MP.ShelfLife;
+    if (shelfData && SL && !SL.rawSafeOn(meal, day + 1, shelfData, SL.shopOffset(plan))) return { how: "drop", why: "The ingredients would be past their best tomorrow" };
+    return { how: "push", why: "Fresh enough to cook tomorrow" };
+  }
+  MP.suggestSkipMove = suggestSkipMove;
+
   /** Phase 81, pure: move the meal at `from` to the later, non-held slot `to`; the meal that was there is freed and
    *  `from` is re-flowed (reflowPlan), the placed meal stays. Batch cooks are refused (push or drop them). */
   function moveSlot(plan, from, to, mealsById, fromDay, generate) {

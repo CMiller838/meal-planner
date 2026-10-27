@@ -1110,6 +1110,13 @@
       check("backfill: sets meal eaten at that date, replaced = old slot", bf.plan.days[1].slots.dinner.mealId === "N" && bf.plan.days[1].slots.dinner.eatenAt === "2026-09-08T19:00:00.000Z" && bf.replaced.mealId === "B" && ser(p1) === keep);
       check("backfill: future day and unknown meal refused", MP.backfillSlot(p1, 4, "dinner", { mealId: "N" }, lib, "x", "2026-09-09").ignored.length === 1 && MP.backfillSlot(p1, 1, "dinner", { mealId: "ZZ" }, lib, "x", "2026-09-09").ignored.length === 1);
       check("backfill: eating out keeps name/text", MP.backfillSlot(p1, 1, "dinner", { eatingOut: true, name: "Spoons", text: "burger" }, lib, "x", "2026-09-09").plan.days[0].slots.dinner.name === "Spoons");
+      // Phase 101: suggested next step for a skipped meal
+      const kp = { k: [{ id: "k1", mealId: "P", portionsLeft: 2 }] };
+      check("suggestSkipMove: leftover with an open fridge record -> freeze", MP.suggestSkipMove(p3, 3, "dinner", lib, null, 1, kp.k).how === "freeze" && MP.suggestSkipMove(p3, 3, "dinner", lib, null, 1, [{ id: "k2", mealId: "P", portionsLeft: 1, storage: "freezer" }]).how === "push");
+      check("suggestSkipMove: uncooked batch cook is never freeze", MP.suggestSkipMove(p3, 2, "dinner", lib, null, 1, kp.k).how === "push");
+      check("suggestSkipMove: plan end -> drop, default push", MP.suggestSkipMove(p3, 5, "dinner", lib, null, 1, []).how === "drop" && MP.suggestSkipMove(p1, 1, "dinner", lib, null, 1, []).how === "push");
+      const rp = { startDate: "2026-09-08", days: Array.from({ length: 14 }, (_, i) => ({ day: i + 1, slots: i === 3 ? { dinner: { mealId: "roast-chicken" } } : {} })) };
+      check("suggestSkipMove: next-day raw-unsafe -> drop", MP.suggestSkipMove(rp, 4, "dinner", { "roast-chicken": mealsById["roast-chicken"] }, shelfData, 1, []).how === "drop");
       const tp = { startDate: "2026-09-08", days: [{ day: 1, slots: { lunch: { mealId: "N", eatenAt: "x" }, dinner: { mealId: "N" } } }, { day: 2, slots: { lunch: { mealId: "N", eatingOut: true }, dinner: { mealId: "N" } } }] };
       const tpk = JSON.stringify(tp), tk = MP.tickPlanEaten(tp, "N", "2026-09-08", "W");
       check("tickPlanEaten: first uneaten matching slot today, pure", tk && tk.day === 1 && tk.slot === "dinner" && tk.plan.days[0].slots.dinner.eatenAt === "W" && JSON.stringify(tp) === tpk);

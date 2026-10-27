@@ -119,7 +119,7 @@ Goal: "what can I make with what's in?" and "something else?" on a slot return o
 the pantry, cooks and session `stock` with nothing to buy, as a chat card or sheet that can place one into the slot. Reads
 `pantryIndex`; never writes the pantry and never reorders the plan's nutrition ranking.
 
-## Phase 101: "Ate something else", with push-back [M] — not started
+## Phase 101: "Ate something else", with push-back [M] — built 2026-10-27, live checks pending
 
 Goal: one tap on any planned slot opens *Ate it*, *Ate something else* (search your library, recents or type text) and
 *Skipped*. The slot records what was eaten (Phase 82 `backfill` / Phase 80 `POST /food-log` path, never `commitCook`, never the

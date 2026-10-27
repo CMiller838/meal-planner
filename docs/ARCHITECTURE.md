@@ -552,3 +552,5 @@ chat edit: a card in the chat, saved only on Accept (`POST /notes/pending`), aft
 `Notes.md`. Notes never enter `rankSlot`/`generatePlan`: Hermes turns them into edits it already has.
 Phase 96: a note with `kind: "dislike"` is saved at once (app-side) with an Undo = `DELETE /notes/pending/:id`, valid only while
 it is still pending (404 once the assistant folded it into `items`); `kind: "rule"` keeps the Accept card.
+
+Phase 101: `POST /plan/edit` takes `userSaid: true`; honoured only for `X-Actor: hermes` with only skip/out/backfill edits, the parked draft then carries `direct: true` (and `backfilled`, which every edit draft now carries). The app adopts a direct draft with no banner (`adoptDirect` in `plan.js`: snapshot, `applyDraft`, toast with Undo); the Worker still never writes the plan.

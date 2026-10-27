@@ -935,6 +935,8 @@ Spec: `.claude/specs/phase100.md`
 
 ## Phase 101: "Ate something else", with push-back
 Spec: `.claude/specs/phase101.md`
+- [x] Built and tester PASS 2026-10-27 (suggestSkipMove, Worker userSaid/direct/backfilled, applyDraft/adoptDirect, done sheet, skip suggestion, bridge line); verified by check.py 10/10, worker_test, browser drive PC+390 both themes.
+- [ ] Live: Telegram Hermes: "I had pasta instead of the curry, push the curry to tomorrow" -> the phone app applies it with no banner, a "Hermes recorded" toast, and Undo restores the plan.
 
 ## Phase 102: Type it anywhere, with recents
 Spec: `.claude/specs/phase102.md`

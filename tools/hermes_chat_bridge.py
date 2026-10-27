@@ -130,6 +130,7 @@ def build_prompt(messages, context, opener=False, strict=False, brief=None, spen
         EDIT_TYPES,
         "Shop once a week (briefing shopDays). Use the briefing's cooks (freezer first) before buying anything, propose bulk buys from its bulk list only,"
         " when two options are equal on nutrition pick the cheaper one quietly, and plan batch cooks with leftover and freezer chains.",
+        "When the user has just said what they ate or skipped, reply with the skip/out/backfill edit; it applies at once with an Undo.",
         "Reply in ordinary prose, as you'd say it. Only when you are changing the plan, end with a fenced block: ```edits\\n[json array of the edits above]\\n``` (never mention the block in the prose)."
         " Add a line `ask: true` only to close a tie-break card; edits apply whatever it says.",
     ]

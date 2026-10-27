@@ -669,6 +669,19 @@ assert.equal((await call("GET", "/today", "a")).body.water, 3); // /today untouc
     const e2 = await call("POST", "/plan/edit", "a", { edits: [{ type: "out", day: 6, slot: "dinner", name: "Spoons" }, { type: "out", day: 6, slot: "dinner", name: "Pret" }] });
     assert.equal(e2.body.ignored[0].reason, "overridden by a later edit"); // last wins
     assert.equal(JSON.parse(kv.get("planDraft")).changes[0].after.name, "Pret");
+    // Phase 101: userSaid is honoured only for Hermes and only for skip/out/backfill
+    const us = { userSaid: true, edits: [{ type: "out", day: 6, slot: "dinner", name: "Spoons", text: "burger" }] };
+    const hx = { "X-Actor": "hermes" };
+    assert.equal((await call("POST", "/plan/edit", "a", us)).body.direct, undefined); // assistant: normal draft
+    assert.equal(JSON.parse(kv.get("planDraft")).direct, undefined);
+    const u1 = await call("POST", "/plan/edit", "h", us, hx);
+    assert.equal(u1.body.direct, true);
+    assert.equal(JSON.parse(kv.get("planDraft")).direct, true);
+    const u2 = await call("POST", "/plan/edit", "h", { userSaid: true, edits: [{ type: "swapDay", a: 3, b: 4 }] }, hx);
+    assert.equal(u2.body.direct, undefined); // a swap is never direct
+    assert.equal((await call("POST", "/plan/edit", "h", { edits: us.edits }, hx)).body.direct, undefined); // no flag, no direct
+    const lib101 = (await call("GET", "/library", "a")).body;
+    assert.deepEqual((lib101.meals || lib101).map((m) => m.id), JSON.parse(kv.get("library")).meals.map((m) => m.id)); // no Hermes-side filter
     // Phase 97: a week-scoped sub parks a draft; scope "meal" is dropped; a mushroom add is refused
     const sub = (subs, scope) => ({ type: "sub", day: 3, slot: "dinner", subs, ...(scope ? { scope } : {}) });
     const s1 = await call("POST", "/plan/edit", "a", { edits: [sub([{ from: null, to: "peppers", label: "Peppers", qty: "1" }], "week")] });

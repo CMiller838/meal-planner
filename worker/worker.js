@@ -440,7 +440,7 @@ async function parkDraft(env, who, d, reflow = false) {
     if (cur.pending) return { id: d.id, status: "already pending" };
     if (cur.ackedId === d.id) return { id: d.id, status: "already applied" };
   }
-  const next = { id: d.id, at: new Date().toISOString(), pending: true, ...(reflow ? { reflow: true } : {}), startDate: d.startDate, ...(cleanStart(d.start) ? { start: cleanStart(d.start) } : {}), changes: d.changes.map(({ day, slot, before, after }) => ({ day, slot, before: before && before.eatingOut ? before : slotRef(before), after: after && after.eatingOut ? after : slotRef(after) })) };
+  const next = { id: d.id, at: new Date().toISOString(), pending: true, ...(reflow ? { reflow: true } : {}), startDate: d.startDate, ...(cleanStart(d.start) ? { start: cleanStart(d.start) } : {}), changes: d.changes.map(({ day, slot, before, after }) => ({ day, slot, before: before && before.eatingOut ? before : slotRef(before), after: after && after.eatingOut ? after : slotRef(after) })), ...(d.direct ? { direct: true } : {}), ...(d.backfilled && d.backfilled.length ? { backfilled: d.backfilled } : {}) };
   await env.MP_KV.put("planDraft", JSON.stringify(next));
   await logWrite(env, { who, key: "planDraft", why: reflow ? "re-flow" : "", changes: diffItems("planDraft", cur, next) });
   return { id: d.id, status: "pending" };
@@ -495,9 +495,12 @@ async function editRoute(body, env, who) {
     (locked, ranOut, avoid) => runGenerator(inp, library.filter((m) => !avoid.includes(m.id)), locked, ranOut), today,
     { terms: [...new Set([...((inp.settings && inp.settings.allergies) || []), ...((inp.settings && inp.settings.never) || [])])] });
   if (!res.changes.length) return json(200, { id: null, status: "no changes", dropped: dropAll, ignored: res.ignored });
-  const draft = { id: draftId(res.changes), startDate, changes: res.changes };
+  // Phase 101: a Hermes-reported skip/out/backfill ("userSaid") is adopted by the app without a banner; anything else parks a normal draft
+  const direct = body.userSaid === true && who === "hermes" && edits.every((e) => ["skip", "out", "backfill"].includes(e.type));
+  const backfilled = res.backfilled.map(({ day, slot, entry }) => ({ day, slot, entry: entry.eatingOut ? { eatingOut: true, ...(entry.name ? { name: String(entry.name).slice(0, 60) } : {}), ...(entry.text ? { text: String(entry.text).slice(0, 200) } : {}) } : { mealId: entry.mealId } }));
+  const draft = { id: draftId([res.changes, backfilled, direct]), startDate, changes: res.changes, backfilled, ...(direct ? { direct: true } : {}) };
   await parkDraft(env, who, draft, true);
-  return json(200, { id: draft.id, status: "parked", dropped: dropAll, ignored: res.ignored });
+  return json(200, { id: draft.id, status: "parked", dropped: dropAll, ignored: res.ignored, ...(direct ? { direct: true } : {}) });
 }
 
 /** The real ranking terms behind a meal's place, as codes. Only inputs rankSlot reads: gap, prefer chip, busy-day effort, rating. */
@@ -1428,6 +1431,8 @@ function planDraftError(parsed) {
   if (typeof parsed.id !== "string" || !parsed.id) return "id must be a non-empty string";
   if (typeof parsed.pending !== "boolean") return "pending must be a boolean";
   if (parsed.changes !== undefined && !Array.isArray(parsed.changes)) return "changes must be an array";
+  if (parsed.direct !== undefined && parsed.direct !== true) return "direct must be true";
+  if (parsed.backfilled !== undefined && !Array.isArray(parsed.backfilled)) return "backfilled must be an array";
   return null;
 }
 
@@ -1504,7 +1509,7 @@ export const ROUTES = [
   row("DELETE", "/drafts/:id", "write", { assistant: true, ...quiet("inert until the app accepts") }),
   row("POST", "/plan/draft", "read", { note: "computes a draft, stores nothing; useUp:true cooks expiring pantry items first" }),
   row("POST", "/plan/apply", "write", { log: "logged", note: "parks the draft in planDraft" }),
-  row("POST", "/plan/edit", "write", { log: "logged", note: "Phase 84: validates chat-style edits (start, skip, out, swap, swapDay, backfill, sub with scope week or absent: add/remove/change an ingredient of one slot's meal), applies them to the mirrored plan and parks the result in planDraft" }),
+  row("POST", "/plan/edit", "write", { log: "logged", note: "Phase 84: validates chat-style edits (start, skip, out, swap, swapDay, backfill, sub with scope week or absent: add/remove/change an ingredient of one slot's meal), applies them to the mirrored plan and parks the result in planDraft; Phase 101: userSaid:true from X-Actor hermes with only skip/out/backfill edits marks the draft direct (the app adopts it with an Undo, no banner)" }),
   row("POST", "/plan/reflow", "write", { log: "logged", note: "re-plans only skipped / eatingOut / ranOut slots and parks the result in planDraft" }),
   row("POST", "/activity/undo", "write", { log: "logged" }),
   row("POST", "/chat", "write", quiet("ephemeral planning-chat thread (ChatRoom DO), not planning data")),
