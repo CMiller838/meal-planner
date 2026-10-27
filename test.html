@@ -3115,6 +3115,7 @@
       const n = ed([{ type: "note", text: " Hates Sunday cooking " }, { type: "note", text: "hates sunday cooking" }, { type: "note", text: "A" }, { type: "note", text: "B" }, { type: "note", text: "" }, { type: "note", text: "x".repeat(201) }]);
       check("validateReply: note trimmed, deduped, capped at 2, bad dropped", n.length === 2 && n[0].text === "Hates Sunday cooking" && n[1].text === "A");
       check("validateReply: note dropped when already an item or pending", ed([{ type: "note", text: "NO FISH" }, { type: "note", text: "soup" }], { ...vocab, notes: { items: ["No fish"], pending: [{ text: "Soup" }] } }).length === 0);
+      check("validateReply: note kind kept for dislike/rule, junk dropped, absent stays absent", (() => { const k = ed([{ type: "note", text: "a", kind: "dislike" }, { type: "note", text: "b", kind: "rule" }]), j = ed([{ type: "note", text: "c", kind: "x" }]), n = ed([{ type: "note", text: "d" }]); return k[0].kind === "dislike" && k[1].kind === "rule" && !("kind" in j[0]) && !("kind" in n[0]); })());
       check("describe: note reads back", MP.PlanChat.describe([{ type: "note", text: "No fish" }], "2026-01-05", 1).includes("No fish"));
       const keep = localStorage.getItem("mp_notes");
       localStorage.removeItem("mp_notes");
@@ -3123,6 +3124,19 @@
       check("Sync.notes: corrupt cache is empty", MP.Sync.notes().items.length === 0);
       localStorage.setItem("mp_notes", JSON.stringify({ items: ["a", 3], pending: [{ id: "n1", text: "b" }, null] }));
       check("Sync.notes: reads items and pending, drops junk", MP.Sync.notes().items.join() === "a" && MP.Sync.notes().pending.length === 1);
+      { // Phase 96: proposeNote returns the pending id; unproposeNote deletes it, 404 reads as already folded
+        const f0 = window.fetch, u0 = localStorage.getItem("mp_hermes_url"), t0 = localStorage.getItem("mp_hermes_token");
+        localStorage.setItem("mp_hermes_url", "http://fake"); localStorage.setItem("mp_hermes_token", "t");
+        const calls = [];
+        window.fetch = async (url, o) => { calls.push(o.method + " " + url); const nf = url.endsWith("/gone"); return { ok: !nf, status: nf ? 404 : 200, json: async () => ({ items: [], pending: o.method === "POST" ? [{ id: "n9", text: "Dislikes fennel" }] : [] }) }; };
+        const p = await MP.Sync.proposeNote(" dislikes FENNEL ");
+        const u = await MP.Sync.unproposeNote("n9"), g = await MP.Sync.unproposeNote("gone");
+        window.fetch = f0;
+        if (u0 === null) localStorage.removeItem("mp_hermes_url"); else localStorage.setItem("mp_hermes_url", u0);
+        if (t0 === null) localStorage.removeItem("mp_hermes_token"); else localStorage.setItem("mp_hermes_token", t0);
+        check("Sync.proposeNote returns the pending id; unproposeNote DELETEs it, 404 = already in Notes.md",
+          p.ok && p.id === "n9" && u.ok && calls[1] === "DELETE http://fake/notes/pending/n9" && !g.ok && /Notes\.md/.test(g.error));
+      }
       if (keep === null) localStorage.removeItem("mp_notes"); else localStorage.setItem("mp_notes", keep);
     }
     { // Phase 87: meal edit types, patchMeal, applyMealEdits

@@ -463,9 +463,16 @@ assert.equal((await call("POST", "/notes/pending", "h", { text: "NO FISH" })).st
 r = await call("POST", "/notes/pending", "h", { text: "Likes soup" });
 assert.deepEqual([r.status, r.body.pending.length, r.body.pending[0].text], [200, 1, "Likes soup"]);
 assert.equal((await call("POST", "/notes/pending", "h", { text: "likes SOUP" })).status, 409);
+const nid = r.body.pending[0].id;
+assert.equal((await call("DELETE", "/notes/pending/" + nid, "a")).status, 403);
+assert.equal((await call("DELETE", "/notes/pending/nope", "h")).status, 404);
 assert.equal((await call("PUT", "/notes", "a", { items: ["No fish"] })).body.pending.length, 1); // stale PUT keeps pending
 assert.equal((await call("PUT", "/notes", "a", { items: ["No fish", "likes soup"] })).body.pending.length, 0); // accepted note clears it
 assert.equal((await call("GET", "/notes", "a")).body.pending.length, 0);
+assert.equal((await call("DELETE", "/notes/pending/" + nid, "h")).status, 404); // folded into items: id gone
+r = await call("POST", "/notes/pending", "h", { text: "Dislikes fennel" });
+r = await call("DELETE", "/notes/pending/" + r.body.pending[0].id, "h");
+assert.deepEqual([r.status, r.body.pending.length, r.body.items.length], [200, 0, 2]); // removes only the pending note
 kv.delete("notes");
 // ranking: peanut meal never returned, olive meal after an otherwise-equal one
 kv.set("library", JSON.stringify([

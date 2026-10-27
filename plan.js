@@ -2566,8 +2566,14 @@
   async function answerNote(x, yes) {
     if (!yes) { chat.meals.splice(chat.meals.indexOf(x), 1); return renderChatMeals(); }
     const r = await MP.Sync.proposeNote(x.edit.text);
-    if (r.ok) { x.pending = false; x.saved = true; x.err = ""; x.text = `Saved: ${x.edit.text} (waiting for Obsidian)`; }
-    else x.err = r.error || "couldn't save, try again";
+    if (r.ok) { x.pending = false; x.saved = true; x.err = ""; x.noteId = r.id; x.text = `Saved: ${x.edit.text} (waiting for Obsidian)`; }
+    else { x.err = r.error || "couldn't save, try again" }
+    if (chat) renderChatMeals();
+  }
+  /** Phase 96: Undo of a saved dislike; 404 means the assistant already moved it to Notes.md. */
+  async function undoNote(x) {
+    const r = await MP.Sync.unproposeNote(x.noteId);
+    if (r.ok) chat.meals.splice(chat.meals.indexOf(x), 1); else x.err = r.error;
     if (chat) renderChatMeals();
   }
   function answerMeal(x, yes) {
@@ -2590,7 +2596,7 @@
       txt.textContent = x.pending || x.saved ? x.text : x.undo ? (x.undone ? "Undone: " : "") + x.text : "Refused: " + x.text;
       li.appendChild(txt);
       if (x.pending) {
-        [[x.bulk || x.note ? "Accept" : "Add", true, "btn-secondary chat-meal-add"], [x.note ? "Dismiss" : "No", false, "btn-secondary chat-meal-no"]].forEach(([label, yes, cls]) => {
+        if (!(x.note && x.edit.kind === "dislike" && !x.err)) [[x.bulk || x.note ? "Accept" : "Add", true, "btn-secondary chat-meal-add"], [x.note ? "Dismiss" : "No", false, "btn-secondary chat-meal-no"]].forEach(([label, yes, cls]) => {
           const b = document.createElement("button");
           b.type = "button"; b.className = cls; b.textContent = label;
           b.addEventListener("click", () => answerMeal(x, yes));
@@ -2598,6 +2604,13 @@
         });
         if (x.err) { const er = document.createElement("span"); er.className = "chat-meal-err"; er.setAttribute("role", "alert"); er.textContent = x.err; li.appendChild(er); }
       }
+      if (x.saved && x.note && x.noteId && x.edit.kind === "dislike") {
+        const b = document.createElement("button");
+        b.type = "button"; b.className = "btn-secondary"; b.textContent = "Undo";
+        b.addEventListener("click", () => undoNote(x));
+        li.appendChild(b);
+      }
+      if (!x.pending && x.err) { const er = document.createElement("span"); er.className = "chat-meal-err"; er.setAttribute("role", "alert"); er.textContent = x.err; li.appendChild(er); }
       if (x.undo && !x.undone) {
         const b = document.createElement("button");
         b.type = "button"; b.className = "btn-secondary"; b.textContent = "Undo";
@@ -2636,7 +2649,11 @@
     bulked.cards.forEach((k) => chat.meals.push({ bulk: true, pending: true, text: k.text, accept: k.accept, undoBulk: k.undo }));
     bulked.refused.forEach((r) => chat.meals.push({ text: r.why }));
     const noted = reply.edits.filter((e) => e.type === "note");
-    noted.forEach((e) => chat.meals.push({ note: true, edit: e, pending: true, text: `Hermes suggests a standing note: ${e.text}` }));
+    noted.forEach((e) => {
+      const x = { note: true, edit: e, pending: true, text: `Hermes suggests a standing note: ${e.text}` };
+      chat.meals.push(x);
+      if (e.kind === "dislike") answerNote(x, true); // Phase 96: a plainly stated dislike saves at once, with Undo
+    });
     const rated = applyRateEdits(reply.edits);
     rated.applied.forEach((a) => chat.meals.push({ rate: true, text: a.text, undo: a.undo }));
     rated.refused.forEach((r) => chat.meals.push({ text: r.why }));

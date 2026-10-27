@@ -92,7 +92,7 @@
       && { type: "cap", minutes: e.minutes, weekdays: [...e.weekdays].sort((a, b) => a - b) },
     rate: (e) => mealId(e) && (e.rating === "up" || e.rating === "down") && (e.note === undefined || typeof e.note === "string")
       && { type: "rate", mealId: e.mealId, rating: e.rating, ...(str(e.note, 200) ? { note: str(e.note, 200) } : {}) },
-    note: (e) => typeof e.text === "string" && e.text.trim() && e.text.trim().length <= 200 && { type: "note", text: e.text.trim() },
+    note: (e) => typeof e.text === "string" && e.text.trim() && e.text.trim().length <= 200 && { type: "note", text: e.text.trim(), ...(e.kind === "dislike" || e.kind === "rule" ? { kind: e.kind } : {}) },
     reroll: (e) => isDay(e.day) && (e.slot === undefined || isSlot(e.slot)) && (e.slot === undefined ? { type: "reroll", day: e.day } : { type: "reroll", day: e.day, slot: e.slot }),
   };
 

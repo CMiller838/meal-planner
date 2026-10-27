@@ -486,8 +486,19 @@ window.MP = window.MP || {};
     try {
       const r = await req("POST", "/notes/pending", { text });
       if (r && Array.isArray(r.items)) localStorage.setItem("mp_notes", JSON.stringify(r));
-      return { ok: true };
+      const mine = r && Array.isArray(r.pending) ? r.pending.find((p) => String(p.text).toLowerCase() === String(text).trim().toLowerCase()) : null;
+      return { ok: true, ...(mine ? { id: mine.id } : {}) };
     } catch (e) { return { ok: false, error: /409/.test(e.message) ? "already a note" : "couldn't save, try again" }; }
+  }
+
+  /** DELETE /notes/pending/:id (Phase 96): undo a note still waiting. 404 = the assistant already folded it into Notes.md. */
+  async function unproposeNote(id) {
+    if (!config().enabled) return { ok: false, error: "Hermes sync is off" };
+    try {
+      const r = await req("DELETE", "/notes/pending/" + encodeURIComponent(id));
+      if (r && Array.isArray(r.items)) localStorage.setItem("mp_notes", JSON.stringify(r));
+      return { ok: true };
+    } catch (e) { return { ok: false, error: /404/.test(e.message) ? "already in Notes.md, edit it there" : "couldn't undo, try again" }; }
   }
 
   /** GET /drafts (Phase 50), mirrored to mp_drafts. Never throws; { drafts: [] } when sync is off or fails. */
@@ -868,7 +879,7 @@ window.MP = window.MP || {};
     decide, needsPlan, config, saveConfig, syncLibrary, syncPlanFlag, ackPlanFlag,
     shoppingLines, setLine, fetchShoppingLines, flushShoppingLines,
     fetchItems, fetchPantry, localItems, writeLocalItems, queueOp, applyOps, flushOps,
-    planMirror, pushPlan, pushPrefs, fetchPlanPrefs, fetchDayHints, fetchPlanDraft, ackPlanDraft, fetchRatings, fetchFoodLog, postFoodLog, removeFoodEntry, groupFoodLog, localFoodLog, fetchSettings, settings, fetchNotes, notes, proposeNote, hardTerms, noteLibraryChange, fetchDrafts, deleteDraft, pushRating, pushPlanPrefs, newPlacements, newSince, syncPlacements, ackPlacements, syncEatRequests,
+    planMirror, pushPlan, pushPrefs, fetchPlanPrefs, fetchDayHints, fetchPlanDraft, ackPlanDraft, fetchRatings, fetchFoodLog, postFoodLog, removeFoodEntry, groupFoodLog, localFoodLog, fetchSettings, settings, fetchNotes, notes, proposeNote, unproposeNote, hardTerms, noteLibraryChange, fetchDrafts, deleteDraft, pushRating, pushPlanPrefs, newPlacements, newSince, syncPlacements, ackPlacements, syncEatRequests,
     localEatenLog, logEaten, logPortion, unlogEaten, pushEatenLog, pushCooks, start,
     syncProducts, localProducts, saveProduct, fetchActivity, undoActivity, resyncKey,
   };

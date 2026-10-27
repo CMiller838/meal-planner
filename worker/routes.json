@@ -383,6 +383,14 @@
     "why": "standing notes from Notes.md, not an everyday edit"
   },
   {
+    "method": "DELETE",
+    "path": "/notes/pending/:id",
+    "assistant": false,
+    "kind": "write",
+    "log": "unlogged",
+    "why": "undo a just-proposed note while it is still waiting; 404 once the assistant has folded it into Notes.md"
+  },
+  {
     "method": "POST",
     "path": "/notes/pending",
     "assistant": false,

@@ -83,11 +83,13 @@ Goal: (a) the bridge resumes one Hermes session per chat (the Hermes CLI has `--
 Goal: the first turn asks what is cooked, left and in the cupboard, turns the answer into `stock` and leftover placements
 (Phase 93), and plans around it in every chat, not only fridge mode. Stock stays session-only; the pantry is untouched.
 
-## Phase 96: Remember my reactions [M] — not started
+## Phase 96: Remember my reactions [M] — built 2026-10-27, live checks pending
 
 Goal: a lasting rule you state in chat (dislike, "lunch should be toasties", "no X on weeknights") is saved as a standing
 note from one tap, or automatically for dislikes, so you never repeat it. Today a `note` needs an Accept card. Notes stay prose
 and never generator input except through the existing exclusion and chip layers.
+
+Verified 2026-10-27: worker_test (DELETE ok/404/403), test.html kind + sync cases, bridge test, check.py 10/10. Live: chat dislike -> Saved + Undo.
 
 ## Phase 97: Change meals and ingredients to suit you [L] — not started
 

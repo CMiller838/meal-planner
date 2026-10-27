@@ -59,6 +59,7 @@ const ASSISTANT_ALLOWED = new Set([
 ]);
 const METHOD_PATH = /^\/meal\/([^/]+)\/method$/;
 const DRAFT_PATH = /^\/drafts\/([^/]+)$/;
+const NOTE_PENDING_PATH = /^\/notes\/pending\/([^/]+)$/;
 const RATING_PATH = /^\/meal\/([^/]+)\/rating$/;
 const SLOT_TYPES = ["breakfast", "lunch", "dinner", "snack"];
 const MEALDB_BASE = "https://www.themealdb.com/api/json/v1/1/";
@@ -183,6 +184,14 @@ async function postNotePending(request, env) {
   if (cur.pending.length >= NOTE_MAX_PENDING) return json(400, `pending: over ${NOTE_MAX_PENDING} waiting`);
   const at = new Date().toISOString();
   const doc = { updatedAt: cur.updatedAt || at, items: cur.items, pending: [...cur.pending, { id: "n" + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), text: t, at }] };
+  await env.MP_KV.put("notes", JSON.stringify(doc));
+  return json(200, { ok: true, ...doc });
+}
+
+async function deleteNotePending(env, id) {
+  const cur = await readNotes(env);
+  if (!cur.pending.some((p) => p.id === id)) return json(404, "no such pending note");
+  const doc = { updatedAt: cur.updatedAt || new Date().toISOString(), items: cur.items, pending: cur.pending.filter((p) => p.id !== id) };
   await env.MP_KV.put("notes", JSON.stringify(doc));
   return json(200, { ok: true, ...doc });
 }
@@ -1515,6 +1524,7 @@ export const ROUTES = [
   row("GET", "/spend", "read"),
   row("GET", "/notes", "read"),
   row("PUT", "/notes", "write", quiet("standing notes from Notes.md, not an everyday edit")),
+  row("DELETE", "/notes/pending/:id", "write", quiet("undo a just-proposed note while it is still waiting; 404 once the assistant has folded it into Notes.md")),
   row("POST", "/notes/pending", "write", quiet("inbox for notes the app accepted; the assistant appends them to Notes.md")),
   row("GET", "/food-log", "read"),
   row("POST", "/food-log", "write", { log: "logged", note: "logs what was eaten or stocked; also writes pantry and products (one activity id per key written); an id already logged is a no-op" }),
@@ -1980,6 +1990,11 @@ export default {
       if (request.method === "PUT") return putNotes(request, env);
       if (request.method !== "GET") return json(405, "method not allowed");
       return json(200, await readNotes(env));
+    }
+    const notePendingMatch = NOTE_PENDING_PATH.exec(url.pathname);
+    if (notePendingMatch) {
+      if (request.method !== "DELETE") return json(405, "method not allowed");
+      return deleteNotePending(env, decodeURIComponent(notePendingMatch[1]));
     }
     if (url.pathname === "/notes/pending") {
       if (request.method !== "POST") return json(405, "method not allowed");

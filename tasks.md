@@ -900,7 +900,9 @@ No spec ([S]); all in `tools/hermes_chat_bridge.py` + `tools/test_hermes_chat_br
 - [ ] Live: open Plan with Hermes with no fridge mode, answer "I cooked chilli, 3 portions left, and I have eggs and rice": Hermes sends stock + a leftover place, Save, then Leftovers shows 3 portions and the list drops the chilli ingredients
 
 ## Phase 96: Remember my reactions
-- [ ] Spec [M]: `.claude/specs/phase96.md`
+- [x] Spec [M]: `.claude/specs/phase96.md`
+- [x] Logic: plan-chat `kind`, Worker `DELETE /notes/pending/:id` + routes.json, sync `unproposeNote`, bridge prompt
+- [x] UI: dislike auto-save + Undo in plan.js; sw.js bump; ARCHITECTURE + CLAUDE.md
 - [ ] Live: in Plan with Hermes say "I really dislike fennel": a "Saved: ..." row appears with Undo, Undo removes it; then "lunch should be toasties" shows an Accept card and Accept saves it
 
 ## Phase 108: Phone-first polish, simple and animated

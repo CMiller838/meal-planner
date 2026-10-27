@@ -550,3 +550,5 @@ One-tap Generate and Plan with me stay the offline fallback, unchanged.
 Read-only "Standing notes" list on Plan with me; `brief.notes` in the chat briefing. Hermes may suggest one with a `note`
 chat edit: a card in the chat, saved only on Accept (`POST /notes/pending`), after which the assistant appends it to
 `Notes.md`. Notes never enter `rankSlot`/`generatePlan`: Hermes turns them into edits it already has.
+Phase 96: a note with `kind: "dislike"` is saved at once (app-side) with an Undo = `DELETE /notes/pending/:id`, valid only while
+it is still pending (404 once the assistant folded it into `items`); `kind: "rule"` keeps the Accept card.
