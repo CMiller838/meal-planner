@@ -488,7 +488,7 @@
   function openForm(meal) {
     const overlay = document.getElementById("modal-overlay");
     const sheet = document.getElementById("modal-sheet");
-    const types = ["breakfast", "lunch", "dinner", "snack"];
+    const types = ["breakfast", "lunch", "dinner"];
     sheet.innerHTML = `
       <button class="close-btn" aria-label="Close">✕</button>
       <h2>${meal ? "Edit meal" : "Add a meal"}</h2>
