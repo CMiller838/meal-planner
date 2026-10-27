@@ -43,6 +43,8 @@ wrong, say so in one line and update the heading.
 
 1. **Read narrowly.** First, grep the code for the roadmap line's headline feature itself (its nouns, e.g. "swipe deck",
    "swap"): it may already be built, which makes the contradiction a gate before any other reading.
+   Also grep its verbs/clauses (e.g. "asks what is cooked", "turns the answer into stock") in the Hermes bridge prompt
+   (`tools/hermes_chat_bridge.py`) and the app handlers: part of the goal is often already built, so spec only the delta.
    Then, right after the roadmap section, grep the code for every named UI surface
    (a "Today view", strip, sheet) so a missing one is found before any other reading (step 2's check, run early).
    Also, for any phase that writes state (a route, a KV key), grep where that state lives: the app's `localStorage` is
@@ -55,8 +57,14 @@ wrong, say so in one line and update the heading.
    list it under Files touched.
    If that field lives in a stored object `CLAUDE.md` pins by shape (e.g. `mp_planPrefs`), list the invariant line under
    Files touched so the builder updates it.
+   For a phase that applies an assistant edit "without a draft" or reuses the draft path, read the existing draft Apply
+   code (`renderPlanDraftBanner` in `plan.js`) for fields it silently drops (a food-log entry, a slot's name/text): they are gaps to spec.
+   For a phase that shows eaten/logged amounts ("what the data already measures"), grep what each log writer actually stores
+   (`logPortion` stores tags only; food-log entries store measured nutrients): a missing amount source is a gate.
    For every existing function/module the spec names, grep its defining file and write that path in the spec; if the
    Worker imports or will import that file, say whether it needs the `window` → `root` shim.
+   Also grep `*.html` that the page running the new code loads that defining file (e.g. `MP.Cooks` lives in `plan.js`,
+   which `index.html` does not load): a miss means extracting the module, so list it under Files touched.
    For a phase that adds a Worker route, also grep `worker/worker.js` for that route name: an existing route with the
    same path is a naming gate (new path vs replace), found before any spec text.
    If the phase touches nutrition, nutrient tags or targets, read `SPEC.md`'s "Nutrition targets" section (Grep
@@ -67,6 +75,8 @@ wrong, say so in one line and update the heading.
    ARCHITECTURE.md, Grep for the relevant headings (or read `docs/ADR_INDEX.md` if the
    project keeps one, then Grep `^### ADR-0NN`) and Read only those spans — never the whole file. Code: Grep/Glob, then Read exact spans. For a broad sweep
    use the `Explore` agent once, with a ≤1000-word report cap. Never read `tasks.md` whole.
+   For a phase that edits a script or module, also grep its test file (`tools/test_*.py`, `test.html`) in the same read, so
+   test tasks name the exact cases and existing helpers instead of needing a second read.
 2. **Reuse check once**: existing helper/stdlib/installed dep before speccing custom code.
    A new dependency is always a gate (project rule).
    **Preflight before naming anything:** `ls`/Glob every new file or module name the spec
@@ -81,6 +91,8 @@ wrong, say so in one line and update the heading.
    Found only in an unbuilt spec means the phase depends on that spec's phase: state "Requires Phase Na" in the spec.
    When a phase exposes existing logic (reasons, scores, fields), grep that each item the roadmap lists is a real input
    in the code; drop the ones that are not and say so in the spec.
+   When a phase grows a lookup or mapping (e.g. `cofid-map.json`), count how many of the library's keys it already covers
+   and quote the roadmap's figure against the real one: a gap smaller than stated is a gate.
    When the roadmap names a data attribute a feature learns from or filters on (a cuisine, a category, a tag), grep that the
    meal shape (`meals.json`) and the importer (`mealdb.js` `toMeal`) actually carry it; absent means a gate (capture it or drop it).
    Check whether the roadmap's "no UI to do X" assumption holds (e.g. the app may have no editor for the field).

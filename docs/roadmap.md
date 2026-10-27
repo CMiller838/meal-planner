@@ -59,7 +59,127 @@ Goal: press Eat on any meal or snack in Browse, pick portions (and optionally wh
 
 ---
 
+# v8 — Hermes adapts to you (Phases 94-107)
+
+Added 2026-10-26 from `docs/MEAL_PLANNING_EXAMPLE.md`, merged from 22 ideas into 14 phases the same day. Hermes should plan
+the way that conversation went: it sounds like Hermes, remembers what you said, learns your rules, swaps ingredients and meals
+for cheaper or to suit you, starts from your kitchen, and lets you log, eat and move meals in one tap. Already built and not
+repeated: highlighted changes with the ticker flash and per-row Undo (Phase 89), the `GET /swaps` cheaper-swap route (Phase 76,
+assistant side only), fridge mode (Phase 90b), eating out, swaps and backfill (Phases 81-82), Log anything (Phase 80), Eat from
+Browse (Phase 92). Kept fixed: exclusions, allergies and `never` stay enforced in code; Hermes never writes the pantry; nothing
+applies unseen except the existing direct `place`. Order is by usefulness; 100 builds with or after 99.
+
+## Phase 94: Hermes talks like Hermes [S] — not started
+
+Goal: (a) the bridge resumes one Hermes session per chat (the Hermes CLI has `--continue`/`--resume`) instead of a fresh
+`hermes -z` per message, so it keeps its own memory and voice, falling back to today's pasted history if resume fails; and
+(b) replies are ordinary prose with the edits in a separate fenced block the bridge strips and validates (same
+`validateReply`), removing the one-JSON-object constraint that makes it sound like a chatbot.
+
+## Phase 95: Kitchen-first opener [M] — not started
+
+Goal: the first turn asks what is cooked, left and in the cupboard, turns the answer into `stock` and leftover placements
+(Phase 93), and plans around it in every chat, not only fridge mode. Stock stays session-only; the pantry is untouched.
+
+## Phase 96: Remember my reactions [M] — not started
+
+Goal: a lasting rule you state in chat (dislike, "lunch should be toasties", "no X on weeknights") is saved as a standing
+note from one tap, or automatically for dislikes, so you never repeat it. Today a `note` needs an Accept card. Notes stay prose
+and never generator input except through the existing exclusion and chip layers.
+
+## Phase 97: Change meals and ingredients to suit you [L] — not started
+
+Goal: (a) a chat `sub` edit ("thighs instead of breast this week") writes `slot.subs` for the slot or slots named through
+`MP.applySubs`, without touching the library meal (today `slot.subs` is generator-written only; hard exclusions run after the
+swap); (b) "less sauce, add peppers" becomes a meal edit offered as "just this week" (a variant on the slot) or "change the
+meal" (Phase 87's library edit); (c) a batch of edits is approved with one tap instead of one card each.
+
+## Phase 98: Make it cheaper, with the live total [M] — not started
+
+Goal: every chat turn carries the working plan's shop total and per-shop split, so Hermes can say "that saves about £3"
+(it still does not raise cost unprompted); and "make it cheaper" gives ingredient or meal swaps with the £ difference from
+`pack-sizes.json` on an Add/No card each, using the Phase 76 swaps logic in-app. Never reorders nutrition ranking.
+
+## Phase 99: Low-effort lunch suggestions [M] — not started
+
+Goal: Hermes suggests lunches that need almost no cooking (toasties, assembled bowls, reheated batch leftovers, 15 minutes or
+under), drawn from the library first and offered as new meals via `mealCreate` (Add/No card) only when nothing fits. Honours
+the lunch rules in `docs/MEAL_PLANNING_EXAMPLE.md` (never an empty lunch slot, no mushrooms, no wraps, no standalone egg) and
+the `cap` minutes; the brief marks each lunch's effort so Hermes can keep the cooking down.
+
+## Phase 100: Cook-now suggestions [M] — not started
+
+Goal: "what can I make with what's in?" and "something else?" on a slot return one to three library meals cookable now from
+the pantry, cooks and session `stock` with nothing to buy, as a chat card or sheet that can place one into the slot. Reads
+`pantryIndex`; never writes the pantry and never reorders the plan's nutrition ranking.
+
+## Phase 101: "Ate something else", with push-back [M] — not started
+
+Goal: one tap on any planned slot opens *Ate it*, *Ate something else* (search your library, recents or type text) and
+*Skipped*. The slot records what was eaten (Phase 82 `backfill` / Phase 80 `POST /food-log` path, never `commitCook`, never the
+pantry) and the planned meal is offered a move: tomorrow, the freezer if it is a batch cook, or drop, chosen by shelf life
+(`shelf-life.js`) and the next shop day (`MP.moveSlot`/`pushSlot`, undo through `mp_planUndo`). Hermes does the same on request
+in chat ("I had pasta instead of the curry, move the curry to tomorrow") through the existing `skip`, `out` and `backfill`
+edit types, applied without a draft only when you have said it in this chat. Hermes picks replacements from your whole liked
+library (the Browse list): the briefing already carries every liked meal (Phase 88), so check that Browse likes and
+`GET /library` agree before building.
+
+## Phase 102: Type it anywhere, with recents [M] — not started
+
+Goal: a persistent "I ate…" box on every page. As you type it offers matches from your library, recents and foods
+(auto-select list); picking one logs it as eaten and, if it matches a planned slot today, ticks that slot (`MP.tickPlanEaten`).
+Free text still logs through `POST /food-log`. Under the box, a strip of your last 10 off-plan things and usual extras, each
+one tap at your usual portion. Phone speech-to-text works through the keyboard mic; no new dependency.
+
+## Phase 103: Drag a meal to another slot or day [M] — not started
+
+Goal: on the plan grid, drag a slot onto another slot or day to swap or move it (touch and mouse, keyboard fallback). Calls
+`MP.swapSlots`/`swapDays`, so held slots and a leftover before its cook are still refused; shopping list and leftover chains
+update. Undo through `mp_planUndo`.
+
+## Phase 104: Portion and leftover adjust [M] — not started
+
+Goal: on a logged meal, slide the portion (half to double). "Keep the rest" opens a Cooks leftover record for tomorrow. A
+portion change re-freezes nutrients at log time (food log rule); it never touches the pantry (`eatPortion` rule).
+
+## Phase 105: Freeze-ahead prompts [M] — not started
+
+Goal: when a batch dinner makes more portions than the next 1-2 days use, Hermes offers to freeze the extras and places them
+into a later week as `fromCook` slots (Phase 90a). Uses `freezable`, the Cooks fridge-to-freezer move and the freezer-first
+rule; buys nothing for a placed portion. Check first what Phases 43 and 90 already prompt in the app so the chat only adds
+the offer, not a second freezer path.
+
+## Phase 106: Eaten, by nutrient [M] — not started
+
+Goal: one easy view (an "Eaten" tab, today and the week, PC and phone) showing what has actually been eaten against target, for
+what the data already measures: calories, protein, carbs, fat, fibre, total sugars, saturated fat, sodium, calcium, iron,
+potassium, magnesium and vitamins A, C, D, B12 and folate, with **water** (the Phase 41 counter) shown beside them, not scored.
+
+Already there, so not rebuilt: targets in `nutrition-targets.json` for everything above except total sugars; total sugars in
+the food log and CoFID; the Phase 35 weekly gap view; the water counter. The view reads the same eaten data as coverage
+(`Nutrition.foodAsEaten`, portion-eat logs, food-log entries): no second source.
+
+New: a `sugars_g` target (a cap), the view, and a line saying how much of the day's food had data. An absent value shows
+"unknown", never 0, and each row says measured or estimate (basis, as for Products). Salt-only labels convert to sodium
+(salt ÷ 2.5).
+
+Link: the Eaten view leads to the nutrition assistant's health page (target and URL to confirm in the spec; not found in this repo).
+
+## Phase 107: More measured foods and added sugars [M] — not started
+
+Goal: raise what Phase 106 can show. (a) Grow `tools/cofid-map.json` beyond the 38 mapped foods to the library's common
+ingredients (`tools/cofid_build.py`, never hand-edit `cofid.json`). (b) Add CoFID's free-sugars column as `addedSugars_g`
+(a cap) after checking the 2021 xlsx has it, and trans fat as `transFat_g` (a cap near zero) if CoFID or USDA (ids 1235 and
+1257 in `food-log.json` `usdaIds`) has it. Both stay "unknown" where no source has them, never 0. (c) Only if wanted: vitamins
+E, K and B6 (new CoFID columns and targets). Depends on Phase 106.
+
 # Built, live checks pending
+
+## Phase 108: Phone-first polish, simple and animated [L] — not started
+
+Goal: keep the Cork Kitchen look (Phase 86 styled and animated every component) but make every page feel simple and native
+on a phone: less on screen at once, bigger tap targets, a bottom tab bar, drag-to-close sheets, page transitions, and
+consistent motion in every component. No new look, no new dependency. Runs last so it polishes the final markup of Phases 94-107.
 
 ## Phase 93: Leftover placements [S] — built 2026-10-26, live checks pending
 

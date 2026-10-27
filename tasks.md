@@ -882,3 +882,61 @@ Spec: `.claude/specs/phase91.md` (tasks there).
 ## Phase 92: Eat from Browse
 Spec: `.claude/specs/phase92.md` (tasks there).
 - [ ] Live: on the phone, Browse a snack, Eat 2 portions, confirm the Plan coverage moves; Eat today's planned dinner from Browse and confirm its plan slot shows Eaten
+
+## Phase 94: Hermes talks like Hermes
+Plain: Hermes keeps its own memory and voice through a chat and answers in ordinary sentences, not a stiff JSON reply.
+No spec ([S]); all in `tools/hermes_chat_bridge.py` + `tools/test_hermes_chat_bridge.py`. The Worker, `validateReply` and the app do not change.
+- [ ] Try the real CLI first (it is local, no credential): confirm `hermes chat -c <name> --create-if-missing -Q -q "<prompt>"` (or `-z` with `-c`) answers once and a second call with the same name remembers the first. Use whichever form works as the new default `--responder`; keep `--responder` overridable and the old one-shot form as the fallback when the named call errors.
+- [ ] Session name = `mp-` + the chat `session` id (thread["session"]). A new chat (a new `open` message) is a new name, so nothing leaks between chats.
+- [ ] With a resumed session send only the new user message plus `Context:`; send the full prompt (rules, edit types, briefing) on the opener, and resend the briefing only when it differs from the last one sent (compare a hash per session), so a 60 000-char brief is not repeated every turn. Fallback (no session / resume failed): today's full prompt with the last 30 lines.
+- [ ] Reply format: prose, then optional fenced block ```edits [json array] ```. `parse_reply` returns `text` = the prose with the block removed, `edits` = the array (non-list or bad JSON = no edits), `ask` still from a line `ask: true`. Keep accepting the old single-JSON-object reply (a responder or old session may still send it); total garbage still -> `FALLBACK`.
+- [ ] Rewrite the prompt's reply instruction for that format (keep `EDIT_TYPES` as is) and the voice lines already there; the `strict` re-ask (edits dropped) uses the same format.
+- [ ] Tests (stdlib, stub responder, no credential): prose-only reply; prose + edits block; old JSON object; garbage; bad JSON in the block; two messages in one chat reuse one session name and a second chat gets another; the briefing is sent on the opener and not repeated when unchanged, but is sent again when it changes.
+- [ ] `python3 tools/test_hermes_chat_bridge.py` and `python3 check.py --changed` pass.
+- [ ] Live: restart the bridge, open Plan with Hermes, chat for 4-5 turns: replies read as plain sentences, Hermes remembers an earlier turn without the 30-line history, and a "swap Tuesday's dinner" request still applies its edit.
+
+## Phase 95: Kitchen-first opener
+- [ ] Spec [M]: `.claude/specs/phase95.md`
+- [ ] Live: open Plan with Hermes with no fridge mode, answer "I cooked chilli, 3 portions left, and I have eggs and rice": Hermes sends stock + a leftover place, Save, then Leftovers shows 3 portions and the list drops the chilli ingredients
+
+## Phase 96: Remember my reactions
+- [ ] Spec [M]: `.claude/specs/phase96.md`
+- [ ] Live: in Plan with Hermes say "I really dislike fennel": a "Saved: ..." row appears with Undo, Undo removes it; then "lunch should be toasties" shows an Accept card and Accept saves it
+
+## Phase 108: Phone-first polish, simple and animated
+- [ ] Spec [L]: `.claude/specs/phase108.md`
+- [ ] Live: on the installed phone PWA, use every tab, open and drag-close a meal sheet, and swipe a Discover card: nothing janks, nothing is cut off, the bottom bar never covers a button
+
+## Phase 97: Change meals and ingredients to suit you
+- [ ] Spec [L]: `.claude/specs/phase97.md`
+- [ ] Live: in Plan with Hermes say "thighs instead of breast on Tuesday this week" (row appears, Reject restores), then "less sauce, add peppers on Thursday": the card offers Just this week / Change the meal / No, and the shopping list follows the choice; with 2 meal changes waiting, Add all applies both
+
+## Phase 98: Make it cheaper, with the live total
+Spec: `.claude/specs/phase98.md`
+
+## Phase 99: Low-effort lunch suggestions
+Spec: `.claude/specs/phase99.md`
+
+## Phase 100: Cook-now suggestions
+Spec: `.claude/specs/phase100.md`
+
+## Phase 101: "Ate something else", with push-back
+Spec: `.claude/specs/phase101.md`
+
+## Phase 102: Type it anywhere, with recents
+Spec: `.claude/specs/phase102.md`
+
+## Phase 103: Drag a meal to another slot or day
+Spec: `.claude/specs/phase103.md`
+
+## Phase 104: Portion and leftover adjust
+Spec: `.claude/specs/phase104.md`
+
+## Phase 105: Freeze-ahead prompts
+Spec: `.claude/specs/phase105.md` (planned batches via `place.freezeFrom`, cooked batches via a `freeze` card; Requires Phase 88/59/90a).
+
+## Phase 106: Eaten, by nutrient
+- Spec: .claude/specs/phase106.md
+
+## Phase 107: More measured foods and added sugars
+- Spec: `.claude/specs/phase107.md` [M]
