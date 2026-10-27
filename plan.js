@@ -1217,6 +1217,103 @@
     });
   }
 
+  /** Pure: the slot one step from (day, slot) for the Alt+Arrow swap; null at the grid edge. */
+  function neighbour(pl, day, slot, dir) {
+    const i = SLOT_TYPES.indexOf(slot);
+    if (i < 0 || !pl.days[day - 1]) return null;
+    if (dir === "left" || dir === "right") {
+      const t = SLOT_TYPES[i + (dir === "left" ? -1 : 1)];
+      return t ? { day, slot: t } : null;
+    }
+    const d = day + (dir === "up" ? -1 : 1);
+    return pl.days[d - 1] ? { day: d, slot: slot } : null;
+  }
+
+  /** Drag a plan card onto another card (swapSlots) or a day grip onto a day row (swapDays); Alt+Arrow swaps with a neighbour.
+   * Only builds {day, slot} pairs and calls applyResult: never edits the plan itself. */
+  function wireDragSwap(root) {
+    if (root._dragCancel) return root._dragCancel(); // listeners live on the persistent root: a re-render only cancels a drag
+    let drag = null;
+    root._dragCancel = () => clear();
+    const clear = () => {
+      if (!drag) return;
+      clearTimeout(drag.timer);
+      if (drag.ghost) drag.ghost.remove();
+      drag.src.classList.remove("drag-src");
+      root.querySelectorAll(".drop-ok").forEach((e) => e.classList.remove("drop-ok"));
+      drag.src.style.touchAction = "";
+      drag = null;
+    };
+    const targetAt = (x, y) => {
+      const e = document.elementFromPoint(x, y);
+      if (!e) return null;
+      return drag.kind === "slot" ? e.closest(".slot-card") : e.closest(".day-row");
+    };
+    const begin = () => {
+      drag.live = true;
+      drag.src.classList.add("drag-src");
+      drag.src.style.touchAction = "none";
+      const g = (drag.kind === "slot" ? drag.src : drag.src.closest("h3")).cloneNode(true);
+      g.classList.add("drag-ghost");
+      g.style.width = drag.src.getBoundingClientRect().width + "px";
+      document.body.appendChild(g);
+      drag.ghost = g;
+      drag.src.setPointerCapture && drag.src.setPointerCapture(drag.id);
+    };
+    root.addEventListener("pointerdown", (e) => {
+      if (guidedActive || chat || e.button > 0 || e.target.closest("button")) return;
+      const grip = e.target.closest(".day-grip"), card = e.target.closest(".slot-card");
+      const src = grip || card;
+      if (!src) return;
+      const touch = e.pointerType === "touch";
+      drag = { src, id: e.pointerId, kind: grip ? "day" : "slot", x: e.clientX, y: e.clientY, live: false, touch };
+      if (touch) drag.timer = setTimeout(() => drag && begin(), 250);
+    });
+    root.addEventListener("pointermove", (e) => {
+      if (!drag || e.pointerId !== drag.id) return;
+      if (!drag.live) {
+        if (Math.hypot(e.clientX - drag.x, e.clientY - drag.y) < 8) return;
+        if (drag.touch) return clear(); // moved before the hold: the page scrolls
+        begin();
+      }
+      e.preventDefault();
+      drag.ghost.style.transform = `translate(${e.clientX - drag.x}px, ${e.clientY - drag.y}px)`;
+      const t = targetAt(e.clientX, e.clientY);
+      root.querySelectorAll(".drop-ok").forEach((n) => n !== t && n.classList.remove("drop-ok"));
+      if (t && t !== (drag.kind === "slot" ? drag.src : drag.src.closest(".day-row"))) t.classList.add("drop-ok");
+      if (e.clientY < 40) scrollBy(0, -12); else if (e.clientY > innerHeight - 40) scrollBy(0, 12);
+    });
+    root.addEventListener("pointerup", (e) => {
+      if (!drag || e.pointerId !== drag.id) return;
+      if (!drag.live) return clear();
+      const d = drag, t = targetAt(e.clientX, e.clientY);
+      const eat = (ev) => ev.stopPropagation(); // the drop is not a tap
+      root.addEventListener("click", eat, true);
+      setTimeout(() => root.removeEventListener("click", eat, true), 0);
+      const own = d.kind === "slot" ? d.src : d.src.closest(".day-row");
+      clear();
+      if (!t || t === own || !root.contains(t)) return;
+      if (d.kind === "slot") {
+        const a = { day: Number(d.src.dataset.day), slot: d.src.dataset.slot }, b = { day: Number(t.dataset.day), slot: t.dataset.slot };
+        if (applyResult(MP.swapSlots(plan, a, b, byIdMap()), "Swapped")) focusSlot(b);
+      } else applyResult(MP.swapDays(plan, Number(own.dataset.day), Number(t.dataset.day), byIdMap()), "Swapped days");
+    });
+    root.addEventListener("pointercancel", clear);
+    root.addEventListener("contextmenu", (e) => { if (drag && drag.live) e.preventDefault(); });
+    root.addEventListener("keydown", (e) => {
+      const card = e.target.closest && e.target.closest(".slot-card");
+      const dir = { ArrowLeft: "left", ArrowRight: "right", ArrowUp: "up", ArrowDown: "down" }[e.key];
+      if (guidedActive || chat || !card || !dir || !e.altKey) return;
+      e.preventDefault();
+      const a = { day: Number(card.dataset.day), slot: card.dataset.slot }, b = neighbour(plan, a.day, a.slot, dir);
+      if (b && applyResult(MP.swapSlots(plan, a, b, byIdMap()), "Swapped")) focusSlot(b);
+    });
+  }
+  function focusSlot(s) {
+    const el = document.querySelector(`#plan-root .slot-card[data-day="${s.day}"][data-slot="${s.slot}"]`);
+    if (el) el.focus();
+  }
+
   /** Re-derive prefs (and the chips) from basePrefs + current hints; dismissals take effect at once. */
   function applyHints(startDate) {
     const resolved = MP.DayHints.resolve(dayHints, startDate || MP.Generator.isoToday(), MP.Generator.isoToday(), MP.DayHints.offMap());
@@ -1425,13 +1522,13 @@
       for (const d of weekDays) {
         const heading = dayHeading(d.day);
         html += `<div class="day-row" data-day="${d.day}">
-          <h3>${heading}${hintChipHtml(d.day)}<button class="reroll-btn" data-day="${d.day}" aria-label="Reroll day ${d.day}" title="Reroll this day">🎲 Reroll</button><button class="reroll-btn swapday-btn" data-day="${d.day}" aria-label="Swap day ${d.day} with another day" title="Swap this day with another">⇄ Swap day</button></h3>
+          <h3><span class="day-grip" aria-label="Drag to swap days">⠿</span>${heading}${hintChipHtml(d.day)}<button class="reroll-btn" data-day="${d.day}" aria-label="Reroll day ${d.day}" title="Reroll this day">🎲 Reroll</button><button class="reroll-btn swapday-btn" data-day="${d.day}" aria-label="Swap day ${d.day} with another day" title="Swap this day with another">⇄ Swap day</button></h3>
           <div class="slot-grid">
             ${SLOT_TYPES.map((slotType) => {
               const meal = mealAt(d.day, slotType);
               const warn = warnings[`${d.day}-${slotType}`];
               const locked = meal && plan.days[d.day - 1].slots[slotType].locked;
-              return `<div class="slot-card ${meal ? "" : "empty"}${locked ? " locked" : ""}" data-day="${d.day}" data-slot="${slotType}">
+              return `<div class="slot-card ${meal ? "" : "empty"}${locked ? " locked" : ""}" data-day="${d.day}" data-slot="${slotType}" tabindex="0" role="button">
                 <div class="slot-type">${slotType}${locked ? ` <span class="lock-icon" aria-label="Locked">🔒</span>` : ""}</div>
                 <div class="slot-meal">${meal ? esc(meal.name) : plan.days[d.day - 1].slots[slotType] && plan.days[d.day - 1].slots[slotType].eatingOut ? esc(outName(plan.days[d.day - 1].slots[slotType])) : "tap to add"}</div>
                 ${ratingHintHtml(meal)}
@@ -1467,6 +1564,7 @@
       });
     });
     wireMoveBtns(root);
+    wireDragSwap(root);
     if (staged) {
       root.classList.add("staging");
       root.querySelectorAll(".slot-card").forEach((el, i) => {
@@ -2453,7 +2551,7 @@
     renderPlacementBanner(e.detail);
   });
 
-  MP.Plan = { cookNowFor, applyCheaperEdits, cheaperCandidates, fridgeWindow, fridgeHave, applyBulkEdits, applyChatEdits, applyMealEdits, applyRateEdits, chatBriefing, chatContext, tieFor, effectiveBudget, budgetSwaps, resetChatPrefs, reflow, snapshot, restore, planMetrics, whatIf, fixGap, wrapUp, cookMinsFor, tickerFor, parseGuidedSlots, applyPlacements, openLeftoverCooks, logPortion, matchEatRequests, applyEatRequests };
+  MP.Plan = { neighbour, cookNowFor, applyCheaperEdits, cheaperCandidates, fridgeWindow, fridgeHave, applyBulkEdits, applyChatEdits, applyMealEdits, applyRateEdits, chatBriefing, chatContext, tieFor, effectiveBudget, budgetSwaps, resetChatPrefs, reflow, snapshot, restore, planMetrics, whatIf, fixGap, wrapUp, cookMinsFor, tickerFor, parseGuidedSlots, applyPlacements, openLeftoverCooks, logPortion, matchEatRequests, applyEatRequests };
 
   // ---- Planning chat with Hermes (Phase 72) ----
   // The working plan is `plan` itself with guidedActive on (no savePlan runs); Exit restores the snapshot, Save commits.

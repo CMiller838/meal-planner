@@ -138,9 +138,9 @@ Goal: a persistent "I ate…" box on every page. As you type it offers matches f
 Free text still logs through `POST /food-log`. Under the box, a strip of your last 10 off-plan things and usual extras, each
 one tap at your usual portion. Phone speech-to-text works through the keyboard mic; no new dependency.
 
-## Phase 103: Drag a meal to another slot or day [M] — not started
+## Phase 103: Drag a meal to another slot or day [M] — built 2026-10-27, live checks pending
 
-Verified 2026-10-27: check.py 10/10; tester PASS (bar on all five pages, free text, needs-grams, chip, Undo, sync-off, sheet hide).
+Verified 2026-10-27: check.py 10/10; tester PASS (card drag swap + Undo at PC and 390 px, self-drop cancels, tap opens day view; touch hold path read only, left to the live check).
 Goal: on the plan grid, drag a slot onto another slot or day to swap or move it (touch and mouse, keyboard fallback). Calls
 `MP.swapSlots`/`swapDays`, so held slots and a leftover before its cook are still refused; shopping list and leftover chains
 update. Undo through `mp_planUndo`.

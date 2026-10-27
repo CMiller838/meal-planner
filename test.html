@@ -3443,6 +3443,11 @@
     check("cookMins: no time -> null", cm(3, {}).mins === null);
     check("cookMins: leftover = 0", cm(5, {}).mins === 0 && !cm(5, { 5: 10 }).over);
     check("cookMins: over a weekday cap (Mon=1), not over without one", cm(1, { 1: 10 }).over && cm(1, { 1: 10 }).cap === 10 && !cm(1, {}).over && !cm(1, { 1: 15 }).over);
+    const nb = (d, s, dir) => JSON.stringify(MP.Plan.neighbour(pl, d, s, dir));
+    check("neighbour: left/right stay in the day and stop at its edges", nb(1, "lunch", "left") === '{"day":1,"slot":"breakfast"}' && nb(1, "lunch", "right") === '{"day":1,"slot":"dinner"}' && nb(1, "breakfast", "left") === "null" && nb(1, "dinner", "right") === "null");
+    check("neighbour: up/down keep the slot type, null off the first/last day", nb(2, "dinner", "up") === '{"day":1,"slot":"dinner"}' && nb(1, "dinner", "up") === "null" && nb(6, "dinner", "down") === '{"day":7,"slot":"dinner"}' && nb(7, "dinner", "down") === "null");
+    const p28 = { days: Array.from({ length: 28 }, (_, i) => ({ day: i + 1, slots: {} })) };
+    check("neighbour: 28-day plan reaches day 28", MP.Plan.neighbour(p28, 27, "lunch", "down").day === 28 && MP.Plan.neighbour(p28, 28, "lunch", "down") === null);
     const snap = JSON.parse(JSON.stringify(pl)), baseM = MP.Plan.planMetrics(snap, X);
     pl.days[2].slots.dinner = { mealId: "q" };
     const tk = MP.Plan.tickerFor(pl, baseM, 0, X), now = MP.Plan.planMetrics(pl, X);

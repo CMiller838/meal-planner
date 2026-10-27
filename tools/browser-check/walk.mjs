@@ -153,6 +153,42 @@ for (const [vp, size] of Object.entries({ pc: { width: 1440, height: 900 }, phon
     if (before !== await page.evaluate(() => localStorage.getItem('mp_plan'))) throw new Error('preview changed mp_plan');
     await page.click('#swap-sheet .close-btn');
   });
+  await step('plan: drag a card onto another swaps, a day grip swaps days, Alt+Arrow swaps, a tap still opens the day (Phase 103)', async () => {
+    await page.goto(`${base}/plan.html`);
+    await page.waitForSelector('#plan-root .slot-card');
+    const names = () => page.evaluate(() => [...document.querySelectorAll('#plan-root .day-row[data-day="1"] .slot-meal')].map((e) => e.textContent));
+    const drag = async (from, to) => {
+      await page.locator(from).first().scrollIntoViewIfNeeded();
+      const a = await page.locator(from).first().boundingBox(), b = await page.locator(to).first().boundingBox();
+      await page.mouse.move(a.x + a.width / 2, a.y + a.height / 2);
+      await page.mouse.down();
+      await page.mouse.move(a.x + a.width / 2 + 12, a.y + a.height / 2 + 12);
+      await page.mouse.move(b.x + b.width / 2, b.y + b.height / 2, { steps: 5 });
+      await page.mouse.up();
+    };
+    const n0 = await names();
+    await drag('#plan-root .slot-card[data-day="1"][data-slot="breakfast"]', '#plan-root .slot-card[data-day="1"][data-slot="lunch"]');
+    const n1 = await names();
+    if (n0[0] !== n1[1] || n0[1] !== n1[0] || n0[0] === n0[1]) {
+      const t = await page.textContent('.toast');
+      if (!/Can.t do that/.test(t)) throw new Error('drag neither swapped nor refused: ' + n0 + ' -> ' + n1 + ' ' + t);
+    }
+    if (await page.locator('#day-view:visible, .day-sheet:visible').count()) throw new Error('a drop opened the day view');
+    await page.evaluate(() => { document.querySelector('#plan-root .slot-card[data-day="3"][data-slot="lunch"]').focus(); });
+    const n2 = await page.evaluate(() => document.querySelector('#plan-root .slot-card[data-day="4"][data-slot="lunch"] .slot-meal').textContent);
+    await page.keyboard.press('Alt+ArrowDown');
+    const f = await page.evaluate(() => document.activeElement.dataset.day + document.activeElement.dataset.slot);
+    if (f !== '4lunch') throw new Error('focus not kept on the moved slot: ' + f);
+    await page.evaluate(() => document.querySelector('#plan-root .slot-card[data-day="1"][data-slot="lunch"]'));
+    const d1 = await page.textContent('#plan-root .day-row[data-day="1"] .slot-card[data-slot="dinner"] .slot-meal');
+    const d2 = await page.textContent('#plan-root .day-row[data-day="2"] .slot-card[data-slot="dinner"] .slot-meal');
+    await drag('#plan-root .day-row[data-day="1"] .day-grip', '#plan-root .day-row[data-day="2"] h3');
+    const e1 = await page.textContent('#plan-root .day-row[data-day="1"] .slot-card[data-slot="dinner"] .slot-meal');
+    if (d1 !== d2 && e1 === d1) { const t = await page.textContent('.toast'); if (!/Can.t do that|Swapped days/.test(t)) throw new Error('day drag neither swapped nor refused: ' + t); }
+    await page.click('#plan-root .slot-card[data-day="5"][data-slot="lunch"]');
+    await page.waitForSelector('.day-swap-btn');
+    await shot('plan-drag');
+  });
   await step('swap deck: Pass x3 walks the ranked order, counter drops, Take changes the plan, arrow keys work', async () => {
     await page.goto(`${base}/plan.html`);
     await page.waitForSelector('#plan-root .slot-card');

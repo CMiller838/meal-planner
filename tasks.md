@@ -949,6 +949,10 @@ Spec: `.claude/specs/phase102.md`
 
 ## Phase 103: Drag a meal to another slot or day
 Spec: `.claude/specs/phase103.md`
+- [x] `MP.Plan.neighbour` + test.html edge cases
+- [x] `wireDragSwap` (pointer drag, ghost, drop highlight, auto-scroll, cancel on re-render), day grip + `swapDays`, Alt+Arrow with focus kept
+- [x] style.css classes, sw.js CACHE bump, walk.mjs drag/keyboard step (in walk.mjs, not ui-check.mjs), CLAUDE.md invariant
+- [ ] Live: on the installed phone PWA, press-hold a lunch, drag it onto another day's lunch, check the shopping list follows, then try dragging a batch-cook dinner and see it refused; check the page still scrolls normally.
 
 ## Phase 104: Portion and leftover adjust
 Spec: `.claude/specs/phase104.md`
