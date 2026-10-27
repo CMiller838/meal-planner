@@ -151,12 +151,14 @@ Verified 2026-10-27: check.py 10/10; tester PASS (bar on all five pages, free te
 Goal: on a logged meal, slide the portion (half to double). "Keep the rest" opens a Cooks leftover record for tomorrow. A
 portion change re-freezes nutrients at log time (food log rule); it never touches the pantry (`eatPortion` rule).
 
-## Phase 105: Freeze-ahead prompts [M] — not started
+## Phase 105: Freeze-ahead prompts [M] — done
 
 Goal: when a batch dinner makes more portions than the next 1-2 days use, Hermes offers to freeze the extras and places them
 into a later week as `fromCook` slots (Phase 90a). Uses `freezable`, the Cooks fridge-to-freezer move and the freezer-first
 rule; buys nothing for a placed portion. Check first what Phases 43 and 90 already prompt in the app so the chat only adds
 the offer, not a second freezer path.
+
+Verified: check.py 10/10 (test.html 105 cases, worker_test, bridge test, ui pages PC/phone both themes, ui walk freeze step); tester PASS.
 
 ## Phase 106: Eaten, by nutrient [M] — not started
 

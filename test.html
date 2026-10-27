@@ -3351,6 +3351,55 @@
       const bb = MP.Plan.chatBriefing({ plan: mkPlan(), library: big, prefs: {}, base: {}, settings: null, ratings: {}, pantry: [], metrics: { weekGaps: [[], []] } });
       check("chatBriefing: over 60000 drops descriptions, then non-dinner tags", JSON.stringify(bb).length <= 60000 && !bb.meals[0].description && !bb.meals[0].tags);
     }
+    { // Phase 105: freeze-ahead (place.freezeFrom, freeze, briefing spares, applyFreezeEdits)
+      const mk = (id, o) => ({ id, name: id, mealTypes: ["dinner"], servings: 1, ingredients: [{ key: "rice", qty: "1" }], ...o });
+      const byId = { chili: mk("chili", { servings: 4 }), nofz: mk("nofz", { servings: 4, freezable: false }), other: mk("other") };
+      const mkPl = (n, set) => { const p = { startDate: "2026-09-07", days: Array.from({ length: n || 10 }, (_, i) => ({ day: i + 1, slots: {} })) }; (set || []).forEach(([d, sl, v]) => { p.days[d - 1].slots[sl] = v; }); return p; };
+      const cx = { terms: [], ratings: {}, fridgeDays: 3 };
+      const fz = (pl, day, mealId, from, slot) => MP.placeSlots(pl, [{ day, slot: slot || "dinner", mealId, freezeFrom: from }], byId, cx);
+      const base = mkPl(10, [[1, "dinner", { mealId: "chili" }]]);
+      const r0 = fz(base, 5, "chili", 1);
+      check("105 placeSlots: freezeFrom writes a frozenFrom slot", !r0.refused.length && deepEqual(r0.plan.days[4].slots.dinner, { mealId: "chili", frozenFrom: 1 }) && MP.frozenParentDay(r0.plan, 5, r0.plan.days[4].slots.dinner) === 1);
+      check("105 placeSlots: too early, wrong meal, lunch, freezable:false, with cookId refused", fz(base, 3, "chili", 1).refused[0].why.includes("too soon") && fz(base, 6, "other", 1).refused.length === 1 && fz(base, 6, "chili", 1, "lunch").refused.length === 1
+        && fz(mkPl(10, [[1, "dinner", { mealId: "nofz" }]]), 6, "nofz", 1).refused[0].why.includes("doesn't freeze") && MP.placeSlots(base, [{ day: 6, slot: "dinner", mealId: "chili", freezeFrom: 1, cookId: "c" }], byId, cx).refused.length === 1);
+      const full = mkPl(10, [[1, "dinner", { mealId: "chili" }], [2, "dinner", { mealId: "chili" }], [3, "dinner", { mealId: "chili" }]]);
+      check("105 spareOf and no-spare refusal", MP.spareOf(base, byId, 1) === 3 && MP.spareOf(full, byId, 1) === 1 && fz(base, 5, "chili", 1).plan.days[4].slots.dinner.frozenFrom === 1
+        && (() => { const two = MP.placeSlots(base, [{ day: 5, slot: "dinner", mealId: "chili", freezeFrom: 1 }, { day: 6, slot: "dinner", mealId: "chili", freezeFrom: 1 }, { day: 7, slot: "dinner", mealId: "chili", freezeFrom: 1 }, { day: 8, slot: "dinner", mealId: "chili", freezeFrom: 1 }], byId, cx); return two.refused.length === 1 && two.refused[0].why === "no spare portions left"; })());
+      check("105 buildLists adds nothing for a frozenFrom slot", (() => { const a = Object.values(MP.ShoppingList.buildLists(base, byId, { items: {} }, null)).flatMap((l) => l.lines).length, b = Object.values(MP.ShoppingList.buildLists(r0.plan, byId, { items: {} }, null)).flatMap((l) => l.lines).length; return a === b; })());
+      const v = (l) => MP.PlanChat.validateReply({ edits: l }, {}, "2026-01-01").reply.edits;
+      const fe = v([{ type: "freeze", cookId: "c1", places: [{ day: 5, slot: "dinner" }, { day: 6, slot: "lunch" }] }, { type: "freeze", cookId: "c1", places: [] }, { type: "freeze", cookId: "c1", places: [{ day: 5, slot: "dinner" }, { day: 5, slot: "dinner" }] }, { type: "freeze", cookId: "c1", places: [{ day: 5, slot: "snack" }] },
+        { type: "place", day: 5, slot: "dinner", mealId: "chili", freezeFrom: 1 }, { type: "place", day: 5, slot: "dinner", mealId: "chili", freezeFrom: 1, cookId: "c" }, { type: "place", day: 5, slot: "lunch", mealId: "chili", freezeFrom: 1 }]);
+      check("105 validateReply: freeze and freezeFrom kept/dropped", fe.length === 2 && fe[0].type === "freeze" && fe[0].places.length === 2 && fe[1].freezeFrom === 1);
+      check("105 validateReply: max 3 freeze", v(Array.from({ length: 5 }, () => ({ type: "freeze", cookId: "c1", places: [{ day: 5, slot: "dinner" }] }))).length === 3);
+      check("105 describe: freeze", MP.PlanChat.describe(fe, "2026-09-07").includes("freeze 2 portions"));
+      const lib = Object.values(byId), bp = (prefs, pl, cooks) => MP.Plan.chatBriefing({ plan: pl, library: lib, prefs: prefs || {}, base: {}, settings: null, ratings: {}, pantry: [], cooks, metrics: { weekGaps: [[], []] } });
+      const b1 = bp({}, base, []), b2 = bp({ freezeBatches: false }, base, []), b3 = bp({}, mkPl(10, [[1, "dinner", { mealId: "other" }]]), []);
+      check("105 chatBriefing: spares, freezeBatches:false and no batch give []", deepEqual(b1.spares, [{ day: 1, mealId: "chili", spare: 3 }]) && b2.spares.length === 0 && b3.spares.length === 0);
+      const bc = bp({}, mkPl(10, [[3, "dinner", { mealId: "chili", fromCook: "k1" }]]), [{ id: "k1", mealId: "chili", name: "chili", portionsLeft: 3, storage: "fridge", cookedAt: "2026-09-07T18:00:00Z" }, { id: "k1:frozen", mealId: "chili", name: "chili", portionsLeft: 2, storage: "freezer", cookedAt: "2026-09-07T18:00:00Z" }]);
+      check("105 chatBriefing: cooks[].spare nets fromCook slots, freezer 0", bc.cooks[0].spare === 2 && bc.cooks[1].spare === 0);
+      // applyFreezeEdits against a stubbed mp_cooks
+      const store = {}, rg = localStorage.getItem.bind(localStorage), rs = localStorage.setItem.bind(localStorage);
+      localStorage.getItem = (k) => (k === "mp_cooks" ? (store.cooks ?? null) : rg(k));
+      localStorage.setItem = (k, val) => { if (k === "mp_cooks") store.cooks = val; else rs(k, val); };
+      try {
+        const rec = MP.Cooks.open({ id: "chili", name: "chili" }, null, 4);
+        const pl = mkPl(14, [[1, "dinner", { mealId: "chili" }]]);
+        const pantryBefore = localStorage.getItem("mp_pantry");
+        const e = { type: "freeze", cookId: rec.id, places: [{ day: 6, slot: "dinner" }, { day: 7, slot: "dinner" }] };
+        const out = MP.Plan.applyFreezeEdits([e, { type: "freeze", cookId: "nope", places: [{ day: 6, slot: "dinner" }] }], { plan: pl, byId, cooks: MP.Cooks.all(), shelfData: null });
+        check("105 applyFreezeEdits: card text, unknown cook refused, nothing written before Accept", out.cards.length === 1 && out.refused.length === 1 && /^Freeze 2 portions of chili/.test(out.cards[0].text) && MP.Cooks.all().length === 1 && !pl.days[5].slots.dinner);
+        const r = out.cards[0].accept();
+        const all = MP.Cooks.all(), tw = all.find((x) => x.storage === "freezer");
+        check("105 applyFreezeEdits: Accept freezes then fills fromCook slots, pantry untouched", r.froze === 2 && !r.notes.length && all.find((x) => x.id === rec.id).portionsLeft === 2 && tw && tw.portionsLeft === 2 && pl.days[5].slots.dinner.fromCook === tw.id && pl.days[6].slots.dinner.fromCook === tw.id && localStorage.getItem("mp_pantry") === pantryBefore);
+        const out2 = MP.Plan.applyFreezeEdits([{ type: "freeze", cookId: rec.id, places: [{ day: 9, slot: "dinner" }, { day: 10, slot: "dinner" }, { day: 11, slot: "dinner" }] }], { plan: pl, byId, cooks: MP.Cooks.all(), shelfData: null });
+        check("105 applyFreezeEdits: places beyond the fridge portions are refused", out2.cards.length === 1 && out2.refused.length === 1 && /Freeze 2 portions/.test(out2.cards[0].text));
+        MP.Cooks.take(rec.id); MP.Cooks.take(rec.id); // the fridge portions get eaten before Accept
+        const r2 = out2.cards[0].accept();
+        check("105 applyFreezeEdits: recheck at Accept freezes nothing when the batch is gone", r2.froze === 0 && r2.notes.length >= 1 && MP.Cooks.all().find((x) => x.storage === "freezer").portionsLeft === 2);
+        check("105 applyFreezeEdits: freezer record and freezable:false refused", MP.Plan.applyFreezeEdits([{ type: "freeze", cookId: tw.id, places: [{ day: 9, slot: "dinner" }] }], { plan: pl, byId, cooks: MP.Cooks.all() }).refused.length === 1
+          && MP.Plan.applyFreezeEdits([{ type: "freeze", cookId: "z", places: [{ day: 9, slot: "dinner" }] }], { plan: pl, byId, cooks: [{ id: "z", mealId: "nofz", name: "nofz", portionsLeft: 2, storage: "fridge" }] }).refused.length === 1);
+      } finally { localStorage.getItem = rg; localStorage.setItem = rs; }
+    }
     check("validateReply: garbage input -> empty reply", deepEqual(PC.validateReply("x", vocab), { reply: { text: "", edits: [], ask: false }, dropped: 0 }));
     const o = PC.toOverride([{ type: "noCook", day: 7 }, { type: "chip", id: "comfort" }, { type: "budget", perWeek: 30, days: [2] }, { type: "reroll", day: 9, slot: "dinner" }, { type: "lock", day: 1, slot: "lunch" }], null, 5);
     check("toOverride: noCook -> busy day, chip defaults to focus day", deepEqual(o.chatPrefs.busyDays, [7]) && deepEqual(o.chatPrefs.chips, { 5: ["comfort"] }) && deepEqual(o.chatPrefs.budget, { 2: 30 }));

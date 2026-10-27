@@ -537,6 +537,58 @@
     return { cards, refused };
   }
 
+  /** Phase 105: chat `freeze` proposals for a cooked fridge batch. The dry run asks placeSlots about the places as if N portions were
+   *  already in the freezer; nothing is written until a card's accept(), which rechecks against the real cooks, then freezes and fills the
+   *  fromCook slots (cooks only, never the pantry). Returns { cards: [{ edit, text, accept() -> { froze, notes } }], refused: [{ edit, why }] }. */
+  function applyFreezeEdits(edits, ctx) {
+    const c = Object.assign({ plan, byId: mealsById, cooks: MP.Cooks.all(), shelfData }, ctx);
+    const cards = [], refused = [];
+    const pctx = () => ({ terms: MP.Sync.hardTerms(), ratings: MP.Ratings.get(), shelfData: c.shelfData, fridgeDays: ((c.shelfData || {}).cooked_leftovers || {}).fridgeDays });
+    const plan0 = () => c.plan;
+    // placeSlots for `places`, against cooks where the fridge record gave up N portions to a freezer twin
+    const check = (e, places, cooks) => {
+      const twin = `${e.cookId}:frozen`, rec = cooks.find((r) => r.id === e.cookId);
+      return MP.placeSlots(plan0(), places.map((q) => ({ day: q.day, slot: q.slot, mealId: rec.mealId, cookId: twin })), c.byId, { ...pctx(), cooks });
+    };
+    const dry = (e, rec, n, all) => { // the fridge record minus n, plus any real twin topped up by n (a new twin when none yet)
+      const old = all.find((r) => r.id === `${rec.id}:frozen`);
+      return [{ ...rec, portionsLeft: rec.portionsLeft - n }, { ...rec, cookedAt: old ? old.cookedAt : rec.cookedAt, id: `${rec.id}:frozen`, storage: "freezer", portionsLeft: (old ? old.portionsLeft : 0) + n }];
+    };
+    for (const e of edits.filter((x) => x.type === "freeze")) {
+      const rec = c.cooks.find((r) => r && r.id === e.cookId), meal = rec && c.byId[rec.mealId];
+      if (!rec || !(rec.portionsLeft > 0)) { refused.push({ edit: e, why: "No such cook, or none left to freeze" }); continue; }
+      if (rec.storage === "freezer") { refused.push({ edit: e, why: `${rec.name || rec.mealId} is already in the freezer` }); continue; }
+      if (!meal || meal.freezable === false) { refused.push({ edit: e, why: `${rec.name || rec.mealId} doesn't freeze` }); continue; }
+      const free = rec.portionsLeft - fromCookCount(c.plan, rec.id), name = meal.name;
+      const places = e.places.slice(0, Math.max(free, 0));
+      if (e.places.length > places.length) e.places.slice(places.length).forEach((q) => refused.push({ edit: e, why: `${name}: day ${q.day} ${q.slot} would use a portion the fridge plan still needs` }));
+      if (!places.length) continue;
+      const trial = check(e, places, dry(e, rec, places.length, c.cooks).flat().concat(c.cooks.filter((r) => r.id !== rec.id && r.id !== `${rec.id}:frozen`)));
+      trial.refused.forEach((r) => refused.push({ edit: e, why: `${name}: day ${r.day} ${r.slot} ${r.why}` }));
+      const ok = places.filter((q) => !trial.refused.some((r) => r.day === q.day && r.slot === q.slot));
+      if (!ok.length) continue;
+      const label = ok.map((q) => `${c.plan.startDate ? WEEKDAY[MP.Generator.weekdayOf(c.plan.startDate, q.day)] : "Day " + q.day} ${q.slot}`).join(", ");
+      cards.push({ edit: e, text: `Freeze ${ok.length} portion${ok.length === 1 ? "" : "s"} of ${name} and eat ${ok.length === 1 ? "it" : "them"} ${label}`,
+        accept: () => {
+          // recheck against the real cooks, then freeze exactly as many as will be placed
+          const live = MP.Cooks.all(), cur = live.find((r) => r.id === rec.id), notes = [];
+          if (!cur || cur.storage === "freezer") return { froze: 0, notes: [`${name} is no longer in the fridge`] };
+          const room = Math.max(0, cur.portionsLeft - fromCookCount(c.plan, cur.id));
+          let todo = ok.slice(0, room);
+          ok.slice(room).forEach((q) => notes.push(`${name}: day ${q.day} ${q.slot} skipped, no portion left`));
+          if (!todo.length) return { froze: 0, notes };
+          const re = check(e, todo, dry(e, cur, todo.length, live).flat().concat(live.filter((r) => r.id !== cur.id && r.id !== `${cur.id}:frozen`)));
+          re.refused.forEach((r) => notes.push(`${name}: day ${r.day} ${r.slot} ${r.why}`));
+          todo = todo.filter((q) => !re.refused.some((r) => r.day === q.day && r.slot === q.slot));
+          let froze = 0, twin = null;
+          for (let i = 0; i < todo.length; i++) { const t = MP.Cooks.freezeOne(cur.id); if (!t) break; twin = t; froze++; }
+          todo.slice(0, froze).forEach((q) => { c.plan.days[q.day - 1].slots[q.slot] = { mealId: cur.mealId, fromCook: twin.id }; });
+          return { froze, notes };
+        } });
+    }
+    return { cards, refused };
+  }
+
   /** Phase 98: cheaper-ingredient candidates for the working plan, one shop list at a time, through the one ShoppingList.cheaperSwaps. */
   function cheaperCandidates(c, limit) {
     if (!c.packData || !c.packData.items || !c.groupsData) return [];
@@ -601,6 +653,7 @@
   /** Phase 88: the app's briefing for Hermes, built once at chat open (the app is the authority; the bridge adds spend).
    *  Over CHAT_BRIEF_MAX chars: meal descriptions go first, then non-dinner meals' tags. ctx (tests): { plan, library, prefs, ... }. */
   const CHAT_BRIEF_MAX = 60000;
+  const fromCookCount = (pl, id) => pl.days.reduce((n, d) => n + SLOT_TYPES.filter((t) => d.slots[t] && d.slots[t].fromCook === id).length, 0);
   function chatBriefing(ctx) {
     const c = Object.assign({ plan, library, prefs, base: basePrefs, settings: MP.Sync.settings(), ratings: MP.Ratings.get(), pantry: MP.Sync.localItems("pantry") }, ctx);
     if (!c.metrics) c.metrics = planMetrics(c.plan);
@@ -611,7 +664,9 @@
     const tokens = Object.entries(taste.tokens || {}).sort((a, b) => b[1] - a[1]);
     const pk = c.packData || packData, sh = c.shelfData || shelfData;
     const cost = (m, vid) => (pk && pk.items ? Math.round(MP.ShoppingList.mealCost(vid ? MP.effectiveMeal(m, vid) : m, pk).total * 100) / 100 : 0);
-    const cooks = (c.cooks || MP.Cooks.all()).filter((r) => r && r.portionsLeft > 0).map((r) => ({ cookId: r.id, mealId: r.mealId, name: r.name, portions: r.portionsLeft, storage: r.storage === "freezer" ? "freezer" : "fridge", eatBy: (sh && MP.ShelfLife.leftoverEatBy(r, sh)) || null }));
+    const cooks = (c.cooks || MP.Cooks.all()).filter((r) => r && r.portionsLeft > 0).map((r) => ({ cookId: r.id, mealId: r.mealId, name: r.name, portions: r.portionsLeft, storage: r.storage === "freezer" ? "freezer" : "fridge", eatBy: (sh && MP.ShelfLife.leftoverEatBy(r, sh)) || null, spare: r.storage === "freezer" ? 0 : Math.max(0, r.portionsLeft - fromCookCount(c.plan, r.id)) }));
+    const libById = Object.fromEntries(c.library.map((m) => [m.id, m]));
+    const spares = c.prefs.freezeBatches === false ? [] : c.plan.days.flatMap((d) => { const x = d.slots.dinner, m = x && x.mealId && libById[x.mealId]; const n = m && m.freezable !== false ? MP.spareOf(c.plan, libById, d.day) : 0; return n > 0 ? [{ day: d.day, mealId: m.id, spare: n }] : []; });
     const meals = c.library.map((m) => {
       const est = m.totalMins ? null : MP.estMins(m);
       return {
@@ -633,7 +688,7 @@
       pantry: c.pantry.map((i) => ({ name: i.name, qty: MP.qtyText(i.qty), ...(i.useBy ? { useBy: i.useBy } : {}), ...(i.storage ? { storage: i.storage } : {}) })),
       notes: (() => { const n = c.notes || MP.Sync.notes(); return { items: n.items, pending: n.pending.map((p) => p.text) }; })(),
       gaps: c.metrics.weekGaps,
-      cooks, shopDays: pk && pk.items ? Object.keys(MP.ShoppingList.buildLists(c.plan, mealsById, pk, null)).map(Number).sort((a, b) => a - b) : [],
+      cooks, spares, shopDays: pk && pk.items ? Object.keys(MP.ShoppingList.buildLists(c.plan, mealsById, pk, null)).map(Number).sort((a, b) => a - b) : [],
       bulk: pk && pk.items ? MP.ShoppingList.bulkOptions(c.plan, mealsById, pk, sh) : [],
       ...(c.fridge ? { mode: "fridge", window: c.fridge.window, ...(c.fridge.fresh ? { newPlanFrom: MP.Generator.isoToday() } : {}) } : {}),
       meals,
@@ -2454,7 +2509,7 @@
     renderPlacementBanner(e.detail);
   });
 
-  MP.Plan = { neighbour, cookNowFor, applyCheaperEdits, cheaperCandidates, fridgeWindow, fridgeHave, applyBulkEdits, applyChatEdits, applyMealEdits, applyRateEdits, chatBriefing, chatContext, tieFor, effectiveBudget, budgetSwaps, resetChatPrefs, reflow, snapshot, restore, planMetrics, whatIf, fixGap, wrapUp, cookMinsFor, tickerFor, parseGuidedSlots, applyPlacements, openLeftoverCooks, logPortion, matchEatRequests, applyEatRequests };
+  MP.Plan = { neighbour, cookNowFor, applyCheaperEdits, cheaperCandidates, fridgeWindow, fridgeHave, applyBulkEdits, applyFreezeEdits, applyChatEdits, applyMealEdits, applyRateEdits, chatBriefing, chatContext, tieFor, effectiveBudget, budgetSwaps, resetChatPrefs, reflow, snapshot, restore, planMetrics, whatIf, fixGap, wrapUp, cookMinsFor, tickerFor, parseGuidedSlots, applyPlacements, openLeftoverCooks, logPortion, matchEatRequests, applyEatRequests };
 
   // ---- Planning chat with Hermes (Phase 72) ----
   // The working plan is `plan` itself with guidedActive on (no savePlan runs); Exit restores the snapshot, Save commits.
@@ -2768,6 +2823,11 @@
   function answerMeal(x, yes) {
     if (x.note) return answerNote(x, yes);
     if (!yes) { chat.meals.splice(chat.meals.indexOf(x), 1); return renderChatMeals(); }
+    if (x.freeze) { // Phase 105: the freeze moved real portions, so the row has no Undo
+      const r = x.accept(); x.pending = false; x.text = r.froze ? `Froze ${r.froze} portion${r.froze === 1 ? "" : "s"}` : "Nothing frozen";
+      r.notes.forEach((n) => toast(n));
+      renderChatMeals(); renderPlan(); renderChatWeek(true, true); return;
+    }
     if (x.bulk) { x.accept(); x.pending = false; x.undo = x.undoBulk; renderChatMeals(); renderPlan(); return; }
     MP.Sync.noteLibraryChange("chat: " + (x.edit.name || x.edit.mealId)); // before the write: its save event starts the sync
     const res = applyMealEdits([x.edit]);
@@ -2809,7 +2869,7 @@
           li.appendChild(b);
         });
       } else if (x.pending) {
-        if (!(x.note && x.edit.kind === "dislike" && !x.err)) [[x.bulk || x.note ? "Accept" : "Add", true, "btn-secondary chat-meal-add"], [x.note ? "Dismiss" : "No", false, "btn-secondary chat-meal-no"]].forEach(([label, yes, cls]) => {
+        if (!(x.note && x.edit.kind === "dislike" && !x.err)) [[x.bulk || x.freeze || x.note ? "Accept" : "Add", true, "btn-secondary chat-meal-add"], [x.note ? "Dismiss" : "No", false, "btn-secondary chat-meal-no"]].forEach(([label, yes, cls]) => {
           const b = document.createElement("button");
           b.type = "button"; b.className = cls; b.textContent = label;
           b.addEventListener("click", () => answerMeal(x, yes));
@@ -2861,6 +2921,9 @@
     const bulked = applyBulkEdits(reply.edits);
     bulked.cards.forEach((k) => chat.meals.push({ bulk: true, pending: true, text: k.text, accept: k.accept, undoBulk: k.undo }));
     bulked.refused.forEach((r) => chat.meals.push({ text: r.why }));
+    const frozen = applyFreezeEdits(reply.edits);
+    frozen.cards.forEach((k) => chat.meals.push({ freeze: true, pending: true, text: k.text, accept: k.accept }));
+    frozen.refused.forEach((r) => chat.meals.push({ text: r.why }));
     const cheap = applyCheaperEdits(reply.edits);
     cheap.cards.forEach((k) => chat.meals.push({ bulk: true, pending: true, text: k.text, accept: k.accept, undoBulk: k.undo }));
     cheap.refused.forEach((r) => chat.meals.push({ text: r.why }));
@@ -2875,7 +2938,7 @@
     const rated = applyRateEdits(reply.edits);
     rated.applied.forEach((a) => chat.meals.push({ rate: true, text: a.text, undo: a.undo }));
     rated.refused.forEach((r) => chat.meals.push({ text: r.why }));
-    if (mealEdits.length || noted.length || subCards.length || reply.edits.some((e) => e.type === "rate" || e.type === "bulk")) renderChatMeals();
+    if (mealEdits.length || noted.length || subCards.length || reply.edits.some((e) => e.type === "rate" || e.type === "bulk" || e.type === "freeze")) renderChatMeals();
     reply.edits.filter((e) => e.type === "stock").forEach((e) => { // session-only: never the pantry
       e.items.forEach((i) => { const k = MP.ShoppingList.normalizeKey(i.name); chat.stock = [...chat.stock.filter((x) => MP.ShoppingList.normalizeKey(x.name) !== k), i]; });
     });
@@ -2883,7 +2946,7 @@
     reply.edits.filter((e) => e.type === "cookNow" && !seenCn.has(e.day + e.slot) && seenCn.add(e.day + e.slot)).forEach((e) => { // display-only: a card that opens the sheet
       chat.meals.push({ cookNow: e, saved: true, text: `Cook-now options for Day ${e.day} ${e.slot}` }); renderChatMeals();
     });
-    const rest = reply.edits.filter((e) => !e.type.startsWith("meal") && e.type !== "rate" && e.type !== "bulk" && e.type !== "stock" && e.type !== "cookNow" && e.type !== "note" && !(e.type === "sub" && e.scope !== "week"));
+    const rest = reply.edits.filter((e) => !e.type.startsWith("meal") && e.type !== "rate" && e.type !== "bulk" && e.type !== "freeze" && e.type !== "stock" && e.type !== "cookNow" && e.type !== "note" && !(e.type === "sub" && e.scope !== "week"));
     if (rest.length) {
       const changes = applyChatEdits(rest, { focusDay: chat.day, pending: pendingMealIds(), fridge: chat.fridge ? { window: chat.fridge.window, have: fridgeHave(chat.stock) } : undefined });
       const line = MP.PlanChat.describe(rest, plan.startDate, chat.day);

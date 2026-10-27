@@ -81,10 +81,15 @@
     // Phase 88: Hermes places a chosen meal; the app checks it (MP.placeSlots). cap/rate are prefs and rating edits.
     place: (e) => isDay(e.day) && isSlot(e.slot) && mealId(e) && (e.variantId === undefined || str(e.variantId, 80)) && (e.cookId === undefined || str(e.cookId, 120))
       && (e.leftover === undefined || e.leftover === true) && (e.portions === undefined || (e.leftover === true && Number.isInteger(e.portions) && e.portions >= 1 && e.portions <= 12)) && !(e.leftover && e.cookId)
-      && { type: "place", day: e.day, slot: e.slot, mealId: e.mealId, ...(e.variantId ? { variantId: str(e.variantId, 80) } : {}), ...(e.cookId ? { cookId: str(e.cookId, 120) } : {}), ...(e.leftover ? { leftover: true, ...(e.portions ? { portions: e.portions } : {}) } : {}) },
+      && (e.freezeFrom === undefined || (isDay(e.freezeFrom) && e.slot === "dinner" && !e.cookId && !e.leftover))
+      && { type: "place", day: e.day, slot: e.slot, mealId: e.mealId, ...(e.freezeFrom ? { freezeFrom: e.freezeFrom } : {}), ...(e.variantId ? { variantId: str(e.variantId, 80) } : {}), ...(e.cookId ? { cookId: str(e.cookId, 120) } : {}), ...(e.leftover ? { leftover: true, ...(e.portions ? { portions: e.portions } : {}) } : {}) },
     // Phase 90a: a bulk-buy proposal; the app recomputes the numbers and shows a card (Accept writes plan.bulk).
     // Phase 98: a cheaper-ingredient proposal; the app recomputes the saving and shows a card (Accept writes slot.subs).
     cheaper: (e) => str(e.key, 60) && str(e.to, 60) && Number.isInteger(e.shopDay) && e.shopDay >= -6 && e.shopDay <= 28 && { type: "cheaper", key: str(e.key, 60), to: str(e.to, 60), shopDay: e.shopDay },
+    // Phase 105: a freeze-ahead proposal for a cooked fridge batch; the app shows a card (Accept moves portions to the freezer).
+    freeze: (e) => str(e.cookId, 120) && Array.isArray(e.places) && e.places.length >= 1 && e.places.length <= 4
+      && e.places.every((q) => q && isDay(q.day) && (q.slot === "lunch" || q.slot === "dinner")) && new Set(e.places.map((q) => q.day + q.slot)).size === e.places.length
+      && { type: "freeze", cookId: str(e.cookId, 120), places: e.places.map((q) => ({ day: q.day, slot: q.slot })) },
     bulk: (e) => str(e.key, 60) && Number.isInteger(e.shopDay) && e.shopDay >= -6 && e.shopDay <= 28 && { type: "bulk", key: str(e.key, 60), shopDay: e.shopDay },
     // Phase 90b: what the user says is left in the fridge; session-only in the app (chat.stock), never the pantry.
     stock: (e) => { const it = Array.isArray(e.items) && e.items.length >= 1 && e.items.length <= 40 && e.items.map((i) => i && typeof i === "object" && str(i.name, 60) && (i.qty === undefined || typeof i.qty === "string") && { name: str(i.name, 60), ...(str(i.qty, 30) ? { qty: str(i.qty, 30) } : {}) });
@@ -112,11 +117,12 @@
     const list = Array.isArray(r.edits) ? r.edits : [];
     const ids = chipIds(vocab);
     const edits = [];
-    let meals = 0, bulks = 0, cheapers = 0;
+    let meals = 0, bulks = 0, cheapers = 0, freezes = 0;
     const known = new Set(((vocab && vocab.notes && vocab.notes.items) || []).concat(((vocab && vocab.notes && vocab.notes.pending) || []).map((p) => p.text || p)).map((t) => String(t).toLowerCase()));
     for (const e of list.slice(0, EDITS_MAX)) {
       if (e && MEAL_EDITS.includes(e.type) && ++meals > MEAL_EDITS_MAX) continue;
       if (e && e.type === "bulk" && ++bulks > 5) continue;
+      if (e && e.type === "freeze" && ++freezes > 3) continue;
       if (e && e.type === "cheaper" && ++cheapers > 3) continue;
       const f0 = e && typeof e === "object" && Object.prototype.hasOwnProperty.call(NORM, e.type) ? NORM[e.type](e, ids, today) : null;
       const f = f0 && f0.type === "note" && (known.has(f0.text.toLowerCase()) || edits.filter((x) => x.type === "note").length >= NOTE_MAX) ? null : f0;
@@ -193,8 +199,9 @@
       else if (e.type === "mealCreate") parts.push(`new meal: ${e.name}`);
       else if (e.type === "mealEdit") parts.push(`changed meal ${e.mealId}`);
       else if (e.type === "mealRemove") parts.push(`removed meal ${e.mealId}`);
-      else if (e.type === "place") parts.push(`${name(e.day)} ${e.slot}: ${e.mealId} placed${e.cookId ? " from the freezer/fridge" : ""}${e.leftover ? ` (already cooked, ${e.portions || 1} portion${(e.portions || 1) === 1 ? "" : "s"})` : ""}`);
+      else if (e.type === "place") parts.push(`${name(e.day)} ${e.slot}: ${e.mealId} placed${e.cookId ? " from the freezer/fridge" : ""}${e.freezeFrom ? ` (frozen from day ${e.freezeFrom})` : ""}${e.leftover ? ` (already cooked, ${e.portions || 1} portion${(e.portions || 1) === 1 ? "" : "s"})` : ""}`);
       else if (e.type === "cheaper") parts.push(`cheaper: ${e.key.replace(/-/g, " ")} to ${e.to.replace(/-/g, " ")} on shop ${e.shopDay}`);
+      else if (e.type === "freeze") parts.push(`freeze ${e.places.length} portion${e.places.length === 1 ? "" : "s"} for ${e.places.map((q) => name(q.day) + " " + q.slot).join(", ")}`);
       else if (e.type === "bulk") parts.push(`bulk buy: ${e.key.replace(/-/g, " ")} on shop ${e.shopDay}`);
       else if (e.type === "cap") parts.push(e.minutes ? `${e.weekdays.map((w) => WEEKDAYS[w]).join("/")}: cooking capped at ${e.minutes} min` : `${e.weekdays.map((w) => WEEKDAYS[w]).join("/")}: time cap cleared`);
       else if (e.type === "stock") parts.push(`you have ${e.items.map((i) => i.name).join(", ")}`);

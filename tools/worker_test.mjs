@@ -865,6 +865,11 @@ assert.equal((await call("GET", "/today", "a")).body.water, 3); // /today untouc
   r = await call("GET", "/chat?session=s1&since=" + uid, "h");
   assert.deepEqual(r.body.messages.at(-1).edits.map((e) => e.type), ["place", "cap", "rate"]);
   assert.deepEqual(r.body.messages.at(-1).edits[1].weekdays, [1, 3]);
+  // Phase 105: freeze and place.freezeFrom kept, a bad one dropped
+  r = await call("POST", "/chat/reply", "h", { session: "s1", replyTo: uid, text: "Freeze", ask: false, edits: [{ type: "freeze", cookId: "c1", places: [{ day: 6, slot: "dinner" }] }, { type: "place", day: 6, slot: "dinner", mealId: "m1", freezeFrom: 1 }, { type: "place", day: 6, slot: "dinner", mealId: "m1", freezeFrom: 1, cookId: "c" }, { type: "freeze", cookId: "c1", places: [] }] }, H);
+  assert.deepEqual([r.status, r.body.dropped], [200, 2]);
+  r = await call("GET", "/chat?session=s1&since=" + uid, "h");
+  assert.deepEqual([r.body.messages.at(-1).edits[0].type, r.body.messages.at(-1).edits[1].freezeFrom], ["freeze", 1]);
   // Phase 87: meal edits are accepted and normalised, bad ones dropped
   r = await call("POST", "/chat/reply", "h", { session: "s1", replyTo: uid, text: "Added", ask: false, edits: [{ type: "mealCreate", name: " Turkey chilli ", mealTypes: ["dinner"], ingredients: [{ name: "turkey mince", qty: "500 g" }] }, { type: "mealEdit", mealId: "m1", patch: { id: "evil" } }, { type: "mealRemove", mealId: "m1" }] }, H);
   assert.deepEqual([r.status, r.body.dropped], [200, 1]);

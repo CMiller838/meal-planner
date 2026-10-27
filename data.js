@@ -408,6 +408,24 @@
     return (mins ? mins <= 15 : (meal.prepEffort || "quick") === "quick") ? "assemble" : "cook";
   }
 
+  /** Phase 105: planned-batch portions still spare on the dinner at `day`: servings - 1 (the cook) - chain leftover days - frozenFrom slots on it. */
+  function spareOf(plan, byId, day, ignore) {
+    const s = plan.days[day - 1] && plan.days[day - 1].slots.dinner, m = s && s.mealId && byId[s.mealId];
+    if (!m || !isBatch(m) || s.frozenFrom || s.fromCook || s.leftover) return 0;
+    const taken = plan.days.reduce((n, d) => n + SLOT_ORDER.filter((t) => { const x = d.slots[t]; return x && x.frozenFrom === day && x.mealId === m.id && !(ignore && ignore.day === d.day && ignore.slot === t); }).length, 0);
+    return (m.servings || 1) - 1 - (chainDays(plan.days, byId, day).length - 1) - taken;
+  }
+  /** Phase 105: why a `freezeFrom` place is refused, or null. */
+  function freezeRefusal(plan, p, m, byId) {
+    const par = plan.days[p.freezeFrom - 1] && plan.days[p.freezeFrom - 1].slots.dinner;
+    if (p.slot !== "dinner") return "frozen portions go in dinners";
+    if (!par || par.mealId !== m.id || !isBatch(m) || par.frozenFrom || par.fromCook || par.leftover) return `day ${p.freezeFrom} doesn't cook a batch of ${m.name}`;
+    if (m.freezable === false) return `${m.name} doesn't freeze`;
+    if (p.day < p.freezeFrom + 3) return "too soon after the cook: that would just be a leftover";
+    const n = spareOf(plan, byId, p.freezeFrom, { day: p.day, slot: p.slot });
+    return n > 0 ? null : "no spare portions left";
+  }
+
   /** Phase 88, pure: put Hermes-chosen meals into slots (last place per slot wins; applied in order, so a cook can precede its
    *  leftover in one reply). ctx = { terms, ratings, fridgeDays, caps: {weekday: mins}, pending: [mealId] }. Each refusal says why;
    *  an over-cap meal is placed with a note. Never ranks, never touches the pantry. Returns { plan, changes, refused, notes }. */
@@ -446,12 +464,18 @@
         if (slotDate) slotDate.setUTCDate(slotDate.getUTCDate() + p.day - 1);
         if (eatBy && slotDate && slotDate.toISOString().slice(0, 10) > eatBy) { no(`past its eat-by (${eatBy})`); continue; }
       }
+      if (p.freezeFrom !== undefined) { // Phase 105: a spare portion of a planned batch, frozen and eaten later (Phase 59 `frozenFrom` slot)
+        if (p.cookId || p.leftover) { no("freezeFrom can't go with a cook or leftover"); continue; }
+        const why = freezeRefusal(cur, p, m, byId);
+        if (why) { no(why); continue; }
+      }
       if (!cookRec && !p.leftover && m.leftoverOf) {
         const ok = cur.days.some((d) => d.day < p.day && p.day - d.day <= fridge && d.slots.dinner && d.slots.dinner.mealId === m.leftoverOf);
         if (!ok) { no("no cook of its parent dinner in the days before"); continue; }
       }
       const slotValue = { mealId: m.id };
       if (cookRec) slotValue.fromCook = cookRec.id;
+      if (p.freezeFrom !== undefined) slotValue.frozenFrom = p.freezeFrom;
       if (p.leftover) { slotValue.leftover = true; slotValue.leftoverPortions = Number.isInteger(p.portions) && p.portions >= 1 && p.portions <= 12 ? p.portions : 1; }
       if (p.variantId && findVariant(m, p.variantId)) slotValue.variantId = p.variantId;
       cur.days[p.day - 1].slots[p.slot] = slotValue;
@@ -885,6 +909,7 @@
   MP.moveSlot = moveSlot;
   MP.swapSlots = swapSlots;
   MP.placeSlots = placeSlots;
+  MP.spareOf = spareOf;
   MP.estMins = estMins;
   MP.lunchEffort = lunchEffort;
   MP.orphanLeftovers = orphanLeftovers;

@@ -397,6 +397,32 @@ for (const [vp, size] of Object.entries({ pc: { width: 1440, height: 900 }, phon
     if (!same) throw new Error('Exit changed mp_plan');
     if (!n) throw new Error('no bulk card offered for beef mince on shops 1 and 8');
   });
+  await step('chat: place.freezeFrom shows a defrost slot, a freeze card Accept fills fromCook slots, No leaves the record alone, Exit leaves mp_plan identical (Phase 105)', async () => {
+    const orig = await planLS(), origCooks = await page.evaluate(() => localStorage.getItem('mp_cooks'));
+    const cookedAt = new Date().toISOString(), cookId = `roast-chicken:${cookedAt}`;
+    await page.evaluate(([cookedAt, cookId]) => { const p = JSON.parse(localStorage.getItem('mp_plan')); p.days.forEach(d => { d.slots = {}; }); p.days[0].slots.dinner = { mealId: 'chilli-con-carne' }; localStorage.setItem('mp_plan', JSON.stringify(p));
+      localStorage.setItem('mp_cooks', JSON.stringify([{ id: cookId, mealId: 'roast-chicken', name: 'Roast chicken', variantId: null, cookedAt, portionsLeft: 4 }])); }, [cookedAt, cookId]);
+    await page.reload();
+    chatMock.reply = { text: 'Freeze some', edits: [{ type: 'place', day: 5, slot: 'dinner', mealId: 'chilli-con-carne', freezeFrom: 1 }, { type: 'freeze', cookId, places: [{ day: 7, slot: 'dinner' }, { day: 8, slot: 'dinner' }] }] };
+    await openChat();
+    const before = await planLS(), pantry0 = await page.evaluate(() => localStorage.getItem('mp_pantry'));
+    await say('freeze the extras');
+    await page.waitForSelector('#chat-meals .chat-meal-add', { timeout: 8000 });
+    if (!/Freeze 2 portions of .*Roast Chicken/.test(await page.locator('#chat-meals').innerText())) throw new Error('freeze card: ' + await page.locator('#chat-meals').innerText());
+    if (await page.evaluate(() => localStorage.getItem('mp_cooks')).then(c => JSON.parse(c).length) !== 1) throw new Error('cooks written before Accept');
+    await shot('chat-freeze');
+    await page.click('#chat-meals .chat-meal-add');
+    await page.waitForFunction(() => /Froze 2 portions/.test(document.querySelector('#chat-meals').innerText), null, { timeout: 5000 });
+    const cooks = await page.evaluate(() => JSON.parse(localStorage.getItem('mp_cooks')));
+    if (cooks.length !== 2 || cooks.find(c => c.storage === 'freezer').portionsLeft !== 2 || cooks.find(c => !c.storage || c.storage === 'fridge').portionsLeft !== 2) throw new Error('cooks after Accept: ' + JSON.stringify(cooks));
+    if (await page.evaluate(() => localStorage.getItem('mp_pantry')) !== pantry0) throw new Error('freeze touched the pantry');
+    await page.click('#chat-exit');
+    await page.waitForSelector('#plan-chat', { state: 'hidden' });
+    const same = await planLS() === before;
+    await page.evaluate(([o, c]) => { localStorage.setItem('mp_plan', o); if (c === null) localStorage.removeItem('mp_cooks'); else localStorage.setItem('mp_cooks', c); }, [orig, origCooks]);
+    await page.reload();
+    if (!same) throw new Error('Exit changed mp_plan');
+  });
   await step('chat: fridge mode shows stock chips, a "needs" note and the shop panel; Exit leaves mp_plan and mp_pantry identical (Phase 90b)', async () => {
     const orig = await planLS();
     await page.evaluate(() => { const p = JSON.parse(localStorage.getItem('mp_plan')); const d = new Date(); d.setDate(d.getDate() - 1); p.startDate = d.toLocaleDateString('sv'); delete p.shopAnchor; delete p.firstSlot; p.days.forEach(x => { x.slots = {}; }); localStorage.setItem('mp_plan', JSON.stringify(p)); });
