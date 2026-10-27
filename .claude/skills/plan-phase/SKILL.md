@@ -93,6 +93,8 @@ wrong, say so in one line and update the heading.
    in the code; drop the ones that are not and say so in the spec.
    When a phase grows a lookup or mapping (e.g. `cofid-map.json`), count how many of the library's keys it already covers
    and quote the roadmap's figure against the real one: a gap smaller than stated is a gate.
+   In the spec, state a count ("17 rows") only as "one per entry of <list>", never as a bare number; a new page's script list
+   must include `ate-box.js` (`ui-check` fails a page without the "I ate" bar).
    When the roadmap names a data attribute a feature learns from or filters on (a cuisine, a category, a tag), grep that the
    meal shape (`meals.json`) and the importer (`mealdb.js` `toMeal`) actually carry it; absent means a gate (capture it or drop it).
    Check whether the roadmap's "no UI to do X" assumption holds (e.g. the app may have no editor for the field).
