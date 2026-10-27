@@ -324,19 +324,8 @@
       const picked = new Date(row.querySelector(".eat-when").value);
       const when = isNaN(picked) || picked > new Date() ? new Date() : picked;
       const whenIso = when.toISOString();
-      MP.Sync.logPortion(meal, whenIso, n);
+      const { ticked } = MP.eatMeal(meal, whenIso, n);
       if (MP.Prefs) MP.Prefs.bump(meal, "eaten");
-      const london = (d) => new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/London" }).format(d);
-      let ticked = null;
-      try {
-        const plan = JSON.parse(localStorage.getItem("mp_plan"));
-        ticked = MP.tickPlanEaten(plan, meal.id, london(new Date()), whenIso);
-        if (ticked && london(when) !== london(new Date())) ticked = null;
-        if (ticked) {
-          localStorage.setItem("mp_plan", JSON.stringify(ticked.plan));
-          window.dispatchEvent(new CustomEvent("mp:plan-saved", { detail: ticked.plan }));
-        }
-      } catch (e) { /* no or malformed plan: log only */ }
       closeDetail();
       toast(`Logged ${n} × ${meal.name}${ticked ? " — plan ticked" : ""}`);
     });

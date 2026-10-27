@@ -83,6 +83,8 @@ const outputs = await Promise.all(combos.map(async ([vp, size, theme]) => {
     const s = await page.evaluate(() => ({ over: document.documentElement.scrollWidth - innerWidth, len: document.body.innerText.trim().length, theme: document.documentElement.dataset.theme }));
     const why = [errs.length && errs[0].slice(0, 160), s.over > 1 && `horizontal scroll ${s.over}px`, s.len < 20 && 'empty page', s.theme && s.theme !== theme && `theme is ${s.theme}`].filter(Boolean).join('; ');
     report(!why, `${name} ${vp} ${theme}`, why, say);
+    const bar = await page.evaluate(() => { const b = document.querySelector('.ate-bar'); if (!b) return 'no ate bar'; const r = b.getBoundingClientRect(); return r.bottom > innerHeight + 1 || r.width < 200 ? 'ate bar off-screen' : ''; });
+    report(!bar, `${name} ${vp} ${theme} ate bar`, bar, say);
     const polish = await page.evaluate(AUDIT, { phone: vp === 'phone' });
     for (const p of polish.slice(0, 5)) say(`${STRICT ? 'FAIL' : 'warn'} ${name} ${vp} ${theme}: ${p}`);
     if (STRICT && polish.length) failed++; else warned += polish.length;

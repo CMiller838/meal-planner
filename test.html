@@ -14,6 +14,7 @@
 <script src="generator.js"></script>
 <script src="shopping-list.js"></script>
 <script src="hermes-sync.js"></script>
+<script src="ate-box.js"></script>
 <script src="products.js"></script>
 <script src="exclusions.js"></script>
 <script src="mealdb.js"></script>
@@ -3733,6 +3734,35 @@
     check("98: undo restores exactly", !("subs" in s1));
     const none = MP.Plan.applyCheaperEdits([{ type: "cheaper", key: "onion", to: "shallot", shopDay: 1 }], { ...ctx, packData: null });
     check("98: no packData refuses with a line, no throw", none.cards.length === 0 && none.refused.length === 1);
+  }
+
+  // 102. Phase 102 — AteBox.suggest / recents, MP.eatMeal
+  {
+    const AB = MP.AteBox;
+    const lib = [{ id: "m1", name: "Chicken stir fry" }, { id: "m2", name: "Roast chicken" }, { id: "m3", name: "Toast" }];
+    const s = AB.suggest("chick", { library: lib, recents: [{ name: "Chicken wrap" }, { name: "roast chicken" }], foods: ["Chicken thigh", "Chickpeas"] });
+    check("102: suggest prefix before substring within a source, library first", s[0].label === "Chicken stir fry" && s[1].label === "Roast chicken" && s[0].kind === "meal");
+    check("102: suggest de-dupes across sources (case-insensitive)", s.filter((x) => x.label.toLowerCase() === "roast chicken").length === 1);
+    check("102: suggest empty/whitespace is empty", AB.suggest("  ", { library: lib }).length === 0);
+    check("102: suggest max 8", AB.suggest("a", { foods: Array.from({ length: 20 }, (_, i) => "a" + i) }).length === 8);
+    const ent = Array.from({ length: 14 }, (_, i) => ({ id: "e" + i, kind: "eat", name: "Food " + (i % 12), grams: 50, when: "2026-01-" + String(i + 1).padStart(2, "0") }));
+    ent.push({ id: "g", kind: "eat", name: "Grouped", group: "x", when: "2026-02-01" }, { id: "s", kind: "stock", name: "Stocked", when: "2026-02-02" }, { id: "c", kind: "eat", name: "Eggs", count: 2, when: "2025-12-01" });
+    const r = AB.recents(ent);
+    check("102: recents max 10, newest first, deduped", r.length === 10 && r[0].name === "Food 1" && new Set(r.map((x) => x.name)).size === 10);
+    check("102: recents excludes group and stock", !r.some((x) => x.name === "Grouped" || x.name === "Stocked"));
+    check("102: recents keeps count/grams of newest", AB.recents([{ kind: "eat", name: "Eggs", count: 2, when: "a" }])[0].count === 2 && r[0].grams === 50);
+    const plan = { startDate: new Date().toISOString().slice(0, 10), days: [{ day: 1, slots: { dinner: { mealId: "m1" } } }] };
+    const keep = { plan: localStorage.getItem("mp_plan"), eaten: localStorage.getItem("mp_eatenLog") };
+    const orig = MP.Sync.logPortion; let logged = 0;
+    MP.Sync.logPortion = () => { logged++; };
+    localStorage.setItem("mp_plan", JSON.stringify(plan));
+    const e1 = MP.eatMeal({ id: "m1", name: "X" }, new Date().toISOString(), 2);
+    check("102: eatMeal logs once via logPortion and ticks today's slot", logged === 1 && e1.ticked && JSON.parse(localStorage.getItem("mp_plan")).days[0].slots.dinner.eatenAt);
+    const before = localStorage.getItem("mp_plan");
+    const e2 = MP.eatMeal({ id: "zz", name: "Y" }, new Date().toISOString(), 1);
+    check("102: eatMeal with no matching slot logs only, plan untouched", e2.ticked === null && localStorage.getItem("mp_plan") === before);
+    MP.Sync.logPortion = orig;
+    keep.plan === null ? localStorage.removeItem("mp_plan") : localStorage.setItem("mp_plan", keep.plan);
   }
 
   lines.push("", `${pass} passed, ${fail} failed`);

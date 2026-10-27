@@ -940,6 +940,12 @@ Spec: `.claude/specs/phase101.md`
 
 ## Phase 102: Type it anywhere, with recents
 Spec: `.claude/specs/phase102.md`
+- [x] `MP.AteBox.suggest` / `recents` + test.html cases
+- [x] `MP.eatMeal` in data.js; app.js Eat sheet uses it
+- [x] `ate-box.js` bar, list, recents strip, Undo, sync-off caption
+- [x] Script tags on five pages, sw.js SHELL + CACHE, style.css, ui-check bar check
+- [x] CLAUDE.md invariant + ARCHITECTURE.md line
+- [ ] Live: on the installed phone PWA, say "two slices of toast" into the keyboard mic, tap Enter, then tap it again from the recents chip; check both land in the food log and the keyboard does not cover the bar.
 
 ## Phase 103: Drag a meal to another slot or day
 Spec: `.claude/specs/phase103.md`

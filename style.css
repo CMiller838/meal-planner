@@ -1029,3 +1029,22 @@ button:disabled { opacity: .5; cursor: not-allowed; transform: none; }
 .cooknow-list { list-style: none; margin: .5rem 0; padding: 0; display: flex; flex-direction: column; gap: .5rem; }
 .cooknow-row { display: flex; align-items: center; justify-content: space-between; gap: .75rem; background: var(--surface); border: 1px solid var(--border); border-radius: .6rem; padding: .5rem .75rem; }
 .cooknow-name small { display: block; color: var(--text-dim); }
+
+/* Phase 102: docked "I ate" bar */
+.ate-bar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 40; display: flex; flex-direction: column; gap: .4rem;
+  padding: .5rem .75rem calc(.5rem + env(safe-area-inset-bottom)); background: var(--surface); border-top: 1px solid var(--border);
+  max-width: 40rem; margin: 0 auto; transition: bottom var(--motion-base) ease; }
+body.has-ate-bar { padding-bottom: calc(5rem + env(safe-area-inset-bottom)); }
+body:has(.modal-overlay:not(.hidden)) .ate-bar, body.chat-open .ate-bar { display: none; }
+.ate-input { width: 100%; padding: .6rem .8rem; font: inherit; color: var(--text); background: var(--bg); border: 1px solid var(--border); border-radius: 999px; }
+.ate-input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-glow); }
+.ate-list { list-style: none; margin: 0; padding: 0; max-height: 40vh; overflow: auto; animation: m-enter 180ms ease-out; }
+.ate-pick { width: 100%; text-align: left; padding: .55rem .6rem; font: inherit; color: var(--text); background: none; border: none; border-radius: .5rem; cursor: pointer; }
+.ate-pick:hover, .ate-pick:focus-visible { background: var(--surface-alt); }
+.ate-pick:disabled { opacity: .5; }
+.ate-recents { display: flex; gap: .4rem; overflow-x: auto; animation: m-enter 180ms ease-out; }
+.ate-recents .chip { white-space: nowrap; flex: 0 0 auto; }
+.ate-note, .ate-msg { margin: 0; font-size: .85rem; }
+.ate-msg button { background: none; border: none; color: var(--accent); font-weight: 700; margin-left: .75rem; cursor: pointer; }
+@media (prefers-reduced-motion: reduce) { .ate-list, .ate-recents { animation: none; } }
+body.has-ate-bar .toast { bottom: calc(5rem + env(safe-area-inset-bottom)); }

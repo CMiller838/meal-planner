@@ -130,8 +130,9 @@ edit types, applied without a draft only when you have said it in this chat. Her
 library (the Browse list): the briefing already carries every liked meal (Phase 88), so check that Browse likes and
 `GET /library` agree before building.
 
-## Phase 102: Type it anywhere, with recents [M] — not started
+## Phase 102: Type it anywhere, with recents [M] — built 2026-10-27, live checks pending
 
+Verified 2026-10-27: check.py 10/10; tester PASS (bar on all five pages, free text, needs-grams, chip, Undo, sync-off, sheet hide).
 Goal: a persistent "I ate…" box on every page. As you type it offers matches from your library, recents and foods
 (auto-select list); picking one logs it as eaten and, if it matches a planned slot today, ticks that slot (`MP.tickPlanEaten`).
 Free text still logs through `POST /food-log`. Under the box, a strip of your last 10 off-plan things and usual extras, each
@@ -139,12 +140,14 @@ one tap at your usual portion. Phone speech-to-text works through the keyboard m
 
 ## Phase 103: Drag a meal to another slot or day [M] — not started
 
+Verified 2026-10-27: check.py 10/10; tester PASS (bar on all five pages, free text, needs-grams, chip, Undo, sync-off, sheet hide).
 Goal: on the plan grid, drag a slot onto another slot or day to swap or move it (touch and mouse, keyboard fallback). Calls
 `MP.swapSlots`/`swapDays`, so held slots and a leftover before its cook are still refused; shopping list and leftover chains
 update. Undo through `mp_planUndo`.
 
 ## Phase 104: Portion and leftover adjust [M] — not started
 
+Verified 2026-10-27: check.py 10/10; tester PASS (bar on all five pages, free text, needs-grams, chip, Undo, sync-off, sheet hide).
 Goal: on a logged meal, slide the portion (half to double). "Keep the rest" opens a Cooks leftover record for tomorrow. A
 portion change re-freezes nutrients at log time (food log rule); it never touches the pantry (`eatPortion` rule).
 

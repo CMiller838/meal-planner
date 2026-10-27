@@ -602,6 +602,23 @@
     return null;
   }
 
+  /** Phase 102: log `n` portions of `meal` (log only, never pantry/Cooks) and tick today's matching plan slot. The one place that pairs log and tick. */
+  function eatMeal(meal, whenIso, n) {
+    MP.Sync.logPortion(meal, whenIso, n);
+    const london = (d) => new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/London" }).format(d);
+    let ticked = null;
+    try {
+      const plan = JSON.parse(localStorage.getItem("mp_plan"));
+      ticked = tickPlanEaten(plan, meal.id, london(new Date()), whenIso);
+      if (ticked && london(new Date(whenIso)) !== london(new Date())) ticked = null;
+      if (ticked) {
+        localStorage.setItem("mp_plan", JSON.stringify(ticked.plan));
+        window.dispatchEvent(new CustomEvent("mp:plan-saved", { detail: ticked.plan }));
+      }
+    } catch (e) { /* no or malformed plan: log only */ }
+    return { ticked };
+  }
+
   /** Phase 63, pure: re-plan only the freed slots of `plan`. Everything else (past days, eaten, locked, untouched
    *  slots) is passed to `generate(locked, ranOutKeys, avoidIds)` as locked, so it comes back identical. A skipped batch cook frees
    *  its whole leftover chain; a slot whose meal uses a ran-out ingredient is freed too. Eating-out slots end up
@@ -875,6 +892,7 @@
   MP.swapDays = swapDays;
   MP.backfillSlot = backfillSlot;
   MP.tickPlanEaten = tickPlanEaten;
+  MP.eatMeal = eatMeal;
   MP.rollPlan = rollPlan;
   MP.reflowInputError = reflowInputError;
   MP.reflowFromDay = reflowFromDay;
