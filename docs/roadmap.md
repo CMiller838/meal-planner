@@ -113,7 +113,7 @@ under), drawn from the library first and offered as new meals via `mealCreate` (
 the lunch rules in `docs/MEAL_PLANNING_EXAMPLE.md` (never an empty lunch slot, no mushrooms, no wraps, no standalone egg) and
 the `cap` minutes; the brief marks each lunch's effort so Hermes can keep the cooking down.
 
-## Phase 100: Cook-now suggestions [M] — not started
+## Phase 100: Cook-now suggestions [M] — built 2026-10-27, live checks pending (check.py 10/10, worker_test ok, bridge test ok, tester PASS: deck + chat entry points placed a meal at PC and 390 px; open gap: Cook now button hides only on eaten slots, locked slots rely on placeSlots refusal)
 
 Goal: "what can I make with what's in?" and "something else?" on a slot return one to three library meals cookable now from
 the pantry, cooks and session `stock` with nothing to buy, as a chat card or sheet that can place one into the slot. Reads

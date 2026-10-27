@@ -1022,3 +1022,10 @@ button:disabled { opacity: .5; cursor: not-allowed; transform: none; }
 .chat-meal-err { flex: 1 1 100%; color: var(--danger); font-size: .75rem; }
 .notes-list { margin: 0 0 .4rem; padding-left: 1.2rem; font-size: .9rem; }
 .notes-tag { font-size: .7rem; color: var(--text-dim); border: 1px solid var(--border); border-radius: 1rem; padding: 0 .45rem; white-space: nowrap; }
+
+/* Phase 100: cook-now sheet */
+.chat-cooknow { font-size: .8rem; padding: .25rem .6rem; white-space: nowrap; }
+.cooknow-label { font-size: .85rem; color: var(--text-dim); margin: .75rem 0 .25rem; }
+.cooknow-list { list-style: none; margin: .5rem 0; padding: 0; display: flex; flex-direction: column; gap: .5rem; }
+.cooknow-row { display: flex; align-items: center; justify-content: space-between; gap: .75rem; background: var(--surface); border: 1px solid var(--border); border-radius: .6rem; padding: .5rem .75rem; }
+.cooknow-name small { display: block; color: var(--text-dim); }

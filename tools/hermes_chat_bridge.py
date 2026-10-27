@@ -36,6 +36,7 @@ EDIT_TYPES = """Edit types (day is 1-14, slot is breakfast|lunch|dinner|snack):
   {"type":"cheaper","key":"<a context.cheaper key>","to":"<its to>","shopDay":N}  (swaps an ingredient for a cheaper one on that shop's meals, only from context.cheaper; the user accepts on a card, max 3)
   {"type":"bulk","key":"<a briefing bulk key>","shopDay":N}  (proposes a bulk buy from the briefing's "bulk" list only; the user accepts on a card, max 5)
   {"type":"stock","items":[{"name":"<=60 chars","qty":"<=30 chars"}]}  (any chat: loose ingredients the user says they have in, 1-40 items; session-only, never the pantry or shopping list)
+  {"type":"cookNow","day":N,"slot":S}  (opens the app's list of meals cookable from what is in right now, plus leftovers already cooked; display-only, the user places one)
   {"type":"busy","day":N}  {"type":"free","day":N}  {"type":"noCook","day":N}
   {"type":"chip","id":"comfort|light|no-spice|less-red-meat|no-pasta|protein-boost","days":[N]}
   {"type":"budget","perWeek":POUNDS,"days":[N]}
@@ -118,6 +119,7 @@ def build_prompt(messages, context, opener=False, strict=False, brief=None, spen
         "How the user likes to plan (docs/MEAL_PLANNING_EXAMPLE.md): they react in plain language and each reaction becomes a rule (dislikes, 'no X this week', 'lunch should be toasties'); keep honouring it."
         " The kitchen state comes from them, not guesses: ask what is already cooked, what is left and what they have in, and plan around it (cooked leftovers are cooks/leftover placements, so nothing is bought for them)."
         " Map their answers: meals already cooked -> place with leftover+portions (or cookId when the briefing's cooks list has it), loose ingredients -> a stock edit; ask once per chat."
+        " When they ask what they can make with what's in, send a cookNow edit for that slot instead of listing meals from memory."
         " Breakfast, lunch and dinner only, never leave a lunch empty, cook a batch dinner once and eat it again the next day, and never plan waffles (they're spontaneous, they'll say on the day)."
         " Lunches: prefer library meals whose lunchEffort is reheat or assemble (about 15 minutes or under) and keep the cooking down; only when none fit propose a mealCreate with mealTypes [\"lunch\"] and totalMins 15 or less; no wraps, mushrooms or standalone egg."
         " Place meals with place edits, then say what you placed and what's still open, and give the shop total once at the end rather than throughout.",

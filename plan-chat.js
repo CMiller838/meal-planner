@@ -89,6 +89,8 @@
     // Phase 90b: what the user says is left in the fridge; session-only in the app (chat.stock), never the pantry.
     stock: (e) => { const it = Array.isArray(e.items) && e.items.length >= 1 && e.items.length <= 40 && e.items.map((i) => i && typeof i === "object" && str(i.name, 60) && (i.qty === undefined || typeof i.qty === "string") && { name: str(i.name, 60), ...(str(i.qty, 30) ? { qty: str(i.qty, 30) } : {}) });
       return it && it.every(Boolean) && { type: "stock", items: it }; },
+    // Phase 100: display-only; the app shows a card that opens the cook-now sheet.
+    cookNow: (e) => isDay(e.day) && isSlot(e.slot) && { type: "cookNow", day: e.day, slot: e.slot },
     cap: (e) => Number.isInteger(e.minutes) && (e.minutes === 0 || (e.minutes >= 5 && e.minutes <= 240)) && Array.isArray(e.weekdays) && e.weekdays.length >= 1 && e.weekdays.length <= 7
       && e.weekdays.every((d) => Number.isInteger(d) && d >= 0 && d <= 6) && new Set(e.weekdays).size === e.weekdays.length
       && { type: "cap", minutes: e.minutes, weekdays: [...e.weekdays].sort((a, b) => a - b) },
@@ -196,6 +198,7 @@
       else if (e.type === "bulk") parts.push(`bulk buy: ${e.key.replace(/-/g, " ")} on shop ${e.shopDay}`);
       else if (e.type === "cap") parts.push(e.minutes ? `${e.weekdays.map((w) => WEEKDAYS[w]).join("/")}: cooking capped at ${e.minutes} min` : `${e.weekdays.map((w) => WEEKDAYS[w]).join("/")}: time cap cleared`);
       else if (e.type === "stock") parts.push(`you have ${e.items.map((i) => i.name).join(", ")}`);
+      else if (e.type === "cookNow") parts.push(`${name(e.day)} ${e.slot}: what you can cook now`);
       else if (e.type === "note") parts.push(`suggested note: ${e.text}`);
       else if (e.type === "rate") parts.push(`${e.mealId}: rated ${e.rating}`);
       else if (e.type === "backfill") parts.push(`${name(e.day)} ${e.slot}: recorded as eaten${e.name ? ` (${e.name})` : ""}`);

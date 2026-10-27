@@ -3006,6 +3006,27 @@
       && !SL.hasEnough({ key: "rice", qty: "500g" }, { rice: "200g" }));
     const ck = SL.cookable(lib, pantry, plan, today, opts);
     check("cookable: ready = 0 missing, soonest use-by first, skipped ingredient ignored", ck.ready.map((p) => p.id).join() === "r2,r1,skip");
+    { // Phase 100: cook-now
+      const many = Array.from({ length: 25 }, (_, i) => ({ id: "m" + i, name: "M" + i, mealTypes: ["dinner"], ingredients: ing("rice") }));
+      check("cookable: all:true returns 25 ready, default still capped (10), n:30 clamps to 20", SL.cookable(many, pantry, plan, today, { ...opts, all: true }).ready.length === 25 && SL.cookable(many, pantry, plan, today, opts).ready.length === 10 && SL.cookable(many, pantry, plan, today, { ...opts, n: 30 }).ready.length === 20);
+      const mk = (id, ...keys) => ({ id, name: id, mealTypes: ["dinner"], ingredients: ing(...keys) });
+      const cl = [mk("a", "rice"), mk("b", "onion"), mk("c", "saffron"), mk("d", "rice", "chicken_breast"), mk("e", "rice", "onion"), mk("ban", "rice", "chilli")];
+      const ordered = ["c", "e", "a", "ban", "d", "b"].map((id) => cl.find((m) => m.id === id)); // candidatesFor order; c is not cookable
+      const pan0 = JSON.stringify(pantry);
+      const cn = (o, ctx) => MP.Plan.cookNowFor({ day: 1, slotType: "dinner", offset: 0, ...o }, { library: cl, plan, pantry, cooks: [], today, shelfData, tags, targets, cands: () => ordered, terms: [], ...ctx });
+      check("cookNowFor: only ready meals, in candidates order", cn({}).meals.map((m) => m.id).join() === "e,a,d");
+      check("cookNowFor: pages by 3, more false on the last page", cn({}).more === true && cn({ offset: 3 }).meals.length === 1 && cn({ offset: 3 }).more === false);
+      const withStock = cn({ stock: [{ name: "Saffron" }] });
+      check("cookNowFor: stock makes a meal ready; pantry unchanged", withStock.meals.map((m) => m.id)[0] === "c" && JSON.stringify(pantry) === pan0 && !cn({}).meals.some((m) => m.id === "c"));
+      check("cookNowFor: hard term drops a meal", !cn({}, { terms: ["onion"] }).meals.some((m) => m.id === "e"));
+      check("cookNowFor: empty pantry -> no meals", cn({}, { pantry: [] }).meals.length === 0);
+      const ck2 = [{ id: "k1", mealId: "a", name: "A", portionsLeft: 2, storage: "fridge", cookedAt: "2026-10-19T18:00:00Z" }, { id: "k2", mealId: "b", name: "B", portionsLeft: 0, storage: "fridge", cookedAt: "2026-10-19T18:00:00Z" }];
+      const lf = cn({}, { cooks: ck2 }).leftovers;
+      check("cookNowFor: open cook under leftovers, spent one not", lf.length === 1 && lf[0].cookId === "k1" && cn({ slotType: "breakfast" }, { cooks: ck2 }).leftovers.length === 0);
+      const PCn = MP.PlanChat, vr = (e) => PCn.validateReply({ text: "", edits: [e] }, {}, "2026-01-01").reply.edits;
+      check("validateReply: cookNow kept, bad day / missing slot dropped; describe names it", vr({ type: "cookNow", day: 2, slot: "dinner" }).length === 1 && !vr({ type: "cookNow", day: 99, slot: "dinner" }).length && !vr({ type: "cookNow", day: 2 }).length
+        && PCn.describe([{ type: "cookNow", day: 2, slot: "dinner" }], "2026-09-07").includes("cook now"));
+    }
     check("cookable: near-miss lists the missing key; exclusion and 3-missing dropped; zero-ingredient excluded",
       ck.nearMiss.map((p) => p.id).join() === "near" && deepEqual(ck.nearMiss[0].missing, ["saffron"]));
     check("cookable: urgency from entered vs estimated use-by, null when undated",

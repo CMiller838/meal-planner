@@ -155,7 +155,8 @@
       const protein = o.tags && o.targets ? MP.Nutrition.dayCoverage([meal], o.tags, o.targets).proteinGramsApprox : 0;
       (missing.length ? nearMiss : ready).push({ id: meal.id, name: meal.name, prepEffort: meal.prepEffort || null, proteinGramsApprox: protein, missing, urgency });
     }
-    return { ready: ready.sort(byUrgency).slice(0, n), nearMiss: nearMiss.sort(byUrgency).slice(0, n) };
+    ready.sort(byUrgency); nearMiss.sort(byUrgency);
+    return o.all ? { ready, nearMiss } : { ready: ready.slice(0, n), nearMiss: nearMiss.slice(0, n) }; // Phase 100: all = uncapped, for a caller that filters afterwards
   }
 
   /** What to eat on a night you're not cooking: open leftovers (fridge and freezer),

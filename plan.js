@@ -1509,6 +1509,48 @@
     });
   }
 
+  /** Phase 100: meals cookable from what is on hand right now, in candidatesFor's order (a filter on top, never a re-score).
+   * stock = session-only chat items merged for this call; the pantry is read, never written. ctx lets tests inject data. */
+  function cookNowFor({ day, slotType, offset, stock }, ctx) {
+    const c = Object.assign({ library, plan, pantry: MP.Sync.localItems("pantry"), cooks: MP.Cooks.all(), cands: candidatesFor, terms: MP.Sync.hardTerms(), today: MP.Generator.isoToday(), shelfData, tags: tagsData && tagsData.tags, targets: tagsData && tagsData.targets }, ctx);
+    const SL = MP.ShoppingList, have = SL.pantryIndex({ items: c.pantry });
+    const items = c.pantry.concat((stock || []).filter((i) => have[SL.normalizeKey(i.name)] === undefined));
+    const ready = new Map(SL.cookable(c.library, items, c.plan, c.today, { all: true, shelfData: c.shelfData, tags: c.tags, targets: c.targets }).ready.map((r) => [r.id, r]));
+    const all = c.cands(day, slotType).filter((m) => ready.has(m.id) && MP.Exclusions.check(m, c.terms).ok);
+    const start = offset > 0 && offset < all.length ? offset : 0;
+    const byId = Object.fromEntries(c.library.map((m) => [m.id, m]));
+    const leftovers = slotType === "lunch" || slotType === "dinner"
+      ? MP.ShelfLife.leftoverView(c.cooks, c.today, c.shelfData).filter((l) => byId[l.mealId] && (byId[l.mealId].mealTypes || []).includes(slotType))
+        .slice(0, 2).map((l) => ({ cookId: l.id, mealId: l.mealId, name: l.name, portions: l.portionsLeft, eatBy: l.eatBy }))
+      : [];
+    return { meals: all.slice(start, start + 3).map((m) => ({ ...m, proteinGramsApprox: ready.get(m.id).proteinGramsApprox })), leftovers, more: start + 3 < all.length, total: all.length };
+  }
+
+  /** Phase 100 sheet in #swap-sheet. Place = a chat diff (checked by placeSlots) in chat, setSlotMeal outside. */
+  function openCookNow(day, slotType, offset) {
+    const sheet = $("swap-sheet"), r = cookNowFor({ day, slotType, offset: offset || 0, stock: chat ? chat.stock : [] });
+    swapCtx = { day, slotType, candidates: [], mode: "cooknow", offset: offset || 0 };
+    const row = (cls, body, id, label, extra) => `<li class="cooknow-row ${cls}"><span class="cooknow-name">${body}</span><button class="btn-secondary cooknow-place" data-id="${esc(id)}"${extra || ""}>${label}</button></li>`;
+    const meals = r.meals.map((m) => row("", `${esc(m.name)} <small>${m.prepEffort ? esc(m.prepEffort) : ""}${m.proteinGramsApprox ? ` · ~${Math.round(m.proteinGramsApprox)} g protein` : ""}</small>`, m.id, "Place"));
+    const lefts = chat ? r.leftovers.map((l) => row("", `${esc(l.name)} <small>${l.portions} left · eat by ${esc(l.eatBy)}</small>`, l.mealId, "Place", ` data-cook="${esc(l.cookId)}"`)) : [];
+    sheet.innerHTML = `<button class="close-btn" aria-label="Close">✕</button><h2>Cook now — Day ${day} ${esc(slotType)}</h2>
+      ${lefts.length ? `<h3 class="cooknow-label">Already cooked</h3><ul class="cooknow-list m-stagger">${lefts.join("")}</ul>` : ""}
+      ${meals.length ? `<ul class="cooknow-list m-stagger">${meals.join("")}</ul>` : lefts.length ? "" : `<p class="swipe-empty">Nothing in the cupboard covers a whole meal. Add what you have in Pantry or tell Hermes.</p>`}
+      ${r.total > 3 ? `<p class="swipe-hint">${r.more ? "" : "That's all I can find. "}</p><button class="ghost cooknow-more">${r.more ? "Something else?" : "Back to the first"}</button>` : ""}`;
+    sheet.querySelector(".close-btn").addEventListener("click", closeSwapPicker);
+    const more = sheet.querySelector(".cooknow-more");
+    if (more) more.addEventListener("click", () => openCookNow(day, slotType, r.more ? (offset || 0) + 3 : 0));
+    sheet.querySelectorAll(".cooknow-place").forEach((b) => b.addEventListener("click", () => {
+      if (chat) {
+        const changes = applyChatEdits([{ type: "place", day, slot: slotType, mealId: b.dataset.id, ...(b.dataset.cook ? { cookId: b.dataset.cook } : {}) }], { focusDay: chat.day, pending: pendingMealIds(), fridge: chat.fridge ? { window: chat.fridge.window, have: fridgeHave(chat.stock) } : undefined });
+        changes.notes.forEach((n) => { toast(n); chatBubble("understood", n); });
+        chat.changes = (chat.changes || []).concat(changes);
+        closeSwapPicker(); renderPlan(); renderChatDiff(); renderChatWeek(true, true);
+      } else { setSlotMeal(day, slotType, b.dataset.id); closeSwapPicker(); renderPlan(); toast("Placed"); }
+    }));
+    $("swap-overlay").classList.remove("hidden");
+  }
+
   function openSwapPicker(day, slotType) {
     swapCtx = { day, slotType, candidates: candidatesFor(day, slotType), mode: "swap" };
     renderDeck();
@@ -1614,7 +1656,7 @@
       : `<button class="close-btn" aria-label="Close">✕</button>
       <h2>Swap ${esc(slotType)} — Day ${day}</h2>
       <p class="swipe-hint" style="margin-top:0;">Recommended swaps are sorted first based on what today is short on.<br>
-      Swipe right to confirm · swipe left to skip · tap to view recipe</p>`;
+      Swipe right to confirm · swipe left to skip · tap to view recipe</p>${(plan.days[day - 1].slots[slotType] || {}).eatenAt ? "" : `<button class="ghost deck-cooknow">Cook now</button>`}`;
     sheet.innerHTML = `${head}
       <div id="swap-deck" class="swipe-deck" style="height:340px;"></div>
       <div class="deck-actions"><button class="ghost deck-pass">Pass</button>${chat ? `<button class="ghost deck-pick">Pick for me</button>` : ""}
@@ -1622,6 +1664,8 @@
     sheet.querySelector(".close-btn").addEventListener("click", closeSwapPicker);
     sheet.querySelector(".deck-take").addEventListener("click", () => flyOff(1));
     sheet.querySelector(".deck-pass").addEventListener("click", () => flyOff(-1));
+    const cn = sheet.querySelector(".deck-cooknow");
+    if (cn) cn.addEventListener("click", () => openCookNow(day, slotType));
     const pick = sheet.querySelector(".deck-pick");
     if (pick) pick.addEventListener("click", () => flyOff(1)); // candidatesFor is already ranked: the top card is the pick
     renderDeckCards();
@@ -2345,7 +2389,7 @@
     renderPlacementBanner(e.detail);
   });
 
-  MP.Plan = { applyCheaperEdits, cheaperCandidates, fridgeWindow, fridgeHave, applyBulkEdits, applyChatEdits, applyMealEdits, applyRateEdits, chatBriefing, chatContext, tieFor, effectiveBudget, budgetSwaps, resetChatPrefs, reflow, snapshot, restore, planMetrics, whatIf, fixGap, wrapUp, cookMinsFor, tickerFor, parseGuidedSlots, applyPlacements, openLeftoverCooks, logPortion, matchEatRequests, applyEatRequests };
+  MP.Plan = { cookNowFor, applyCheaperEdits, cheaperCandidates, fridgeWindow, fridgeHave, applyBulkEdits, applyChatEdits, applyMealEdits, applyRateEdits, chatBriefing, chatContext, tieFor, effectiveBudget, budgetSwaps, resetChatPrefs, reflow, snapshot, restore, planMetrics, whatIf, fixGap, wrapUp, cookMinsFor, tickerFor, parseGuidedSlots, applyPlacements, openLeftoverCooks, logPortion, matchEatRequests, applyEatRequests };
 
   // ---- Planning chat with Hermes (Phase 72) ----
   // The working plan is `plan` itself with guidedActive on (no savePlan runs); Exit restores the snapshot, Save commits.
@@ -2444,6 +2488,7 @@
 
   // Phase 90b: the typed fridge list, session-only. Chips, not pantry rows.
   function renderChatStock() {
+    $("chat-cooknow").onclick = () => openCookNow(chat.day, "dinner");
     const el = $("chat-stock");
     const pantry = MP.ShoppingList.pantryIndex({ items: MP.Sync.localItems("pantry") });
     const list = (chat.stock || []).filter((i) => pantry[MP.ShoppingList.normalizeKey(i.name)] === undefined);
@@ -2686,7 +2731,12 @@
       const txt = document.createElement("span");
       txt.textContent = x.pending || x.saved ? x.text : x.undo ? (x.undone ? "Undone: " : "") + x.text : "Refused: " + x.text;
       li.appendChild(txt);
-      if (x.pending && x.sub) {
+      if (x.cookNow) {
+        const b = document.createElement("button");
+        b.type = "button"; b.className = "btn-secondary chat-cooknow-show"; b.textContent = "Show";
+        b.addEventListener("click", () => openCookNow(x.cookNow.day, x.cookNow.slot));
+        li.appendChild(b);
+      } else if (x.pending && x.sub) {
         [["Just this week", "week"], ["Change the meal", "meal"], ["No", "no"]].forEach(([label, how]) => {
           const b = document.createElement("button");
           b.type = "button"; b.className = "btn-secondary chat-sub-" + how; b.textContent = label;
@@ -2764,7 +2814,11 @@
     reply.edits.filter((e) => e.type === "stock").forEach((e) => { // session-only: never the pantry
       e.items.forEach((i) => { const k = MP.ShoppingList.normalizeKey(i.name); chat.stock = [...chat.stock.filter((x) => MP.ShoppingList.normalizeKey(x.name) !== k), i]; });
     });
-    const rest = reply.edits.filter((e) => !e.type.startsWith("meal") && e.type !== "rate" && e.type !== "bulk" && e.type !== "stock" && e.type !== "note" && !(e.type === "sub" && e.scope !== "week"));
+    const seenCn = new Set();
+    reply.edits.filter((e) => e.type === "cookNow" && !seenCn.has(e.day + e.slot) && seenCn.add(e.day + e.slot)).forEach((e) => { // display-only: a card that opens the sheet
+      chat.meals.push({ cookNow: e, saved: true, text: `Cook-now options for Day ${e.day} ${e.slot}` }); renderChatMeals();
+    });
+    const rest = reply.edits.filter((e) => !e.type.startsWith("meal") && e.type !== "rate" && e.type !== "bulk" && e.type !== "stock" && e.type !== "cookNow" && e.type !== "note" && !(e.type === "sub" && e.scope !== "week"));
     if (rest.length) {
       const changes = applyChatEdits(rest, { focusDay: chat.day, pending: pendingMealIds(), fridge: chat.fridge ? { window: chat.fridge.window, have: fridgeHave(chat.stock) } : undefined });
       const line = MP.PlanChat.describe(rest, plan.startDate, chat.day);

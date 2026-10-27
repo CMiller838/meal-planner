@@ -929,6 +929,9 @@ Spec: `.claude/specs/phase99.md`
 
 ## Phase 100: Cook-now suggestions
 Spec: `.claude/specs/phase100.md`
+- [x] cookable all, cookNowFor, cookNow edit, openCookNow sheet, bridge, walk, CLAUDE.md, sw.js bump
+- [ ] Live: phone PWA, Plan, tap a dinner slot, "Cook now" -> empty pantry shows the empty message; stocked shows up to 3 rows with Place, "Something else?" pages
+- [ ] Live: Plan with Hermes, ask "what can I make with what's in?" -> a "Cook-now options" card with Show appears and opens the sheet
 
 ## Phase 101: "Ate something else", with push-back
 Spec: `.claude/specs/phase101.md`

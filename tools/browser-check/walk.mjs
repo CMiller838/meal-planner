@@ -396,6 +396,46 @@ for (const [vp, size] of Object.entries({ pc: { width: 1440, height: 900 }, phon
     await page.waitForSelector('#swap-overlay.hidden', { state: 'attached' });
     await page.click('#chat-exit');
   });
+  // Phase 100: cook-now, from the swap deck and from the chat chip
+  const W = (sel, o) => page.waitForSelector(sel, { timeout: 4000, ...o }).catch(() => { throw new Error('wait ' + sel); });
+  await step('cook-now: empty state, then a stocked pantry lists a meal; Place from the deck and from chat changes the slot (Phase 100)', async () => {
+    await page.goto(`${base}/plan.html`);
+    await W('#plan-root .slot-card');
+    await page.evaluate(() => MP.Sync.writeLocalItems('pantry', []));
+    await page.click('#plan-root .slot-card');
+    await page.click('.day-swap-btn[data-slot="dinner"]');
+    await W('.deck-cooknow');
+    await page.click('.deck-cooknow');
+    await W('#swap-sheet .swipe-empty');
+    await page.click('#swap-sheet .close-btn');
+    const id = await page.evaluate(async () => {
+      const lib = JSON.parse(localStorage.getItem('mp_library') || '[]');
+      const keys = new Set(window.candidatesFor(1, 'dinner').flatMap((x) => x.ingredients.map((g) => g.key)));
+      MP.Sync.writeLocalItems('pantry', [...keys].map((k) => ({ name: k })));
+      return 0;
+    });
+    await page.click('.day-swap-btn[data-slot="dinner"]');
+    await page.click('.deck-cooknow');
+    await W('#swap-sheet .cooknow-place', { timeout: 3000 }).catch(async (e) => { throw new Error('no rows: ' + (await page.innerText('#swap-sheet')) + ' / ' + id); });
+    await page.click('#swap-sheet .cooknow-place');
+    await page.waitForSelector('#swap-overlay.hidden', { state: 'attached' });
+    await page.evaluate(() => { const p = JSON.parse(localStorage.getItem('mp_plan')); delete p.days[0].slots.dinner.locked; localStorage.setItem('mp_plan', JSON.stringify(p)); });
+    await page.reload();
+    await page.waitForSelector('#plan-root .slot-card');
+    chatMock.reply = { text: 'ok', edits: [{ type: 'cookNow', day: 1, slot: 'dinner' }, { type: 'cookNow', day: 1, slot: 'dinner' }] };
+    await openChat();
+    await say('what can I make with what is in?');
+    await W('#chat-meals .chat-cooknow-show');
+    if (await page.locator('#chat-meals .chat-cooknow-show').count() !== 1) throw new Error('duplicate cookNow cards');
+    await page.click('#chat-meals .chat-cooknow-show');
+    await W('#swap-sheet .cooknow-place');
+    await page.click('#swap-sheet .close-btn');
+    await page.click('#chat-cooknow');
+    await W('#swap-sheet .cooknow-place');
+    await page.click('#swap-sheet .cooknow-place');
+    await W('#chat-diff .diff-row');
+    await page.click('#chat-exit');
+  });
   // Phase 73: tie and trade-off cards (tieMargin widened so the generated plan has a tie; a £5 budget forces a trade-off)
   await step('chat: tie card (one, ignorable, alt swaps the working copy only) and trade-off card (Accept adds diff rows, Exit restores)', async () => {
     chatMock.reply = { text: 'ok', edits: [] };

@@ -24,6 +24,7 @@ assert b.parse_reply("\nsession_id: abc\n") == b.FALLBACK
 msgs = [{"id": i, "from": "user" if i % 2 else "hermes", "text": f"msg{i}"} for i in range(1, 20)]
 p = b.build_prompt(msgs, {"day": 3, "gaps": ["iron"]})
 assert all(t in p for t in ("busy", "noCook", "chip", "budget", "lock", "unlock", "reroll", "place", "cap", "rate", "bulk", "cheaper", "context.shop", "cookId", "freezer first", '"type":"note"', "standing preferences")) and '"iron"' in p
+assert '"type":"cookNow"' in p and "cookNow edit" in p
 assert "lunchEffort" in p and "mealCreate" in p and "15" in p
 pf = b.build_prompt([], {}, brief={"mode": "fridge", "window": [3, 6]})
 assert "FRIDGE MODE" in pf and "[3, 6]" in pf and '"stock"' in pf and "FRIDGE MODE" not in b.build_prompt([], {}, brief={"a": 1})
