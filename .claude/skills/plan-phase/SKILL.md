@@ -55,6 +55,8 @@ wrong, say so in one line and update the heading.
    For a phase that adds a field to a stored object (a slot, a record), grep for the mirror/serialiser that copies that object
    to KV or another store (e.g. `planMirror` in `hermes-sync.js`): one that whitelists fields silently strips the new one, so
    list it under Files touched.
+   For a phase that imports an external dataset (spreadsheet, CSV, API), open it during planning: confirm each column/field
+   the spec relies on exists (by code, not assumption) and record the download URL in the spec.
    If that field lives in a stored object `CLAUDE.md` pins by shape (e.g. `mp_planPrefs`), list the invariant line under
    Files touched so the builder updates it.
    For a phase that applies an assistant edit "without a draft" or reuses the draft path, read the existing draft Apply
