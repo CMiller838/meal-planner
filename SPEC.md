@@ -96,6 +96,8 @@ them to score days/meals, don't hardcode magic numbers inline in JS):
 - Carbohydrate: ~350 g/day
 - Fat: ~95 g/day (saturates capped ~30 g/day)
 - Sugars: capped ~90 g/day total sugars incl. fruit and milk (Phase 106; free-sugar guidance is 30 g)
+- Added (free) sugars: capped ~30 g/day (NHS/SACN guidance; Phase 107)
+- Trans fat: capped ~3 g/day (WHO under 1% of energy at 2900 kcal; no UK cap; Phase 107)
 - Fibre: 35 g/day
 - Vitamin A: 900 mcg
 - Vitamin C: 90 mg

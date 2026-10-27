@@ -3,7 +3,7 @@
   "tolerance": {
     "macro": 0.15,
     "micro": 0.25,
-    "macroKeys": ["energy_kcal", "protein_g", "carbohydrate_g", "fat_g", "saturates_g", "sugars_g", "fibre_g", "salt_g", "sodium_mg"]
+    "macroKeys": ["energy_kcal", "protein_g", "carbohydrate_g", "fat_g", "saturates_g", "sugars_g", "fibre_g", "salt_g", "sodium_mg", "addedSugars_g", "transFat_g"]
   },
   "tagShare": 0.1,
   "itemGrams": {
@@ -12,7 +12,7 @@
   },
   "usdaIds": {
     "energy_kcal": 1008, "protein_g": 1003, "carbohydrate_g": 1005, "fat_g": 1004, "saturates_g": 1258,
-    "fibre_g": 1079, "sugars_g": 2000, "sodium_mg": 1093, "potassium_mg": 1092, "calcium_mg": 1087,
+    "fibre_g": 1079, "sugars_g": 2000, "addedSugars_g": 1235, "transFat_g": 1257, "sodium_mg": 1093, "potassium_mg": 1092, "calcium_mg": 1087,
     "magnesium_mg": 1090, "iron_mg": 1089, "zinc_mg": 1095, "vitA_mcg": 1106, "vitC_mg": 1162,
     "vitD_mcg": 1114, "vitB12_mcg": 1178, "folate_mcg": 1177
   }

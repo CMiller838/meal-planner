@@ -176,7 +176,7 @@ New: a `sugars_g` target (a cap), the view, and a line saying how much of the da
 
 Link: the Eaten view leads to the nutrition assistant's health page (target and URL to confirm in the spec; not found in this repo).
 
-## Phase 107: More measured foods and added sugars [M] — not started
+## Phase 107: More measured foods and added sugars [M] — built 2026-10-27, live checks pending (trans fat measured from CoFID; the 2021 xlsx has no free-sugars column, so addedSugars_g is USDA-estimate only; 39 staples mapped; verified: check.py 10/10, worker_test, cofid build deterministic)
 
 Goal: raise what Phase 106 can show. (a) Grow `tools/cofid-map.json` beyond the 38 mapped foods to the library's common
 ingredients (`tools/cofid_build.py`, never hand-edit `cofid.json`). (b) Add CoFID's free-sugars column as `addedSugars_g`

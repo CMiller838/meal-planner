@@ -976,3 +976,7 @@ Spec: `.claude/specs/phase105.md` (planned batches via `place.freezeFrom`, cooke
 
 ## Phase 107: More measured foods and added sugars
 - Spec: `.claude/specs/phase107.md` [M]
+- [x] Logic: xlsx codes confirmed (trans = `FODTRANS`; the 2021 xlsx has NO free-sugars column, so `addedSugars_g` is USDA-estimate only); 39 staples mapped; `teriyaki_sauce`, `magnesium_tea`, `protein_powder` deliberately unmapped (no sound CoFID match); `cofid_build.py` + `cofid.json` regenerated, second run identical
+- [x] `food-log.json` `usdaIds`/`macroKeys`, `worker_test.mjs` cross-check case (2 sources accepted, 1 source stays unknown), caps + `SPEC.md`
+- [x] UI: `eaten.js` ROWS Added sugars + Trans fat, `sw.js` v99, CLAUDE.md CoFID line
+- [ ] Live: confirm the 30 g added-sugars and 3 g trans-fat caps are the numbers you want.

@@ -6,6 +6,8 @@
   "fat_g": 95,
   "saturates_g_cap": 30,
   "sugars_g_cap": 90,
+  "addedSugars_g_cap": 30,
+  "transFat_g_cap": 3,
   "fibre_g": 35,
   "vitA_mcg": 900,
   "vitC_mg": 90,

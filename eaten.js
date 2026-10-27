@@ -7,7 +7,7 @@
   // [key, label, unit, isCap]; targets stay in nutrition-targets.json (caps live under `${key}_cap`).
   const ROWS = [
     ["energy_kcal", "Energy", "kcal", false], ["protein_g", "Protein", "g", false], ["carbohydrate_g", "Carbohydrate", "g", false],
-    ["fat_g", "Fat", "g", false], ["sugars_g", "Sugars", "g", true], ["saturates_g", "Saturates", "g", true], ["fibre_g", "Fibre", "g", false],
+    ["fat_g", "Fat", "g", false], ["sugars_g", "Sugars", "g", true], ["saturates_g", "Saturates", "g", true], ["addedSugars_g", "Added sugars", "g", true], ["transFat_g", "Trans fat", "g", true], ["fibre_g", "Fibre", "g", false],
     ["vitA_mcg", "Vitamin A", "mcg", false], ["vitC_mg", "Vitamin C", "mg", false], ["vitD_mcg", "Vitamin D", "mcg", false],
     ["vitB12_mcg", "Vitamin B12", "mcg", false], ["folate_mcg", "Folate", "mcg", false], ["calcium_mg", "Calcium", "mg", false],
     ["iron_mg", "Iron", "mg", false], ["zinc_mg", "Zinc", "mg", false], ["magnesium_mg", "Magnesium", "mg", false],

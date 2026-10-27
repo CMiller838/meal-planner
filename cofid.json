@@ -98,6 +98,126 @@
   "potatoes": {
    "default": "13-489",
    "cooked": "13-490"
+  },
+  "apple": {
+   "default": "14-319"
+  },
+  "orange": {
+   "default": "14-327"
+  },
+  "sausage": {
+   "default": "19-509"
+  },
+  "rasher": {
+   "default": "19-500"
+  },
+  "crumpet": {
+   "default": "11-989"
+  },
+  "waffle": {
+   "default": "11-1130"
+  },
+  "slice_bread": {
+   "default": "11-1145"
+  },
+  "wholemeal_bread": {
+   "default": "11-981"
+  },
+  "brown_bread": {
+   "default": "11-971"
+  },
+  "bagel": {
+   "default": "11-970"
+  },
+  "naan": {
+   "default": "11-973"
+  },
+  "couscous": {
+   "default": "11-901",
+   "cooked": "11-902"
+  },
+  "olive_oil": {
+   "default": "17-038"
+  },
+  "cucumber": {
+   "default": "13-523"
+  },
+  "lettuce": {
+   "default": "13-520"
+  },
+  "cabbage": {
+   "default": "13-582",
+   "cooked": "13-581"
+  },
+  "courgette": {
+   "default": "13-627",
+   "cooked": "13-628"
+  },
+  "garlic": {
+   "default": "13-244"
+  },
+  "tomato_puree": {
+   "default": "13-531"
+  },
+  "cherry_tomatoes": {
+   "default": "13-519"
+  },
+  "sweet_potato": {
+   "default": "13-463",
+   "cooked": "13-646"
+  },
+  "chickpeas": {
+   "default": "13-670"
+  },
+  "lentils": {
+   "default": "13-089",
+   "cooked": "13-661"
+  },
+  "strawberries": {
+   "default": "14-324"
+  },
+  "blueberries": {
+   "default": "14-325"
+  },
+  "grapes": {
+   "default": "14-350"
+  },
+  "avocado": {
+   "default": "14-386"
+  },
+  "honey": {
+   "default": "17-050"
+  },
+  "mayonnaise": {
+   "default": "17-654"
+  },
+  "ketchup": {
+   "default": "17-709"
+  },
+  "soy_sauce": {
+   "default": "17-721"
+  },
+  "cottage_cheese": {
+   "default": "12-539"
+  },
+  "mozzarella": {
+   "default": "12-360"
+  },
+  "pork_mince": {
+   "default": "18-606"
+  },
+  "lamb_mince": {
+   "default": "18-481"
+  },
+  "cod": {
+   "default": "16-373"
+  },
+  "prawns": {
+   "default": "16-387",
+   "cooked": "16-384"
+  },
+  "almonds": {
+   "default": "14-896"
   }
  },
  "foods": {
@@ -110,6 +230,7 @@
     "saturates_g": 0.11,
     "fibre_g": 2.5,
     "sugars_g": 1.1,
+    "transFat_g": 0,
     "sodium_mg": 1.0,
     "potassium_mg": 114.0,
     "calcium_mg": 12.0,
@@ -124,6 +245,53 @@
    },
    "name": "Pasta, white, dried, boiled in unsalted water"
   },
+  "11-1130": {
+   "nutrients": {
+    "energy_kcal": 335.0,
+    "protein_g": 9.0,
+    "carbohydrate_g": 43.0,
+    "fat_g": 15.3,
+    "saturates_g": 8.96,
+    "fibre_g": 1.9,
+    "sugars_g": 3.4,
+    "transFat_g": 0.47,
+    "sodium_mg": 306.0,
+    "potassium_mg": 217.0,
+    "calcium_mg": 150.0,
+    "magnesium_mg": 21.0,
+    "iron_mg": 1.25,
+    "zinc_mg": 0.9,
+    "vitA_mcg": 190.0,
+    "vitD_mcg": 0.7,
+    "vitB12_mcg": 1.1,
+    "folate_mcg": 12.0,
+    "vitC_mg": 1.0
+   },
+   "name": "Waffles, homemade"
+  },
+  "11-1145": {
+   "nutrients": {
+    "energy_kcal": 236.0,
+    "protein_g": 8.7,
+    "carbohydrate_g": 48.7,
+    "fat_g": 2.1,
+    "fibre_g": 2.9,
+    "sugars_g": 3.0,
+    "transFat_g": 0.02,
+    "sodium_mg": 400.0,
+    "potassium_mg": 134.0,
+    "calcium_mg": 155.0,
+    "magnesium_mg": 22.0,
+    "iron_mg": 1.5,
+    "zinc_mg": 0.7,
+    "vitA_mcg": 0.0,
+    "vitD_mcg": 0.0,
+    "vitB12_mcg": 0.0,
+    "folate_mcg": 29.0,
+    "vitC_mg": 0.0
+   },
+   "name": "Bread, white, average"
+  },
   "11-716": {
    "nutrients": {
     "energy_kcal": 343.0,
@@ -132,6 +300,7 @@
     "fat_g": 1.6,
     "saturates_g": 0.23,
     "sugars_g": 2.1,
+    "transFat_g": 0,
     "sodium_mg": 2.0,
     "potassium_mg": 232.0,
     "calcium_mg": 24.0,
@@ -155,6 +324,7 @@
     "saturates_g": 1.28,
     "fibre_g": 7.8,
     "sugars_g": 0.3,
+    "transFat_g": 0.01,
     "sodium_mg": 1.0,
     "potassium_mg": 372.0,
     "calcium_mg": 50.0,
@@ -178,6 +348,7 @@
     "saturates_g": 0.14,
     "fibre_g": 1.1,
     "sugars_g": 0.1,
+    "transFat_g": 0,
     "sodium_mg": 1.0,
     "potassium_mg": 77.0,
     "calcium_mg": 10.0,
@@ -201,6 +372,7 @@
     "saturates_g": 0.16,
     "fibre_g": 0.6,
     "sugars_g": 0,
+    "transFat_g": 0,
     "sodium_mg": 4.0,
     "potassium_mg": 15.0,
     "calcium_mg": 14.0,
@@ -215,6 +387,54 @@
    },
    "name": "Rice, white, basmati, boiled in unsalted water"
   },
+  "11-901": {
+   "nutrients": {
+    "energy_kcal": 364.0,
+    "protein_g": 12.0,
+    "carbohydrate_g": 79.2,
+    "fat_g": 2.1,
+    "saturates_g": 0.3,
+    "fibre_g": 3.7,
+    "sugars_g": 2.3,
+    "transFat_g": 0,
+    "sodium_mg": 4.0,
+    "potassium_mg": 287.0,
+    "calcium_mg": 28.0,
+    "magnesium_mg": 59.0,
+    "iron_mg": 2.0,
+    "zinc_mg": 1.8,
+    "vitA_mcg": 0.0,
+    "vitD_mcg": 0.0,
+    "vitB12_mcg": 0.0,
+    "folate_mcg": 28.0,
+    "vitC_mg": 0.0
+   },
+   "name": "Couscous, plain, raw"
+  },
+  "11-902": {
+   "nutrients": {
+    "energy_kcal": 178.0,
+    "protein_g": 7.2,
+    "carbohydrate_g": 37.5,
+    "fat_g": 1.0,
+    "saturates_g": 0.18,
+    "fibre_g": 2.2,
+    "sugars_g": 1.0,
+    "transFat_g": 0,
+    "sodium_mg": 4.0,
+    "potassium_mg": 154.0,
+    "calcium_mg": 20.0,
+    "magnesium_mg": 32.0,
+    "iron_mg": 1.02,
+    "zinc_mg": 0.9,
+    "vitA_mcg": 0.0,
+    "vitD_mcg": 0.0,
+    "vitB12_mcg": 0.0,
+    "folate_mcg": 13.0,
+    "vitC_mg": 0.0
+   },
+   "name": "Couscous, plain, cooked"
+  },
   "11-925": {
    "nutrients": {
     "energy_kcal": 285.0,
@@ -224,6 +444,7 @@
     "saturates_g": 2.5,
     "fibre_g": 3.6,
     "sugars_g": 2.0,
+    "transFat_g": 0,
     "sodium_mg": 622.0,
     "potassium_mg": 126.0,
     "calcium_mg": 148.0,
@@ -238,6 +459,70 @@
    },
    "name": "Tortilla, wheat, soft"
   },
+  "11-970": {
+   "nutrients": {
+    "energy_kcal": 273.0,
+    "protein_g": 10.0,
+    "carbohydrate_g": 57.8,
+    "fat_g": 1.8,
+    "fibre_g": 3.0,
+    "sugars_g": 4.8,
+    "sodium_mg": 400.0,
+    "vitA_mcg": 0.0,
+    "vitD_mcg": 0.0,
+    "vitB12_mcg": 0.0,
+    "vitC_mg": 0.0
+   },
+   "name": "Bagels, plain"
+  },
+  "11-971": {
+   "nutrients": {
+    "energy_kcal": 207.0,
+    "protein_g": 7.9,
+    "carbohydrate_g": 42.1,
+    "fat_g": 2.0,
+    "saturates_g": 0.43,
+    "fibre_g": 5.0,
+    "sugars_g": 3.4,
+    "transFat_g": 0.02,
+    "sodium_mg": 400.0,
+    "potassium_mg": 216.0,
+    "calcium_mg": 186.0,
+    "magnesium_mg": 45.0,
+    "iron_mg": 2.2,
+    "zinc_mg": 1.3,
+    "vitA_mcg": 0.0,
+    "vitD_mcg": 0.0,
+    "vitB12_mcg": 0.0,
+    "folate_mcg": 45.0,
+    "vitC_mg": 0.0
+   },
+   "name": "Bread, brown, average"
+  },
+  "11-973": {
+   "nutrients": {
+    "energy_kcal": 285.0,
+    "protein_g": 7.8,
+    "carbohydrate_g": 50.2,
+    "fat_g": 7.3,
+    "saturates_g": 0.97,
+    "fibre_g": 2.9,
+    "sugars_g": 3.1,
+    "transFat_g": 0.09,
+    "sodium_mg": 360.0,
+    "potassium_mg": 172.0,
+    "calcium_mg": 187.0,
+    "magnesium_mg": 21.0,
+    "iron_mg": 1.6,
+    "zinc_mg": 0.7,
+    "vitA_mcg": 7.0,
+    "vitD_mcg": 0.1,
+    "vitB12_mcg": 0,
+    "folate_mcg": 15.0,
+    "vitC_mg": 0
+   },
+   "name": "Bread, naan, retail"
+  },
   "11-980": {
    "nutrients": {
     "energy_kcal": 219.0,
@@ -247,6 +532,7 @@
     "saturates_g": 0.29,
     "fibre_g": 2.5,
     "sugars_g": 3.4,
+    "transFat_g": 0.01,
     "sodium_mg": 400.0,
     "potassium_mg": 137.0,
     "calcium_mg": 177.0,
@@ -261,6 +547,54 @@
    },
    "name": "Bread, white, sliced"
   },
+  "11-981": {
+   "nutrients": {
+    "energy_kcal": 217.0,
+    "protein_g": 9.4,
+    "carbohydrate_g": 42.0,
+    "fat_g": 2.5,
+    "saturates_g": 0.46,
+    "fibre_g": 7.0,
+    "sugars_g": 2.8,
+    "transFat_g": 0.04,
+    "sodium_mg": 400.0,
+    "potassium_mg": 253.0,
+    "calcium_mg": 106.0,
+    "magnesium_mg": 66.0,
+    "iron_mg": 2.4,
+    "zinc_mg": 1.6,
+    "vitA_mcg": 0.0,
+    "vitD_mcg": 0.0,
+    "vitB12_mcg": 0.0,
+    "folate_mcg": 40.0,
+    "vitC_mg": 0.0
+   },
+   "name": "Bread, wholemeal, average"
+  },
+  "11-989": {
+   "nutrients": {
+    "energy_kcal": 207.0,
+    "protein_g": 6.9,
+    "carbohydrate_g": 45.4,
+    "fat_g": 1.0,
+    "saturates_g": 0.1,
+    "fibre_g": 3.1,
+    "sugars_g": 3.1,
+    "transFat_g": 0,
+    "sodium_mg": 1029.0,
+    "potassium_mg": 168.0,
+    "calcium_mg": 123.0,
+    "magnesium_mg": 17.0,
+    "iron_mg": 1.44,
+    "zinc_mg": 0.6,
+    "vitA_mcg": 0.0,
+    "vitD_mcg": 0.0,
+    "vitB12_mcg": 0.0,
+    "folate_mcg": 9.0,
+    "vitC_mg": 0.0
+   },
+   "name": "Crumpets, toasted"
+  },
   "12-313": {
    "nutrients": {
     "energy_kcal": 46.0,
@@ -270,6 +604,7 @@
     "saturates_g": 1.07,
     "fibre_g": 0.0,
     "sugars_g": 4.7,
+    "transFat_g": 0.07,
     "sodium_mg": 43.0,
     "potassium_mg": 156.0,
     "calcium_mg": 120.0,
@@ -293,6 +628,7 @@
     "saturates_g": 21.68,
     "fibre_g": 0.0,
     "sugars_g": 0.1,
+    "transFat_g": 1.44,
     "sodium_mg": 723.0,
     "potassium_mg": 75.0,
     "calcium_mg": 739.0,
@@ -307,6 +643,54 @@
    },
    "name": "Cheese, Cheddar, English"
   },
+  "12-360": {
+   "nutrients": {
+    "energy_kcal": 257.0,
+    "protein_g": 18.6,
+    "carbohydrate_g": 0,
+    "fat_g": 20.3,
+    "saturates_g": 13.75,
+    "fibre_g": 0.0,
+    "sugars_g": 0,
+    "transFat_g": 0.8,
+    "sodium_mg": 395.0,
+    "potassium_mg": 51.0,
+    "calcium_mg": 362.0,
+    "magnesium_mg": 15.0,
+    "iron_mg": 0,
+    "zinc_mg": 2.7,
+    "vitA_mcg": 283.0,
+    "vitD_mcg": 0.2,
+    "vitB12_mcg": 1.7,
+    "folate_mcg": 20.0,
+    "vitC_mg": 0
+   },
+   "name": "Cheese, Mozzarella, fresh"
+  },
+  "12-539": {
+   "nutrients": {
+    "energy_kcal": 103.0,
+    "protein_g": 9.4,
+    "carbohydrate_g": 3.1,
+    "fat_g": 6.0,
+    "saturates_g": 3.24,
+    "fibre_g": 0.0,
+    "sugars_g": 3.1,
+    "transFat_g": 0.29,
+    "sodium_mg": 250.0,
+    "potassium_mg": 161.0,
+    "calcium_mg": 127.0,
+    "magnesium_mg": 13.0,
+    "iron_mg": 0,
+    "zinc_mg": 0.6,
+    "vitA_mcg": 67.0,
+    "vitD_mcg": 0.0,
+    "vitB12_mcg": 0.6,
+    "folate_mcg": 22.0,
+    "vitC_mg": 0
+   },
+   "name": "Cheese, cottage, plain"
+  },
   "12-555": {
    "nutrients": {
     "energy_kcal": 133.0,
@@ -316,6 +700,7 @@
     "saturates_g": 6.75,
     "fibre_g": 0.0,
     "sugars_g": 4.5,
+    "transFat_g": 0.21,
     "sodium_mg": 66.0,
     "potassium_mg": 184.0,
     "calcium_mg": 126.0,
@@ -339,6 +724,7 @@
     "saturates_g": 2.52,
     "fibre_g": 0.0,
     "sugars_g": 0,
+    "transFat_g": 0.01,
     "sodium_mg": 154.0,
     "potassium_mg": 145.0,
     "calcium_mg": 46.0,
@@ -362,6 +748,7 @@
     "saturates_g": 2.7,
     "fibre_g": 0.0,
     "sugars_g": 0,
+    "transFat_g": 0.01,
     "sodium_mg": 150.0,
     "potassium_mg": 141.0,
     "calcium_mg": 55.0,
@@ -376,6 +763,74 @@
    },
    "name": "Eggs, chicken, whole, boiled"
   },
+  "13-089": {
+   "nutrients": {
+    "energy_kcal": 297.0,
+    "protein_g": 24.3,
+    "carbohydrate_g": 48.8,
+    "fat_g": 1.9,
+    "saturates_g": 0.2,
+    "sugars_g": 1.2,
+    "transFat_g": 0,
+    "sodium_mg": 12.0,
+    "potassium_mg": 940.0,
+    "calcium_mg": 71.0,
+    "magnesium_mg": 110.0,
+    "iron_mg": 11.1,
+    "zinc_mg": 3.9,
+    "vitD_mcg": 0.0,
+    "vitB12_mcg": 0.0,
+    "folate_mcg": 110.0,
+    "vitC_mg": 0
+   },
+   "name": "Lentils, green and brown, whole, dried, raw"
+  },
+  "13-244": {
+   "nutrients": {
+    "energy_kcal": 98.0,
+    "protein_g": 7.9,
+    "carbohydrate_g": 16.3,
+    "fat_g": 0.6,
+    "saturates_g": 0.1,
+    "sugars_g": 1.6,
+    "transFat_g": 0.0,
+    "sodium_mg": 4.0,
+    "potassium_mg": 620.0,
+    "calcium_mg": 19.0,
+    "magnesium_mg": 25.0,
+    "iron_mg": 1.9,
+    "zinc_mg": 1.0,
+    "vitA_mcg": 0,
+    "vitD_mcg": 0.0,
+    "vitB12_mcg": 0.0,
+    "folate_mcg": 5.0,
+    "vitC_mg": 17.0
+   },
+   "name": "Garlic, raw"
+  },
+  "13-463": {
+   "nutrients": {
+    "energy_kcal": 87.0,
+    "protein_g": 1.2,
+    "carbohydrate_g": 21.3,
+    "fat_g": 0.3,
+    "saturates_g": 0.1,
+    "sugars_g": 5.7,
+    "transFat_g": 0.0,
+    "sodium_mg": 40.0,
+    "potassium_mg": 370.0,
+    "calcium_mg": 24.0,
+    "magnesium_mg": 18.0,
+    "iron_mg": 0.7,
+    "zinc_mg": 0.3,
+    "vitA_mcg": 655.0,
+    "vitD_mcg": 0.0,
+    "vitB12_mcg": 0.0,
+    "folate_mcg": 17.0,
+    "vitC_mg": 23.0
+   },
+   "name": "Sweet potato, raw, flesh only"
+  },
   "13-489": {
    "nutrients": {
     "energy_kcal": 82.0,
@@ -385,6 +840,7 @@
     "saturates_g": 0.03,
     "fibre_g": 2.0,
     "sugars_g": 0.9,
+    "transFat_g": 0.0,
     "sodium_mg": 2.0,
     "potassium_mg": 443.0,
     "calcium_mg": 7.0,
@@ -408,6 +864,7 @@
     "saturates_g": 0.03,
     "fibre_g": 1.6,
     "sugars_g": 0.8,
+    "transFat_g": 0.0,
     "sodium_mg": 1.0,
     "potassium_mg": 365.0,
     "calcium_mg": 6.0,
@@ -431,6 +888,7 @@
     "saturates_g": 0.1,
     "fibre_g": 3.9,
     "sugars_g": 7.2,
+    "transFat_g": 0,
     "sodium_mg": 27.0,
     "potassium_mg": 178.0,
     "calcium_mg": 26.0,
@@ -454,6 +912,7 @@
     "saturates_g": 0.15,
     "fibre_g": 2.8,
     "sugars_g": 5.5,
+    "transFat_g": 0,
     "sodium_mg": 29.0,
     "potassium_mg": 166.0,
     "calcium_mg": 31.0,
@@ -477,6 +936,7 @@
     "saturates_g": 0,
     "fibre_g": 2.2,
     "sugars_g": 6.2,
+    "transFat_g": 0.0,
     "sodium_mg": 3.0,
     "potassium_mg": 138.0,
     "calcium_mg": 30.0,
@@ -500,6 +960,7 @@
     "saturates_g": 0,
     "fibre_g": 2.3,
     "sugars_g": 4.2,
+    "transFat_g": 0.0,
     "sodium_mg": 2.0,
     "potassium_mg": 105.0,
     "calcium_mg": 25.0,
@@ -523,6 +984,7 @@
     "saturates_g": 0.15,
     "fibre_g": 4.0,
     "sugars_g": 1.9,
+    "transFat_g": 0,
     "sodium_mg": 9.0,
     "potassium_mg": 397.0,
     "calcium_mg": 48.0,
@@ -546,6 +1008,7 @@
     "saturates_g": 0.12,
     "fibre_g": 2.8,
     "sugars_g": 1.6,
+    "transFat_g": 0,
     "sodium_mg": 6.0,
     "potassium_mg": 212.0,
     "calcium_mg": 35.0,
@@ -560,6 +1023,77 @@
    },
    "name": "Broccoli, green, boiled in unsalted water"
   },
+  "13-519": {
+   "nutrients": {
+    "energy_kcal": 22.0,
+    "protein_g": 1.1,
+    "carbohydrate_g": 3.6,
+    "fat_g": 0.5,
+    "saturates_g": 0.1,
+    "fibre_g": 1.3,
+    "sugars_g": 3.6,
+    "transFat_g": 0.0,
+    "sodium_mg": 4.0,
+    "potassium_mg": 274.0,
+    "calcium_mg": 10.0,
+    "magnesium_mg": 12.0,
+    "iron_mg": 0.34,
+    "zinc_mg": 0.2,
+    "vitA_mcg": 80.0,
+    "vitD_mcg": 0.0,
+    "vitB12_mcg": 0.0,
+    "folate_mcg": 24.0,
+    "vitC_mg": 15.0
+   },
+   "name": "Tomatoes, cherry, raw"
+  },
+  "13-520": {
+   "nutrients": {
+    "energy_kcal": 11.0,
+    "protein_g": 1.2,
+    "carbohydrate_g": 1.4,
+    "fat_g": 0.1,
+    "saturates_g": 0.03,
+    "fibre_g": 1.5,
+    "sugars_g": 1.4,
+    "transFat_g": 0.0,
+    "sodium_mg": 9.0,
+    "potassium_mg": 222.0,
+    "calcium_mg": 24.0,
+    "magnesium_mg": 9.0,
+    "iron_mg": 0.13,
+    "zinc_mg": 0.2,
+    "vitA_mcg": 10.0,
+    "vitD_mcg": 0.0,
+    "vitB12_mcg": 0.0,
+    "folate_mcg": 60.0,
+    "vitC_mg": 1.0
+   },
+   "name": "Lettuce, average, raw"
+  },
+  "13-523": {
+   "nutrients": {
+    "energy_kcal": 14.0,
+    "protein_g": 1.0,
+    "carbohydrate_g": 1.2,
+    "fat_g": 0.6,
+    "fibre_g": 0.7,
+    "sugars_g": 1.2,
+    "transFat_g": 0.0,
+    "sodium_mg": 4.0,
+    "potassium_mg": 156.0,
+    "calcium_mg": 21.0,
+    "magnesium_mg": 10.0,
+    "iron_mg": 0.3,
+    "zinc_mg": 0.1,
+    "vitA_mcg": 12.0,
+    "vitD_mcg": 0.0,
+    "vitB12_mcg": 0.0,
+    "folate_mcg": 14.0,
+    "vitC_mg": 2.0
+   },
+   "name": "Cucumber, raw, flesh and skin"
+  },
   "13-524": {
    "nutrients": {
     "energy_kcal": 21.0,
@@ -569,6 +1103,7 @@
     "saturates_g": 0.05,
     "fibre_g": 2.2,
     "sugars_g": 4.2,
+    "transFat_g": 0.0,
     "sodium_mg": 1.0,
     "potassium_mg": 216.0,
     "calcium_mg": 7.0,
@@ -592,6 +1127,7 @@
     "saturates_g": 0.03,
     "fibre_g": 2.4,
     "sugars_g": 3.3,
+    "transFat_g": 0.0,
     "sodium_mg": 0,
     "potassium_mg": 159.0,
     "calcium_mg": 7.0,
@@ -615,6 +1151,7 @@
     "saturates_g": 0.13,
     "fibre_g": 5.3,
     "sugars_g": 5.7,
+    "transFat_g": 0,
     "sodium_mg": 4.0,
     "potassium_mg": 171.0,
     "calcium_mg": 36.0,
@@ -629,6 +1166,30 @@
    },
    "name": "Peas, frozen, raw"
   },
+  "13-531": {
+   "nutrients": {
+    "energy_kcal": 67.0,
+    "protein_g": 4.4,
+    "carbohydrate_g": 12.9,
+    "fat_g": 0.2,
+    "saturates_g": 0.04,
+    "fibre_g": 4.7,
+    "sugars_g": 12.9,
+    "transFat_g": 0,
+    "sodium_mg": 49.0,
+    "potassium_mg": 1257.0,
+    "calcium_mg": 45.0,
+    "magnesium_mg": 57.0,
+    "iron_mg": 1.45,
+    "zinc_mg": 0.6,
+    "vitA_mcg": 292.0,
+    "vitD_mcg": 0.0,
+    "vitB12_mcg": 0.0,
+    "folate_mcg": 39.0,
+    "vitC_mg": 43.0
+   },
+   "name": "Tomato puree"
+  },
   "13-532": {
    "nutrients": {
     "energy_kcal": 81.0,
@@ -638,6 +1199,7 @@
     "saturates_g": 0.09,
     "fibre_g": 4.9,
     "sugars_g": 4.8,
+    "transFat_g": 0,
     "sodium_mg": 261.0,
     "potassium_mg": 272.0,
     "calcium_mg": 42.0,
@@ -661,6 +1223,7 @@
     "saturates_g": 0.14,
     "fibre_g": 5.5,
     "sugars_g": 5.9,
+    "transFat_g": 0,
     "sodium_mg": 4.0,
     "potassium_mg": 177.0,
     "calcium_mg": 37.0,
@@ -675,6 +1238,126 @@
    },
    "name": "Peas, frozen, boiled in unsalted water"
   },
+  "13-581": {
+   "nutrients": {
+    "energy_kcal": 17.0,
+    "protein_g": 1.1,
+    "carbohydrate_g": 2.8,
+    "fat_g": 0.2,
+    "saturates_g": 0.02,
+    "fibre_g": 2.2,
+    "sugars_g": 2.8,
+    "transFat_g": 0.0,
+    "sodium_mg": 5.0,
+    "potassium_mg": 172.0,
+    "calcium_mg": 47.0,
+    "magnesium_mg": 9.0,
+    "iron_mg": 0.34,
+    "zinc_mg": 0.1,
+    "vitA_mcg": 27.0,
+    "vitD_mcg": 0.0,
+    "vitB12_mcg": 0.0,
+    "folate_mcg": 38.0,
+    "vitC_mg": 32.0
+   },
+   "name": "Cabbage, average, boiled in unsalted water"
+  },
+  "13-582": {
+   "nutrients": {
+    "energy_kcal": 26.0,
+    "protein_g": 1.8,
+    "carbohydrate_g": 4.4,
+    "fat_g": 0.2,
+    "saturates_g": 0.02,
+    "fibre_g": 3.5,
+    "sugars_g": 4.4,
+    "transFat_g": 0.0,
+    "sodium_mg": 7.0,
+    "potassium_mg": 258.0,
+    "calcium_mg": 56.0,
+    "magnesium_mg": 13.0,
+    "iron_mg": 0.45,
+    "zinc_mg": 0.2,
+    "vitA_mcg": 38.0,
+    "vitD_mcg": 0.0,
+    "vitB12_mcg": 0.0,
+    "folate_mcg": 65.0,
+    "vitC_mg": 48.0
+   },
+   "name": "Cabbage, average, raw"
+  },
+  "13-627": {
+   "nutrients": {
+    "energy_kcal": 16.0,
+    "protein_g": 1.3,
+    "carbohydrate_g": 2.3,
+    "fat_g": 0.2,
+    "saturates_g": 0.05,
+    "fibre_g": 0.5,
+    "sugars_g": 2.2,
+    "transFat_g": 0.0,
+    "sodium_mg": 0,
+    "potassium_mg": 341.0,
+    "calcium_mg": 27.0,
+    "magnesium_mg": 24.0,
+    "iron_mg": 0.42,
+    "zinc_mg": 0.3,
+    "vitA_mcg": 33.0,
+    "vitD_mcg": 0.0,
+    "vitB12_mcg": 0.0,
+    "folate_mcg": 34.0,
+    "vitC_mg": 5.0
+   },
+   "name": "Courgette, raw"
+  },
+  "13-628": {
+   "nutrients": {
+    "energy_kcal": 15.0,
+    "protein_g": 1.3,
+    "carbohydrate_g": 1.8,
+    "fat_g": 0.3,
+    "saturates_g": 0.08,
+    "fibre_g": 0.8,
+    "sugars_g": 1.7,
+    "transFat_g": 0.0,
+    "sodium_mg": 0,
+    "potassium_mg": 238.0,
+    "calcium_mg": 22.0,
+    "magnesium_mg": 16.0,
+    "iron_mg": 0.37,
+    "zinc_mg": 0.2,
+    "vitA_mcg": 32.5,
+    "vitD_mcg": 0.0,
+    "vitB12_mcg": 0.0,
+    "folate_mcg": 20.6,
+    "vitC_mg": 1.0
+   },
+   "name": "Courgette, boiled in unsalted water"
+  },
+  "13-646": {
+   "nutrients": {
+    "energy_kcal": 58.0,
+    "protein_g": 1.7,
+    "carbohydrate_g": 13.0,
+    "fat_g": 0.2,
+    "saturates_g": 0.07,
+    "fibre_g": 2.7,
+    "sugars_g": 9.4,
+    "transFat_g": 0.0,
+    "sodium_mg": 37.0,
+    "potassium_mg": 375.0,
+    "calcium_mg": 58.0,
+    "magnesium_mg": 20.0,
+    "iron_mg": 0.53,
+    "zinc_mg": 0.3,
+    "vitA_mcg": 927.0,
+    "vitD_mcg": 0.0,
+    "vitB12_mcg": 0.0,
+    "folate_mcg": 6.0,
+    "vitC_mg": 3.0
+   },
+   "name": "Sweet potato, flesh only, boiled in unsalted water"
+  },
   "13-660": {
    "nutrients": {
     "energy_kcal": 100.0,
@@ -684,6 +1367,7 @@
     "saturates_g": 0.2,
     "fibre_g": 6.8,
     "sugars_g": 0.8,
+    "transFat_g": 0,
     "sodium_mg": 0,
     "potassium_mg": 366.0,
     "calcium_mg": 38.0,
@@ -698,6 +1382,30 @@
    },
    "name": "Beans, red kidney, canned in water, re-heated, drained"
   },
+  "13-661": {
+   "nutrients": {
+    "energy_kcal": 92.0,
+    "protein_g": 7.8,
+    "carbohydrate_g": 14.5,
+    "fat_g": 0.7,
+    "saturates_g": 0.1,
+    "fibre_g": 7.4,
+    "sugars_g": 0.2,
+    "transFat_g": 0,
+    "sodium_mg": 0,
+    "potassium_mg": 202.0,
+    "calcium_mg": 21.0,
+    "magnesium_mg": 25.0,
+    "iron_mg": 2.11,
+    "zinc_mg": 0.79,
+    "vitA_mcg": 0,
+    "vitD_mcg": 0.0,
+    "vitB12_mcg": 0.0,
+    "folate_mcg": 152.0,
+    "vitC_mg": 0
+   },
+   "name": "Lentils, green and brown, whole, dried, boiled in unsalted water"
+  },
   "13-666": {
    "nutrients": {
     "energy_kcal": 104.0,
@@ -707,6 +1415,7 @@
     "saturates_g": 0.27,
     "fibre_g": 6.8,
     "sugars_g": 0.7,
+    "transFat_g": 0,
     "sodium_mg": 7.0,
     "potassium_mg": 299.0,
     "calcium_mg": 93.0,
@@ -720,6 +1429,126 @@
    },
    "name": "Beans, cannellini, canned, re-heated, drained"
   },
+  "13-670": {
+   "nutrients": {
+    "energy_kcal": 129.0,
+    "protein_g": 8.4,
+    "carbohydrate_g": 18.3,
+    "fat_g": 3.0,
+    "saturates_g": 0.29,
+    "fibre_g": 7.1,
+    "sugars_g": 0.7,
+    "transFat_g": 0,
+    "sodium_mg": 1.0,
+    "potassium_mg": 281.0,
+    "calcium_mg": 48.0,
+    "magnesium_mg": 44.0,
+    "iron_mg": 1.9,
+    "zinc_mg": 1.13,
+    "vitA_mcg": 4.0,
+    "vitD_mcg": 0.0,
+    "vitB12_mcg": 0.0,
+    "folate_mcg": 35.0,
+    "vitC_mg": 0
+   },
+   "name": "Beans, chick peas, canned, re-heated, drained"
+  },
+  "14-319": {
+   "nutrients": {
+    "energy_kcal": 51.0,
+    "protein_g": 0.6,
+    "carbohydrate_g": 11.6,
+    "fat_g": 0.5,
+    "saturates_g": 0.12,
+    "fibre_g": 1.2,
+    "sugars_g": 11.6,
+    "transFat_g": 0.0,
+    "sodium_mg": 1.0,
+    "potassium_mg": 100.0,
+    "calcium_mg": 5.0,
+    "magnesium_mg": 4.0,
+    "iron_mg": 0.09,
+    "zinc_mg": 0,
+    "vitA_mcg": 2.0,
+    "vitD_mcg": 0.0,
+    "vitB12_mcg": 0.0,
+    "folate_mcg": 0,
+    "vitC_mg": 6.0
+   },
+   "name": "Apples, eating, raw, flesh and skin"
+  },
+  "14-324": {
+   "nutrients": {
+    "energy_kcal": 30.0,
+    "protein_g": 0.6,
+    "carbohydrate_g": 6.1,
+    "fat_g": 0.5,
+    "saturates_g": 0.04,
+    "fibre_g": 3.8,
+    "sugars_g": 6.1,
+    "transFat_g": 0.0,
+    "sodium_mg": 1.0,
+    "potassium_mg": 170.0,
+    "calcium_mg": 17.0,
+    "magnesium_mg": 12.0,
+    "iron_mg": 0.25,
+    "zinc_mg": 0.1,
+    "vitA_mcg": 0,
+    "vitD_mcg": 0.0,
+    "vitB12_mcg": 0.0,
+    "folate_mcg": 61.0,
+    "vitC_mg": 57.0
+   },
+   "name": "Strawberries, raw"
+  },
+  "14-325": {
+   "nutrients": {
+    "energy_kcal": 40.0,
+    "protein_g": 0.9,
+    "carbohydrate_g": 9.1,
+    "fat_g": 0.2,
+    "saturates_g": 0.02,
+    "fibre_g": 1.5,
+    "sugars_g": 9.1,
+    "transFat_g": 0.0,
+    "sodium_mg": 2.0,
+    "potassium_mg": 66.0,
+    "calcium_mg": 10.0,
+    "magnesium_mg": 5.0,
+    "iron_mg": 0.55,
+    "zinc_mg": 0.1,
+    "vitA_mcg": 2.0,
+    "vitD_mcg": 0.0,
+    "vitB12_mcg": 0.0,
+    "folate_mcg": 8.0,
+    "vitC_mg": 6.0
+   },
+   "name": "Blueberries"
+  },
+  "14-327": {
+   "nutrients": {
+    "energy_kcal": 36.0,
+    "protein_g": 0.8,
+    "carbohydrate_g": 8.2,
+    "fat_g": 0.2,
+    "saturates_g": 0.05,
+    "fibre_g": 1.2,
+    "sugars_g": 8.2,
+    "transFat_g": 0.0,
+    "sodium_mg": 1.0,
+    "potassium_mg": 122.0,
+    "calcium_mg": 24.0,
+    "magnesium_mg": 8.0,
+    "iron_mg": 0.11,
+    "zinc_mg": 0,
+    "vitA_mcg": 9.0,
+    "vitD_mcg": 0.0,
+    "vitB12_mcg": 0.0,
+    "folate_mcg": 33.0,
+    "vitC_mg": 52.0
+   },
+   "name": "Oranges, flesh only"
+  },
   "14-347": {
    "nutrients": {
     "energy_kcal": 51.0,
@@ -729,6 +1558,7 @@
     "saturates_g": 0.03,
     "fibre_g": 0.9,
     "sugars_g": 11.4,
+    "transFat_g": 0.0,
     "sodium_mg": 0,
     "potassium_mg": 208.0,
     "calcium_mg": 4.0,
@@ -743,6 +1573,54 @@
    },
    "name": "Bananas, raw, flesh only, weighed with skin"
   },
+  "14-350": {
+   "nutrients": {
+    "energy_kcal": 65.0,
+    "protein_g": 0.7,
+    "carbohydrate_g": 16.1,
+    "fat_g": 0.2,
+    "saturates_g": 0.06,
+    "fibre_g": 1.3,
+    "sugars_g": 16.1,
+    "transFat_g": 0.0,
+    "sodium_mg": 1.0,
+    "potassium_mg": 215.0,
+    "calcium_mg": 10.0,
+    "magnesium_mg": 7.0,
+    "iron_mg": 0.23,
+    "zinc_mg": 0,
+    "vitA_mcg": 1.0,
+    "vitD_mcg": 0.0,
+    "vitB12_mcg": 0.0,
+    "folate_mcg": 6.0,
+    "vitC_mg": 2.0
+   },
+   "name": "Grapes, average"
+  },
+  "14-386": {
+   "nutrients": {
+    "energy_kcal": 171.0,
+    "protein_g": 1.8,
+    "carbohydrate_g": 1.8,
+    "fat_g": 17.4,
+    "saturates_g": 4.15,
+    "fibre_g": 3.1,
+    "sugars_g": 0.4,
+    "transFat_g": 0.0,
+    "sodium_mg": 7.0,
+    "potassium_mg": 583.0,
+    "calcium_mg": 19.0,
+    "magnesium_mg": 27.0,
+    "iron_mg": 0.51,
+    "zinc_mg": 0.6,
+    "vitA_mcg": 3.0,
+    "vitD_mcg": 0.0,
+    "vitB12_mcg": 0.0,
+    "folate_mcg": 31.0,
+    "vitC_mg": 1.0
+   },
+   "name": "Avocado, Hass, flesh only"
+  },
   "14-892": {
    "nutrients": {
     "energy_kcal": 607.0,
@@ -752,6 +1630,7 @@
     "saturates_g": 12.78,
     "fibre_g": 6.6,
     "sugars_g": 6.7,
+    "transFat_g": 0,
     "sodium_mg": 350.0,
     "potassium_mg": 700.0,
     "calcium_mg": 37.0,
@@ -766,6 +1645,30 @@
    },
    "name": "Peanut butter, smooth"
   },
+  "14-896": {
+   "nutrients": {
+    "energy_kcal": 554.0,
+    "protein_g": 21.2,
+    "carbohydrate_g": 5.3,
+    "fat_g": 49.9,
+    "saturates_g": 3.8,
+    "fibre_g": 12.5,
+    "sugars_g": 4.5,
+    "transFat_g": 0.02,
+    "sodium_mg": 1.0,
+    "potassium_mg": 733.0,
+    "calcium_mg": 269.0,
+    "magnesium_mg": 270.0,
+    "iron_mg": 3.71,
+    "zinc_mg": 3.1,
+    "vitA_mcg": 0,
+    "vitD_mcg": 0.0,
+    "vitB12_mcg": 0.0,
+    "folate_mcg": 44.0,
+    "vitC_mg": 0.0
+   },
+   "name": "Almonds, whole kernels"
+  },
   "16-356": {
    "nutrients": {
     "energy_kcal": 217.0,
@@ -775,6 +1678,7 @@
     "saturates_g": 2.77,
     "fibre_g": 0.2,
     "sugars_g": 0.0,
+    "transFat_g": 0,
     "sodium_mg": 43.0,
     "potassium_mg": 357.0,
     "calcium_mg": 10.0,
@@ -789,6 +1693,78 @@
    },
    "name": "Salmon, farmed, flesh only, raw"
   },
+  "16-373": {
+   "nutrients": {
+    "energy_kcal": 100.0,
+    "protein_g": 23.9,
+    "carbohydrate_g": 0.0,
+    "fat_g": 0.5,
+    "saturates_g": 0.12,
+    "fibre_g": 0.0,
+    "sugars_g": 0.0,
+    "transFat_g": 0,
+    "sodium_mg": 91.0,
+    "potassium_mg": 367.0,
+    "calcium_mg": 18.0,
+    "magnesium_mg": 30.0,
+    "iron_mg": 0.15,
+    "zinc_mg": 0.6,
+    "vitA_mcg": 2.0,
+    "vitD_mcg": 0,
+    "vitB12_mcg": 1.9,
+    "folate_mcg": 8.0,
+    "vitC_mg": 0
+   },
+   "name": "Cod, flesh only, baked"
+  },
+  "16-384": {
+   "nutrients": {
+    "energy_kcal": 70.0,
+    "protein_g": 15.4,
+    "carbohydrate_g": 0.0,
+    "fat_g": 0.9,
+    "saturates_g": 0.15,
+    "fibre_g": 0.0,
+    "sugars_g": 0.0,
+    "transFat_g": 0,
+    "sodium_mg": 588.0,
+    "potassium_mg": 74.0,
+    "calcium_mg": 65.0,
+    "magnesium_mg": 36.0,
+    "iron_mg": 1.0,
+    "zinc_mg": 1.0,
+    "vitA_mcg": 0,
+    "vitD_mcg": 0,
+    "vitB12_mcg": 2.3,
+    "folate_mcg": 10.0,
+    "vitC_mg": 0
+   },
+   "name": "Prawns, standard, purchased cooked"
+  },
+  "16-387": {
+   "nutrients": {
+    "energy_kcal": 77.0,
+    "protein_g": 17.6,
+    "carbohydrate_g": 0.0,
+    "fat_g": 0.7,
+    "saturates_g": 0.17,
+    "fibre_g": 0.0,
+    "sugars_g": 0.0,
+    "transFat_g": 0,
+    "sodium_mg": 215.0,
+    "potassium_mg": 126.0,
+    "calcium_mg": 44.0,
+    "magnesium_mg": 28.0,
+    "iron_mg": 0.7,
+    "zinc_mg": 1.2,
+    "vitA_mcg": 0,
+    "vitD_mcg": 0,
+    "vitB12_mcg": 1.3,
+    "folate_mcg": 11.0,
+    "vitC_mg": 0
+   },
+   "name": "Prawns, king, raw"
+  },
   "16-416": {
    "nutrients": {
     "energy_kcal": 109.0,
@@ -798,6 +1774,7 @@
     "saturates_g": 0.3,
     "fibre_g": 0.0,
     "sugars_g": 0.0,
+    "transFat_g": 0,
     "sodium_mg": 293.0,
     "potassium_mg": 230.0,
     "calcium_mg": 10.0,
@@ -812,6 +1789,76 @@
    },
    "name": "Tuna, canned in brine, drained"
   },
+  "17-038": {
+   "nutrients": {
+    "energy_kcal": 899.0,
+    "protein_g": 0,
+    "carbohydrate_g": 0.0,
+    "fat_g": 99.9,
+    "saturates_g": 14.3,
+    "fibre_g": 0.0,
+    "sugars_g": 0.0,
+    "transFat_g": 0,
+    "sodium_mg": 0,
+    "potassium_mg": 0,
+    "calcium_mg": 0,
+    "magnesium_mg": 0,
+    "iron_mg": 0.4,
+    "zinc_mg": 0,
+    "vitD_mcg": 0.0,
+    "vitB12_mcg": 0.0,
+    "folate_mcg": 0,
+    "vitC_mg": 0.0
+   },
+   "name": "Oil, olive"
+  },
+  "17-050": {
+   "nutrients": {
+    "energy_kcal": 288.0,
+    "protein_g": 0.4,
+    "carbohydrate_g": 76.4,
+    "fat_g": 0.0,
+    "saturates_g": 0.0,
+    "fibre_g": 0.0,
+    "sugars_g": 76.4,
+    "transFat_g": 0.0,
+    "sodium_mg": 11.0,
+    "potassium_mg": 51.0,
+    "calcium_mg": 5.0,
+    "magnesium_mg": 2.0,
+    "iron_mg": 0.4,
+    "zinc_mg": 0.9,
+    "vitA_mcg": 0.0,
+    "vitD_mcg": 0.0,
+    "vitB12_mcg": 0.0,
+    "vitC_mg": 0.0
+   },
+   "name": "Honey"
+  },
+  "17-654": {
+   "nutrients": {
+    "energy_kcal": 686.0,
+    "protein_g": 1.1,
+    "carbohydrate_g": 2.4,
+    "fat_g": 74.8,
+    "saturates_g": 5.65,
+    "fibre_g": 0.0,
+    "sugars_g": 2.4,
+    "transFat_g": 0.04,
+    "sodium_mg": 131.0,
+    "potassium_mg": 4.0,
+    "calcium_mg": 2.0,
+    "magnesium_mg": 0,
+    "iron_mg": 0.16,
+    "zinc_mg": 0.1,
+    "vitA_mcg": 78.0,
+    "vitD_mcg": 0,
+    "vitB12_mcg": 0.3,
+    "folate_mcg": 9.0,
+    "vitC_mg": 0
+   },
+   "name": "Mayonnaise, standard, retail"
+  },
   "17-667": {
    "nutrients": {
     "energy_kcal": 131.0,
@@ -821,6 +1868,7 @@
     "saturates_g": 5.04,
     "fibre_g": 0.3,
     "sugars_g": 5.1,
+    "transFat_g": 0.29,
     "sodium_mg": 100.0,
     "potassium_mg": 183.0,
     "calcium_mg": 137.0,
@@ -834,6 +1882,54 @@
     "vitC_mg": 1.0
    },
    "name": "White sauce, savoury, made with semi-skimmed milk, homemade"
+  },
+  "17-709": {
+   "nutrients": {
+    "energy_kcal": 115.0,
+    "protein_g": 1.6,
+    "carbohydrate_g": 28.6,
+    "fat_g": 0.1,
+    "saturates_g": 0,
+    "fibre_g": 0.9,
+    "sugars_g": 27.5,
+    "transFat_g": 0,
+    "sodium_mg": 800.0,
+    "potassium_mg": 350.0,
+    "calcium_mg": 13.0,
+    "magnesium_mg": 19.0,
+    "iron_mg": 0.3,
+    "zinc_mg": 0.1,
+    "vitA_mcg": 79.0,
+    "vitD_mcg": 0.0,
+    "vitB12_mcg": 0.0,
+    "folate_mcg": 1.0,
+    "vitC_mg": 2.0
+   },
+   "name": "Tomato ketchup"
+  },
+  "17-721": {
+   "nutrients": {
+    "energy_kcal": 79.0,
+    "protein_g": 3.0,
+    "carbohydrate_g": 17.9,
+    "fat_g": 0,
+    "saturates_g": 0.0,
+    "fibre_g": 0,
+    "sugars_g": 16.4,
+    "transFat_g": 0.0,
+    "sodium_mg": 5500.0,
+    "potassium_mg": 180.0,
+    "calcium_mg": 17.0,
+    "magnesium_mg": 37.0,
+    "iron_mg": 2.4,
+    "zinc_mg": 0.2,
+    "vitA_mcg": 0.0,
+    "vitD_mcg": 0.0,
+    "vitB12_mcg": 0.0,
+    "folate_mcg": 11.0,
+    "vitC_mg": 0.0
+   },
+   "name": "Soy sauce, light and dark varieties"
   },
   "17-725": {
    "nutrients": {
@@ -866,6 +1962,7 @@
     "saturates_g": 0.3,
     "fibre_g": 0.0,
     "sugars_g": 0.0,
+    "transFat_g": 0.01,
     "sodium_mg": 60.0,
     "potassium_mg": 370.0,
     "calcium_mg": 5.0,
@@ -889,6 +1986,7 @@
     "saturates_g": 1.02,
     "fibre_g": 0.0,
     "sugars_g": 0.0,
+    "transFat_g": 0.05,
     "sodium_mg": 60.0,
     "potassium_mg": 360.0,
     "calcium_mg": 7.0,
@@ -912,6 +2010,7 @@
     "saturates_g": 2.1,
     "fibre_g": 0.0,
     "sugars_g": 0.0,
+    "transFat_g": 0.1,
     "sodium_mg": 80.0,
     "potassium_mg": 330.0,
     "calcium_mg": 11.0,
@@ -935,6 +2034,7 @@
     "saturates_g": 6.94,
     "fibre_g": 0.0,
     "sugars_g": 0.0,
+    "transFat_g": 0.81,
     "sodium_mg": 80.0,
     "potassium_mg": 260.0,
     "calcium_mg": 9.0,
@@ -948,6 +2048,101 @@
     "vitC_mg": 0.0
    },
    "name": "Beef, mince, raw"
+  },
+  "18-481": {
+   "nutrients": {
+    "energy_kcal": 196.0,
+    "protein_g": 19.1,
+    "carbohydrate_g": 0.0,
+    "fat_g": 13.3,
+    "saturates_g": 6.2,
+    "fibre_g": 0.0,
+    "sugars_g": 0.0,
+    "transFat_g": 1.1,
+    "sodium_mg": 69.0,
+    "potassium_mg": 310.0,
+    "calcium_mg": 17.0,
+    "magnesium_mg": 21.0,
+    "iron_mg": 1.6,
+    "zinc_mg": 3.5,
+    "vitA_mcg": 5.0,
+    "vitD_mcg": 0.8,
+    "vitB12_mcg": 2.0,
+    "folate_mcg": 2.0,
+    "vitC_mg": 0.0
+   },
+   "name": "Lamb, mince, raw"
+  },
+  "18-606": {
+   "nutrients": {
+    "energy_kcal": 164.0,
+    "protein_g": 19.2,
+    "carbohydrate_g": 0.0,
+    "fat_g": 9.7,
+    "saturates_g": 3.57,
+    "sugars_g": 0.0,
+    "transFat_g": 0.04,
+    "sodium_mg": 66.0,
+    "potassium_mg": 390.0,
+    "calcium_mg": 7.0,
+    "magnesium_mg": 20.0,
+    "iron_mg": 0.9,
+    "zinc_mg": 2.4,
+    "vitA_mcg": 0,
+    "vitD_mcg": 0.8,
+    "vitB12_mcg": 0.5,
+    "folate_mcg": 2.0,
+    "vitC_mg": 0.0
+   },
+   "name": "Pork, mince, raw"
+  },
+  "19-500": {
+   "nutrients": {
+    "energy_kcal": 287.0,
+    "protein_g": 23.2,
+    "carbohydrate_g": 0.0,
+    "fat_g": 21.6,
+    "saturates_g": 8.1,
+    "fibre_g": 0.0,
+    "sugars_g": 0.0,
+    "transFat_g": 0.01,
+    "sodium_mg": 1390.0,
+    "potassium_mg": 340.0,
+    "calcium_mg": 7.0,
+    "magnesium_mg": 21.0,
+    "iron_mg": 0.6,
+    "zinc_mg": 1.7,
+    "vitA_mcg": 0,
+    "vitD_mcg": 0.6,
+    "vitB12_mcg": 1.0,
+    "folate_mcg": 5.0,
+    "vitC_mg": 0
+   },
+   "name": "Bacon rashers, back, grilled"
+  },
+  "19-509": {
+   "nutrients": {
+    "energy_kcal": 294.0,
+    "protein_g": 14.5,
+    "carbohydrate_g": 9.8,
+    "fat_g": 22.1,
+    "saturates_g": 8.0,
+    "fibre_g": 2.3,
+    "sugars_g": 1.5,
+    "transFat_g": 0.1,
+    "sodium_mg": 640.0,
+    "potassium_mg": 190.0,
+    "calcium_mg": 110.0,
+    "magnesium_mg": 15.0,
+    "iron_mg": 1.1,
+    "zinc_mg": 1.4,
+    "vitA_mcg": 0,
+    "vitD_mcg": 1.1,
+    "vitB12_mcg": 1.0,
+    "folate_mcg": 4.0,
+    "vitC_mg": 5.0
+   },
+   "name": "Sausages, pork, chilled, grilled"
   },
   "19-516": {
    "nutrients": {

@@ -977,6 +977,8 @@ assert.equal((await call("GET", "/today", "a")).body.water, 3); // /today untouc
   assert.deepEqual([x.nutrients.protein_g, x.unconfirmed], [{ value: 21, basis: "estimate", sources: ["A", "B"] }, ["iron_mg"]]);
   assert.equal(cc(["A", { iron_mg: 1 }], ["B", { iron_mg: 1.3 }]).nutrients.iron_mg.value, 1.15);
   assert.deepEqual(cc(["A", { protein_g: 10 }]).nutrients, {});
+  x = cc(["A", { addedSugars_g: 10, transFat_g: 0.5 }], ["B", { addedSugars_g: 11 }]);
+  assert.deepEqual([x.nutrients.addedSugars_g.value, x.nutrients.transFat_g, x.unconfirmed], [10.5, undefined, ["transFat_g"]]);
   assert.deepEqual(cc(["A", { protein_g: 10 }], ["a", { protein_g: 10 }]).nutrients, {});
   x = cc(["A", { protein_g: 10 }], ["B", { protein_g: 30 }], ["C", { protein_g: 31 }]);
   assert.deepEqual(x.nutrients.protein_g.sources, ["B", "C"]);
@@ -1005,8 +1007,8 @@ assert.equal((await call("GET", "/today", "a")).body.water, 3); // /today untouc
   assert.ok(kv.get("pantry") === pb && kv.get("activity") === ab);
   r = await A({ entries: [eat("w1", "2 waffles")] });
   res = r.body.results[0];
-  assert.deepEqual([res.status, res.count, res.grams, res.gramsEstimate, res.pantry.after, res.matched.kind], ["logged", 2, 70, true, "4each", "none"]);
-  assert.deepEqual([res.nutrients, res.unconfirmed.includes("protein_g")], [{}, true]);
+  assert.deepEqual([res.status, res.count, res.grams, res.gramsEstimate, res.pantry.after, res.matched.kind], ["logged", 2, 70, true, "4each", "cofid"]);
+  assert.deepEqual([!!res.nutrients.protein_g, res.unconfirmed.includes("addedSugars_g")], [true, true]); // waffle mapped in Phase 107; free sugars stay unknown
   r = await A({ entries: [eat("g1", "30g glycine"), eat("g2", "60g glycine")] });
   assert.deepEqual([r.body.results[0].pantry.after, r.body.results[1].pantry.after], ["20g", "0g"]);
   const logLen = () => JSON.parse(kv.get("foodLog")).entries.length;

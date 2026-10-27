@@ -9,7 +9,8 @@ N = "{http://schemas.openxmlformats.org/spreadsheetml/2006/main}"
 # sheet name -> { CoFID column code (row 2 of the sheet): planner key }
 SHEETS = {
     "1.3 Proximates": {"KCALS": "energy_kcal", "PROT": "protein_g", "CHO": "carbohydrate_g", "FAT": "fat_g",
-                       "SATFOD": "saturates_g", "AOACFIB": "fibre_g", "TOTSUG": "sugars_g"},
+                       "SATFOD": "saturates_g", "AOACFIB": "fibre_g", "TOTSUG": "sugars_g",
+                       "FODTRANS": "transFat_g"},  # no free-sugars column in the 2021 xlsx: addedSugars_g stays unknown,
     "1.4 Inorganics": {"NA": "sodium_mg", "K": "potassium_mg", "CA": "calcium_mg", "MG": "magnesium_mg",
                        "FE": "iron_mg", "ZN": "zinc_mg"},
     "1.5 Vitamins": {"RETEQU": "vitA_mcg", "VITD": "vitD_mcg", "VITB12": "vitB12_mcg", "FOLT": "folate_mcg", "VITC": "vitC_mg"},
