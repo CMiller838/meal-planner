@@ -95,6 +95,7 @@ them to score days/meals, don't hardcode magic numbers inline in JS):
 - Protein: 160 g/day (existing hard target — keep as-is, already high)
 - Carbohydrate: ~350 g/day
 - Fat: ~95 g/day (saturates capped ~30 g/day)
+- Sugars: capped ~90 g/day total sugars incl. fruit and milk (Phase 106; free-sugar guidance is 30 g)
 - Fibre: 35 g/day
 - Vitamin A: 900 mcg
 - Vitamin C: 90 mg

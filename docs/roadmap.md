@@ -160,7 +160,7 @@ the offer, not a second freezer path.
 
 Verified: check.py 10/10 (test.html 105 cases, worker_test, bridge test, ui pages PC/phone both themes, ui walk freeze step); tester PASS.
 
-## Phase 106: Eaten, by nutrient [M] — not started
+## Phase 106: Eaten, by nutrient [M] — built 2026-10-27, live checks pending
 
 Goal: one easy view (an "Eaten" tab, today and the week, PC and phone) showing what has actually been eaten against target, for
 what the data already measures: calories, protein, carbs, fat, fibre, total sugars, saturated fat, sodium, calcium, iron,

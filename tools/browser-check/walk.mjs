@@ -87,6 +87,17 @@ for (const [vp, size] of Object.entries({ pc: { width: 1440, height: 900 }, phon
     await page.waitForSelector('#shopping-root .shop-line', { timeout: 10000 });
     await shot('shopping');
   });
+  await step('eaten: seeded food log shows a measured row, Week toggle works', async () => {
+    await page.goto(`${base}/eaten.html`);
+    await page.evaluate(() => localStorage.setItem('mp_foodLog', JSON.stringify({ entries: [{ id: 'w1', kind: 'eat', name: 'Walk bar', when: new Date().toISOString(), nutrients: { protein_g: { value: 12, basis: 'label' }, sodium_mg: { value: 9999, basis: 'label' } } }] })));
+    await page.goto(`${base}/eaten.html`);
+    await page.waitForSelector('.eaten-row[data-key="protein_g"] .eaten-chip.measured', { timeout: 10000 });
+    if (!(await page.locator('.eaten-row[data-key="sodium_mg"]').getAttribute('class')).includes('over')) throw new Error('sodium cap not flagged over');
+    if (!/unknown/.test(await page.locator('.eaten-row[data-key="zinc_mg"] .eaten-val').textContent())) throw new Error('zinc should be unknown');
+    await page.click('[data-mode="week"]');
+    await page.waitForSelector('.eaten-row[data-key="protein_g"] .eaten-chip.measured');
+    await shot('eaten');
+  });
   await step('pantry: tab, scan sheet check-digit error, manual product saves and lists with est.', async () => {
     await page.goto(`${base}/shopping.html#pantry`);
     await page.waitForSelector('#panel-pantry:not(.hidden) #scan-btn');

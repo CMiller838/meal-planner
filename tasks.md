@@ -969,6 +969,10 @@ Spec: `.claude/specs/phase105.md` (planned batches via `place.freezeFrom`, cooke
 
 ## Phase 106: Eaten, by nutrient
 - Spec: .claude/specs/phase106.md
+- [x] Logic: targets JSON (`sugars_g_cap`, `healthUrl`), SPEC line, `mealAmounts`/`entryAmounts`/`rollUp`/`weekRollUp` with test.html cases
+- [x] UI: `eaten.html` + `eaten.js`, nav links, `sw.js` SHELL + `CACHE` v98, `walk.mjs` Eaten step, CLAUDE.md invariant
+- [ ] Live: confirm the 90 g total-sugars cap is the number you want.
+- [ ] Live: give the nutrition assistant's health page URL (set `healthUrl` in `nutrition-targets.json`), then check the link opens it.
 
 ## Phase 107: More measured foods and added sugars
 - Spec: `.claude/specs/phase107.md` [M]

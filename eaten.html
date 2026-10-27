@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Meal Planner — Eaten</title>
+<meta name="theme-color" content="#121212" />
+<link rel="manifest" href="manifest.json" />
+<link rel="icon" href="icons/icon-192.png" />
+<link rel="apple-touch-icon" href="icons/icon-192.png" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="Meals" />
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+<nav class="nav">
+  <span class="brand">🍽 Meal Planner</span>
+  <div class="nav-links hscroll">
+    <a href="index.html">Browse & Add</a>
+    <a href="discover.html">Discover</a>
+    <a href="plan.html">2-Week Plan</a>
+    <a href="shopping.html">Shopping</a>
+    <a href="eaten.html" class="active">Eaten</a>
+  </div>
+  <button id="theme-toggle" class="icon-btn" title="Toggle dark/light mode">🌓</button>
+</nav>
+
+<main>
+  <h1>Eaten, by nutrient</h1>
+  <div id="eaten-root"></div>
+</main>
+
+<script src="data.js"></script>
+<script src="prefs.js"></script>
+<script src="nutrition.js"></script>
+<script src="shopping-list.js"></script>
+<script src="products.js"></script>
+<script src="hermes-sync.js"></script>
+<script src="ate-box.js"></script>
+<script src="eaten.js"></script>
+<script>if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js");</script>
+</body>
+</html>

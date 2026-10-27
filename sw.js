@@ -1,7 +1,7 @@
 // Minimal service worker: satisfies Chrome's PWA installability requirement
 // (registered SW with a fetch handler) and caches the static shell so the
 // app opens offline. No build step, so the cache list is just the files.
-const CACHE = "meal-planner-v97";
+const CACHE = "meal-planner-v98";
 const SHELL = [
   "./",
   "index.html",
@@ -9,6 +9,8 @@ const SHELL = [
   "plan.html",
   "plan-with-me.html",
   "shopping.html",
+  "eaten.html",
+  "eaten.js",
   "ate-box.js",
   "style.css",
   "data.js",

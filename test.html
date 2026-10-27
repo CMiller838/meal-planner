@@ -16,6 +16,7 @@
 <script src="shopping-list.js"></script>
 <script src="hermes-sync.js"></script>
 <script src="ate-box.js"></script>
+<script src="eaten.js"></script>
 <script src="products.js"></script>
 <script src="exclusions.js"></script>
 <script src="mealdb.js"></script>
@@ -3829,6 +3830,38 @@
     check("102: eatMeal with no matching slot logs only, plan untouched", e2.ticked === null && localStorage.getItem("mp_plan") === before);
     MP.Sync.logPortion = orig;
     keep.plan === null ? localStorage.removeItem("mp_plan") : localStorage.setItem("mp_plan", keep.plan);
+  }
+
+
+  { // Phase 106: Eaten, by nutrient
+    const E = MP.Eaten, SL = MP.ShoppingList;
+    const cofid = { map: { chicken_breast: { default: "c" }, white_bread: { default: "b" } }, foods: { c: { nutrients: { protein_g: 30, energy_kcal: 150 } }, b: { nutrients: { protein_g: 8 } } } };
+    const ig = { white_bread: 36 };
+    const ma = (m) => E.mealAmounts(m, cofid, ig, SL.parseQty, SL.normalizeKey);
+    const a = ma({ servings: 1, ingredients: [{ key: "chicken_breast", qty: "200g" }, { key: "white_bread", qty: "2 slices" }, { key: "chicken_breast", qty: "1 handful" }, { key: "mystery", qty: "100g" }] });
+    check("106: mealAmounts grams/100 x CoFID + slices via itemGrams", Math.abs(a.per.protein_g.value - (60 + 0.72 * 8)) < 1e-9 && a.per.protein_g.basis === "estimate");
+    check("106: mealAmounts handful and unmapped lower share", a.share === 0.5);
+    check("106: mealAmounts missing nutrient stays absent", a.per.energy_kcal.value === 300 && !("fat_g" in a.per));
+    const h = ma({ servings: 2, ingredients: [{ key: "chicken_breast", qty: "200g" }] });
+    check("106: mealAmounts servings halves", h.per.protein_g.value === 30);
+    const ctx = { byId: { m1: { id: "m1", servings: 1, ingredients: [{ key: "chicken_breast", qty: "100g" }] } }, cofid, itemGrams: ig, parseQty: SL.parseQty, normalizeKey: SL.normalizeKey, targets: { protein_g: 160, sodium_mg_cap: 100 } };
+    const fl = (n) => ({ id: "f", kind: "eat", when: "x", nutrients: n });
+    check("106: entryAmounts food-log keeps basis", E.entryAmounts(fl({ protein_g: { value: 5, basis: "label" } }), ctx).per.protein_g.basis === "label");
+    check("106: entryAmounts salt -> sodium x400", E.entryAmounts(fl({ salt_g: { value: 2.5, basis: "off" } }), ctx).per.sodium_mg.value === 1000);
+    check("106: entryAmounts sodium beats salt", E.entryAmounts(fl({ salt_g: { value: 2.5, basis: "off" }, sodium_mg: { value: 7, basis: "off" } }), ctx).per.sodium_mg.value === 7);
+    const orph = E.entryAmounts({ mealId: "gone" }, ctx);
+    check("106: orphan planned entry share 0, no amounts", orph.share === 0 && !Object.keys(orph.per).length);
+    const r = E.rollUp([{ mealId: "m1" }, fl({ protein_g: { value: 10, basis: "label" } }), fl({ fat_g: { value: 1, basis: "label" } })], ctx);
+    const row = (res, k) => res.rows.find((x) => x.key === k);
+    check("106: rollUp sums contributors, one item unknown", row(r, "protein_g").value === 40 && row(r, "protein_g").unknownItems === 1);
+    check("106: rollUp no contributor = null (not 0)", row(r, "zinc_mg").value === null);
+    check("106: rollUp basis estimate with a planned contributor, measured otherwise", row(r, "protein_g").basis === "estimate" && row(r, "fat_g").basis === "measured");
+    const ro = E.rollUp([fl({ sodium_mg: { value: 150, basis: "label" } })], ctx);
+    check("106: rollUp cap over past target", row(ro, "sodium_mg").over === true && row(r, "sodium_mg").over === false);
+    check("106: rollUp empty day has share 0", E.rollUp([], ctx).share === 0);
+    const w = E.weekRollUp({ "2026-01-01": [fl({ protein_g: { value: 100, basis: "label" } })], "2026-01-02": [], "2026-01-03": [fl({ protein_g: { value: 50, basis: "label" } })] }, { ...ctx, today: "2026-01-03", gymTargets: { protein_g: 180 } });
+    check("106: weekRollUp averages logged days, lists notLogged", row(w, "protein_g").value === 75 && w.notLogged.join() === "2026-01-02" && w.loggedDays.length === 2);
+    check("106: weekRollUp gym uplift on today only", row(w, "protein_g").target === 170);
   }
 
   lines.push("", `${pass} passed, ${fail} failed`);

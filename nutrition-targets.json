@@ -5,6 +5,7 @@
   "carbohydrate_g": 350,
   "fat_g": 95,
   "saturates_g_cap": 30,
+  "sugars_g_cap": 90,
   "fibre_g": 35,
   "vitA_mcg": 900,
   "vitC_mg": 90,
@@ -17,5 +18,6 @@
   "magnesium_mg": 350,
   "potassium_mg": 3800,
   "sodium_mg_cap": 2300,
+  "healthUrl": "",
   "gymDay": { "protein_g": 20, "energy_kcal": 300, "carbohydrate_g": 50 }
 }

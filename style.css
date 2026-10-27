@@ -1054,3 +1054,20 @@ body:has(.modal-overlay:not(.hidden)) .ate-bar, body.chat-open .ate-bar { displa
 .ate-msg button { background: none; border: none; color: var(--accent); font-weight: 700; margin-left: .75rem; cursor: pointer; }
 @media (prefers-reduced-motion: reduce) { .ate-list, .ate-recents { animation: none; } }
 body.has-ate-bar .toast { bottom: calc(5rem + env(safe-area-inset-bottom)); }
+/* Phase 106: Eaten page */
+.eaten-tabs { display: flex; gap: .5rem; flex-wrap: wrap; align-items: center; margin-bottom: .5rem; }
+.eaten-list { list-style: none; margin: .5rem 0; padding: 0; display: grid; gap: .6rem; }
+.eaten-row { background: var(--surface); border-radius: var(--radius); padding: .6rem .8rem; animation: today-in .25s ease-out; }
+.eaten-top { display: flex; flex-wrap: wrap; gap: .5rem; align-items: baseline; }
+.eaten-top strong { flex: 1 1 auto; }
+.eaten-bar { height: .5rem; border-radius: .25rem; background: var(--surface-alt); margin: .35rem 0; overflow: hidden; }
+.eaten-bar i { display: block; height: 100%; background: var(--accent-2); border-radius: inherit; transition: width var(--motion-base) ease-out; }
+.eaten-row.over .eaten-bar i { background: var(--danger); }
+.eaten-row.over .eaten-val { color: var(--danger); font-weight: 700; }
+.eaten-row.unknown { opacity: .75; }
+.eaten-chip { font-size: .75rem; padding: .1rem .45rem; border-radius: calc(var(--radius) / 2); background: color-mix(in srgb, currentColor 10%, transparent); }
+.eaten-chip.estimate { color: var(--butter); }
+.eaten-chip.measured { color: var(--accent-2); }
+.eaten-sub { font-size: .8rem; }
+.eaten-water { margin-top: .8rem; }
+@media (prefers-reduced-motion: reduce) { .eaten-row { animation: none; } .eaten-bar i { transition: none; } }
