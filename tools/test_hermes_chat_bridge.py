@@ -13,7 +13,13 @@ import hermes_chat_bridge as b
 # parse_reply
 assert b.parse_reply('{"text":"hi","edits":[{"type":"busy","day":2}],"ask":false}')["edits"] == [{"type": "busy", "day": 2}]
 assert b.parse_reply('thinking {not json} ... {"text":"ok","edits":[],"ask":true}\n')["ask"] is True
-assert b.parse_reply("total garbage") == b.FALLBACK and b.parse_reply("") == b.FALLBACK
+assert b.parse_reply("   ") == b.FALLBACK and b.parse_reply("") == b.FALLBACK and b.parse_reply(None) == b.FALLBACK  # prose alone is now a valid reply
+# Phase 94: prose + fenced edits block
+r = b.parse_reply("Swapped it.\n```edits\n[{\"type\":\"busy\",\"day\":2}]\n```\nask: true\nsession_id: 2026_x\n")
+assert r == {"text": "Swapped it.", "edits": [{"type": "busy", "day": 2}], "ask": True}, r
+assert b.parse_reply("Just chatting, {with braces}.") == {"text": "Just chatting, {with braces}.", "edits": [], "ask": False}
+assert b.parse_reply("Hm.\n```edits\n[oops\n```")["edits"] == [] and b.parse_reply("x\n```edits\n{\"a\":1}\n```")["edits"] == []
+assert b.parse_reply("\nsession_id: abc\n") == b.FALLBACK
 # build_prompt
 msgs = [{"id": i, "from": "user" if i % 2 else "hermes", "text": f"msg{i}"} for i in range(1, 20)]
 p = b.build_prompt(msgs, {"day": 3, "gaps": ["iron"]})
@@ -25,6 +31,8 @@ assert "ONE question" not in p and "Never name" not in p and "rejected" in b.bui
 pb = b.build_prompt(msgs, {}, brief={"meals": [{"id": "x"}]}, spend={"weeks": {}})
 assert '"meals":[{"id":"x"}]' in pb and "Spend so far" in pb and "Briefing" in pb and "Briefing" not in p
 assert b.brief_of([{"open": True, "context": {"brief": {"a": 1}}}]) == {"a": 1} and b.brief_of([{"text": "x"}]) is None
+pr = b.build_prompt(msgs, {"day": 2}, brief={"a": 1}, resumed=True, send_brief=False)
+assert pr == 'Context: {"day": 2}\nUser: msg19' and "Briefing" in b.build_prompt(msgs, {}, brief={"a": 1}, resumed=True)
 # poll_interval
 now = datetime.now(timezone.utc)
 iso = lambda d: (now - d).isoformat()
@@ -79,5 +87,24 @@ posted.clear(); state["thread"]["openAt"] = None
 assert b.run_once(base, "t", resp, set())[1] == 0 and not posted
 assert state["spendCalls"] == 1, state  # spend fetched once per session, not per answer
 prompts.unlink(missing_ok=True)
+# Phase 94: session responder reuses one name per chat, briefing sent once unless it changes
+calls = []
+real_run = b.run
+b.run = lambda responder, prompt, session=None: calls.append((session, prompt)) or "Fine.\n```edits\n[]\n```"
+sresp = b.shlex.split(b.SESSION_RESPONDER)
+b.SENT.clear()
+H1 = [{"id": 1, "from": "user", "text": "hi", "open": True}, {"id": 3, "from": "user", "text": "next"}]
+for m, br in ((H1[0], {"v": 1}), (H1[1], {"v": 1}), (H1[1], {"v": 2})):
+    b.ask(sresp, "mp-s1", H1, {}, bool(m.get("open")), br, None)
+b.ask(sresp, "mp-s2", H1, {}, True, {"v": 1}, None)
+assert [c[0] for c in calls] == ["mp-s1"] * 3 + ["mp-s2"]
+assert "You are Hermes" in calls[0][1] and '"v":1' in calls[0][1]
+assert "You are Hermes" not in calls[1][1] and "Briefing" not in calls[1][1] and "User: next" in calls[1][1]
+assert '"v":2' in calls[2][1] and "You are Hermes" not in calls[2][1] and "You are Hermes" in calls[3][1]
+# resume fails -> one-shot responder with the full prompt
+calls.clear(); b.SENT["mp-s1"] = "x"
+b.run = lambda responder, prompt, session=None: calls.append((session, prompt)) or (None if session else "ok")
+assert b.ask(sresp, "mp-s1", H1, {}, False, {"v": 1}, None)["text"] == "ok" and "You are Hermes" in calls[-1][1] and "mp-s1" not in b.SENT
+b.run = real_run
 srv.shutdown()
 print("hermes_chat_bridge: ok")

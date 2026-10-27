@@ -69,7 +69,9 @@ assistant side only), fridge mode (Phase 90b), eating out, swaps and backfill (P
 Browse (Phase 92). Kept fixed: exclusions, allergies and `never` stay enforced in code; Hermes never writes the pantry; nothing
 applies unseen except the existing direct `place`. Order is by usefulness; 100 builds with or after 99.
 
-## Phase 94: Hermes talks like Hermes [S] — not started
+## Phase 94: Hermes talks like Hermes [S] — built 2026-10-27, live checks pending
+
+Verified 2026-10-27: real CLI resume probe (named session remembers), bridge self-test (prose, edits block, old JSON, session reuse, briefing hash, fallback), tester PASS. Empty/noise-only reply = FALLBACK; any other prose is valid.
 
 Goal: (a) the bridge resumes one Hermes session per chat (the Hermes CLI has `--continue`/`--resume`) instead of a fresh
 `hermes -z` per message, so it keeps its own memory and voice, falling back to today's pasted history if resume fails; and

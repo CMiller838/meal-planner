@@ -2,13 +2,16 @@
 """Planning-chat bridge (Phase 72): makes Hermes answer the app's chat. Stdlib only, runs on the PC.
 
 `python3 tools/hermes_chat_bridge.py [--once] [--responder "cmd {prompt}"]`. Polls GET /chat on the Worker, runs the
-responder once per unanswered user message (default `hermes -z "<prompt>" chat`, an argv list, no shell) and posts the
+responder once per unanswered user message (default: one named Hermes session per chat, `hermes chat -c mp-<session> --create-if-missing -Q -q`, so it keeps
+its own memory; falls back to the one-shot `hermes -z`, an argv list, no shell) and posts the
 reply to POST /chat/reply. Reads MP_WORKER_URL and MP_AUTH_TOKEN from the environment or ./.env.
 Phase 88: Hermes talks freely, reads the app's briefing (the open message's context.brief) every turn, may place meals
 itself and may propose new or changed meals (the user confirms those); the Worker validates every reply.
 """
 import argparse
+import hashlib
 import json
+import re
 import shlex
 import subprocess
 import sys
@@ -24,6 +27,8 @@ POLL_IDLE = 10
 ACTIVE_WINDOW = 600
 HISTORY = 30
 RESPONDER_TIMEOUT = 120
+SESSION_RESPONDER = "hermes chat -c {session} --create-if-missing -Q -q {prompt}"
+ONESHOT_RESPONDER = "hermes -z {prompt} chat"
 FALLBACK = {"text": "Sorry, could you say that another way?", "edits": [], "ask": False}
 GIVE_UP = {"text": "I didn't follow, could you put it another way?", "edits": [], "ask": False}
 EDIT_TYPES = """Edit types (day is 1-14, slot is breakfast|lunch|dinner|snack):
@@ -52,17 +57,35 @@ def poll_interval(open_at, now=None):
     return POLL_ACTIVE if age < ACTIVE_WINDOW else POLL_IDLE
 
 
+FENCE = re.compile(r"```edits[ \t]*\n?(.*?)```", re.S)
+ASK = re.compile(r"^[ \t]*ask:[ \t]*true[ \t]*$", re.M | re.I)
+NOISE = re.compile(r"^(session_id:.*|\u21bb Resumed session.*|Session .* found but has no messages.*)$", re.M)
+
+
 def parse_reply(out):
-    """The last {...} JSON object in the responder's stdout; anything else -> the 'say that another way' fallback."""
-    dec = json.JSONDecoder()
-    for i in reversed([i for i, ch in enumerate(out or "") if ch == "{"]):
+    """Prose, then an optional ```edits [json]``` block and an `ask: true` line. The old single JSON object is still
+    accepted; an empty reply -> the 'say that another way' fallback."""
+    out = NOISE.sub("", out or "")
+    blocks = FENCE.findall(out)
+    if not blocks:
+        dec = json.JSONDecoder()
+        for i in reversed([i for i, ch in enumerate(out) if ch == "{"]):
+            try:
+                obj, _ = dec.raw_decode(out[i:])
+            except ValueError:
+                continue
+            if isinstance(obj, dict) and ("text" in obj or "edits" in obj):
+                return {"text": str(obj.get("text", "")), "edits": obj.get("edits") if isinstance(obj.get("edits"), list) else [], "ask": obj.get("ask") is True}
+    edits = []
+    if blocks:
         try:
-            obj, _ = dec.raw_decode(out[i:])
+            got = json.loads(blocks[-1])
+            edits = got if isinstance(got, list) else []
         except ValueError:
-            continue
-        if isinstance(obj, dict) and ("text" in obj or "edits" in obj):
-            return {"text": str(obj.get("text", "")), "edits": obj.get("edits") if isinstance(obj.get("edits"), list) else [], "ask": obj.get("ask") is True}
-    return dict(FALLBACK)
+            pass
+    ask = bool(ASK.search(out))
+    text = ASK.sub("", FENCE.sub("", out)).strip()
+    return {"text": text, "edits": edits, "ask": ask} if text or edits else dict(FALLBACK)
 
 
 def brief_of(messages):
@@ -73,7 +96,19 @@ def brief_of(messages):
     return None
 
 
-def build_prompt(messages, context, opener=False, strict=False, brief=None, spend=None):
+def build_prompt(messages, context, opener=False, strict=False, brief=None, spend=None, resumed=False, send_brief=True):
+    """resumed = Hermes already holds the rules and history in its session: send only what is new."""
+    if resumed:
+        lines = ["Reply the same way as before: prose, then an optional ```edits block."] if strict else []
+        if strict:
+            lines.append("Your last edits were rejected: use only the edit types and fields exactly as listed before.")
+        if brief and send_brief:
+            lines.append("Briefing (updated): " + json.dumps(brief, separators=(",", ":")))
+            if spend:
+                lines.append("Spend so far: " + json.dumps(spend, separators=(",", ":")))
+        lines.append("Context: " + json.dumps(context or {}))
+        lines += [f'User: {m["text"]}' for m in [m for m in messages if m.get("text")][-1:] if m["from"] == "user"]
+        return "\n".join(lines)
     lines = [
         "You are Hermes, talking with the user as yourself, in your own voice: the way you'd talk over their shoulder while they look at the plan on screen."
         " Natural, warm, conversational; short plain sentences. No bullet lists, headings, bold, menus of options or 'I can help with...' lines, no chatbot filler."
@@ -88,7 +123,8 @@ def build_prompt(messages, context, opener=False, strict=False, brief=None, spen
         EDIT_TYPES,
         "Shop once a week (briefing shopDays). Use the briefing's cooks (freezer first) before buying anything, propose bulk buys from its bulk list only,"
         " when two options are equal on nutrition pick the cheaper one quietly, and plan batch cooks with leftover and freezer chains.",
-        'Reply with ONLY one JSON object: {"text":"your reply","edits":[...],"ask":false}. "ask":true only closes a tie-break card; edits apply whatever it says.',
+        "Reply in ordinary prose, as you'd say it. Only when you are changing the plan, end with a fenced block: ```edits\\n[json array of the edits above]\\n``` (never mention the block in the prose)."
+        " Add a line `ask: true` only to close a tie-break card; edits apply whatever it says.",
     ]
     if brief and brief.get("mode") == "fridge":
         lines.append(
@@ -121,12 +157,33 @@ def call(base, token, method, path, body=None):
         return e.code, None
 
 
-def ask(responder, prompt):
-    argv = [prompt if a == "{prompt}" else a.replace("{prompt}", prompt) for a in responder]
+def run(responder, prompt, session=None):
+    argv = [a.replace("{prompt}", prompt).replace("{session}", session or "") for a in responder]
     try:
-        return parse_reply(subprocess.run(argv, capture_output=True, text=True, timeout=RESPONDER_TIMEOUT).stdout)
+        r = subprocess.run(argv, capture_output=True, text=True, timeout=RESPONDER_TIMEOUT)
     except (OSError, subprocess.TimeoutExpired):
-        return dict(FALLBACK)
+        return None
+    return r.stdout if r.returncode == 0 and r.stdout.strip() else None
+
+
+SENT = {}  # session name -> hash of the briefing last sent to it
+
+
+def ask(responder, session, messages, context, opener, brief, spend, strict=False):
+    """One reply. A session responder ({session} in its argv) resumes Hermes's own memory: only the new message goes
+    (the briefing only when it changed); if that call fails, the full prompt with the last HISTORY lines goes to the one-shot responder."""
+    kw = {"opener": opener, "strict": strict, "brief": brief, "spend": spend}
+    if any("{session}" in a for a in responder):
+        h = hashlib.sha1(json.dumps(brief, sort_keys=True).encode()).hexdigest()
+        known = session in SENT
+        out = run(responder, build_prompt(messages, context, **kw, resumed=known, send_brief=SENT.get(session) != h), session)
+        if out is not None:
+            SENT[session] = h
+            return parse_reply(out)
+        SENT.pop(session, None)
+        responder = shlex.split(ONESHOT_RESPONDER)
+    out = run(responder, build_prompt(messages, context, **kw))
+    return parse_reply(out) if out is not None else dict(FALLBACK)
 
 
 SPEND = {}  # session -> GET /spend, fetched once per chat session
@@ -146,11 +203,12 @@ def answer(base, token, responder, thread, msg):
     post = lambda rep: (call(base, token, "POST", "/chat/reply", {"session": thread["session"], "replyTo": msg["id"], **rep}) or (0, None))[1] or {}
     brief = brief_of(thread["messages"])
     spend = spend_for(base, token, thread["session"]) if brief else None
-    kw = {"brief": brief, "spend": spend}
-    rep = ask(responder, build_prompt(history, msg.get("context"), opener, **kw))
+    name = "mp-" + str(thread["session"])
+    kw = (name, history, msg.get("context"), opener, brief, spend)
+    rep = ask(responder, *kw)
     got = post(rep)
     if got.get("dropped"):
-        rep = ask(responder, build_prompt(history, msg.get("context"), opener, strict=True, **kw))
+        rep = ask(responder, *kw, strict=True)
         got = post(rep)
         if got.get("dropped") and got["dropped"] >= len(rep["edits"]):
             post(GIVE_UP)
@@ -171,7 +229,7 @@ def run_once(base, token, responder, done):
 def main(argv):
     ap = argparse.ArgumentParser()
     ap.add_argument("--once", action="store_true")
-    ap.add_argument("--responder", default='hermes -z {prompt} chat')
+    ap.add_argument("--responder", default=SESSION_RESPONDER)
     a = ap.parse_args(argv)
     base, token = env("MP_WORKER_URL"), env("MP_AUTH_TOKEN")
     if not (base and token):
