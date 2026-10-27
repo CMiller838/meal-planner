@@ -2828,6 +2828,18 @@
       }
     });
     document.getElementById("unlock-btn").addEventListener("click", unlockAll);
+    document.getElementById("restore-btn").addEventListener("click", async () => {
+      const mirror = await MP.Sync.fetchPlanMirror();
+      if (!mirror) { toast("No plan on the Hermes server (or it's unreachable)"); return; }
+      if (!confirm(`Replace your current plan with the one Hermes holds (${mirror.days.length} days from ${mirror.startDate})? Undo is available right after.`)) return;
+      MP.Plan.snapshot(plan);
+      plan = mirror;
+      if (rollIfDue()) applyHints(plan.startDate);
+      openLeftoverCooks(plan, library);
+      savePlan();
+      renderPlan();
+      toast("Restored the plan from Hermes", { label: "Undo", fn: () => { const p = MP.Plan.restore(); if (p) { plan = p; renderPlan(); toast("Back to before the restore"); } } });
+    });
     document.getElementById("useup-btn").addEventListener("click", () => {
       const today = new Date().toLocaleDateString("en-CA");
       const items = MP.ShoppingList.useUpItems(MP.Sync.localItems("pantry"), plan, today, shelfData);
