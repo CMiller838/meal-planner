@@ -26,6 +26,8 @@ p = b.build_prompt(msgs, {"day": 3, "gaps": ["iron"]})
 assert all(t in p for t in ("busy", "noCook", "chip", "budget", "lock", "unlock", "reroll", "place", "cap", "rate", "bulk", "cookId", "freezer first", '"type":"note"', "standing preferences")) and '"iron"' in p
 pf = b.build_prompt([], {}, brief={"mode": "fridge", "window": [3, 6]})
 assert "FRIDGE MODE" in pf and "[3, 6]" in pf and '"stock"' in pf and "FRIDGE MODE" not in b.build_prompt([], {}, brief={"a": 1})
+pn = b.build_prompt([], {}, brief={"a": 1}, opener=True)
+assert "stock" in pn and "leftover" in pn and "any chat" in pn and "fridge mode only" not in pn and "what's already cooked" in pn
 assert "msg19" in p and "msg1:" not in p and b.HISTORY == 30  # last 30 (all 19 here)
 assert "ONE question" not in p and "Never name" not in p and "rejected" in b.build_prompt([], {}, strict=True)
 pb = b.build_prompt(msgs, {}, brief={"meals": [{"id": "x"}]}, spend={"weeks": {}})

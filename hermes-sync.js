@@ -324,6 +324,7 @@ window.MP = window.MP || {};
           if (slot.variantId) slots[slotType].variantId = slot.variantId;
           if (Number.isInteger(slot.frozenFrom)) slots[slotType].frozenFrom = slot.frozenFrom;
           if (typeof slot.fromCook === "string" && slot.fromCook) slots[slotType].fromCook = slot.fromCook;
+          if (slot.leftover === true) { slots[slotType].leftover = true; if (Number.isInteger(slot.leftoverPortions)) slots[slotType].leftoverPortions = slot.leftoverPortions; }
           if (slot.subs && slot.subs.length) slots[slotType].subs = slot.subs;
           if (slot.locked) slots[slotType].locked = true;
         }

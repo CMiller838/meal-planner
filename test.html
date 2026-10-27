@@ -3183,6 +3183,23 @@
       res = put(1, "dinner", "p"); // 2026-09-07 is a Monday (weekday 1), cap 30, meal 60
       check("placeSlots: over-cap is placed with a soft note", res.changes.length === 1 && /over your 30 min cap/.test(res.notes[0]) && put(3, "dinner", "p").notes.length === 0);
       check("placeSlots: hard terms refuse", MP.placeSlots(pl, [{ day: 1, slot: "dinner", mealId: "e" }], byId, { ...ctx, terms: ["rice"] }).refused.length === 1);
+      { // Phase 95: leftover place
+        const lv = (extra) => MP.placeSlots(pl, [{ day: 3, slot: "dinner", mealId: "b", ...extra }], byId, ctx);
+        const lr = lv({ leftover: true, portions: 3 });
+        check("placeSlots: leftover flags the slot, skips the orphan check, pure", !lr.refused.length && lr.plan.days[2].slots.dinner.leftover === true && lr.plan.days[2].slots.dinner.leftoverPortions === 3 && JSON.stringify(pl) === snapP);
+        check("placeSlots: leftover+cookId, portions alone, non-boolean leftover refused", lv({ leftover: true, cookId: "x" }).refused.length === 1 && lv({ portions: 2 }).refused.length === 1 && lv({ leftover: "yes" }).refused.length === 1);
+        const lk = (e) => PC.validateReply({ text: "", edits: [e] }, vocab, "2026-01-01").reply.edits;
+        const base = { type: "place", day: 1, slot: "dinner", mealId: "m1" };
+        check("validateReply: place keeps leftover+portions, drops bad ones", lk({ ...base, leftover: true, portions: 4 })[0].portions === 4 && lk({ ...base, leftover: true })[0].leftover === true
+          && [{ portions: 2 }, { leftover: "yes" }, { leftover: true, portions: 0 }, { leftover: true, portions: 13 }, { leftover: true, portions: 1.5 }, { leftover: true, cookId: "c" }].every((x) => lk({ ...base, ...x }).length === 0));
+        check("describe: leftover place reads back", PC.describe([{ ...base, leftover: true, portions: 2 }], "2026-09-07").includes("already cooked, 2 portions"));
+        check("planMirror: carries leftover slot", MP.Sync.planMirror(lr.plan).days[2].slots.dinner.leftover === true && MP.Sync.planMirror(lr.plan).days[2].slots.dinner.leftoverPortions === 3);
+        const lib = [{ id: "b", name: "B", mealTypes: ["dinner"], servings: 1, ingredients: [] }], p1 = JSON.parse(JSON.stringify(lr.plan)), n0 = MP.Cooks.all().length;
+        check("openLeftoverCooks: Exit path (no call) leaves Cooks alone", MP.Cooks.all().length === n0);
+        MP.Plan.openLeftoverCooks(p1, lib); MP.Plan.openLeftoverCooks(p1, lib);
+        check("openLeftoverCooks: one record, idempotent", MP.Cooks.all().length === n0 + 1);
+        MP.Cooks.all().slice(n0).forEach((r) => MP.Cooks.discard && MP.Cooks.discard(r.id));
+      }
       { // Phase 90b: fridge notes, stock, window
         const fr = (w, have) => ({ ...ctx, fridge: { window: w, have } }), run = (day, id, c) => MP.placeSlots(pl, [{ day, slot: "dinner", mealId: id }], byId, c);
         const byId2 = { ...byId, s: meal("s", { ingredients: [{ key: "rice", qty: "1" }, { key: "leftover_chilli", qty: "1" }, { key: "gravy", qty: "from roast" }] }) };

@@ -2777,6 +2777,7 @@
     $("chat-wrap-overlay").classList.add("hidden");
     closeChat();
     chat = null;
+    openLeftoverCooks(plan, library); // Phase 95: chat leftover places become Cooks records on Save only
     savePlan();
     renderPlan();
     toast("Plan saved");

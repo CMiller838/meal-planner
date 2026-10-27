@@ -78,7 +78,7 @@ Goal: (a) the bridge resumes one Hermes session per chat (the Hermes CLI has `--
 (b) replies are ordinary prose with the edits in a separate fenced block the bridge strips and validates (same
 `validateReply`), removing the one-JSON-object constraint that makes it sound like a chatbot.
 
-## Phase 95: Kitchen-first opener [M] — not started
+## Phase 95: Kitchen-first opener [M] — built 2026-10-27, live checks pending
 
 Goal: the first turn asks what is cooked, left and in the cupboard, turns the answer into `stock` and leftover placements
 (Phase 93), and plans around it in every chat, not only fridge mode. Stock stays session-only; the pantry is untouched.

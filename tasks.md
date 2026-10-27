@@ -896,7 +896,7 @@ No spec ([S]); all in `tools/hermes_chat_bridge.py` + `tools/test_hermes_chat_br
 - [ ] Live: restart the bridge, open Plan with Hermes, chat for 4-5 turns: replies read as plain sentences, Hermes remembers an earlier turn without the 30-line history, and a "swap Tuesday's dinner" request still applies its edit.
 
 ## Phase 95: Kitchen-first opener
-- [ ] Spec [M]: `.claude/specs/phase95.md`
+- [x] Spec [M]: `.claude/specs/phase95.md`
 - [ ] Live: open Plan with Hermes with no fridge mode, answer "I cooked chilli, 3 portions left, and I have eggs and rice": Hermes sends stock + a leftover place, Save, then Leftovers shows 3 portions and the list drops the chilli ingredients
 
 ## Phase 96: Remember my reactions

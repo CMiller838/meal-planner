@@ -80,7 +80,8 @@
     mealRemove: (e) => mealId(e) && { type: "mealRemove", mealId: e.mealId },
     // Phase 88: Hermes places a chosen meal; the app checks it (MP.placeSlots). cap/rate are prefs and rating edits.
     place: (e) => isDay(e.day) && isSlot(e.slot) && mealId(e) && (e.variantId === undefined || str(e.variantId, 80)) && (e.cookId === undefined || str(e.cookId, 120))
-      && { type: "place", day: e.day, slot: e.slot, mealId: e.mealId, ...(e.variantId ? { variantId: str(e.variantId, 80) } : {}), ...(e.cookId ? { cookId: str(e.cookId, 120) } : {}) },
+      && (e.leftover === undefined || e.leftover === true) && (e.portions === undefined || (e.leftover === true && Number.isInteger(e.portions) && e.portions >= 1 && e.portions <= 12)) && !(e.leftover && e.cookId)
+      && { type: "place", day: e.day, slot: e.slot, mealId: e.mealId, ...(e.variantId ? { variantId: str(e.variantId, 80) } : {}), ...(e.cookId ? { cookId: str(e.cookId, 120) } : {}), ...(e.leftover ? { leftover: true, ...(e.portions ? { portions: e.portions } : {}) } : {}) },
     // Phase 90a: a bulk-buy proposal; the app recomputes the numbers and shows a card (Accept writes plan.bulk).
     bulk: (e) => str(e.key, 60) && Number.isInteger(e.shopDay) && e.shopDay >= -6 && e.shopDay <= 28 && { type: "bulk", key: str(e.key, 60), shopDay: e.shopDay },
     // Phase 90b: what the user says is left in the fridge; session-only in the app (chat.stock), never the pantry.
@@ -180,7 +181,7 @@
       else if (e.type === "mealCreate") parts.push(`new meal: ${e.name}`);
       else if (e.type === "mealEdit") parts.push(`changed meal ${e.mealId}`);
       else if (e.type === "mealRemove") parts.push(`removed meal ${e.mealId}`);
-      else if (e.type === "place") parts.push(`${name(e.day)} ${e.slot}: ${e.mealId} placed${e.cookId ? " from the freezer/fridge" : ""}`);
+      else if (e.type === "place") parts.push(`${name(e.day)} ${e.slot}: ${e.mealId} placed${e.cookId ? " from the freezer/fridge" : ""}${e.leftover ? ` (already cooked, ${e.portions || 1} portion${(e.portions || 1) === 1 ? "" : "s"})` : ""}`);
       else if (e.type === "bulk") parts.push(`bulk buy: ${e.key.replace(/-/g, " ")} on shop ${e.shopDay}`);
       else if (e.type === "cap") parts.push(e.minutes ? `${e.weekdays.map((w) => WEEKDAYS[w]).join("/")}: cooking capped at ${e.minutes} min` : `${e.weekdays.map((w) => WEEKDAYS[w]).join("/")}: time cap cleared`);
       else if (e.type === "stock") parts.push(`you have ${e.items.map((i) => i.name).join(", ")}`);

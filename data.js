@@ -413,6 +413,9 @@
       const chk = mx ? mx.check(m, c.terms || []) : { ok: true, reasons: [] };
       if (!chk.ok) { no(chk.reasons.join(", ")); continue; }
       if (c.ratings && c.ratings[m.id] && c.ratings[m.id].never) { no("rated never"); continue; }
+      if (p.leftover !== undefined && p.leftover !== true) { no("leftover must be true"); continue; }
+      if (p.leftover && p.cookId) { no("leftover can't also be a cook"); continue; }
+      if (p.portions !== undefined && !p.leftover) { no("portions need leftover"); continue; }
       let cookRec = null;
       if (p.cookId) {
         if (!["dinner", "lunch"].includes(p.slot)) { no("a cook can only fill lunch or dinner"); continue; }
@@ -426,12 +429,13 @@
         if (slotDate) slotDate.setUTCDate(slotDate.getUTCDate() + p.day - 1);
         if (eatBy && slotDate && slotDate.toISOString().slice(0, 10) > eatBy) { no(`past its eat-by (${eatBy})`); continue; }
       }
-      if (!cookRec && m.leftoverOf) {
+      if (!cookRec && !p.leftover && m.leftoverOf) {
         const ok = cur.days.some((d) => d.day < p.day && p.day - d.day <= fridge && d.slots.dinner && d.slots.dinner.mealId === m.leftoverOf);
         if (!ok) { no("no cook of its parent dinner in the days before"); continue; }
       }
       const slotValue = { mealId: m.id };
       if (cookRec) slotValue.fromCook = cookRec.id;
+      if (p.leftover) { slotValue.leftover = true; slotValue.leftoverPortions = Number.isInteger(p.portions) && p.portions >= 1 && p.portions <= 12 ? p.portions : 1; }
       if (p.variantId && findVariant(m, p.variantId)) slotValue.variantId = p.variantId;
       cur.days[p.day - 1].slots[p.slot] = slotValue;
       const mins = m.totalMins || estMins(m), wd = cur.startDate ? new Date(`${cur.startDate}T12:00:00Z`) : null;

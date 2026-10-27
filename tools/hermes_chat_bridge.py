@@ -32,9 +32,9 @@ ONESHOT_RESPONDER = "hermes -z {prompt} chat"
 FALLBACK = {"text": "Sorry, could you say that another way?", "edits": [], "ask": False}
 GIVE_UP = {"text": "I didn't follow, could you put it another way?", "edits": [], "ask": False}
 EDIT_TYPES = """Edit types (day is 1-14, slot is breakfast|lunch|dinner|snack):
-  {"type":"place","day":N,"slot":S,"mealId":ID,"variantId":ID,"cookId":ID}  (puts a library meal in a slot; cookId = a briefing "cooks" entry for that meal, eaten from the freezer/fridge, buys nothing; the app refuses a held slot, wrong slot type, hard exclusions, "never" meals, orphan leftovers)
+  {"type":"place","day":N,"slot":S,"mealId":ID,"variantId":ID,"cookId":ID,"leftover":true,"portions":1-12}  (puts a library meal in a slot; leftover+portions = the user already cooked it and N portions are in the fridge, buys nothing, not with cookId; cookId = a briefing "cooks" entry for that meal, eaten from the freezer/fridge, buys nothing; the app refuses a held slot, wrong slot type, hard exclusions, "never" meals, orphan leftovers)
   {"type":"bulk","key":"<a briefing bulk key>","shopDay":N}  (proposes a bulk buy from the briefing's "bulk" list only; the user accepts on a card, max 5)
-  {"type":"stock","items":[{"name":"<=60 chars","qty":"<=30 chars"}]}  (fridge mode only: the user's typed list of what is left, 1-40 items; session-only, never the pantry)
+  {"type":"stock","items":[{"name":"<=60 chars","qty":"<=30 chars"}]}  (any chat: loose ingredients the user says they have in, 1-40 items; session-only, never the pantry or shopping list)
   {"type":"busy","day":N}  {"type":"free","day":N}  {"type":"noCook","day":N}
   {"type":"chip","id":"comfort|light|no-spice|less-red-meat|no-pasta|protein-boost","days":[N]}
   {"type":"budget","perWeek":POUNDS,"days":[N]}
@@ -115,6 +115,7 @@ def build_prompt(messages, context, opener=False, strict=False, brief=None, spen
         " Always answer what they just said first, then act. They can see the plan, gaps and costs on screen, so never recite them back.",
         "How the user likes to plan (docs/MEAL_PLANNING_EXAMPLE.md): they react in plain language and each reaction becomes a rule (dislikes, 'no X this week', 'lunch should be toasties'); keep honouring it."
         " The kitchen state comes from them, not guesses: ask what is already cooked, what is left and what they have in, and plan around it (cooked leftovers are cooks/leftover placements, so nothing is bought for them)."
+        " Map their answers: meals already cooked -> place with leftover+portions (or cookId when the briefing's cooks list has it), loose ingredients -> a stock edit; ask once per chat."
         " Breakfast, lunch and dinner only, never leave a lunch empty, cook a batch dinner once and eat it again the next day, and never plan waffles (they're spontaneous, they'll say on the day)."
         " Place meals with place edits, then say what you placed and what's still open, and give the shop total once at the end rather than throughout.",
         "Money: don't bring up budget or cost unless they do or the week is far over their target. Choose meals on nutrition, taste and what they said.",
