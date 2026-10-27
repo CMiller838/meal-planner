@@ -123,6 +123,8 @@ wrong, say so in one line and update the heading.
    bodies) · Edge cases · Verification · Tasks as `- [ ]` split Logic (TDD) / UI.
    For every helper in Signatures, name who consumes its return value (e.g. who logs `backfilled`) and give that
    caller its own task; a return value nobody consumes is a gap the tester will flag.
+   Browser steps: `tools/browser-check/ui-check.mjs` is only the page smoke check; click-through/interaction steps
+   (drag, sheets, plan generation, shopping) go in `walk.mjs`. Name the right file in Files touched and Verification.
    Before moving on run `python3 tools/spec_lint.py phaseN`: it fails a spec with no tier tag, no `## Files touched`,
    or a `## Verification` without a runnable command in backticks (`/overnight` refuses to start on the same check).
    Under the first line add `Plain: <one everyday sentence on what this gives the user>`: the building-now pane shows it.
