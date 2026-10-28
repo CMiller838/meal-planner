@@ -131,6 +131,8 @@ wrong, say so in one line and update the heading.
    (drag, sheets, plan generation, shopping) go in `walk.mjs`. Name the right file in Files touched and Verification.
    Every behaviour Verification names (incl. negatives like "No leaves the record alone") gets its own `walk.mjs`
    task/assertion, so the tester finds it covered.
+   If any task edits a cached file (JS/CSS/HTML/JSON the PWA shell caches), put the `sw.js` `CACHE` bump in the first
+   Logic task that does: `data_check.py` fails that stage without it.
    Before moving on run `python3 tools/spec_lint.py phaseN`: it fails a spec with no tier tag, no `## Files touched`,
    or a `## Verification` without a runnable command in backticks (`/overnight` refuses to start on the same check).
    Under the first line add `Plain: <one everyday sentence on what this gives the user>`: the building-now pane shows it.
