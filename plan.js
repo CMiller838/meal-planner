@@ -3111,6 +3111,11 @@
   async function init() {
     MP.initTheme();
     initChat(); // wired first: a later load error must not leave the Plan with Hermes button dead
+    MP.enableSheetDrag($("day-sheet"), closeDayView);
+    MP.enableSheetDrag($("swap-sheet"), closeSwapPicker);
+    MP.enableSheetDrag($("detail-sheet"), () => $("detail-overlay").classList.add("hidden"));
+    MP.enableSheetDrag($("eat-sheet"), closeEatSheet);
+    MP.enableSheetDrag($("cook-sheet"), () => $("cook-overlay").classList.add("hidden"));
     document.getElementById("day-overlay").addEventListener("click", (e) => {
       if (e.target.id === "day-overlay") closeDayView();
     });

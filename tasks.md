@@ -906,7 +906,8 @@ No spec ([S]); all in `tools/hermes_chat_bridge.py` + `tools/test_hermes_chat_br
 - [ ] Live: in Plan with Hermes say "I really dislike fennel": a "Saved: ..." row appears with Undo, Undo removes it; then "lunch should be toasties" shows an Accept card and Accept saves it
 
 ## Phase 108: Phone-first polish, simple and animated
-- [ ] Spec [L]: `.claude/specs/phase108.md`
+- [x] Spec [L]: `.claude/specs/phase108.md`
+- [ ] Live: on a phone tap a text input (ate bar): the tab bar hides while the keyboard is up
 - [ ] Live: on the installed phone PWA, use every tab, open and drag-close a meal sheet, and swipe a Discover card: nothing janks, nothing is cut off, the bottom bar never covers a button
 
 ## Phase 97: Change meals and ingredients to suit you

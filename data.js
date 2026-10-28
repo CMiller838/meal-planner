@@ -934,5 +934,44 @@
   MP.getSavedLater = getSavedLater;
   MP.saveForLater = saveForLater;
   MP.removeSavedLater = removeSavedLater;
+  /** Phase 108: drag a sheet down from its top edge to close it. Transform only; returns a detach function. */
+  function enableSheetDrag(sheetEl, onClose) {
+    const THRESHOLD = 80, EDGE = 48;
+    let startY = null, dy = 0;
+    const still = () => typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const down = (e) => {
+      if (sheetEl.scrollTop > 0 || e.clientY - sheetEl.getBoundingClientRect().top > EDGE) return;
+      startY = e.clientY; dy = 0;
+      sheetEl.style.transition = "none";
+      document.addEventListener("pointermove", move);
+      document.addEventListener("pointerup", up);
+      document.addEventListener("pointercancel", up);
+    };
+    const move = (e) => {
+      if (startY === null) return;
+      dy = Math.max(0, e.clientY - startY);
+      if (!still()) sheetEl.style.transform = "translateY(" + dy + "px)";
+    };
+    const up = () => {
+      if (startY === null) return;
+      const close = dy > THRESHOLD;
+      startY = null;
+      sheetEl.style.transition = still() ? "none" : "transform var(--motion-base, 200ms) ease-out";
+      sheetEl.style.transform = "";
+      stop();
+      if (close) onClose();
+    };
+    const stop = () => {
+      document.removeEventListener("pointermove", move);
+      document.removeEventListener("pointerup", up);
+      document.removeEventListener("pointercancel", up);
+    };
+    // a touch starting in the top edge must not become a native pan, or the browser cancels the pointer stream
+    const touch = (e) => { const t = e.touches[0]; if (!e.target.closest("button, a, input, select, textarea, summary") && sheetEl.scrollTop <= 0 && t.clientY - sheetEl.getBoundingClientRect().top <= EDGE && e.cancelable) e.preventDefault(); };
+    sheetEl.addEventListener("pointerdown", down);
+    sheetEl.addEventListener("touchstart", touch, { passive: false });
+    return () => { sheetEl.removeEventListener("pointerdown", down); sheetEl.removeEventListener("touchstart", touch); stop(); };
+  }
+  MP.enableSheetDrag = enableSheetDrag;
   MP.initTheme = initTheme;
 })(typeof globalThis !== "undefined" ? globalThis : this);

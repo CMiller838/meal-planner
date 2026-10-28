@@ -3864,6 +3864,24 @@
     check("106: weekRollUp gym uplift on today only", row(w, "protein_g").target === 170);
   }
 
+  // 108. Phase 108 — MP.enableSheetDrag
+  {
+    const mk = () => { const el = document.createElement("div"); el.style.cssText = "position:fixed;top:0;left:0;width:100px;height:100px"; document.body.appendChild(el); return el; };
+    const ev = (type, y, tgt) => (tgt || document).dispatchEvent(new MouseEvent(type, { clientY: y, bubbles: true }));
+    const drag = (el, from, to) => { ev("pointerdown", from, el); ev("pointermove", to); ev("pointerup", to); };
+    let closed = 0;
+    const a = mk(), detachA = MP.enableSheetDrag(a, () => closed++);
+    drag(a, 10, 150);
+    check("108: drag past threshold closes", closed === 1);
+    drag(a, 10, 60);
+    check("108: drag under threshold snaps back, no close", closed === 1 && a.style.transform === "");
+    drag(a, 90, 300);
+    check("108: drag starting below the top edge is ignored", closed === 1);
+    detachA(); drag(a, 10, 200);
+    check("108: detach removes listeners", closed === 1);
+    a.remove();
+  }
+
   lines.push("", `${pass} passed, ${fail} failed`);
   document.getElementById("out").textContent = lines.join("\n");
 })();

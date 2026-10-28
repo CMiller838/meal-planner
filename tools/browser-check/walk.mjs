@@ -48,6 +48,20 @@ for (const [vp, size] of Object.entries({ pc: { width: 1440, height: 900 }, phon
     if (await page.locator('#modal-overlay:not(.hidden)').count()) await page.mouse.click(5, 5);
     await page.waitForSelector('#modal-overlay.hidden', { state: 'attached' });
   });
+  await step('phone polish (Phase 108): tab bar at the bottom with the active page, a sheet drags down to close, a short drag snaps back', async () => {
+    if (page.viewportSize().width >= 640) return;
+    const bar = await page.evaluate(() => { const n = document.querySelector('.nav-links'), r = n.getBoundingClientRect(); return { bottom: Math.round(r.bottom) === innerHeight, active: n.querySelector('a.active')?.textContent, pos: getComputedStyle(n).position }; });
+    if (bar.pos !== 'fixed' || !bar.bottom || !/Browse/.test(bar.active)) throw new Error('tab bar: ' + JSON.stringify(bar));
+    await page.locator('#library-grid .card').first().click();
+    await page.waitForSelector('#modal-overlay:not(.hidden)');
+    await page.waitForTimeout(400); // entry animation
+    const r = await page.locator('#modal-sheet').boundingBox();
+    const dragBy = async (dy) => { await page.mouse.move(r.x + r.width / 2, r.y + 10); await page.mouse.down(); await page.mouse.move(r.x + r.width / 2, r.y + 10 + dy, { steps: 4 }); await page.mouse.up(); };
+    await dragBy(40);
+    if (await page.locator('#modal-overlay.hidden').count()) throw new Error('a 40 px drag closed the sheet');
+    await dragBy(160);
+    await page.waitForSelector('#modal-overlay.hidden', { state: 'attached' });
+  });
   await step('theme toggle flips dark/light and persists', async () => {
     const before = await theme();
     await page.click('#theme-toggle');
@@ -170,6 +184,7 @@ for (const [vp, size] of Object.entries({ pc: { width: 1440, height: 900 }, phon
     const names = () => page.evaluate(() => [...document.querySelectorAll('#plan-root .day-row[data-day="1"] .slot-meal')].map((e) => e.textContent));
     const drag = async (from, to) => {
       await page.locator(from).first().scrollIntoViewIfNeeded();
+      await page.evaluate(([f]) => { const a = document.querySelector(f).getBoundingClientRect(); scrollBy(0, a.top - 0.3 * innerHeight); }, [from]); // sticky meter and docked bars (tab bar, ate-bar) can cover a row at the viewport edge
       const a = await page.locator(from).first().boundingBox(), b = await page.locator(to).first().boundingBox();
       await page.mouse.move(a.x + a.width / 2, a.y + a.height / 2);
       await page.mouse.down();

@@ -211,12 +211,14 @@
     document.getElementById("modal-overlay").classList.add("hidden");
   }
 
+  let sheetDragOn = false;
   function openSheet(html) {
     stopCamera();
     stopCamera = () => {};
     sheetEl().innerHTML = `<button class="close-btn" aria-label="Close">✕</button>${html}`;
     sheetEl().querySelector(".close-btn").addEventListener("click", closeSheet);
     document.getElementById("modal-overlay").classList.remove("hidden");
+    if (!sheetDragOn) { sheetDragOn = true; MP.enableSheetDrag(sheetEl(), closeSheet); }
     return sheetEl();
   }
 

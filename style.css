@@ -1018,7 +1018,7 @@ button:disabled { opacity: .5; cursor: not-allowed; transform: none; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; animation-delay: 0s !important; }
   :is(button, a, .btn, .chip, .card, .slot-card, .shop-line):is(:hover, :active) { transform: none !important; }
-  .m-enter, .m-stagger > *, .modal-sheet, .slot-card, .banner, .hermes-banner { animation-name: m-fade; animation-duration: 120ms !important; }
+  main, .m-enter, .m-stagger > *, .modal-sheet, .slot-card, .banner, .hermes-banner { animation-name: m-fade; animation-duration: 120ms !important; }
   .toast { animation-name: m-fade; transform: translateX(-50%); }
   .meter-bar, .swipe-card.fly-right, .swipe-card.fly-left { transition: none; }
   .chat-typing span { opacity: .7; }
@@ -1071,3 +1071,41 @@ body.has-ate-bar .toast { bottom: calc(5rem + env(safe-area-inset-bottom)); }
 .eaten-sub { font-size: .8rem; }
 .eaten-water { margin-top: .8rem; }
 @media (prefers-reduced-motion: reduce) { .eaten-row { animation: none; } .eaten-bar i { transition: none; } }
+
+/* ---- Phase 108: phone-first polish (<640 px): bottom tab bar, 44 px taps, sheet drag, page entry ---- */
+:root { --tabbar-h: 3.5rem; }
+main { animation: m-enter var(--motion-base) ease-out both; }
+@media (max-width: 639px) {
+  /* blur on .nav would trap the fixed tab bar inside it */
+  .nav { backdrop-filter: none; background: var(--bg-2); }
+  .nav .brand { display: flex; }
+  .nav-links {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 30; gap: 0; justify-content: space-around;
+    height: calc(var(--tabbar-h) + env(safe-area-inset-bottom)); padding: 0 .25rem env(safe-area-inset-bottom);
+    background: var(--surface); border-top: 1px solid var(--border); overflow: visible;
+  }
+  .nav-links > a {
+    flex: 1 1 0; display: flex; align-items: center; justify-content: center; text-align: center; white-space: normal;
+    min-height: 44px; margin: .3rem .1rem; padding: 0 .2rem; font-size: .72rem; line-height: 1.15; border-radius: .8rem;
+  }
+  body:has(input:focus, textarea:focus, select:focus) .nav-links { display: none; }
+  body { padding-bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom) + 1rem); }
+  body.has-ate-bar { padding-bottom: calc(var(--tabbar-h) + 5rem + env(safe-area-inset-bottom)); }
+  .ate-bar { bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom)); padding-bottom: .5rem; }
+  .toast, body.has-ate-bar .toast { bottom: calc(var(--tabbar-h) + 1rem + env(safe-area-inset-bottom)); }
+  body.has-ate-bar .toast { bottom: calc(var(--tabbar-h) + 5rem + env(safe-area-inset-bottom)); }
+  body:has(.modal-overlay:not(.hidden)) .nav-links, body.chat-open .nav-links { display: none; }
+  /* tap targets */
+  .btn, button.primary, button.ghost, .btn-secondary, .chip, .tab-btn, .toast button, .dismiss, .variant-option,
+  .search-input, select, .sync-field input, .customise input, .chat-form input { min-height: 44px; }
+  .nav button.icon-btn, .chat-day-nav .icon-btn { width: 44px; height: 44px; }
+  .modal-sheet .close-btn { width: 44px; height: 44px; }
+  .chip-row { gap: .5rem; }
+  .shop-line { min-height: 44px; }
+  #plan-chat :is(.btn, .btn-secondary, button.ghost, .chip, select, input) { min-height: 0; } /* the chat panel is a fixed-height stack: taller rows push cards under .chat-main */
+  /* declutter: plan secondary actions become one scrolling row */
+  .top-actions { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; gap: .5rem; }
+  .top-actions::-webkit-scrollbar { display: none; }
+  .top-actions > * { flex: 0 0 auto; display: inline-flex; align-items: center; white-space: nowrap; }
+  .modal-sheet { padding-bottom: calc(1.25rem + env(safe-area-inset-bottom)); }
+}

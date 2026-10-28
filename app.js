@@ -843,6 +843,7 @@
 
   async function init() {
     MP.initTheme();
+    MP.enableSheetDrag(document.getElementById("modal-sheet"), closeDetail);
     document.getElementById("modal-overlay").addEventListener("click", (e) => {
       if (e.target.id === "modal-overlay") closeDetail();
     });

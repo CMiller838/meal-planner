@@ -46,6 +46,7 @@ when next touched, do not add more.
 - One `prefers-reduced-motion: reduce` block at the end of `style.css`: movement off, short opacity fades stay. Do not add per-component reduced-motion blocks. `transform` and `opacity` only. Colours are tokens (`--on-accent`, `--on-butter`, `--accent-hover`, `--accent-glow`, `--pin-hi`/`--pin-lo`, `--on-cork`, `--scrim`); no raw hex outside the theme blocks.
 
 ## Patterns
+- Phone (<640 px): the nav links become a fixed bottom tab bar (`--tabbar-h`, safe-area padding, hidden while an input is focused, a sheet or chat is open); `.ate-bar` and toasts sit above it; taps are >= 44 px; plan `.top-actions` scroll sideways. `main` rises in once (`m-enter`). Sheets drag down from the top 48 px past 80 px to close (`MP.enableSheetDrag`, transform only, instant under reduced motion).
 - Nav: sticky translucent bar, pill links, active link filled with `--accent`, round icon buttons.
 - Cards: paper surface, image on top, `.card-body`, `.card-actions`, uppercase `.tag` chips; grids are one column, widening at 640 px.
 - Sheets: bottom `.modal-sheet` over a dark overlay; confirmations and undo via `.toast`.

@@ -186,7 +186,7 @@ E, K and B6 (new CoFID columns and targets). Depends on Phase 106.
 
 # Built, live checks pending
 
-## Phase 108: Phone-first polish, simple and animated [L] — not started
+## Phase 108: Phone-first polish, simple and animated [L] — built 2026-10-27, live checks pending
 
 Goal: keep the Cork Kitchen look (Phase 86 styled and animated every component) but make every page feel simple and native
 on a phone: less on screen at once, bigger tap targets, a bottom tab bar, drag-to-close sheets, page transitions, and
