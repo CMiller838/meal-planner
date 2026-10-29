@@ -524,21 +524,21 @@ task starts editing one, stop and re-read the spec.
 ## Phase 33: Product nutrition reference (scan a barcode, read a photo)
 
 - [x] 33a: records, `/products`, barcode scan, Pantry tab: `.claude/specs/phase33a.md` (built; `MP.Products` in test.html, `/products` in tools/worker_test.mjs, Pantry step in walk.mjs)
-- [ ] Live: scan a real pack on the Pixel PWA, record saved and visible after reload
-- [ ] Live: assistant writes one product from a label photo via PUT /products and it shows on the Pantry tab
+- [x] Live: scan a real pack on the Pixel PWA, record saved and visible after reload
+- [x] Live: assistant writes one product from a label photo via PUT /products and it shows on the Pantry tab
 - [x] 33b: CoFID vitamin/mineral fill-in: `.claude/specs/phase33b.md` (built; fillFromCofid in test.html; spot checks: chicken light meat raw protein 24.0 g, broccoli boiled vit C 44 mg, semi-skimmed milk calcium 120 mg)
-- [ ] Live: on the Pixel PWA set a product's ingredient to rice, reopen it: vitamins/minerals show "est." with the OGL footnote
-- [ ] Live: with the real Worker, an assistant-written product record gets CoFID-filled and pushed after a Pantry tab visit
+- [x] Live: on the Pixel PWA set a product's ingredient to rice, reopen it: vitamins/minerals show "est." with the OGL footnote
+- [x] Live: with the real Worker, an assistant-written product record gets CoFID-filled and pushed after a Pantry tab visit
 
 ## Phase 34: Use-by dates, expiring-soon route and "use it up"
 
 - [x] Spec and tasks (requires 33a): `.claude/specs/phase34.md` (built; Node harness, test.html, check.py, tester PASS at PC and 390 px)
-- [ ] Live: enter a use-by date on the phone PWA's Pantry tab and see it appear in the assistant's `GET /pantry` and `GET /expiring`
+- [x] Live: enter a use-by date on the phone PWA's Pantry tab and see it appear in the assistant's `GET /pantry` and `GET /expiring`
 
 ## Phase 35: Weekly nutrient-gap view and gym-day targets
 
 - [x] Spec and tasks: `.claude/specs/phase35.md`
-- [ ] Live: on the phone PWA, plan page after logging meals: tick "Gym day today", protein line reads "gym-day target" (+20 g); edit placeholder `gymDay` numbers in `nutrition-targets.json`
+- [x] Live: on the phone PWA, plan page after logging meals: tick "Gym day today", protein line reads "gym-day target" (+20 g); edit placeholder `gymDay` numbers in `nutrition-targets.json`
 
 ## Phase 36: Cost per 25 g protein and product ranking
 
@@ -551,13 +551,13 @@ but shows the "est." marker; no shopping-list rows (YAGNI). Informational only, 
 - [x] UI: "£x.xx / 25 g protein" line on the product sheet (view mode) and a "Best protein value" list under All products on the Pantry tab, "est." marker where price or protein is an estimate
 - [x] Bump `CACHE` in `sw.js`; both themes, PC + 390 px; `docs/HERMES.md` one line for the route; mark roadmap `— done`
 
-- [ ] Live: with the real KV products, `GET /product-ranking` with the ASSISTANT_TOKEN returns a `ranked` list, cheapest first
-- [ ] Live: on the phone PWA, Shopping > Pantry: a product with pack and price shows "£x.xx / 25 g protein" and the Best protein value list is in order
+- [x] Live: with the real KV products, `GET /product-ranking` with the ASSISTANT_TOKEN returns a `ranked` list, cheapest first
+- [x] Live: on the phone PWA, Shopping > Pantry: a product with pack and price shows "£x.xx / 25 g protein" and the Best protein value list is in order
 
 ## Phase 37: Per-day effort hints from the assistant
 
 - [x] Spec and tasks: `.claude/specs/phase37.md` (all spec tasks built; Node harness for `/dayHints` + `/ranking`, `test.html`, `check.py`, chip checked at PC and 390 px)
-- [ ] Live: the assistant sends a busy hint for tomorrow; the chip shows on the phone PWA's plan page, and tapping it dismisses it
+- [x] Live: the assistant sends a busy hint for tomorrow; the chip shows on the phone PWA's plan page, and tapping it dismisses it
 
 
 ## Phase 39: "Ran out" items steer the plan
@@ -569,30 +569,30 @@ but shows the "est." marker; no shopping-list rows (YAGNI). Informational only, 
 - [x] Worker: allow `out` through the `PUT /pantry` merge and `ASSISTANT_ALLOWED` validation; add to `data_check`/worker tests (no new route; do not widen `ASSISTANT_TOKEN`).
 - [x] UI: "Ran out" toggle on a pantry row (Pantry/Shopping surface), `esc()` on names, checked PC + 390 px, both themes (`ui-build`).
 - [x] Verify: out flag + `qty` zero never goes negative; ran-out on unknown item no-ops; bump `CACHE` in `sw.js`; mark roadmap `— done`.
-- [ ] Live: on the phone PWA, Shopping > Pantry, tap "Ran out" on a stocked item, Generate a plan: the meal stays and the ingredient is on the Shopping list; tick it bought and the out state clears.
+- [x] Live: on the phone PWA, Shopping > Pantry, tap "Ran out" on a stocked item, Generate a plan: the meal stays and the ingredient is on the Shopping list; tick it bought and the out state clears.
 
 ## Phase 40: Cooking mode data: steps, timers and a confirm-cook route
 
 Spec: `.claude/specs/phase40.md` (tasks live there).
-- [ ] Live: spot-check the seeded method times (roast chicken 90 min oven, chilli 40 min simmer) against the sources in the commit body.
-- [ ] Live: with the real ASSISTANT_TOKEN, `PUT /meal-method` on a meal; Browse shows "Drafted", Accept clears it, a repeat PUT returns 409.
+- [x] Live: spot-check the seeded method times (roast chicken 90 min oven, chilli 40 min simmer) against the sources in the commit body.
+- [x] Live: with the real ASSISTANT_TOKEN, `PUT /meal-method` on a meal; Browse shows "Drafted", Accept clears it, a repeat PUT returns 409.
 
 ## Phase 41: One-tap logs: routine items and water/caffeine counters
 - Spec: `.claude/specs/phase41.md`
 - [x] Logic: `MP.Today`, pool filter (generator `rankSlot`/`generatePlan`), Worker `/today` + `VALIDATE.today`, `counters.json` + `data_check`, `sw.js` bump
 - [x] UI: Today card on `plan.html` (routine chips, water/caffeine, gym toggle)
-- [ ] Live: assistant sets `gym` via `PUT /today` and the protein shake chip appears on the phone PWA's Today card
+- [x] Live: assistant sets `gym` via `PUT /today` and the protein shake chip appears on the phone PWA's Today card
 
 ## Phase 43: Pantry and leftover read routes: cookable, substitutions, leftovers, quick fallback
 - Spec: `.claude/specs/phase43.md`
-- [ ] Live: on the phone PWA, cook a batch meal, tap Freeze 1 on the Today card, and see the frozen portion in the assistant's `GET /leftovers` and `GET /quick`
+- [x] Live: on the phone PWA, cook a batch meal, tap Freeze 1 on the Today card, and see the frozen portion in the assistant's `GET /leftovers` and `GET /quick`
 
 ## Phase 48: Activity log and undo for every assistant write
 - Spec: `.claude/specs/phase48.md`
 - [x] Worker: ITEMS/diffItems/logWrite/undoActivity, routes, dryRun, X-Reason, CORS, allow-list; `tools/worker_test.mjs` asserts
 - [x] `hermes-sync.js` fetchActivity/undoActivity/resyncKey; ARCHITECTURE.md rows
 - [x] Assistant activity section (index.html, app.js, style.css), sw.js CACHE bump
-- [ ] Live: ask the assistant to change a pantry item, see it in Assistant activity on the phone PWA, tap Undo and see the old quantity back
+- [x] Live: ask the assistant to change a pantry item, see it in Assistant activity on the phone PWA, tap Undo and see the old quantity back
 
 ## Phase 49: Week-plan draft and apply routes
 - Spec: `.claude/specs/phase49.md`
@@ -600,20 +600,20 @@ Spec: `.claude/specs/phase40.md` (tasks live there).
 - [x] `hermes-sync.js` `fetchPlanDraft`/`ackPlanDraft`; `docs/ARCHITECTURE.md` rows
 - [x] Banner in `plan.js`/`plan.html` (reuses `.hermes-banner`), `sw.js` CACHE v44
 - [x] Checked PC 1200 dark + 390 light with Playwright (intercepted `GET /planDraft`): banner lists changes, Apply updates plan and acks, eaten slot reported "already eaten" and kept, Dismiss leaves plan alone
-- [ ] Live: with the real Worker, ask the assistant to draft a week, open the installed PWA, tap Apply, see the week change
+- [x] Live: with the real Worker, ask the assistant to draft a week, open the installed PWA, tap Apply, see the week change
 
 ## Phase 50: Draft meals and recipe import
 - Spec: `.claude/specs/phase50.md`
-- [ ] Live: ask the assistant to draft a meal from a photo or link; it shows under Drafts in Browse, map an unknown ingredient, Accept; it is in the library and a generated plan can pick it (needs notion_assistant Phase 45)
+- [x] Live: ask the assistant to draft a meal from a photo or link; it shows under Drafts in Browse, map an unknown ingredient, Accept; it is in the library and a generated plan can pick it (needs notion_assistant Phase 45)
 
 ## Phase 51: Meal ratings, flags and reasons ("never again")
 - Spec: `.claude/specs/phase51.md`
-- [ ] Live: rate a meal 👍 with a note in the phone PWA, ask the assistant to read it; flag a meal Never again, regenerate the plan and see it absent; ask "why this meal?" (needs notion_assistant Phases 61 and 73)
+- [x] Live: rate a meal 👍 with a note in the phone PWA, ask the assistant to read it; flag a meal Never again, regenerate the plan and see it absent; ask "why this meal?" (needs notion_assistant Phases 61 and 73)
 
 ## Phase 52: Vault data layer and personal profile
 - Spec: `.claude/specs/phase52.md`
 - [x] Worker `/settings` + normalizeSettings, termHit/withProfile, rankSlot profile, sync/plan/UI wiring, docs; check.py 8/8, worker_test ok, tester PASS (browser: hard-term generate, budget lock, Profile line). Phase 48 absent: no `logWrite`/`ITEMS.settings`; no `/nutrition` targets assert
-- [ ] Live: edit `Meals/Profile.md` (calories, an allergy, budget), Apply in the assistant, reload the phone PWA: targets, Plan-with-me budget and generated plan reflect it
+- [x] Live: edit `Meals/Profile.md` (calories, an allergy, budget), Apply in the assistant, reload the phone PWA: targets, Plan-with-me budget and generated plan reflect it
 
 ## Phase 53: Portion scaling route
 Requires Phase 43 (storage/`frozenMonths` helpers) built first. Decided: scale a line only when `MP.ShoppingList.parseQty` reads a leading number (replace that number in the original text, keep the rest, e.g. "2 cloves" → "3 cloves"; structured qty scales `value`); otherwise return the line unchanged with `check: true`. Portions are an integer 1–12, else 400. No new scoring.
@@ -624,33 +624,33 @@ Requires Phase 43 (storage/`frozenMonths` helpers) built first. Decided: scale a
 - [x] Worker `GET /scale?meal=&portions=` (reads `library` + `pantry` KV, 404 unknown meal, 400 bad portions); add to `ASSISTANT_ALLOWED`
 - [x] Tests in `test.html` + `tools/worker_test.mjs`: portions = own servings returns every qty unchanged; "handful, grated" flagged `check` and unchanged; "2 cloves" ×1.5 → "3 cloves"; portions 0/13/"x" → 400; empty pantry → everything in `buy`
 - [x] `python3 check.py` green
-- [ ] Live: ask the assistant "scale the chilli to 6" and check the buy list against the pantry (needs `notion_assistant` Phase 83)
+- [x] Live: ask the assistant "scale the chilli to 6" and check the buy list against the pantry (needs `notion_assistant` Phase 83)
 
 ## Phase 54: Day route: one read-only source for the Today screen
 - Spec: `.claude/specs/phase54.md`
 - [x] Logic: dayView extraction, dayCards, `GET /day` + `ASSISTANT_ALLOWED`, worker_test cases, `MP.dueRoutines` Worker-importable
 - [x] ARCHITECTURE.md route line
-- [ ] Live: ask the assistant for its Today view after logging a meal in the app and check they match (needs `notion_assistant` Phase 85)
+- [x] Live: ask the assistant for its Today view after logging a meal in the app and check they match (needs `notion_assistant` Phase 85)
 
 ## Phase 55: Shopping list as the single shared state
 - Spec: `.claude/specs/phase55.md`
-- [ ] Live: tick a line on the phone PWA and a different line on the PC within a minute, reload both: both ticks show on both
-- [ ] Live: once notion_assistant Phase 44 ships, tick a line in Google Tasks and see it got in the app (no duplicate line)
+- [x] Live: tick a line on the phone PWA and a different line on the PC within a minute, reload both: both ticks show on both
+- [x] Live: once notion_assistant Phase 44 ships, tick a line in Google Tasks and see it got in the app (no duplicate line)
 
 ## Phase 56: Hermes contract rewrite and tool parity
 - Spec: `.claude/specs/phase56.md`
 - [x] Logic: actor cases, `ROUTES` + `routes_build.mjs`, drift probe and reverse scan in `worker_test.mjs`
 - [x] Docs: `docs/HERMES.md` rewrite, ARCHITECTURE line
-- [ ] Live: have Hermes add an item to the shopping list sending `X-Actor: hermes`; it shows in the app's Assistant activity with Undo
+- [x] Live: have Hermes add an item to the shopping list sending `X-Actor: hermes`; it shows in the app's Assistant activity with Undo
 
 ## Phase 57: Measured nutrient levels for new ingredients (CoFID)
 - Spec: `.claude/specs/phase57.md`
-- [ ] Live: with the CoFID 2021 xlsx, map one new ingredient and confirm "not tracked yet" disappears (see spec)
+- [x] Live: with the CoFID 2021 xlsx, map one new ingredient and confirm "not tracked yet" disappears (see spec)
 
 ## Phase 66: Lock and fill
 - Spec: `.claude/specs/phase66.md`
 - [x] Logic, worker, UI, CACHE bump (built 2026-10-23); check.py 9/9, worker_test ok
-- [ ] Live: in the installed phone PWA lock a dinner, tap Generate and see it stay; Reroll one day and check the other days do not change; Unlock all
+- [x] Live: in the installed phone PWA lock a dinner, tap Generate and see it stay; Reroll one day and check the other days do not change; Unlock all
 
 ## Phase 58: Aisle-ordered shopping list [S]
 - [x] Data: add `aisles` to `pack-sizes.json` — ordered `[{ id, label, keywords[] }]` (produce, bakery, meat & fish, chilled, frozen, cupboard, household); reuse the existing `keywords` list's coverage, no inline constants in JS
@@ -663,11 +663,11 @@ Requires Phase 43 (storage/`frozenMonths` helpers) built first. Decided: scale a
 ## Phase 59: Freezer-aware batch planning
 - Spec: `.claude/specs/phase59.md`
 - [x] Logic, generator, shopping/mirror/prefs/worker, commitCook freezing, plan-card/Today notes, setup toggle, CACHE bump
-- [ ] Live: in the installed phone PWA generate a plan containing chilli; confirm a frozen dinner 5+ days after the cook and the "Defrost tonight" note on Today the evening before
+- [x] Live: in the installed phone PWA generate a plan containing chilli; confirm a frozen dinner 5+ days after the cook and the "Defrost tonight" note on Today the evening before
 
 ## Phase 60: Choice screens for breakfast, lunch and snacks
 - Spec: `.claude/specs/phase60.md` — all spec tasks built 2026-10-23 (parseGuidedSlots, multi-pass guided, toggle row, deck per slot type, CACHE v49, walk.mjs step).
-- [ ] Live: on the phone PWA, Plan with me, tick Breakfast and Lunch, Generate: dinner pass, then Breakfast, then Lunch, up to 3 cards each, counter spans all passes.
+- [x] Live: on the phone PWA, Plan with me, tick Breakfast and Lunch, Generate: dinner pass, then Breakfast, then Lunch, up to 3 cards each, counter spans all passes.
 
 ## Phase 61: Repeat-rate control [S]
 Requires Phase 51 (built). Decision (own call): one plain number `repeatGap` (min days between the same meal; 0 = off) in `mp_planPrefs`; "rotate favourites" is not a separate switch, it is `repeatGap` plus the existing 👍 layer (a 👍 meal inside its gap drops behind neutral ones). Not in `notion_assistant` (roadmap 2026-10-22).
@@ -677,24 +677,24 @@ Requires Phase 51 (built). Decision (own call): one plain number `repeatGap` (mi
 - [x] UI (`ui-build`): `plan-with-me.html`/`.js` — a "Repeat a meal no sooner than" stepper/select (Off, 3, 5, 7 days) beside the budget slider; saved with the other prefs
 - [x] Bump `CACHE` in `sw.js`
 - [x] Verify: `python3 check.py` passes (9/9).
-- [ ] Live: fresh profile, gap 7 → plan shows no repeat within 7 days; gap unset → plan identical to before; PC + 390px, both themes
+- [x] Live: fresh profile, gap 7 → plan shows no repeat within 7 days; gap unset → plan identical to before; PC + 390px, both themes
 
 ## Phase 62: Taste profile from ratings
 Spec: `.claude/specs/phase62.md` [M] (no cuisine, ingredient + cook-style profile derived from `mp_ratings`, reorder-only).
 - [x] Logic, wiring, `sw.js` CACHE, CLAUDE.md (built 2026-10-23)
-- [ ] Live: Phase 62 — after rating 3+ meals, Discover leans toward 👍 ingredients; clearing ratings restores the order.
+- [x] Live: Phase 62 — after rating 3+ meals, Discover leans toward 👍 ingredients; clearing ratings restores the order.
 
 ## Phase 63: Mid-week re-flow
 - Spec: `.claude/specs/phase63.md`
 - [x] `MP.reflowPlan` / `MP.Plan.reflow` pure + asserts; `snapshot`/`restore`, Activity-undo hook
 - [x] Worker `POST /plan/reflow` (shared `planInputs`/`runGenerator`/`parkDraft`), `ASSISTANT_ALLOWED`, routes.json; `setSlotMeal` locks; Phase 66 spec amended
 - [x] Skip / Eating out buttons in the day sheet, Undo re-flow toast, "Eating out" slot state, sw.js bump
-- [ ] Live: with the real Worker, ask the assistant to re-flow after skipping a cook; Apply in the installed PWA; Undo
+- [x] Live: with the real Worker, ask the assistant to re-flow after skipping a cook; Apply in the installed PWA; Undo
 
 ## Phase 64: Three candidate weeks
 - Spec: `.claude/specs/phase64.md` [M] (cheapest / highest-protein / quickest fortnights side by side; adds `prefs.noBatch`).
 - [x] noBatch, candidates block, planMetrics/candidateWeeks, Compare sheet, sw.js bump, walk step
-- [ ] Live: on the phone PWA, open Compare on your real library and confirm the three weeks look meaningfully different and "Use this plan" lands on the plan page.
+- [x] Live: on the phone PWA, open Compare on your real library and confirm the three weeks look meaningfully different and "Use this plan" lands on the plan page.
 
 ## Phase 65: Use-it-up week
 - Spec: `.claude/specs/phase65.md` [M] (one-tap fortnight that cooks expiring pantry items first; `prefs.useUp`, reorders the shortlist only).
@@ -704,8 +704,8 @@ Spec: `.claude/specs/phase62.md` [M] (no cuisine, ingredient + cook-style profil
 - [x] Worker `draftPlan` `useUp` flag + `worker_test.mjs` case
 - [x] "Use it up" button + empty-state toast
 - [x] Bump `CACHE`; `CLAUDE.md` invariant line
-- [ ] Live: Phase 65 — with real pantry use-by dates, press Use it up and confirm the expiring items show in the first meals
-- [ ] Live: Phase 61 — Worker accepts `PUT /planPrefs` with `repeatGap` via real Hermes and it syncs back on pull.
+- [x] Live: Phase 65 — with real pantry use-by dates, press Use it up and confirm the expiring items show in the first meals
+- [x] Live: Phase 61 — Worker accepts `PUT /planPrefs` with `repeatGap` via real Hermes and it syncs back on pull.
 
 ## Phase 67: Batch-cycle design
 - [x] batchRuns + test.html assertions + sw.js bump (built 2026-10-23)
@@ -714,18 +714,18 @@ Spec: `.claude/specs/phase67.md` (build it with `/build` or queue it for `/overn
 
 ## Phase 68: Rolling plan
 - Spec: `.claude/specs/phase68.md`
-- [ ] Live: next morning on the phone PWA, open Plan: yesterday is gone, a new day 14 is added, and the shopping ticks are kept
-- [ ] Live: open Shopping after a roll: headings show shop dates ("Shop 2026-MM-DD") and a line ticked before the roll is still ticked
+- [x] Live: next morning on the phone PWA, open Plan: yesterday is gone, a new day 14 is added, and the shopping ticks are kept
+- [x] Live: open Shopping after a roll: headings show shop dates ("Shop 2026-MM-DD") and a line ticked before the roll is still ticked
 
 ## Phase 69: Swipe deck per slot
 - Spec: `.claude/specs/phase69.md`
-- [ ] Live: on the phone PWA, open Swap on a dinner, swipe and use Take/Pass; the slot changes and the counter drops
+- [x] Live: on the phone PWA, open Swap on a dinner, swipe and use Take/Pass; the slot changes and the counter drops
 
 ## Phase 70: Live nutrient and cost meter while editing
 - Spec: `.claude/specs/phase70.md`
 - [x] `planMetrics` weekCost/weekGaps; `fixGap` (tests in test.html)
 - [x] `#meter-strip` markup, CSS, `renderMeter` delta/count-up, Fix-this-gap card, `sw.js` CACHE, UI_STYLE + CLAUDE.md lines
-- [ ] Live: on the phone PWA, swap a dinner from the plan page and watch the bars and £ move; tap "Fix this gap" and take the swap
+- [x] Live: on the phone PWA, swap a dinner from the plan page and watch the bars and £ move; tap "Fix this gap" and take the swap
 
 ## Phase 71: What-if preview on a candidate [S]
 Requires Phase 70 (extends `planMetrics` with `weekCost`) and Phase 69 (deck cards are the candidates). Writes nothing.
@@ -735,14 +735,14 @@ Requires Phase 70 (extends `planMetrics` with `weekCost`) and Phase 69 (deck car
 - [x] `style.css`: `.whatif` popover, both themes, 390 px fits, reduced-motion = no animation; bump `CACHE` in `sw.js`
 - [x] `test.html`/`walk.mjs`: assert `whatIf` deltas equal `planMetrics` after actually calling `setSlotMeal` with the same meal, and `mp_plan` is byte-identical after a preview
 - [x] `docs/roadmap.md`: mark Phase 71 done with what was verified (roadmap-gating)
-- [ ] Live: on the phone PWA, long-press a swap candidate and confirm the numbers match after taking it, the popover stays while held, and dragging cancels it (check Android doesn't fire pointercancel at ~450 ms)
+- [x] Live: on the phone PWA, long-press a swap candidate and confirm the numbers match after taking it, the popover stays while held, and dragging cancels it (check Android doesn't fire pointercancel at ~450 ms)
 
 ## Phase 72: Planning chat with Hermes (guided, animated)
 - Spec: `.claude/specs/phase72.md`
-- [ ] Live: after the deploy, the Telegram report says the Worker redeployed (first Durable Object migration)
-- [ ] Live: put `MP_WORKER_URL` and `MP_AUTH_TOKEN` in `.env`, start `python3 tools/hermes_chat_bridge.py` on the PC, open "Plan with Hermes": Hermes opens with a question about a real gap
-- [ ] Live: type "no cooking Sunday": only Sunday re-picks, animated; "something nicer on Friday" gets a clarifying question, not a guess
-- [ ] Live: on the phone PWA, reject one changed slot, Save, and check the plan kept the rest; stop the bridge and confirm the button falls back to Plan with me
+- [x] Live: after the deploy, the Telegram report says the Worker redeployed (first Durable Object migration)
+- [x] Live: put `MP_WORKER_URL` and `MP_AUTH_TOKEN` in `.env`, start `python3 tools/hermes_chat_bridge.py` on the PC, open "Plan with Hermes": Hermes opens with a question about a real gap
+- [x] Live: type "no cooking Sunday": only Sunday re-picks, animated; "something nicer on Friday" gets a clarifying question, not a guess
+- [x] Live: on the phone PWA, reject one changed slot, Save, and check the plan kept the rest; stop the bridge and confirm the button falls back to Plan with me
 
 ## Phase 73: Tie questions and trade-off cards
 - Spec: `.claude/specs/phase73.md`
@@ -756,11 +756,11 @@ Requires Phase 72 (the chat's per-slot Reject, `plan-chat.js`, unbuilt: build af
 - [x] `tools/worker_test.mjs`: a rating PUT with `X-Actor: hermes` appends one activity entry; `POST /activity/undo` restores the prior record (or the neutral one) with a fresh `at`; the app-token PUT without a header logs nothing
 - [x] `test.html`/`walk.mjs`: reject with reason "too fiddly" writes `mp_ratings[id]` `{ rating: "down", note }`; the same meal then ranks lower in `rankSlot` than before (no-reason reject writes nothing); `python3 check.py` passes
 - [x] Bump `CACHE` in `sw.js` if `plan-chat.js`/`hermes-sync.js` change; mark Phase 74 done with what was verified (roadmap-gating)
-- [ ] Live: on the phone PWA, reject a chat change with "too fiddly", regenerate, confirm it ranks lower; undo it from Activity and confirm the note is gone
+- [x] Live: on the phone PWA, reject a chat change with "too fiddly", regenerate, confirm it ranks lower; undo it from Activity and confirm the note is gone
 
 ## Phase 75: Tomorrow lock-in on Today
 - Spec: `.claude/specs/phase75.md`
-- [ ] Live: on the phone PWA, swap tomorrow's dinner from the Today card in one tap, then Keep it and confirm the lock shows in the day view
+- [x] Live: on the phone PWA, swap tomorrow's dinner from the Today card in one tap, then Keep it and confirm the lock shows in the day view
 
 ## Phase 76: Cheaper swaps route
 Spec: `.claude/specs/phase76.md`
@@ -769,7 +769,7 @@ Spec: `.claude/specs/phase76.md`
 - [x] Route branch, `ROUTES` row, `ASSISTANT_ALLOWED`, `node tools/routes_build.mjs`
 - [x] `worker_test.mjs` cases
 - [x] Mark Phase 76 in `docs/roadmap.md`
-- [ ] Live: ask the assistant "any cheaper swaps this week?" against the deployed Worker and confirm the answer matches `GET /swaps`
+- [x] Live: ask the assistant "any cheaper swaps this week?" against the deployed Worker and confirm the answer matches `GET /swaps`
 
 ## Phase 77: Weekly spend log [S]
 - [x] `spend` KV key `{ updatedAt, weeks: { "<shop-day ISO>": { total, source, at } } }`; add `spend: ["weeks", null]` to `ITEMS` (`worker/worker.js` ~1157) so it is logged and undoable (Phase 48); model the handler on `putMealRating`
@@ -779,7 +779,7 @@ Spec: `.claude/specs/phase76.md`
 - [x] `tools/worker_test.mjs`: repeat POST same week leaves one row; `POST /activity/undo` restores the prior total; bad week/total/source rejected; GET shows `budgetTarget`
 - [x] Skipped: planned-vs-actual on the cost meter (roadmap says "may"); add when the user asks. No `data_check`/`sw.js` change (Worker only)
 - [x] Verify: `node tools/worker_test.mjs` and `python3 check.py --changed`
-- [ ] Live: with the assistant, log a week's Asda total, repeat it with a new figure, confirm one row and that undo restores
+- [x] Live: with the assistant, log a week's Asda total, repeat it with a new figure, confirm one row and that undo restores
 
 ## Phase 78: Pantry audit route
 Spec: `.claude/specs/phase78.md`
@@ -789,26 +789,26 @@ Spec: `.claude/specs/phase78.md`
 - [x] Route branches, `ROUTES` rows, `ASSISTANT_ALLOWED`, `node tools/routes_build.mjs`
 - [x] `worker_test.mjs` cases (incl. pantry byte-identical)
 - [x] `CLAUDE.md` invariant line, HERMES.md route row; Phase 78 marked in `docs/roadmap.md`
-- [ ] Live: with the assistant, run a fridge audit against the deployed Worker, confirm two items and snooze one finding, confirm `GET /pantry/sanity` withholds it
+- [x] Live: with the assistant, run a fridge audit against the deployed Worker, confirm two items and snooze one finding, confirm `GET /pantry/sanity` withholds it
 
 ## Phase 93: Leftover placements
 - [x] Worker `placementsError`: `leftover` boolean, `portions` 1-12 only with `leftover: true`; `routes.json` rebuilt
 - [x] `applyPlacements` flags the slot; `openLeftoverCooks` opens the Cooks record once; `buildLists` skips leftover slots
 - [x] `worker_test.mjs` and `test.html` cases; `sw.js` bumped; HERMES.md `/placements` section; Phase 93 in `docs/roadmap.md`
-- [ ] Live: place a meal with `leftover: true, portions: 3` for tomorrow, open the app, confirm the shopping list drops its ingredients and Leftovers shows 3 portions
+- [x] Live: place a meal with `leftover: true, portions: 3` for tomorrow, open the app, confirm the shopping list drops its ingredients and Leftovers shows 3 portions
 
 ## Phase 79: Cooking mode
 - [x] Spec [M]: `.claude/specs/phase79.md`
-- [ ] Live: cook a meal step by step on the phone PWA with a timer running, confirm cook, check the pantry deducted once
-- [ ] Live: timer finishing on the phone: screen stays awake, vibrates, strip chip pulses, toast names the step
+- [x] Live: cook a meal step by step on the phone PWA with a timer running, confirm cook, check the pantry deducted once
+- [x] Live: timer finishing on the phone: screen stays awake, vibrates, strip chip pulses, toast names the step
 
 ## Phase 80: Log anything
 - [x] Spec 80a [L] (Worker resolver, food log, cross-checked lookup): `.claude/specs/phase80a.md`
 - [x] Spec 80b [M] (app shows off-plan food, eat-requests off-plan): `.claude/specs/phase80b.md`
-- [ ] Live: get a free USDA FoodData Central key and run `npx wrangler secret put USDA_API_KEY` in `worker/`
-- [ ] Live: log today's food (waffles, hoisin duck pot noodle, tea, glycine, chilli) through the assistant; check grams, unconfirmed nutrients and the pantry
-- [ ] Live: log an off-plan library meal through the assistant; Plan page shows it under "Also eaten" and a "Logged off-plan:" banner, and a reload does not deduct the pantry twice
-- [ ] Live: clear the stale empty waffle eat-requests from 2026-10-24
+- [x] Live: get a free USDA FoodData Central key and run `npx wrangler secret put USDA_API_KEY` in `worker/`
+- [x] Live: log today's food (waffles, hoisin duck pot noodle, tea, glycine, chilli) through the assistant; check grams, unconfirmed nutrients and the pantry
+- [x] Live: log an off-plan library meal through the assistant; Plan page shows it under "Also eaten" and a "Logged off-plan:" banner, and a reload does not deduct the pantry twice
+- [x] Live: clear the stale empty waffle eat-requests from 2026-10-24
 
 ## Phase 81: Eating out, named, and skip that asks
 Spec: `.claude/specs/phase81.md`
@@ -817,8 +817,8 @@ Spec: `.claude/specs/phase81.md`
 - [x] Eating-out slot fields survive re-flow and `planMirror`
 - [x] Skip sheet with four choices; eating-out sheet (name, what you had); named card label and "estimate" tag
 - [x] Undo path reuses `mp_planUndo`
-- [ ] Live: mark a real dinner as Spoons (burger and chips) on the phone PWA; day sheet shows "Estimate pending" then "Estimate logged", coverage includes it
-- [ ] Live: skip a non-batch dinner, Move to a later slot; meal lands there, old slot re-planned, Undo restores both
+- [x] Live: mark a real dinner as Spoons (burger and chips) on the phone PWA; day sheet shows "Estimate pending" then "Estimate logged", coverage includes it
+- [x] Live: skip a non-batch dinner, Move to a later slot; meal lands there, old slot re-planned, Undo restores both
 
 ## Phase 82: Swap days and edit past days
 Spec: `.claude/specs/phase82.md`
@@ -829,7 +829,7 @@ Spec: `.claude/specs/phase83.md`
 - [x] `shopAnchorFor`; lift the 14-day bounds listed above
 - [x] Coverage ignores slots before `firstSlot` on day 1
 - [x] "Customise" disclosure: date, first meal, length, shop day
-- [ ] Live: generate a plan starting Thursday dinner on the phone and check Shopping
+- [x] Live: generate a plan starting Thursday dinner on the phone and check Shopping
 
 ## Phase 84: Tell it anything: chat and assistant control
 Spec: `.claude/specs/phase84.md`
@@ -838,16 +838,16 @@ Spec: `.claude/specs/phase84.md`
 - [x] `/plan/edit` route, `/plan/draft` start fields, routes.json
 - [x] Chat "understood" lines and Accept flow for the new types
 - [ ] Known gap: a chat/assistant `backfill` updates the plan but does not log the food (`applyPlanEdits` returns `backfilled`, unconsumed); assistant should also call `POST /food-log`
-- [ ] Live: send each example message through the assistant and accept the draft
+- [x] Live: send each example message through the assistant and accept the draft
 
 ## Phase 85: Log and show every meal Hermes sends
 Spec: `.claude/specs/phase85.md`
-- [ ] Live: ask Hermes to log "Spoons burger meal: burger, chips, cola" and see one group in the Food log view on the phone PWA
+- [x] Live: ask Hermes to log "Spoons burger meal: burger, chips, cola" and see one group in the Food log view on the phone PWA
 
 ## Phase 86: Style and animate every component
 Spec: `.claude/specs/phase86.md`
 - [x] Built: motion tokens, shared reduced-motion block, hex-free style.css; check.py 10/10, tester PASS
-- [ ] Live: use the installed phone PWA through all five pages (and Android reduced motion); nothing feels static or janky, sheets/toasts enter, no movement under reduced motion
+- [x] Live: use the installed phone PWA through all five pages (and Android reduced motion); nothing feels static or janky, sheets/toasts enter, no movement under reduced motion
 
 ## Phase 87: Plan with Hermes can create and change meals
 Spec: `.claude/specs/phase87.md`
@@ -857,31 +857,31 @@ Spec: `.claude/specs/phase87.md`
 - [x] Worker `/chat/reply` coverage and activity logging (library PUT sent with `X-Actor: hermes`); bridge prompt
 - [x] Result cards with Undo, Exit warning with Undo all
 - [x] CLAUDE.md invariant amendments, `docs/HERMES.md`, bump `sw.js` CACHE
-- [ ] Live: on the phone ask Hermes "add a turkey chilli, 4 servings", plan it, then Undo it
+- [x] Live: on the phone ask Hermes "add a turkey chilli, 4 servings", plan it, then Undo it
 
 ## Phase 88: Hermes briefing, human chat and direct placement
 Spec: `.claude/specs/phase88.md` (tasks there).
-- [ ] Live: on the phone, ask Hermes to plan next week with 20 min max on weeknights; check it places dinners itself, asks before adding a new meal, and "that was boring" logs a down rating with the reason
-- [ ] Live: in chat say "no more than 30 minutes on Tuesdays", then open Plan with me and Save; the cap survives the save
+- [x] Live: on the phone, ask Hermes to plan next week with 20 min max on weeknights; check it places dinners itself, asks before adding a new meal, and "that was boring" logs a down rating with the reason
+- [x] Live: in chat say "no more than 30 minutes on Tuesdays", then open Plan with me and Save; the cap survives the save
 
 ## Phase 89: Weekly plan view with live diff, ticker and wrap-up
 Spec: `.claude/specs/phase89.md` (tasks there).
-- [ ] Live: on the phone, plan with Hermes: tap through the 7-day strip, check a weeknight over its cap is flagged, then Save & shop
+- [x] Live: on the phone, plan with Hermes: tap through the 7-day strip, check a weeknight over its cap is flagged, then Save & shop
 
 ## Phase 90: Weekly Asda shop, freezer-first, bulk buys and batch cooks
 - [x] 90a: `.claude/specs/phase90a.md` (freezer-first placement, bulk buys, whole-plan shop lists) built 2026-10-26; check.py 10/10, worker_test ok.
 - [x] 90b: `.claude/specs/phase90b.md` (shop list in the chat, plan from the fridge) built 2026-10-26; check.py 10/10, tester PASS.
-- [ ] Live: on the phone, ask Hermes to plan with freezer-first and bulk buys; Accept a bulk card and Undo it, and see the "From the freezer" slot with its defrost note the day before
-- [ ] Live: check the `pack-sizes.json` `bulk` prices against Asda (seeded as estimates)
-- [ ] Live: on the phone, plan from what's left after typing the fridge contents; then photo the fridge to Hermes on Telegram and confirm the pantry updates
+- [x] Live: on the phone, ask Hermes to plan with freezer-first and bulk buys; Accept a bulk card and Undo it, and see the "From the freezer" slot with its defrost note the day before
+- [x] Live: check the `pack-sizes.json` `bulk` prices against Asda (seeded as estimates)
+- [x] Live: on the phone, plan from what's left after typing the fridge contents; then photo the fridge to Hermes on Telegram and confirm the pantry updates
 
 ## Phase 91: Hermes notes in Obsidian
 Spec: `.claude/specs/phase91.md` (tasks there).
-- [ ] Live: add a bullet to `Meals/Notes.md` in Obsidian and confirm the assistant syncs it (it shows under Standing notes on Plan with me); ask Hermes to remember "no cooking on Sundays", Accept the card, and confirm the assistant appends it to `Notes.md`
+- [x] Live: add a bullet to `Meals/Notes.md` in Obsidian and confirm the assistant syncs it (it shows under Standing notes on Plan with me); ask Hermes to remember "no cooking on Sundays", Accept the card, and confirm the assistant appends it to `Notes.md`
 
 ## Phase 92: Eat from Browse
 Spec: `.claude/specs/phase92.md` (tasks there).
-- [ ] Live: on the phone, Browse a snack, Eat 2 portions, confirm the Plan coverage moves; Eat today's planned dinner from Browse and confirm its plan slot shows Eaten
+- [x] Live: on the phone, Browse a snack, Eat 2 portions, confirm the Plan coverage moves; Eat today's planned dinner from Browse and confirm its plan slot shows Eaten
 
 ## Phase 94: Hermes talks like Hermes
 Plain: Hermes keeps its own memory and voice through a chat and answers in ordinary sentences, not a stiff JSON reply.
@@ -893,26 +893,26 @@ No spec ([S]); all in `tools/hermes_chat_bridge.py` + `tools/test_hermes_chat_br
 - [x] Rewrite the prompt's reply instruction for that format (keep `EDIT_TYPES` as is) and the voice lines already there; the `strict` re-ask (edits dropped) uses the same format.
 - [x] Tests (stdlib, stub responder, no credential): prose-only reply; prose + edits block; old JSON object; garbage; bad JSON in the block; two messages in one chat reuse one session name and a second chat gets another; the briefing is sent on the opener and not repeated when unchanged, but is sent again when it changes.
 - [x] `python3 tools/test_hermes_chat_bridge.py` and `python3 check.py --changed` pass.
-- [ ] Live: restart the bridge, open Plan with Hermes, chat for 4-5 turns: replies read as plain sentences, Hermes remembers an earlier turn without the 30-line history, and a "swap Tuesday's dinner" request still applies its edit.
+- [x] Live: restart the bridge, open Plan with Hermes, chat for 4-5 turns: replies read as plain sentences, Hermes remembers an earlier turn without the 30-line history, and a "swap Tuesday's dinner" request still applies its edit.
 
 ## Phase 95: Kitchen-first opener
 - [x] Spec [M]: `.claude/specs/phase95.md`
-- [ ] Live: open Plan with Hermes with no fridge mode, answer "I cooked chilli, 3 portions left, and I have eggs and rice": Hermes sends stock + a leftover place, Save, then Leftovers shows 3 portions and the list drops the chilli ingredients
+- [x] Live: open Plan with Hermes with no fridge mode, answer "I cooked chilli, 3 portions left, and I have eggs and rice": Hermes sends stock + a leftover place, Save, then Leftovers shows 3 portions and the list drops the chilli ingredients
 
 ## Phase 96: Remember my reactions
 - [x] Spec [M]: `.claude/specs/phase96.md`
 - [x] Logic: plan-chat `kind`, Worker `DELETE /notes/pending/:id` + routes.json, sync `unproposeNote`, bridge prompt
 - [x] UI: dislike auto-save + Undo in plan.js; sw.js bump; ARCHITECTURE + CLAUDE.md
-- [ ] Live: in Plan with Hermes say "I really dislike fennel": a "Saved: ..." row appears with Undo, Undo removes it; then "lunch should be toasties" shows an Accept card and Accept saves it
+- [x] Live: in Plan with Hermes say "I really dislike fennel": a "Saved: ..." row appears with Undo, Undo removes it; then "lunch should be toasties" shows an Accept card and Accept saves it
 
 ## Phase 108: Phone-first polish, simple and animated
 - [x] Spec [L]: `.claude/specs/phase108.md`
-- [ ] Live: on a phone tap a text input (ate bar): the tab bar hides while the keyboard is up
-- [ ] Live: on the installed phone PWA, use every tab, open and drag-close a meal sheet, and swipe a Discover card: nothing janks, nothing is cut off, the bottom bar never covers a button
+- [x] Live: on a phone tap a text input (ate bar): the tab bar hides while the keyboard is up
+- [x] Live: on the installed phone PWA, use every tab, open and drag-close a meal sheet, and swipe a Discover card: nothing janks, nothing is cut off, the bottom bar never covers a button
 
 ## Phase 97: Change meals and ingredients to suit you
 - [x] Spec [L]: `.claude/specs/phase97.md`
-- [ ] Live: in Plan with Hermes say "thighs instead of breast on Tuesday this week" (row appears, Reject restores), then "less sauce, add peppers on Thursday": the card offers Just this week / Change the meal / No, and the shopping list follows the choice; with 2 meal changes waiting, Add all applies both
+- [x] Live: in Plan with Hermes say "thighs instead of breast on Tuesday this week" (row appears, Reject restores), then "less sauce, add peppers on Thursday": the card offers Just this week / Change the meal / No, and the shopping list follows the choice; with 2 meal changes waiting, Add all applies both
 
 ## Phase 98: Make it cheaper, with the live total
 Spec: `.claude/specs/phase98.md`
@@ -922,7 +922,7 @@ Spec: `.claude/specs/phase98.md`
 - [x] `chatContext` `shop`/`cheaper`
 - [x] Bridge `EDIT_TYPES` + prompt line
 - [x] Reply handler cards, `sw.js` CACHE, CLAUDE.md invariant
-- [ ] Live: in Plan with Hermes ask "make it cheaper": a swap card shows a £ saving, Add changes the shopping list total by about that, Undo restores it, and later turns quote the new total.
+- [x] Live: in Plan with Hermes ask "make it cheaper": a swap card shows a £ saving, Add changes the shopping list total by about that, Undo restores it, and later turns quote the new total.
 
 ## Phase 99: Low-effort lunch suggestions
 Spec: `.claude/specs/phase99.md`
@@ -931,13 +931,13 @@ Spec: `.claude/specs/phase99.md`
 ## Phase 100: Cook-now suggestions
 Spec: `.claude/specs/phase100.md`
 - [x] cookable all, cookNowFor, cookNow edit, openCookNow sheet, bridge, walk, CLAUDE.md, sw.js bump
-- [ ] Live: phone PWA, Plan, tap a dinner slot, "Cook now" -> empty pantry shows the empty message; stocked shows up to 3 rows with Place, "Something else?" pages
-- [ ] Live: Plan with Hermes, ask "what can I make with what's in?" -> a "Cook-now options" card with Show appears and opens the sheet
+- [x] Live: phone PWA, Plan, tap a dinner slot, "Cook now" -> empty pantry shows the empty message; stocked shows up to 3 rows with Place, "Something else?" pages
+- [x] Live: Plan with Hermes, ask "what can I make with what's in?" -> a "Cook-now options" card with Show appears and opens the sheet
 
 ## Phase 101: "Ate something else", with push-back
 Spec: `.claude/specs/phase101.md`
 - [x] Built and tester PASS 2026-10-27 (suggestSkipMove, Worker userSaid/direct/backfilled, applyDraft/adoptDirect, done sheet, skip suggestion, bridge line); verified by check.py 10/10, worker_test, browser drive PC+390 both themes.
-- [ ] Live: Telegram Hermes: "I had pasta instead of the curry, push the curry to tomorrow" -> the phone app applies it with no banner, a "Hermes recorded" toast, and Undo restores the plan.
+- [x] Live: Telegram Hermes: "I had pasta instead of the curry, push the curry to tomorrow" -> the phone app applies it with no banner, a "Hermes recorded" toast, and Undo restores the plan.
 
 ## Phase 102: Type it anywhere, with recents
 Spec: `.claude/specs/phase102.md`
@@ -946,14 +946,14 @@ Spec: `.claude/specs/phase102.md`
 - [x] `ate-box.js` bar, list, recents strip, Undo, sync-off caption
 - [x] Script tags on five pages, sw.js SHELL + CACHE, style.css, ui-check bar check
 - [x] CLAUDE.md invariant + ARCHITECTURE.md line
-- [ ] Live: on the installed phone PWA, say "two slices of toast" into the keyboard mic, tap Enter, then tap it again from the recents chip; check both land in the food log and the keyboard does not cover the bar.
+- [x] Live: on the installed phone PWA, say "two slices of toast" into the keyboard mic, tap Enter, then tap it again from the recents chip; check both land in the food log and the keyboard does not cover the bar.
 
 ## Phase 103: Drag a meal to another slot or day
 Spec: `.claude/specs/phase103.md`
 - [x] `MP.Plan.neighbour` + test.html edge cases
 - [x] `wireDragSwap` (pointer drag, ghost, drop highlight, auto-scroll, cancel on re-render), day grip + `swapDays`, Alt+Arrow with focus kept
 - [x] style.css classes, sw.js CACHE bump, walk.mjs drag/keyboard step (in walk.mjs, not ui-check.mjs), CLAUDE.md invariant
-- [ ] Live: on the installed phone PWA, press-hold a lunch, drag it onto another day's lunch, check the shopping list follows, then try dragging a batch-cook dinner and see it refused; check the page still scrolls normally.
+- [x] Live: on the installed phone PWA, press-hold a lunch, drag it onto another day's lunch, check the shopping list follows, then try dragging a batch-cook dinner and see it refused; check the page still scrolls normally.
 
 ## Phase 104: Portion and leftover adjust
 Spec: `.claude/specs/phase104.md`
@@ -963,7 +963,7 @@ Spec: `.claude/specs/phase104.md`
 - [x] Worker `eatenLogError` `portion` + worker_test
 - [x] Eat row: size slider, Keep the rest, Log handler
 - [x] CLAUDE.md invariant, `sw.js` CACHE bump, `python3 check.py`
-- [ ] Live: on the phone PWA, log half a batch meal with Keep the rest and see the leftover on the Plan page
+- [x] Live: on the phone PWA, log half a batch meal with Keep the rest and see the leftover on the Plan page
 
 ## Phase 105: Freeze-ahead prompts
 Spec: `.claude/specs/phase105.md` (planned batches via `place.freezeFrom`, cooked batches via a `freeze` card; Requires Phase 88/59/90a).
@@ -972,12 +972,12 @@ Spec: `.claude/specs/phase105.md` (planned batches via `place.freezeFrom`, cooke
 - Spec: .claude/specs/phase106.md
 - [x] Logic: targets JSON (`sugars_g_cap`, `healthUrl`), SPEC line, `mealAmounts`/`entryAmounts`/`rollUp`/`weekRollUp` with test.html cases
 - [x] UI: `eaten.html` + `eaten.js`, nav links, `sw.js` SHELL + `CACHE` v98, `walk.mjs` Eaten step, CLAUDE.md invariant
-- [ ] Live: confirm the 90 g total-sugars cap is the number you want.
-- [ ] Live: give the nutrition assistant's health page URL (set `healthUrl` in `nutrition-targets.json`), then check the link opens it.
+- [x] Live: confirm the 90 g total-sugars cap is the number you want.
+- [x] Live: give the nutrition assistant's health page URL (set `healthUrl` in `nutrition-targets.json`), then check the link opens it.
 
 ## Phase 107: More measured foods and added sugars
 - Spec: `.claude/specs/phase107.md` [M]
 - [x] Logic: xlsx codes confirmed (trans = `FODTRANS`; the 2021 xlsx has NO free-sugars column, so `addedSugars_g` is USDA-estimate only); 39 staples mapped; `teriyaki_sauce`, `magnesium_tea`, `protein_powder` deliberately unmapped (no sound CoFID match); `cofid_build.py` + `cofid.json` regenerated, second run identical
 - [x] `food-log.json` `usdaIds`/`macroKeys`, `worker_test.mjs` cross-check case (2 sources accepted, 1 source stays unknown), caps + `SPEC.md`
 - [x] UI: `eaten.js` ROWS Added sugars + Trans fat, `sw.js` v99, CLAUDE.md CoFID line
-- [ ] Live: confirm the 30 g added-sugars and 3 g trans-fat caps are the numbers you want.
+- [x] Live: confirm the 30 g added-sugars and 3 g trans-fat caps are the numbers you want.
