@@ -1133,3 +1133,8 @@ main { animation: m-enter var(--motion-base) ease-out both; }
   .top-actions > * { flex: 0 0 auto; display: inline-flex; align-items: center; white-space: nowrap; }
   .modal-sheet { padding-bottom: calc(1.25rem + env(safe-area-inset-bottom)); }
 }
+
+/* Pantry checklist: tick = used up, qty editable inline */
+.pan-tick { width: 1.4rem; height: 1.4rem; flex: none; }
+.pan-qty { width: 5.5rem; font-size: .9rem; }
+.used-up .shop-name, .used-up .pan-qty { text-decoration: line-through; opacity: .55; }

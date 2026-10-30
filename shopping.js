@@ -425,11 +425,13 @@
     const rows = items.map((item) => {
       const key = MP.ShoppingList.normalizeKey(item.name);
       const p = MP.Products.forIngredient(products, key);
-      return `<li class="shop-line prod-row"><span class="shop-qty">${esc(MP.qtyText(item.qty))}</span>
+      return `<li class="shop-line prod-row${item.out ? " used-up" : ""}">
+        <input type="checkbox" class="pan-tick" data-tick="${esc(item.name)}"${item.out ? " checked" : ""} aria-label="Used up: ${esc(item.name)}">
+        <input type="text" class="pan-qty" data-qty="${esc(item.name)}" value="${esc(MP.qtyText(item.qty))}" placeholder="qty" aria-label="Quantity of ${esc(item.name)}">
         <span class="shop-name">${esc(item.name)}</span>
         ${useByHtml(item, today, plan)}
         ${storageHtml(item)}
-        ${item.out ? `<button class="prod-chip" data-restock="${esc(item.name)}">Out — restocked?</button>` : `<button class="prod-chip muted" data-out="${esc(item.name)}">Ran out</button>`}
+        <button class="prod-chip muted" data-rm="${esc(item.name)}" aria-label="Remove ${esc(item.name)}">✕</button>
         ${p ? chipHtml(p) : `<button class="prod-chip muted" data-link="${esc(key)}">Link product</button>`}</li>`;
     });
     const best = MP.Products.rank(products, packData);
@@ -443,6 +445,7 @@
       <div class="top-actions"><button id="scan-btn" class="btn">Scan a product</button><button id="add-product-btn" class="ghost">Add without barcode</button></div>
       ${strip}
       <h3>In your pantry</h3>
+      <form id="pan-add" class="top-actions"><input id="pan-add-name" placeholder="Add item" required aria-label="Item name"><input id="pan-add-qty" placeholder="qty (optional)" aria-label="Quantity"><button class="btn">Add</button></form>
       ${rows.length ? `<ul class="shop-list">${rows.join("")}</ul>` : `<p class="empty">Nothing in your pantry.</p>`}
       <h3>All products</h3>
       ${best.length ? `<h3>Best protein value</h3><ol class="shop-list best-protein">${best.map((r) => `<li class="shop-line prod-row">${chipHtml(r.product)} <span class="prot-value">${proteinText(r)}</span></li>`).join("")}</ol>` : ""}
@@ -511,8 +514,19 @@
     root.querySelectorAll("[data-link]").forEach((b) => b.addEventListener("click", () => scanSheet(b.dataset.link)));
     root.querySelectorAll("[data-useby]").forEach((b) => b.addEventListener("click", () => useByDialog(b.dataset.useby)));
     root.querySelectorAll("[data-stor]").forEach((sel) => sel.addEventListener("change", () => { pantryOp({ type: "storage", name: sel.dataset.stor, storage: sel.value || null }); renderPantry(); }));
-    root.querySelectorAll("[data-out]").forEach((b) => b.addEventListener("click", () => { pantryOp({ type: "out", name: b.dataset.out }); renderPantry(); }));
-    root.querySelectorAll("[data-restock]").forEach((b) => b.addEventListener("click", () => { pantryOp({ type: "add", name: b.dataset.restock }); renderPantry(); }));
+    root.querySelectorAll("[data-tick]").forEach((c) => c.addEventListener("change", () => { pantryOp(c.checked ? { type: "out", name: c.dataset.tick } : { type: "add", name: c.dataset.tick }); renderPantry(); }));
+    root.querySelectorAll("[data-rm]").forEach((b) => b.addEventListener("click", () => { pantryOp({ type: "remove", name: b.dataset.rm }); renderPantry(); }));
+    root.querySelectorAll("[data-qty]").forEach((i) => i.addEventListener("change", () => {
+      const name = i.dataset.qty, ub = (MP.Sync.localItems("pantry").find((x) => x.name === name) || {}).useBy;
+      pantryOp({ type: "add", name, qty: i.value.trim() });
+      if (ub) pantryOp({ type: "useBy", name, useBy: ub }); // an `add` with qty drops useBy
+      renderPantry();
+    }));
+    root.querySelector("#pan-add").addEventListener("submit", (e) => {
+      e.preventDefault();
+      const name = root.querySelector("#pan-add-name").value.trim(), qty = root.querySelector("#pan-add-qty").value.trim();
+      if (name) { pantryOp(qty ? { type: "add", name, qty } : { type: "add", name }); renderPantry(); }
+    });
     const useup = root.querySelector("#useup-btn");
     if (useup) useup.addEventListener("click", useItUpSheet);
   }
