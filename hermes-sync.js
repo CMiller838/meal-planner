@@ -537,6 +537,16 @@ window.MP = window.MP || {};
     }
   }
 
+  /** GET /plan: the server's plan mirror, as a plan the Plan page can adopt, or null (off, offline, empty). The "Restore plan from Hermes" button's source. */
+  async function fetchPlanMirror() {
+    if (!config().enabled) return null;
+    try {
+      const m = await req("GET", "/plan");
+      if (!m || !Array.isArray(m.days) || !m.days.length || !m.startDate) return null;
+      return { startDate: m.startDate, ...(m.shopAnchor ? { shopAnchor: m.shopAnchor } : {}), ...(m.firstSlot ? { firstSlot: m.firstSlot } : {}), ...(Array.isArray(m.bulk) && m.bulk.length ? { bulk: m.bulk } : {}), days: m.days.map((d) => ({ day: d.day, slots: d.slots || {} })), generatedAt: new Date().toISOString(), restoredFromHermes: true };
+    } catch { return null; }
+  }
+
   /** GET /dayHints (assistant-written, read-only here). Failure-silent: null. */
   async function fetchDayHints() {
     if (!config().enabled) return null;
@@ -880,7 +890,7 @@ window.MP = window.MP || {};
     decide, needsPlan, config, saveConfig, syncLibrary, syncPlanFlag, ackPlanFlag,
     shoppingLines, setLine, fetchShoppingLines, flushShoppingLines,
     fetchItems, fetchPantry, localItems, writeLocalItems, queueOp, applyOps, flushOps,
-    planMirror, pushPlan, pushPrefs, fetchPlanPrefs, fetchDayHints, fetchPlanDraft, ackPlanDraft, fetchRatings, fetchFoodLog, postFoodLog, removeFoodEntry, groupFoodLog, localFoodLog, fetchSettings, settings, fetchNotes, notes, proposeNote, unproposeNote, hardTerms, noteLibraryChange, fetchDrafts, deleteDraft, pushRating, pushPlanPrefs, newPlacements, newSince, syncPlacements, ackPlacements, syncEatRequests,
+    planMirror, pushPlan, fetchPlanMirror, pushPrefs, fetchPlanPrefs, fetchDayHints, fetchPlanDraft, ackPlanDraft, fetchRatings, fetchFoodLog, postFoodLog, removeFoodEntry, groupFoodLog, localFoodLog, fetchSettings, settings, fetchNotes, notes, proposeNote, unproposeNote, hardTerms, noteLibraryChange, fetchDrafts, deleteDraft, pushRating, pushPlanPrefs, newPlacements, newSince, syncPlacements, ackPlacements, syncEatRequests,
     localEatenLog, logEaten, logPortion, unlogEaten, pushEatenLog, pushCooks, start,
     syncProducts, localProducts, saveProduct, fetchActivity, undoActivity, resyncKey,
   };
