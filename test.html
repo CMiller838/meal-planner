@@ -24,6 +24,7 @@
 <script src="day-hints.js"></script>
 <script src="ratings.js"></script>
 <script src="plan-chat.js"></script>
+<script src="bar-chat.js"></script>
 <script src="cook-mode.js"></script>
 <script src="plan.js"></script>
 <script>
@@ -170,6 +171,46 @@
     check("filterMeals matches by meal type", MP.filterMeals(library, "dinner").every((m) => m.mealTypes.includes("dinner")));
     check("filterMeals matches by ingredient", MP.filterMeals(library, "yogurt").some((m) => m.id === "oats-yogurt-banana"));
     check("filterMeals blank query returns full array", MP.filterMeals(library, "  ").length === library.length);
+  }
+
+  // 8b. Phase 109: multi-term filterMeals, the `meals` edit, and the docked bar's live edit set
+  {
+    const both = MP.filterMeals(library, "chicken rice");
+    check("filterMeals: 'chicken rice' needs both terms, and + , 'and' agree", both.length > 0 && both.length < MP.filterMeals(library, "chicken").length
+      && both.every((m) => /chicken/.test(JSON.stringify(m).toLowerCase()) && /rice/.test(JSON.stringify(m).toLowerCase()))
+      && MP.filterMeals(library, "chicken + rice").length === both.length && MP.filterMeals(library, "chicken, rice").length === both.length && MP.filterMeals(library, "chicken and rice").length === both.length);
+    check("filterMeals: only separators returns everything", MP.filterMeals(library, " + , ").length === library.length);
+    const PCb = MP.PlanChat, vm = (e) => PCb.validateReply({ text: "", edits: [e] }, {}, "2026-01-01").reply.edits;
+    check("validateReply: meals kept (deduped), empty / >6 / non-string ids dropped", vm({ type: "meals", ids: ["a", "a", "b"] })[0].ids.join() === "a,b" && !vm({ type: "meals", ids: [] }).length
+      && !vm({ type: "meals", ids: ["1", "2", "3", "4", "5", "6", "7"] }).length && !vm({ type: "meals", ids: [3] }).length && PCb.BAR_LIVE.includes("meals") && !PCb.BAR_LIVE.includes("mealCreate"));
+    const mk = (id, ings, types) => ({ id, name: id.toUpperCase(), mealTypes: types || ["dinner"], ingredients: ings.map((k) => ({ key: k })), servings: 1 });
+    const bm = { a: mk("a", ["chicken", "rice"]), b: mk("b", ["pasta"]), c: mk("c", ["chicken", "cheese"]), l: mk("l", ["bread"], ["lunch"]) };
+    const mkPlan = () => ({ startDate: "2026-01-05", days: [1, 2, 3].map((d) => ({ day: d, slots: { dinner: { mealId: ["a", "b", "c"][d - 1] } } })) });
+    const mkStore = () => { const st = { plan: mkPlan(), snap: null, writes: 0 }; return { st, get: () => st.plan, snapshot: (p) => { st.snap = JSON.stringify(p); }, set: (p) => { st.plan = p; st.writes++; } }; };
+    const dinners = (p) => p.days.map((d) => d.slots.dinner && d.slots.dinner.mealId).join();
+    const ctxB = (store, extra) => ({ store, byId: bm, now: "2026-01-05", terms: [], noLog: true, ...extra });
+    let S = mkStore();
+    let r = MP.BarChat.applyLive({ text: "", edits: [{ type: "swapDay", a: 2, b: 3 }] }, ctxB(S));
+    check("BarChat.applyLive: swapDay applies, snapshots first, one write", dinners(S.st.plan) === "a,c,b" && r.applied.length === 1 && S.st.writes === 1 && JSON.parse(S.st.snap).days[1].slots.dinner.mealId === "b");
+    r.undo();
+    check("BarChat.applyLive: undo restores the plan", dinners(S.st.plan) === "a,b,c");
+    S = mkStore();
+    r = MP.BarChat.applyLive({ text: "", edits: [{ type: "mealCreate", name: "X", ingredients: [{ key: "rice", qty: "1" }] }, { type: "budget", perWeek: 30 }, { type: "start", date: "2026-02-01" }, { type: "cheaper", key: "a", to: "b", shopDay: 1 }, { type: "place", day: 2, slot: "dinner", mealId: "a", cookId: "k1" }] }, ctxB(S));
+    check("BarChat.applyLive: non-live edit types apply nothing and flag `other`", r.other === true && !r.applied.length && S.st.writes === 0 && dinners(S.st.plan) === "a,b,c");
+    r = MP.BarChat.applyLive({ text: "", edits: [{ type: "place", day: 2, slot: "dinner", mealId: "c" }, { type: "place", day: 3, slot: "dinner", mealId: "l" }] }, ctxB(S));
+    check("BarChat.applyLive: library place applies; wrong slot type is refused with a reason", dinners(S.st.plan) === "a,c,c" && r.applied.some((x) => x.type === "place") && r.refused.length === 1 && /dinner/.test(r.refused[0]));
+    r = MP.BarChat.applyLive({ text: "", edits: [{ type: "place", day: 2, slot: "dinner", mealId: "a" }] }, ctxB(S, { terms: ["rice"] }));
+    check("BarChat.applyLive: hard exclusion term refuses a place", r.refused.length === 1 && dinners(S.st.plan) === "a,c,c");
+    r = MP.BarChat.applyLive({ text: "", edits: [{ type: "meals", ids: ["a", "zzz", "c"] }] }, ctxB(mkStore()));
+    check("BarChat.applyLive: meals rows keep library ids only, change nothing", r.meals.map((m) => m.id).join() === "a,c" && !r.applied.length && !r.other);
+    const rat = {}; let pushed = 0;
+    const ratingsApi = { get: () => rat, set: (id, p) => { rat[id] = { ...rat[id], ...p }; }, push: () => { pushed++; } };
+    r = MP.BarChat.applyLive({ text: "", edits: [{ type: "rate", mealId: "a", rating: "down", note: "bland" }, { type: "rate", mealId: "nope", rating: "up" }] }, ctxB(mkStore(), { ratingsApi }));
+    check("BarChat.applyLive: rate applies, unknown meal refused, undo reverts", rat.a.rating === "down" && pushed === 1 && r.refused.length === 1 && (r.undo(), rat.a.rating === null));
+    S = mkStore();
+    r = MP.BarChat.applyLive({ text: "", edits: [{ type: "backfill", day: 1, slot: "dinner", name: "Pizza" }] }, ctxB(S, { uuid: () => "fid1" }));
+    check("BarChat.applyLive: eating-out backfill records the slot with a food-log id, undo restores", S.st.plan.days[0].slots.dinner.foodLogId === "fid1" && (r.undo(), dinners(S.st.plan) === "a,b,c"));
+    check("BarChat.brief: library ids + ingredient keys, today's slots, no cooks/bulk", (() => { const b = MP.BarChat.brief({ library: Object.values(bm), plan: mkPlan(), now: "2026-01-06", ratings: {}, terms: ["x"] }); return b.library[0].ingredients.join() === "chicken,rice" && b.today.day === 2 && b.today.slots.dinner === "b" && !("cooks" in b) && b.terms[0] === "x"; })());
   }
 
   // 9a. aisleFor / groupByAisle

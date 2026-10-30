@@ -108,6 +108,8 @@
         const from = k(x.from), to = k(x.to), label = x.label === undefined ? undefined : str(x.label, 60), qty = x.qty === undefined ? undefined : str(x.qty, 40);
         return from !== false && to !== false && (from || to) && (!to || from === to || label) && (x.qty === undefined || qty) && !(from && from === to && !qty) && { from, to, ...(label ? { label } : {}), ...(qty ? { qty } : {}) }; });
       return isDay(e.day) && isSlot(e.slot) && subs && subs.every(Boolean) && (e.scope === undefined || e.scope === "week" || e.scope === "meal") && { type: "sub", day: e.day, slot: e.slot, subs, ...(e.scope ? { scope: e.scope } : {}) }; },
+    // Phase 109: display-only meal rows for the docked bar (<=6 ids; the bar drops ids not in the library)
+    meals: (e) => Array.isArray(e.ids) && e.ids.length >= 1 && e.ids.length <= 6 && e.ids.every((i) => typeof i === "string" && i.length > 0 && i.length <= 80) && { type: "meals", ids: [...new Set(e.ids)] },
     reroll: (e) => isDay(e.day) && (e.slot === undefined || isSlot(e.slot)) && (e.slot === undefined ? { type: "reroll", day: e.day } : { type: "reroll", day: e.day, slot: e.slot }),
   };
 
@@ -170,6 +172,9 @@
     return { chatPrefs: cp, days: uniq([...days]), locks, unlocks, slotOnly };
   }
 
+  /** Phase 109: the only edit types the docked bar's Ask mode applies (everything else is dropped there). */
+  const BAR_LIVE = ["skip", "out", "swap", "swapDay", "backfill", "sub", "rate", "place", "meals"];
+
   const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
   function dayName(startDate, day) {
     const d = new Date(`${startDate}T12:00:00Z`);
@@ -208,6 +213,7 @@
       else if (e.type === "cookNow") parts.push(`${name(e.day)} ${e.slot}: what you can cook now`);
       else if (e.type === "note") parts.push(`suggested note: ${e.text}`);
       else if (e.type === "rate") parts.push(`${e.mealId}: rated ${e.rating}`);
+      else if (e.type === "meals") parts.push(`showing ${e.ids.length} meal${e.ids.length === 1 ? "" : "s"}`);
       else if (e.type === "backfill") parts.push(`${name(e.day)} ${e.slot}: recorded as eaten${e.name ? ` (${e.name})` : ""}`);
     }
     return parts.join(", ");
@@ -227,5 +233,5 @@
   }
 
   root.MP = root.MP || {};
-  root.MP.PlanChat = { validateReply, toOverride, describe, chipIds, call };
+  root.MP.PlanChat = { validateReply, toOverride, describe, chipIds, call, BAR_LIVE };
 })(typeof globalThis !== "undefined" ? globalThis : this);

@@ -608,6 +608,118 @@ for (const [vp, size] of Object.entries({ pc: { width: 1440, height: 900 }, phon
     await seed(13);
     if (!(await page.evaluate(() => document.getElementById('tomorrow-card').hidden))) throw new Error('card shown on last plan day');
   });
+  // Phase 109: the docked bar's Ask mode (Hermes) and Browse search-and-log; /chat is the same page.route mock above
+  const flog = { entries: [] };
+  await page.route('https://fake.test/food-log', route => {
+    const req = route.request();
+    if (req.method() === 'POST') { const e = req.postDataJSON().entries[0]; if (e.name && e.grams) flog.entries.push({ id: e.id, kind: 'eat', name: e.name, grams: e.grams, when: e.when }); return route.fulfill({ status: 200, contentType: 'application/json', body: '{}' }); }
+    return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(flog) });
+  });
+  const stateKeys = () => page.evaluate(() => JSON.stringify(['mp_pantry', 'mp_cooks', 'mp_pantry_ops'].map(k => localStorage.getItem(k))));
+  const askBar = async (text, reply) => {
+    chatMock.bridgeAgeMs = 0; chatMock.reply = reply;
+    await page.click('.ate-mode[data-mode="ask"]');
+    await page.fill('.ate-input', text);
+    await page.press('.ate-input', 'Enter');
+    await page.waitForSelector('.ate-bubble.typing', { state: 'detached', timeout: 10000 });
+  };
+  const seedPlan = async (pg) => {
+    await page.goto(`${base}/plan.html`);
+    await page.evaluate(() => { localStorage.removeItem('mp_plan'); localStorage.removeItem('mp_planPrefs'); localStorage.setItem('mp_hermes_url', 'https://fake.test'); localStorage.setItem('mp_hermes_token', 't'); sessionStorage.clear(); });
+    await page.goto(`${base}/${pg}`);
+    if (pg === 'plan.html') await page.waitForSelector('#plan-root .slot-card');
+    if (pg === 'plan.html') await page.evaluate(() => { const p = JSON.parse(localStorage.getItem('mp_plan')); p.startDate = new Date().toLocaleDateString('en-CA'); localStorage.setItem('mp_plan', JSON.stringify(p)); });
+    await page.reload();
+    if (pg === 'plan.html') await page.waitForSelector('#plan-root .slot-card');
+    await page.waitForSelector('.ate-mode[data-mode="ask"]:not([hidden])');
+    await page.evaluate(() => { window.__marker = 1; window.__live = 0; addEventListener('mp:plan-live', () => window.__live++); });
+  };
+  await step('bar Ask on Shopping: a swapDay reply changes mp_plan in place (no reload), the list redraws, Undo restores', async () => {
+    await page.goto(`${base}/plan.html`); await page.evaluate(() => localStorage.removeItem('mp_plan')); // fresh plan
+    await seedPlan('plan.html'); await page.goto(`${base}/shopping.html`);
+    await page.waitForSelector('#shopping-root .shop-line, #shopping-root li', { timeout: 8000 });
+    await page.waitForSelector('.ate-mode[data-mode="ask"]:not([hidden])');
+    await page.evaluate(() => { window.__marker = 1; window.__live = 0; addEventListener('mp:plan-live', () => window.__live++); });
+    const before = JSON.parse(await planLS());
+    await askBar('swap Tuesday and Wednesday', { text: 'Swapped them.', edits: [{ type: 'swapDay', a: 2, b: 3 }] });
+    const after = JSON.parse(await planLS());
+    if (JSON.stringify(after.days[1].slots) !== JSON.stringify(before.days[2].slots) || JSON.stringify(after.days[2].slots) !== JSON.stringify(before.days[1].slots)) throw new Error('days 2 and 3 not swapped in mp_plan');
+    if (await page.evaluate(() => [window.__marker, window.__live].join()) !== '1,1') throw new Error('page reloaded or mp:plan-live missed');
+    if (!/Hermes did/.test(await page.innerText('.ate-thread'))) throw new Error('no "Hermes did" bubble');
+    if (await page.evaluate(() => localStorage.getItem('mp_planUndo')) !== JSON.stringify(before)) throw new Error('snapshot is not the pre-edit plan');
+    await shot('bar-ask');
+    await page.click('.ate-msg button:text("Undo")');
+    if (JSON.stringify(JSON.parse(await planLS())) !== JSON.stringify(before)) throw new Error('Undo did not restore the plan');
+  });
+  await step('bar Ask on Plan: a swapDay redraws the grid in place; with the Plan chat open the bar is not offered', async () => {
+    await seedPlan('plan.html');
+    const grid0 = await page.innerText('#plan-root');
+    await askBar('swap Tuesday and Wednesday', { text: 'Done.', edits: [{ type: 'swapDay', a: 2, b: 3 }] });
+    if (await page.evaluate(() => window.__marker) !== 1) throw new Error('page reloaded');
+    if (await page.innerText('#plan-root') === grid0) throw new Error('plan grid did not redraw');
+    await openChat();
+    if (await page.locator('.ate-bar').isVisible()) throw new Error('bar visible while the Plan chat is open');
+    await page.click('#chat-exit'); await page.waitForSelector('#plan-chat', { state: 'hidden' });
+  });
+  await step('bar Ask: non-live edits apply nothing and link to Plan with me; meals rows list library ids only', async () => {
+    await seedPlan('discover.html');
+    const before = await planLS();
+    await askBar('make me a new recipe and a budget', { text: 'Needs the planner.', edits: [{ type: 'mealCreate', name: 'X', ingredients: [{ key: 'rice', qty: '1' }] }, { type: 'budget', perWeek: 30 }] });
+    if (await planLS() !== before) throw new Error('plan changed');
+    if (!await page.locator('.ate-thread a[href="plan-with-me.html"]').count()) throw new Error('no Plan with me link');
+    const ids = await page.evaluate(async () => (await MP.getLibrary()).slice(0, 8).map(m => m.id));
+    await askBar('quick chicken?', { text: 'Try these.', edits: [{ type: 'meals', ids: [...ids, 'no-such-meal'] }] });
+    if (await page.locator('.ate-meal').count()) throw new Error('>6 ids should drop the whole meals edit');
+    await askBar('quick chicken?', { text: 'Try these.', edits: [{ type: 'meals', ids: [ids[0], ids[1], 'no-such-meal'] }] });
+    if (await page.locator('.ate-meal').count() !== 2) throw new Error('expected 2 meal rows (unknown id dropped)');
+  });
+  await step('bar bad input: empty Ask, 1001 chars, stale bridge show a message, Log unaffected', async () => {
+    await seedPlan('discover.html');
+    await page.click('.ate-mode[data-mode="ask"]');
+    await page.press('.ate-input', 'Enter');
+    if (!/Type a question/.test(await page.innerText('.ate-msg'))) throw new Error('empty Ask not refused');
+    if (await page.evaluate(() => document.querySelector('.ate-input').maxLength) !== 1000) throw new Error('Ask maxlength');
+    await page.evaluate(() => { sessionStorage.removeItem('mp_barSession'); });
+    chatMock.bridgeAgeMs = 120000;
+    await page.fill('.ate-input', 'hello'); await page.press('.ate-input', 'Enter');
+    await page.waitForFunction(() => /Hermes isn't answering/.test(document.querySelector('.ate-thread').innerText), null, { timeout: 8000 });
+    chatMock.bridgeAgeMs = 0;
+    await page.click('.ate-mode[data-mode="log"]');
+    if (await page.evaluate(() => document.querySelector('.ate-input').maxLength) !== 120) throw new Error('Log mode input changed');
+  });
+  await step('browse: "chicken rice" needs both; a food Eat without grams asks for an amount, with grams logs; pantry/cooks untouched', async () => {
+    await page.goto(`${base}/index.html`);
+    await page.evaluate(() => { localStorage.setItem('mp_hermes_url', 'https://fake.test'); localStorage.setItem('mp_hermes_token', 't'); });
+    await page.reload(); await page.waitForSelector('#library-grid .card');
+    await page.fill('#library-search', 'chicken rice');
+    await page.waitForTimeout(300);
+    const bad = await page.$$eval('#library-grid .card', cs => cs.length);
+    const ok = await page.evaluate(async () => { const l = await MP.getLibrary(); return MP.filterMeals(l, 'chicken').filter(m => /rice/i.test(JSON.stringify(m))).length; });
+    if (bad !== ok) throw new Error(`browse shows ${bad}, expected ${ok} meals with chicken and rice`);
+    await page.fill('#library-search', 'chicken');
+    await page.waitForSelector('#library-foods .food-row');
+    const keys0 = await stateKeys();
+    await page.click('#library-foods .food-row button');
+    await page.waitForSelector('.toast:has-text("Add an amount")', { timeout: 5000 });
+    await page.fill('#library-foods .food-row input', '150');
+    await page.click('#library-foods .food-row button');
+    await page.waitForSelector('.toast:has-text("Logged")', { timeout: 5000 });
+    if (!flog.entries.some(e => e.grams === 150)) throw new Error('food not logged with grams');
+    if (await stateKeys() !== keys0) throw new Error('pantry/cooks changed');
+    await shot('browse-foods');
+  });
+  await step('bar Ask at the phone width sits above the tab bar; thread scrolls; no horizontal scroll (both themes)', async () => {
+    await seedPlan('discover.html');
+    await askBar('hi', { text: 'x '.repeat(200), edits: [] });
+    await page.waitForTimeout(500); // bottom transition
+    const typing = await page.evaluate(() => Math.round(innerHeight - document.querySelector('.ate-bar').getBoundingClientRect().bottom));
+    if (typing !== 0) throw new Error('bar not flush with the bottom while typing: ' + typing);
+    await page.evaluate(() => document.activeElement.blur());
+    await page.waitForTimeout(500);
+    const g = await page.evaluate(() => { const b = document.querySelector('.ate-bar').getBoundingClientRect(), n = document.querySelector('.nav-links').getBoundingClientRect(), t = document.querySelector('.ate-thread'); return { above: b.bottom <= n.top + 1 || getComputedStyle(document.querySelector('.nav-links')).position !== 'fixed', scrolls: t.scrollHeight > t.clientHeight, over: document.documentElement.scrollWidth > innerWidth, h: t.getBoundingClientRect().height < innerHeight * 0.45 }; });
+    if (!g.above || g.over || !g.h) throw new Error('layout: ' + JSON.stringify(g));
+    for (const th of ['light', 'dark']) { await page.evaluate(t => { document.documentElement.dataset.theme = t; }, th); await shot('bar-' + th); }
+  });
   await step('no uncaught page errors during the walk', async () => { if (errs.length) throw new Error(errs[0]); });
   await ctx.close();
 }

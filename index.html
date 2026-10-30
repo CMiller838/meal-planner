@@ -40,7 +40,7 @@
       <button id="add-meal" class="btn">+ Add a meal</button>
     </div>
     <input type="search" id="library-search" class="search-input"
-           placeholder="Search your library — name, meal type or ingredient"
+           placeholder="Search your library — name, meal type or ingredients (chicken rice)"
            aria-label="Search your library">
     <div id="library-filters" class="chip-row">
       <button class="chip active" data-type="">All</button>
@@ -50,6 +50,7 @@
       <button class="chip" data-type="snack">Snack</button>
     </div>
     <div id="library-grid" class="card-grid"></div>
+    <div id="library-foods" class="library-foods" hidden></div>
   </section>
 
   <section class="section">
@@ -91,6 +92,8 @@
 <script src="mealdb.js"></script>
 <script src="shopping-list.js"></script>
 <script src="hermes-sync.js"></script>
+<script src="plan-chat.js"></script>
+<script src="bar-chat.js"></script>
 <script src="ate-box.js"></script>
 <script src="app.js"></script>
 <script>if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js");</script>

@@ -46,10 +46,11 @@
     if (document.querySelector(".ate-bar") || !MP.Sync || !MP.eatMeal) return;
     const bar = document.createElement("div");
     bar.className = "ate-bar";
-    bar.innerHTML = `<div class="ate-recents" hidden></div><ul class="ate-list" hidden></ul>
+    bar.innerHTML = `<div class="ate-thread" hidden aria-live="polite"></div><div class="ate-recents" hidden></div><ul class="ate-list" hidden></ul>
       <p class="ate-note muted" hidden>Turn on Hermes sync to log free text</p>
       <div class="ate-msg" role="status" hidden></div>
-      <input type="text" class="ate-input" enterkeyhint="done" autocomplete="off" maxlength="120" placeholder="I ate… (e.g. 2 slices of toast)" aria-label="Log what you ate">`;
+      <div class="ate-row"><div class="ate-modes" role="group" aria-label="Bar mode"><button type="button" class="ate-mode active" data-mode="log" aria-pressed="true">Log</button><button type="button" class="ate-mode" data-mode="ask" aria-pressed="false" hidden>Ask</button></div>
+      <input type="text" class="ate-input" enterkeyhint="done" autocomplete="off" maxlength="120" placeholder="I ate… (e.g. 2 slices of toast)" aria-label="Log what you ate"></div>`;
     document.body.appendChild(bar);
     document.body.classList.add("has-ate-bar");
     const input = bar.querySelector(".ate-input"), list = bar.querySelector(".ate-list"), chips = bar.querySelector(".ate-recents"), msg = bar.querySelector(".ate-msg"), note = bar.querySelector(".ate-note");
@@ -105,7 +106,91 @@
       render();
     }
 
+    // ---- Phase 109: Ask mode (Hermes). Log mode above is untouched. ----
+    const thread = bar.querySelector(".ate-thread"), askBtn = bar.querySelector('[data-mode="ask"]');
+    let mode = "log", logMsgs = [];
+    try { logMsgs = JSON.parse(sessionStorage.getItem("mp_barLog") || "[]").slice(-20); } catch (e) { /* cosmetic */ }
+    const saveLog = () => { try { sessionStorage.setItem("mp_barLog", JSON.stringify(logMsgs.slice(-20))); } catch (e) { /* cosmetic */ } };
+    const bubble = (cls, text) => { const d = document.createElement("div"); d.className = "ate-bubble " + cls; d.textContent = text; thread.appendChild(d); thread.scrollTop = thread.scrollHeight; return d; };
+    function renderThread() {
+      thread.textContent = "";
+      logMsgs.forEach((m) => bubble(m.role, m.text));
+      thread.hidden = mode !== "ask" || !logMsgs.length;
+    }
+    function remember(role, text) { logMsgs.push({ role, text }); logMsgs = logMsgs.slice(-20); saveLog(); }
+    function setMode(m) {
+      if (m === "ask" && !MP.BarChat) return;
+      mode = m;
+      bar.classList.toggle("ask", m === "ask");
+      bar.querySelectorAll(".ate-mode").forEach((b) => { const on = b.dataset.mode === m; b.classList.toggle("active", on); b.setAttribute("aria-pressed", String(on)); });
+      input.maxLength = m === "ask" ? 1000 : 120;
+      input.placeholder = m === "ask" ? "Ask Hermes… (e.g. swap Tuesday dinner)" : "I ate… (e.g. 2 slices of toast)";
+      input.setAttribute("aria-label", m === "ask" ? "Ask Hermes" : "Log what you ate");
+      input.value = "";
+      try { sessionStorage.setItem("mp_barMode", m); } catch (e) { /* cosmetic */ }
+      renderThread();
+      render();
+    }
+    function mealRows(meals) {
+      const wrap = document.createElement("div");
+      wrap.className = "ate-bubble hermes ate-meals";
+      meals.forEach((m) => {
+        const row = document.createElement("div");
+        row.className = "ate-meal";
+        const open = document.createElement("a");
+        open.href = "index.html?q=" + encodeURIComponent(m.name); open.textContent = m.name;
+        const eat = document.createElement("button");
+        eat.type = "button"; eat.textContent = "Eat";
+        eat.addEventListener("click", () => { guard(eat); logMeal(m); });
+        row.append(open, eat);
+        wrap.appendChild(row);
+      });
+      thread.appendChild(wrap);
+      thread.scrollTop = thread.scrollHeight;
+    }
+    function showReply(r) {
+      if (r.text) { bubble("hermes", r.text); remember("hermes", r.text); }
+      if (r.applied.length) {
+        const t = "Hermes did: " + r.applied.map((a) => a.summary).join("; ");
+        bubble("did", t); remember("did", t);
+        say(`Hermes changed ${r.applied.length} thing${r.applied.length === 1 ? "" : "s"}`, "Undo", () => { r.undo(); bubble("muted", "Undone"); remember("muted", "Undone"); });
+      }
+      if (r.refused.length) { const t = "Couldn't: " + r.refused.join("; "); bubble("muted", t); remember("muted", t); }
+      if (r.meals.length) mealRows(r.meals);
+      if (r.other) {
+        const d = bubble("muted", "That needs the full planner. ");
+        const a = document.createElement("a");
+        a.href = "plan-with-me.html"; a.textContent = "Open Plan with me";
+        d.appendChild(a);
+      }
+      thread.hidden = false;
+    }
+    let asking = false;
+    async function track(promise) {
+      asking = true; input.disabled = true;
+      const typing = bubble("hermes typing", "Hermes is thinking");
+      thread.hidden = false;
+      try { showReply(await promise); } catch (e) { const t = e.message || "Couldn't reach Hermes"; bubble("muted", t); remember("muted", t); }
+      typing.remove();
+      asking = false; input.disabled = false;
+      if (document.activeElement !== input && mode === "ask") input.focus();
+    }
+    async function ask(text) {
+      text = text.trim();
+      if (asking) return;
+      if (!text) return say("Type a question first");
+      if (text.length > 1000) return say("Keep it under 1000 characters");
+      bubble("user", text); remember("user", text);
+      input.value = "";
+      await track(MP.BarChat.send(text));
+    }
+    askBtn.addEventListener("pointerdown", (e) => e.preventDefault());
+    bar.querySelectorAll(".ate-mode").forEach((b) => { b.addEventListener("pointerdown", (e) => e.preventDefault()); b.addEventListener("click", () => setMode(b.dataset.mode)); });
+    function syncAsk() { askBtn.hidden = !(MP.BarChat && syncOn()); if (askBtn.hidden && mode === "ask") setMode("log"); }
+
     function render() {
+      syncAsk();
+      if (mode === "ask") { note.hidden = true; chips.hidden = true; list.hidden = true; return; }
       const ok = syncOn();
       note.hidden = ok;
       const rec = ok ? recents(MP.Sync.localFoodLog()) : [];
@@ -142,18 +227,24 @@
     input.addEventListener("blur", () => open(false));
     input.addEventListener("input", render);
     input.addEventListener("keydown", (e) => {
-      if (e.key === "Enter") logText(input.value);
+      if (e.key === "Enter") mode === "ask" ? ask(input.value) : logText(input.value);
       if (e.key === "Escape") input.blur();
     });
     // keep the bar above a phone keyboard
     if (root.visualViewport) {
-      const lift = () => { bar.style.bottom = Math.max(0, innerHeight - visualViewport.height - visualViewport.offsetTop) + "px"; };
+      // only while a keyboard covers the page: at 0 the CSS offset (above the phone tab bar) must win
+      const lift = () => { const px = Math.max(0, innerHeight - visualViewport.height - visualViewport.offsetTop); bar.style.bottom = px > 1 ? px + "px" : ""; };
       visualViewport.addEventListener("resize", lift);
       visualViewport.addEventListener("scroll", lift);
     }
     render();
+    let saved = "log";
+    try { saved = sessionStorage.getItem("mp_barMode") || "log"; } catch (e) { /* cosmetic */ }
+    if (saved === "ask") setMode("ask");
+    const pending = MP.BarChat && syncOn() && MP.BarChat.resume();
+    if (pending) { if (mode !== "ask") setMode("ask"); track(pending); }
   }
 
-  MP.AteBox = { init, suggest, recents };
+  MP.AteBox = { init, suggest, recents, foodNames };
   if (typeof document !== "undefined") document.addEventListener("DOMContentLoaded", init);
 })();

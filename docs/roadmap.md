@@ -252,3 +252,7 @@ Full specs: `.claude/archive/roadmap_20261026.md` (v5 and v6 prose and every pha
 ## Phase 85: Log and show every meal Hermes sends [M] — done (built 2026-10-26; live checks left to in-use testing)
 ## Phase 86: Style and animate every component [L] — done (built 2026-10-26; live checks left to in-use testing)
 ## Phase 87: Plan with Hermes can create and change meals [L] — done (built 2026-10-26; live checks left to in-use testing) (check.py 10/10, worker_test ok, tester PASS: browser run of create/refuse/Undo/Exit warning at PC and 390 px)
+
+## Phase 109: Hermes on every page, live edits, search-and-log in Browse [L] — done (built 2026-10-30; live checks left to in-use testing) (check.py --changed 3/3: worker, ui pages, ui walk)
+
+Goal: a docked bar on every page with a Log/Ask toggle; Ask talks to Hermes and its small edits (swap, skip, rate, place) apply live on the current screen with Undo; Browse search finds meals and loose foods, logs them, and filters meals by several ingredients. Spec: `.claude/specs/phase109.md`.

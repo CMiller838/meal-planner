@@ -228,9 +228,52 @@
     toast(`Added "${meal.name}"` + (similar ? ` (similar to "${similar.name}")` : ""));
   }
 
+  /** Phase 109: loose foods matching the search (measured foods list), each with a grams box and Eat. Log-only, same entry as the "I ate" bar. */
+  let foodList = null;
+  async function renderFoods(query) {
+    const box = document.getElementById("library-foods");
+    const terms = query.toLowerCase().split(/\s*(?:\+|,|\band\b|\s)\s*/).filter(Boolean);
+    if (!terms.length || !MP.AteBox) { box.hidden = true; return; }
+    if (!foodList) foodList = await MP.AteBox.foodNames();
+    if (document.getElementById("library-search").value !== query) return; // a newer keystroke is rendering
+    const hits = foodList.filter((f) => terms.every((t) => f.toLowerCase().includes(t))).slice(0, 8);
+    box.textContent = "";
+    box.hidden = !hits.length;
+    if (!hits.length) return;
+    const h = document.createElement("h3");
+    h.textContent = "Foods";
+    box.appendChild(h);
+    hits.forEach((name) => {
+      const row = document.createElement("div");
+      row.className = "food-row";
+      const label = document.createElement("span");
+      label.textContent = name;
+      const g = document.createElement("input");
+      g.type = "number"; g.min = "1"; g.max = "5000"; g.inputMode = "numeric"; g.placeholder = "g"; g.setAttribute("aria-label", "Grams of " + name);
+      const eat = document.createElement("button");
+      eat.type = "button"; eat.className = "btn"; eat.textContent = "Eat";
+      eat.addEventListener("click", async () => {
+        if (!MP.Sync.config().enabled) return toast("Turn on Hermes sync to log foods.");
+        const grams = Math.round(Number(g.value));
+        if (g.value && !(grams >= 1 && grams <= 5000)) return toast("Grams must be 1 to 5000.");
+        const id = crypto.randomUUID();
+        eat.disabled = true;
+        const r = await MP.Sync.postFoodLog({ id, action: "eat", when: new Date().toISOString(), name, ...(grams ? { grams } : {}) });
+        eat.disabled = false;
+        if (r !== "ok") return toast("Couldn't log, try again.");
+        if (!MP.Sync.localFoodLog().some((e) => e.id === id)) return toast("Add an amount, e.g. 150 in the g box.");
+        g.value = "";
+        toast(`Logged ${name}`);
+      });
+      row.append(label, g, eat);
+      box.appendChild(row);
+    });
+  }
+
   function renderLibrary() {
     const grid = document.getElementById("library-grid");
     const query = document.getElementById("library-search").value;
+    renderFoods(query);
     const filtered = MP.filterMeals(library, query).filter(
       (m) => !activeType || (m.mealTypes || []).includes(activeType)
     );
@@ -848,6 +891,8 @@
       if (e.target.id === "modal-overlay") closeDetail();
     });
 
+    const qs = new URLSearchParams(location.search).get("q"); // Phase 109: the bar's meal rows link here
+    if (qs) document.getElementById("library-search").value = qs.slice(0, 80);
     document.getElementById("library-search").addEventListener("input", renderLibrary);
     document.getElementById("add-meal").addEventListener("click", () => openForm(null));
     document.getElementById("backfill-images").addEventListener("click", (e) => backfillImages(e.target));

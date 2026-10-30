@@ -557,7 +557,11 @@
     initPantry();
     renderAdhoc();
     MP.Sync.fetchShoppingLines().then(() => renderAdhoc());
+    await renderLists();
+    window.addEventListener("mp:plan-live", renderLists); // Phase 109: the docked bar changed the plan
+  }
 
+  async function renderLists() {
     const plan = loadPlan();
     const root = document.getElementById("shopping-root");
     if (!plan || !plan.days.some((d) => Object.values(d.slots).some((s) => s && s.mealId))) {

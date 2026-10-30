@@ -808,14 +808,17 @@
    */
   function filterMeals(meals, query) {
     const q = (query || "").trim().toLowerCase();
-    if (!q) return meals;
+    // Phase 109: every term must match ("chicken rice", "chicken + rice", "chicken, rice", "chicken and rice")
+    const terms = q.split(/\s*(?:\+|,|\band\b|\s)\s*/).filter(Boolean);
+    if (!terms.length) return meals;
     return meals.filter((meal) => {
       const parts = [meal.name, ...(meal.mealTypes || [])];
       for (const ing of meal.ingredients || []) {
         parts.push(ing.key.replace(/_/g, " "));
         if (ing.label) parts.push(ing.label);
       }
-      return parts.join(" ").toLowerCase().includes(q);
+      const hay = parts.join(" ").toLowerCase();
+      return hay.includes(q) || terms.every((t) => hay.includes(t));
     });
   }
 

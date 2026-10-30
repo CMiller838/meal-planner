@@ -167,4 +167,5 @@
     render();
   }
   init();
+  window.addEventListener("mp:plan-live", () => setTimeout(init, 600)); // Phase 109: the docked bar may have logged a backfill
 })(typeof globalThis !== "undefined" ? globalThis : this);

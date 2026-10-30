@@ -981,3 +981,9 @@ Spec: `.claude/specs/phase105.md` (planned batches via `place.freezeFrom`, cooke
 - [x] `food-log.json` `usdaIds`/`macroKeys`, `worker_test.mjs` cross-check case (2 sources accepted, 1 source stays unknown), caps + `SPEC.md`
 - [x] UI: `eaten.js` ROWS Added sugars + Trans fat, `sw.js` v99, CLAUDE.md CoFID line
 - [x] Live: confirm the 30 g added-sugars and 3 g trans-fat caps are the numbers you want.
+
+## Phase 109: Hermes on every page, live edits, search-and-log in Browse
+- Spec: `.claude/specs/phase109.md` [L]
+- [ ] Live: with real Hermes and `tools/hermes_chat_bridge.py` running, open Shopping, switch the bar to Ask, type "swap Tuesday dinner": the plan changes, the list redraws without a reload, an Undo toast appears and restores the plan.
+- [ ] Live: on the installed Android PWA, focus the Ask input: the bar lifts above the keyboard, no gap under it, not hidden behind the tab bar.
+- [ ] Live: ask Hermes "what's quick with leftover chicken?": up to 6 tappable meal rows appear, each with Open and Eat.

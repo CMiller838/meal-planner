@@ -37,6 +37,11 @@ assert '"meals":[{"id":"x"}]' in pb and "Spend so far" in pb and "Briefing" in p
 assert b.brief_of([{"open": True, "context": {"brief": {"a": 1}}}]) == {"a": 1} and b.brief_of([{"text": "x"}]) is None
 pr = b.build_prompt(msgs, {"day": 2}, brief={"a": 1}, resumed=True, send_brief=False)
 assert pr == 'Context: {"day": 2}\nUser: msg19' and "Briefing" in b.build_prompt(msgs, {}, brief={"a": 1}, resumed=True)
+# Phase 109: bar-mode prompt (live edit set only) and the silent opener
+pbar = b.build_prompt([{"id": 3, "from": "user", "text": "swap tue"}], {"mode": "bar"}, brief={"library": []})
+assert '"type":"meals"' in pbar and '"type":"swapDay"' in pbar and "Plan with me" in pbar and "User: swap tue" in pbar
+assert '"type":"mealCreate"' not in pbar and '"type":"budget"' not in pbar and '"type":"bulk"' not in pbar
+assert b.parse_reply('Here.\n```edits\n[{"type":"meals","ids":["a","b"]}]\n```')["edits"] == [{"type": "meals", "ids": ["a", "b"]}]
 # poll_interval
 now = datetime.now(timezone.utc)
 iso = lambda d: (now - d).isoformat()
@@ -86,6 +91,12 @@ assert '"start":"2026-10-26"' in seen and "Spend so far" in seen  # brief in the
 posted.clear(); state["drop"] = True
 b.run_once(base, "t", resp, set())
 assert [p.get("replyTo") for p in posted] == [3, 3, 3] and posted[-1]["text"] == b.GIVE_UP["text"], posted
+# Phase 109: a bar opener is answered with an empty reply and no model call
+posted.clear(); state["drop"] = False
+state["thread"] = {"session": "s2", "openAt": now.isoformat(), "messages": [{"id": 1, "from": "user", "text": "", "open": True, "context": {"mode": "bar", "brief": {"library": []}}}]}
+b.run_once(base, "t", resp, set())
+assert len(posted) == 1 and posted[0]["text"] == "" and posted[0]["edits"] == [], posted
+state["thread"]["session"] = "s1"
 # closed chat: nothing answered
 posted.clear(); state["thread"]["openAt"] = None
 assert b.run_once(base, "t", resp, set())[1] == 0 and not posted

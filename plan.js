@@ -2375,6 +2375,13 @@
     };
   }
 
+  // Phase 109: the docked bar changed mp_plan (already snapshotted and mirrored); redraw unless a chat/guided session holds a working copy
+  window.addEventListener("mp:plan-live", (e) => {
+    if (!plan || guidedActive || chat) return;
+    plan = e.detail && Array.isArray(e.detail.days) ? e.detail : JSON.parse(localStorage.getItem(LS_PLAN) || "null") || plan;
+    renderPlan();
+  });
+
   window.addEventListener("mp:plandraft", (e) => { if (plan) (e.detail.direct ? adoptDirect : renderPlanDraftBanner)(e.detail); });
 
   // ---- Assistant "I ate X" requests (eat-requests queue) ----

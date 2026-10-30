@@ -1054,6 +1054,29 @@ body:has(.modal-overlay:not(.hidden)) .ate-bar, body.chat-open .ate-bar { displa
 .ate-msg button { background: none; border: none; color: var(--accent); font-weight: 700; margin-left: .75rem; cursor: pointer; }
 @media (prefers-reduced-motion: reduce) { .ate-list, .ate-recents { animation: none; } }
 body.has-ate-bar .toast { bottom: calc(5rem + env(safe-area-inset-bottom)); }
+/* Phase 109: Ask mode of the docked bar */
+.ate-row { display: flex; gap: .5rem; align-items: center; }
+.ate-row .ate-input { flex: 1 1 auto; min-width: 0; }
+.ate-modes { display: inline-flex; flex: 0 0 auto; padding: 2px; border: 1px solid var(--border); border-radius: 999px; background: var(--bg); }
+.ate-mode { min-height: 2rem; padding: 0 .75rem; font: inherit; font-size: .8rem; font-weight: 600; color: var(--text-muted, var(--text)); background: none; border: none; border-radius: 999px; cursor: pointer; transition: background var(--motion-base) ease, color var(--motion-base) ease; }
+.ate-mode.active { background: var(--accent); color: var(--bg); }
+.ate-mode[hidden] { display: none; }
+.ate-thread { display: flex; flex-direction: column; gap: .35rem; max-height: 40vh; overflow-y: auto; overscroll-behavior: contain; padding-bottom: .15rem; }
+.ate-bubble { max-width: 88%; padding: .45rem .7rem; font-size: .9rem; line-height: 1.35; border-radius: 14px; overflow-wrap: anywhere; animation: m-enter 180ms ease-out; }
+.ate-bubble.user { align-self: flex-end; background: var(--accent); color: var(--bg); border-bottom-right-radius: 4px; }
+.ate-bubble.hermes { align-self: flex-start; background: var(--surface-alt); border-bottom-left-radius: 4px; }
+.ate-bubble.did { align-self: flex-start; background: var(--accent-glow); border: 1px solid var(--accent); }
+.ate-bubble.muted { align-self: flex-start; color: var(--text-muted, var(--text)); opacity: .8; font-size: .82rem; }
+.ate-bubble a { color: var(--accent); font-weight: 600; }
+.ate-bubble.typing::after { content: "…"; display: inline-block; animation: mp-chat-dot 1s ease-in-out infinite; }
+.ate-meals { display: flex; flex-direction: column; gap: .25rem; }
+.ate-meal { display: flex; justify-content: space-between; align-items: center; gap: .75rem; min-height: 2.75rem; }
+.ate-meal button { min-height: 2.75rem; min-width: 2.75rem; padding: 0 .9rem; font: inherit; font-weight: 700; color: var(--accent); background: none; border: 1px solid var(--accent); border-radius: 999px; cursor: pointer; }
+.library-foods { margin-top: 1rem; }
+.food-row { display: flex; align-items: center; gap: .5rem; min-height: 2.75rem; }
+.food-row span { flex: 1 1 auto; }
+.food-row input { width: 4.5rem; padding: .5rem; font: inherit; color: var(--text); background: var(--bg); border: 1px solid var(--border); border-radius: .5rem; }
+@media (prefers-reduced-motion: reduce) { .ate-bubble, .ate-bubble.typing::after { animation: none; } .ate-mode { transition: none; } }
 /* Phase 106: Eaten page */
 .eaten-tabs { display: flex; gap: .5rem; flex-wrap: wrap; align-items: center; margin-bottom: .5rem; }
 .eaten-list { list-style: none; margin: .5rem 0; padding: 0; display: grid; gap: .6rem; }
@@ -1092,6 +1115,7 @@ main { animation: m-enter var(--motion-base) ease-out both; }
   body { padding-bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom) + 1rem); }
   body.has-ate-bar { padding-bottom: calc(var(--tabbar-h) + 5rem + env(safe-area-inset-bottom)); }
   .ate-bar { bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom)); padding-bottom: .5rem; }
+  body:has(.ate-input:focus) .ate-bar { bottom: 0; } /* the tab bar hides while typing */
   .toast, body.has-ate-bar .toast { bottom: calc(var(--tabbar-h) + 1rem + env(safe-area-inset-bottom)); }
   body.has-ate-bar .toast { bottom: calc(var(--tabbar-h) + 5rem + env(safe-area-inset-bottom)); }
   body:has(.modal-overlay:not(.hidden)) .nav-links, body.chat-open .nav-links { display: none; }

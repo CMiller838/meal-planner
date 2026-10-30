@@ -53,6 +53,19 @@ EDIT_TYPES = """Edit types (day is 1-14, slot is breakfast|lunch|dinner|snack):
 (Meal edits wait for the user's OK on a card, max 5 per reply. A meal's time is totalMins when set, else estMins, an estimate from its steps: propose mealEdit {patch:{totalMins}} to confirm it. Give ingredients as "key" from the library's known keys when you can; the app refuses mushrooms, standalone egg meals and the user's allergies. Place only meals that exist in the briefing; a meal you just proposed cannot be placed until the user adds it.)
 (days and slot are optional on chip, budget and reroll; days defaults to the day in focus. Up to 60 edits per reply.)"""
 
+# Phase 109: the docked bar's Ask mode. Live edit set only; anything else, tell the user to open Plan with me.
+BAR_EDIT_TYPES = """Edit types (day is 1-14, slot is breakfast|lunch|dinner|snack), applied at once with an Undo:
+  {"type":"skip","day":N,"slot":S,"how":"push|move|drop","to":{"day":N,"slot":S}}  (move needs to)
+  {"type":"out","day":N,"slot":S,"name":"<=60 chars","text":"<=200 chars"}  (eating out)
+  {"type":"swap","a":{"day":N,"slot":S},"b":{"day":N,"slot":S}}  {"type":"swapDay","a":N,"b":N}
+  {"type":"backfill","day":N,"slot":S,"mealId":ID}  or  {"type":"backfill","day":N,"slot":S,"name":"<=60 chars","text":"<=200 chars"}  (records what was eaten)
+  {"type":"sub","day":N,"slot":S,"subs":[{"from":"key|null","to":"key|null","label":"<=60 chars","qty":"<=40 chars"}]}
+  {"type":"rate","mealId":ID,"rating":"up|down","note":"<=200 chars"}
+  {"type":"place","day":N,"slot":S,"mealId":ID}  (a library meal into a slot; the app refuses held slots and hard exclusions)
+  {"type":"meals","ids":[ID]}  (show up to 6 library meals as tappable rows, display-only; use for 'what can I make with...')
+Nothing else is available here: no regenerating, budgets, new or changed meals, bulk, freezing or notes. For those say 'open Plan with me for that'."""
+
+
 def poll_interval(open_at, now=None):
     """1 s while a chat opened under 10 min ago, else 10 s (keeps the Worker under its free-tier request budget)."""
     if not open_at:
@@ -113,6 +126,17 @@ def build_prompt(messages, context, opener=False, strict=False, brief=None, spen
                 lines.append("Spend so far: " + json.dumps(spend, separators=(",", ":")))
         lines.append("Context: " + json.dumps(context or {}))
         lines += [f'User: {m["text"]}' for m in [m for m in messages if m.get("text")][-1:] if m["from"] == "user"]
+        return "\n".join(lines)
+    if (context or {}).get("mode") == "bar":
+        lines = [
+            "You are Hermes, answering from a small chat bar on the user's meal planner. Short, warm, plain sentences, no lists or bold."
+            " You may answer questions about meals, ingredients and the plan from the briefing. Edits you send apply at once and the user can Undo.",
+            BAR_EDIT_TYPES,
+            "Reply in prose, then only when changing something end with a fenced block: ```edits\\n[json array]\\n``` (never mention the block).",
+            "Briefing (library meals with ingredient keys, today's slots, ratings): " + json.dumps(brief, separators=(",", ":")) if brief else "No briefing.",
+            "Context: " + json.dumps(context or {}),
+        ]
+        lines += [f'{"User" if m["from"] == "user" else "Hermes"}: {m["text"]}' for m in [m for m in messages if m.get("text")][-HISTORY:]]
         return "\n".join(lines)
     lines = [
         "You are Hermes, talking with the user as yourself, in your own voice: the way you'd talk over their shoulder while they look at the plan on screen."
@@ -211,6 +235,9 @@ def answer(base, token, responder, thread, msg):
     history = [m for m in thread["messages"] if m["id"] <= msg["id"]]
     opener = bool(msg.get("open"))
     post = lambda rep: (call(base, token, "POST", "/chat/reply", {"session": thread["session"], "replyTo": msg["id"], **rep}) or (0, None))[1] or {}
+    if opener and (msg.get("context") or {}).get("mode") == "bar":  # Phase 109: the bar opens silently, no model call
+        post({"text": "", "edits": [], "ask": False})
+        return
     brief = brief_of(thread["messages"])
     spend = spend_for(base, token, thread["session"]) if brief else None
     name = "mp-" + str(thread["session"])
