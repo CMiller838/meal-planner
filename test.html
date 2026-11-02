@@ -181,6 +181,10 @@
       && MP.filterMeals(library, "chicken + rice").length === both.length && MP.filterMeals(library, "chicken, rice").length === both.length && MP.filterMeals(library, "chicken and rice").length === both.length);
     check("filterMeals: only separators returns everything", MP.filterMeals(library, " + , ").length === library.length);
     const PCb = MP.PlanChat, vm = (e) => PCb.validateReply({ text: "", edits: [e] }, {}, "2026-01-01").reply.edits;
+    check("validateReply: place keeps why, drops an over-long one but the edit applies",
+      vm({ type: "place", day: 1, slot: "dinner", mealId: "m1", why: "iron" })[0].why === "iron"
+      && vm({ type: "place", day: 1, slot: "dinner", mealId: "m1", why: "x".repeat(141) })[0].why === undefined
+      && vm({ type: "place", day: 1, slot: "dinner", mealId: "m1", why: 5 })[0].mealId === "m1");
     check("validateReply: meals kept (deduped), empty / >6 / non-string ids dropped", vm({ type: "meals", ids: ["a", "a", "b"] })[0].ids.join() === "a,b" && !vm({ type: "meals", ids: [] }).length
       && !vm({ type: "meals", ids: ["1", "2", "3", "4", "5", "6", "7"] }).length && !vm({ type: "meals", ids: [3] }).length && PCb.BAR_LIVE.includes("meals") && !PCb.BAR_LIVE.includes("mealCreate"));
     const mk = (id, ings, types) => ({ id, name: id.toUpperCase(), mealTypes: types || ["dinner"], ingredients: ings.map((k) => ({ key: k })), servings: 1 });
@@ -2013,6 +2017,33 @@
   {
     const G = MP.Generator;
     const vocab = await fetch("plan-preferences.json").then((r) => r.json());
+
+    // ---- Phase 111: dinner share, logged gaps, cycle meals ----
+    {
+      const N = MP.Nutrition, tg = { energy_kcal: 2900, protein_g: 160, fat_g_cap: 95, gymDay: { protein_g: 20 }, healthUrl: "x", dinnerShare: 0.375 };
+      const dt = N.dinnerTargets(tg);
+      check("dinnerTargets: scales numbers, leaves gymDay/healthUrl/dinnerShare", dt.protein_g === 60 && dt.energy_kcal === 1087.5 && dt.fat_g_cap === 95 * 0.375 && dt.gymDay === tg.gymDay && dt.healthUrl === "x" && dt.dinnerShare === 0.375);
+      check("dinnerTargets: share absent or out of range = same object", [{ protein_g: 1 }, { protein_g: 1, dinnerShare: 0 }, { protein_g: 1, dinnerShare: 2 }].every((t) => N.dinnerTargets(t) === t));
+      check("dinnerTargets after gym uplift = (160+20)*0.375", N.dinnerTargets(N.withGymDay(tg)).protein_g === 180 * 0.375);
+      const dTags = { a: { vitD: "high" } }, mD = { id: "mD", ingredients: [{ key: "a" }] }, mN = { id: "mN", ingredients: [{ key: "zz" }] };
+      const days = ["2026-01-01", "2026-01-02", "2026-01-03", "2026-01-04"], dk = (e) => e.eatenAt.slice(0, 10);
+      const ent = (mealIds) => mealIds.map((id, i) => ({ id: "e" + i, mealId: id, eatenAt: days[i] + "T18:00:00Z", tags: [] }));
+      const byIdD = { mD, mN }, knobs = { loggedGapDays: 3, loggedGapBelow: 0.5 };
+      check("loggedGaps: below loggedGapDays logged days = []", N.loggedGaps(ent(["mN", "mN"]), byIdD, days, dTags, tg, dk, knobs).length === 0);
+      check("loggedGaps: covered 1 of 4 days = gap", N.loggedGaps(ent(["mD", "mN", "mN", "mN"]), byIdD, days, dTags, tg, dk, knobs).includes("vitD"));
+      check("loggedGaps: covered 3 of 4 days = not a gap", !N.loggedGaps(ent(["mD", "mD", "mD", "mN"]), byIdD, days, dTags, tg, dk, knobs).includes("vitD"));
+      const plan4 = [1, 2, 3, 4, 5, 6, 7, 8, 9].map((d) => ({ day: d, slots: d === 10 ? {} : { dinner: { mealId: d === 5 ? null : d % 2 ? "mD" : "mN" } } }));
+      const byD = { mD, mN };
+      check("cycleMeals: same cycle only, earlier days only", G.cycleMeals(plan4, 4, 0, byD).length === 3 && G.cycleMeals(plan4, 9, 0, byD).length === 1);
+      check("cycleMeals: empty on a cycle's first day", G.cycleMeals(plan4, 1, 0, byD).length === 0 && G.cycleMeals(plan4, 8, 0, byD).length === 0);
+      // rankSlot: loggedGaps reorder only, never admit a never meal
+      const eq = { id: "eqN", ingredients: [{ key: "zz" }] }, d2 = { id: "eqD", ingredients: [{ key: "a" }] };
+      const r0 = G.rankSlot([eq, d2], 1, [], { tags: dTags, targets: tg, prefs: {} });
+      const r1 = G.rankSlot([eq, d2], 1, [], { tags: { a: { vitD: "high" } }, targets: { protein_g: 1 }, prefs: { loggedGaps: ["vitD"] } });
+      check("rankSlot: loggedGaps puts the vitD meal first", r1[0].id === "eqD" && r1.length === 2);
+      const r2 = G.rankSlot([eq, d2], 1, [], { tags: dTags, targets: tg, prefs: { loggedGaps: ["vitD"] }, ratings: { eqD: { never: true } } });
+      check("rankSlot: loggedGaps never admits a never meal", r2.length === 1 && r2[0].id === "eqN");
+    }
 
     const dinnerPool = library.filter((m) => (m.mealTypes || []).includes("dinner"));
     const base = G.rankSlot(dinnerPool, 1, [], { tags, targets });

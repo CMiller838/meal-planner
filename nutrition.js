@@ -153,6 +153,22 @@
     return { days, nutrients, notLogged: days.filter((d) => !d.logged).map((d) => d.date) };
   }
 
+  /** Phase 111: copy of targets scaled to a dinner's share. Share absent or outside (0,1] = same object. */
+  function dinnerTargets(targets) {
+    const share = targets && targets.dinnerShare;
+    if (!(share > 0 && share <= 1) || share === 1) return targets;
+    const out = {};
+    for (const [k, v] of Object.entries(targets)) out[k] = typeof v === "number" && k !== "dinnerShare" ? v * share : v;
+    return out;
+  }
+
+  /** Phase 111: nutrients the logged eating has been short on (enough logged days, covered on too few). */
+  function loggedGaps(entries, byId, dates, tags, targets, dayKey, knobs) {
+    const minDays = (knobs && knobs.loggedGapDays) || 3, below = (knobs && knobs.loggedGapBelow) || 0.5;
+    return weekGaps(entries, byId, dates, tags, targets, dayKey).nutrients
+      .filter((n) => n.loggedDays >= minDays && n.coveredDays / n.loggedDays < below).map((n) => n.nutrient);
+  }
+
   /** How well one meal fills the given gap nutrients (sum of tag weights). */
   function gapScore(meal, gapNutrients, tags) {
     let score = 0;
@@ -175,5 +191,5 @@
       .map((x) => x.meal);
   }
 
-  MP.Nutrition = { load, tagsForMeal, gapHits, dayCoverage, weekCoverage, rankByGap, gapScore, TRACKED_NUTRIENTS, withGymDay, withProfile, profileOf, eatenDayCoverage, weekGaps, foodAsEaten };
+  MP.Nutrition = { load, tagsForMeal, gapHits, dayCoverage, weekCoverage, rankByGap, gapScore, TRACKED_NUTRIENTS, withGymDay, withProfile, profileOf, eatenDayCoverage, weekGaps, foodAsEaten, dinnerTargets, loggedGaps };
 })(typeof globalThis !== "undefined" ? globalThis : this);

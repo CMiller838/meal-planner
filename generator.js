@@ -155,6 +155,17 @@
    * Layers 2-5 are stable reorders of layer 1 - none of them re-score nutrition.
    * Returns every meal in `pool` (minus exclusions); chips never filter.
    */
+  /** Phase 111: dinners already placed in dayNum's shop cycle on earlier days (a meal-less slot adds nothing). */
+  function cycleMeals(days, dayNum, shopOffset, byId) {
+    const start = MP.ShelfLife.shopDayFor(dayNum, shopOffset);
+    const out = [];
+    for (let d = Math.max(1, start); d < dayNum; d++) {
+      const slot = days[d - 1] && days[d - 1].slots.dinner;
+      if (slot && slot.mealId && byId[slot.mealId]) out.push(byId[slot.mealId]);
+    }
+    return out;
+  }
+
   function rankSlot(pool, dayNum, dayMealsSoFar, opts) {
     opts = opts || {};
     const { tags, targets, prefs, budget, halfKeys, pressure } = opts;
@@ -169,7 +180,7 @@
     if (!ranked.length) ranked = allowed.slice(); // too small a pool to honour the exclusion; repeat is unavoidable
     if (!ranked.length) return [];
     const gap = MP.Nutrition.dayCoverage(dayMealsSoFar, tags, targets);
-    const gapNutrients = [...gap.missing, ...gap.partial];
+    const gapNutrients = [...new Set([...gap.missing, ...gap.partial, ...((prefs && prefs.loggedGaps) || [])])]; // Phase 111: logged gaps only widen the weighted set
     ranked = MP.Nutrition.rankByGap(ranked, gapNutrients, tags);
 
     const { prefer: preferChips, avoid: avoidChips } = activeChips(prefs);
@@ -405,7 +416,7 @@
       // (buy day 1, freeze, defrost Thursday); logged in docs/FUTURE.md.
       const safe = []; // shelf-life filtering switched off (user only wants warnings for entered use-by dates)
       const candidatePool = safe.length ? safe : batchCandidates;
-      const parent = pickMeal(candidatePool, d0, [], { prefer: "batch", excludeIds });
+      const parent = pickMeal(candidatePool, d0, cycleMeals(days, d0, shopOffset, mealsById), { prefer: "batch", excludeIds });
       if (!parent) continue; // no batch meal available at all; days fall through to quick fill below
 
       const coverage = Math.min(run.length, parent.servings || 2, shelfData.cooked_leftovers.fridgeDays);
@@ -438,12 +449,12 @@
       if (prevId) excludeIds.add(prevId);
       const nextId = nextMealId(day, "dinner");
       if (nextId) excludeIds.add(nextId);
-      const meal = pickMeal(dinnerPool, day, [], { prefer: "quick", excludeIds });
+      const meal = pickMeal(dinnerPool, day, cycleMeals(days, day, shopOffset, mealsById), { prefer: "quick", excludeIds });
       place(day, "dinner", meal);
     }
 
     return { startDate, days, generatedAt: new Date().toISOString() };
   }
 
-  MP.Generator = { generatePlan, rankSlot, weekendRuns, batchRuns, weekdayOf, isoToday, pickVariant, chipHits, activeChips, effortOf };
+  MP.Generator = { generatePlan, cycleMeals, rankSlot, weekendRuns, batchRuns, weekdayOf, isoToday, pickVariant, chipHits, activeChips, effortOf };
 })(typeof globalThis !== "undefined" ? globalThis : this);

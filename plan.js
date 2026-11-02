@@ -42,6 +42,16 @@
 
   let startOverride; // Plan with me: ?start=ISO for the guided plan only
   let genOpts; // Phase 83: { days, shopWeekday } for one generation; absent = the current plan's own length and first slot
+  /** Phase 111: nutrients the last 7 logged days were short on; per call, never stored. [] when nothing is logged. */
+  function loggedGapsNow() {
+    if (!tagsData) return [];
+    const fmt = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/London" });
+    const today = fmt.format(new Date());
+    const dates = Array.from({ length: 7 }, (_, i) => new Date(Date.parse(today + "T00:00:00Z") - (6 - i) * 86400000).toISOString().slice(0, 10));
+    const log = MP.Sync.localEatenLog().concat(foodEaten());
+    const byId = Object.fromEntries(library.map((m) => [m.id, m]));
+    return MP.Nutrition.loggedGaps(log, byId, dates, tagsData.tags, tagsData.targets, (e) => fmt.format(new Date(e.eatenAt)), packData && packData.planning);
+  }
   function generatePlan(override, locked, ranOut, avoid) {
     const lib = avoid && avoid.length ? library.filter((m) => !avoid.includes(m.id)) : library;
     const budget = packData
@@ -53,7 +63,7 @@
       const start = startOverride || new Date().toLocaleDateString("sv");
       override = Object.assign({}, override, { shopOffset: MP.ShelfLife.shopOffset({ startDate: start, shopAnchor: MP.shopAnchorFor(start, genOpts.shopWeekday) }) });
     }
-    const gen = MP.Generator.generatePlan(lib, tagsData.tags, tagsData.targets, shelfData, startOverride, budget, have, Object.assign({}, prefs, override, { profile: MP.Nutrition.profileOf(MP.Sync.settings()) }), MP.Ratings.get(), locked,
+    const gen = MP.Generator.generatePlan(lib, tagsData.tags, tagsData.targets, shelfData, startOverride, budget, have, Object.assign({}, prefs, { loggedGaps: loggedGapsNow() }, override, { profile: MP.Nutrition.profileOf(MP.Sync.settings()) }), MP.Ratings.get(), locked,
       genOpts || (plan ? { days: plan.days.length } : undefined));
     if (basePrefs.rolling !== false) gen.shopAnchor = genOpts && genOpts.shopWeekday != null ? MP.shopAnchorFor(gen.startDate, genOpts.shopWeekday) : gen.startDate; // Phase 68: a fresh plan starts a new shop cadence; rolls/rerolls read only its days
     return gen;
@@ -235,7 +245,7 @@
       el.querySelector("#fix-gap-btn").addEventListener("click", () => { fixDismissed.days.delete(-1); renderFixCard(true); });
     }
     const m = planMetrics(plan);
-    const target = (tagsData.targets.protein_g || 0) * 7;
+    const target = (MP.Nutrition.dinnerTargets(tagsData.targets).protein_g || 0) * 7;
     const next = [0, 1].map((i) => ({
       pct: target ? Math.max(0, Math.min(100, (m.proteinG[i] / target) * 100)) : 0,
       prot: m.proteinG[i], cost: m.weekCost[i],
@@ -478,7 +488,8 @@
         const i = changes.findIndex((x) => x.day === ch.day && x.slot === ch.slot);
         const before = i >= 0 ? changes[i].before : pl.days[ch.day - 1].slots[ch.slot] || null, after = res.plan.days[ch.day - 1].slots[ch.slot] || null;
         if (i >= 0) changes.splice(i, 1);
-        if (JSON.stringify(before) !== JSON.stringify(after)) changes.push({ day: ch.day, slot: ch.slot, before, after });
+        const why = (places.find((e) => e.day === ch.day && e.slot === ch.slot) || {}).why; // Phase 111: display text only
+        if (JSON.stringify(before) !== JSON.stringify(after)) changes.push({ day: ch.day, slot: ch.slot, before, after, ...(why ? { why } : {}) });
       });
       pl.days = res.plan.days;
       res.refused.forEach((r) => changes.notes.push(`Day ${r.day} ${r.slot}: not placed, ${r.why}`));
@@ -687,6 +698,11 @@
       pantry: c.pantry.map((i) => ({ name: i.name, qty: MP.qtyText(i.qty), ...(i.useBy ? { useBy: i.useBy } : {}), ...(i.storage ? { storage: i.storage } : {}) })),
       notes: (() => { const n = c.notes || MP.Sync.notes(); return { items: n.items, pending: n.pending.map((p) => p.text) }; })(),
       gaps: c.metrics.weekGaps,
+      nutrition: (() => {
+        const t = tagsData ? MP.Nutrition.dinnerTargets(MP.Nutrition.withProfile(tagsData.targets, c.settings)) : {};
+        const lg = c.loggedGaps || loggedGapsNow();
+        return { dinnerShare: (tagsData && tagsData.targets.dinnerShare) || 1, dinnerTargets: { energy_kcal: Math.round(t.energy_kcal || 0), protein_g: Math.round(t.protein_g || 0) }, logged: { gaps: lg }, planGaps: c.metrics.weekGaps };
+      })(),
       cooks, spares, shopDays: pk && pk.items ? Object.keys(MP.ShoppingList.buildLists(c.plan, mealsById, pk, null)).map(Number).sort((a, b) => a - b) : [],
       bulk: pk && pk.items ? MP.ShoppingList.bulkOptions(c.plan, mealsById, pk, sh) : [],
       ...(c.fridge ? { mode: "fridge", window: c.fridge.window, ...(c.fridge.fresh ? { newPlanFrom: MP.Generator.isoToday() } : {}) } : {}),
@@ -759,7 +775,7 @@
     if (!c.tags || cardSkip(slots.dinner, cur)) return null;
     const alt = c.cands(day, "dinner")[0];
     if (!alt || alt.id === cur.id) return null;
-    const others = SLOT_TYPES.filter((t) => t !== "dinner").map((t) => slots[t] && byId[slots[t].mealId]).filter(Boolean);
+    const others = MP.Generator.cycleMeals(c.plan.days, day, MP.ShelfLife.shopOffset(c.plan), byId);
     const cov = MP.Nutrition.dayCoverage(others, c.tags, c.targets);
     const gaps = [...cov.missing, ...cov.partial];
     if (!gaps.length) return null; // nothing left to fill, so "equal" means nothing
@@ -1145,12 +1161,9 @@
   }
 
   function coverageHtml(meals) {
-    const cov = MP.Nutrition.dayCoverage(meals, tagsData.tags, tagsData.targets);
-    const shortList = [...cov.missing, ...cov.partial];
-    const bits = [
-      `Protein ~${cov.proteinGramsApprox}g / ${cov.proteinTarget}g (approx)`,
-      shortList.length ? `Short on: ${shortList.map(labelize).join(", ")}` : "All tracked nutrients covered",
-    ];
+    // Phase 111: a day is one dinner, so it is judged on protein against the dinner share; nutrient gaps are weekly
+    const cov = MP.Nutrition.dayCoverage(meals, tagsData.tags, MP.Nutrition.dinnerTargets(tagsData.targets));
+    const bits = [`Protein ~${cov.proteinGramsApprox}g / ${Math.round(cov.proteinTarget)}g (approx)`];
     if (cov.sodiumCaution) bits.push("⚠ high sodium day");
     return `<div class="coverage-list"><span class="tag">${bits.join(" · ")}</span></div>`;
   }
@@ -1556,10 +1569,7 @@
   function candidatesFor(day, slotType) {
     const slot = plan.days[day - 1].slots[slotType];
     const currentId = slot ? slot.mealId : null;
-    const others = SLOT_TYPES.filter((s) => s !== slotType).flatMap((s) => {
-      const m = effectiveMealAt(day, s);
-      return m ? [m] : [];
-    });
+    const others = MP.Generator.cycleMeals(plan.days, day, MP.ShelfLife.shopOffset(plan), Object.fromEntries(library.map((m) => [m.id, m])));
     const pool = library.filter((m) => (m.mealTypes || []).includes(slotType) && m.id !== currentId);
     // Same variety guard generator.js's own auto-fill loop uses: exclude the
     // immediately adjacent day's pick, demote every other already-used meal
@@ -1577,7 +1587,7 @@
     return MP.Generator.rankSlot(pool, day, others, {
       tags: tagsData.tags,
       targets: tagsData.targets,
-      prefs,
+      prefs: Object.assign({}, prefs, { loggedGaps: loggedGapsNow() }),
       lastUsedDay,
       excludeIds,
       ratings: MP.Ratings.get(),
@@ -2771,6 +2781,7 @@
       acc.addEventListener("click", () => set(false));
       rej.addEventListener("click", () => set(true));
       li.append(txt, acc, rej);
+      if (c.why) { const b = document.createElement("small"); b.className = "diff-because"; b.textContent = "Because: " + c.why; li.appendChild(b); }
       if (c.askReason) li.appendChild(reasonForm(c));
       ul.appendChild(li);
     });

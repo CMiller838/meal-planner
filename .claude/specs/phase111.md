@@ -57,14 +57,14 @@ Own call:
 
 ## Tasks
 ### Logic (TDD)
-- [ ] 1. `test.html` cases above for `dinnerTargets`, `loggedGaps`, `cycleMeals`; implement in `nutrition.js`/`generator.js`; add `dinnerShare` and the two `planning` knobs; bump `sw.js` `CACHE`.
-- [ ] 2. `rankSlot` unions `prefs.loggedGaps`; `pickMeal` uses `cycleMeals`; `test.html` rankSlot cases (loggedGaps reorder only, never admits a filtered meal); update existing generator cases that assumed per-day `dayMealsSoFar`.
-- [ ] 3. `plan.js` consumers: `candidatesFor`, `tieFor`, prefs assembly with `loggedGaps` (the one caller of `Nutrition.loggedGaps` app-side), `chatBriefing` `nutrition` block.
-- [ ] 4. Worker: `planInputs` `loggedGaps` (its caller of `Nutrition.loggedGaps`), `ranking()` via `cycleMeals`, `normalizeSettings` exclusion, `GET /nutrition?dates=` `targets` + `dinnerShare`; `worker_test.mjs` cases above.
-- [ ] 5. `plan-chat.js` `place` keeps `why`; bridge prompt sentence + `test_hermes_chat_bridge.py` asserts it appears; `test.html` `validateReply` cases.
+- [x] 1. `test.html` cases above for `dinnerTargets`, `loggedGaps`, `cycleMeals`; implement in `nutrition.js`/`generator.js`; add `dinnerShare` and the two `planning` knobs; bump `sw.js` `CACHE`.
+- [x] 2. `rankSlot` unions `prefs.loggedGaps`; `pickMeal` uses `cycleMeals`; `test.html` rankSlot cases (loggedGaps reorder only, never admits a filtered meal); update existing generator cases that assumed per-day `dayMealsSoFar`.
+- [x] 3. `plan.js` consumers: `candidatesFor`, `tieFor`, prefs assembly with `loggedGaps` (the one caller of `Nutrition.loggedGaps` app-side), `chatBriefing` `nutrition` block.
+- [x] 4. Worker: `planInputs` `loggedGaps` (its caller of `Nutrition.loggedGaps`), `ranking()` via `cycleMeals`, `normalizeSettings` exclusion, `GET /nutrition?dates=` `targets` + `dinnerShare`; `worker_test.mjs` cases above.
+- [x] 5. `plan-chat.js` `place` keeps `why`; bridge prompt sentence + `test_hermes_chat_bridge.py` asserts it appears; `test.html` `validateReply` cases.
 ### UI (`ui-build`)
-- [ ] 6. `coverageHtml` dinner-share protein chip (no "Short on"), meter target, `place` card "Because:" line (house style `docs/UI_STYLE.md`, both themes, PC and 390 px).
-- [ ] 7. `walk.mjs` assertions listed in Verification.
+- [x] 6. `coverageHtml` dinner-share protein chip (no "Short on"), meter target, `place` card "Because:" line (house style `docs/UI_STYLE.md`, both themes, PC and 390 px).
+- [x] 7. `walk.mjs` assertions listed in Verification.
 ### Docs
 - [ ] 8. `SPEC.md`, `CLAUDE.md` invariants, `docs/FUTURE.md` handoff entry (below), `docs/roadmap.md` heading `[L]`.
 

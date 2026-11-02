@@ -270,7 +270,7 @@ generator, plan, chat, Worker and data stop knowing them. Order: 110 → 111 →
 
 Goal: one slot per day (`dinner`) end to end; stored plans, ratings and food-log entries from older slots migrate or are dropped safely, `lunchEffort` and the "Also plan lunch" setup go, and the Worker, chat edits (`place`, `swap`, `backfill`) and `mealTypes` filtering all agree. Architectural fork: slot shape (`d.slots.dinner` kept vs flat `d.dinner`), ADR needed.
 
-## Phase 111: Dinner-share nutrition targets [L] — not started
+## Phase 111: Dinner-share nutrition targets [L] — built 2026-11-02, live checks pending (check.py 10/10, worker_test, bridge test; tester PASS; docs task 8 still open)
 
 Goal: coverage and the plan meter judge dinners against a data-driven dinner share of the daily target (`nutrition-targets.json`, 0.375), gaps are judged over the shop week's dinners, the generator and Hermes aim dinners at nutrients the last 7 logged days were short on, and Hermes says when a pick is nutrient-driven. Requires Phase 110. The health and diet screen is a separate `notion_assistant` phase (handoff in the spec).
 

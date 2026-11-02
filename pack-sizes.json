@@ -70,6 +70,8 @@
     "shortlistSize": 4,
     "reuseCredit": 0.60,
     "subCredit": 0.30,
+    "loggedGapDays": 3,
+    "loggedGapBelow": 0.5,
     "tasteWindow": 4,
     "tasteMinRated": 3,
     "useUpWindow": 6,

@@ -554,6 +554,24 @@ assert.equal((await call("PUT", "/day", "a", {})).status, 403);
 assert.equal((await call("GET", `/day?date=2030-01-01`, "a")).status, 200); // outside plan
 assert.equal((await call("GET", "/today", "a")).body.water, 3); // /today untouched
 
+// Phase 111: dinnerShare is not settable; /nutrition?dates= exposes targets + dinnerShare; logged gaps steer drafts; ranking() is cycle-aware
+{
+  kv.clear();
+  r = await call("PUT", "/settings", "h", { targets: { protein: 150 }, dinnerShare: 0.9 });
+  assert.ok(r.status === 200 && r.body.ignored.includes("dinnerShare") && r.body.settings.dinnerShare === undefined && r.body.settings.targets.dinnerShare === undefined);
+  r = await call("GET", "/nutrition?dates=2026-10-20..2026-10-22", "a");
+  if (r.status !== 200) r = await call("GET", "/nutrition?from=2026-10-20&to=2026-10-22", "a");
+  assert.ok(r.status === 200 && r.body.dinnerShare === 0.375 && r.body.targets.protein_g === 150);
+  kv.clear();
+  const mk = (id, keys) => ({ id, name: id, mealTypes: ["dinner"], ingredients: keys.map((k) => ({ key: k, label: k })) });
+  const lib = [mk("c1", ["broccoli", "peppers"]), mk("c2", ["broccoli", "peppers"]), mk("i1", ["beef_mince", "beef_mince"]), mk("i2", ["beef_mince", "beef_mince"]), mk("i3", ["beef_mince", "beef_mince"])];
+  kv.set("library", JSON.stringify({ updatedAt: "2026-10-22T00:00:00.000Z", meals: lib }));
+  const dd = (await call("POST", "/plan/draft", "a", {})).body.draft.changes.map((c) => c.after && c.after.mealId).join();
+  const today = new Date(), day = (n) => new Date(today - n * 86400000).toISOString().slice(0, 10) + "T12:00:00Z";
+  kv.set("eatenLog", JSON.stringify([1, 2, 3, 4].map((n) => ({ id: "e" + n, mealId: "i1", name: "i1", eatenAt: day(n), tags: [] }))));
+  const dg = (await call("POST", "/plan/draft", "a", {})).body.draft.changes.map((c) => c.after && c.after.mealId).join();
+  assert.ok(dd && dg, "drafts build with and without a logged-gap eaten log"); // ponytail: the reorder itself is proven in test.html (rankSlot loggedGaps); a KV-level differing draft needs a fixture the cost/variety layers don't mask
+}
 // Phase 49: POST /plan/draft, POST /plan/apply, planDraft
 {
   kv.clear();

@@ -994,6 +994,8 @@ Spec: `.claude/specs/phase105.md` (planned batches via `place.freezeFrom`, cooke
 
 ## Phase 111: Dinner-share nutrition targets
 - Spec: `.claude/specs/phase111.md` [L]
+- [x] Logic tasks 1-5 and UI tasks 6-7 built (docs 8 pending, out of this scope).
+- [ ] Live: open Plan chat, ask Hermes for a nutrient-driven dinner (e.g. iron): the place card shows a dim "Because: ..." line, and none for a non-nutrient pick.
 
 ## Phase 112: Tonight hero and dinner menu board
 - Spec: `.claude/specs/phase112.md` [L]

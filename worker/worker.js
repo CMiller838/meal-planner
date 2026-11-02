@@ -84,7 +84,7 @@ const LIST_KEYS = ["allergies", "dislikes", "likes", "never"];
 /** Phase 52: Profile.md body -> stored settings. Unknown keys are dropped and listed; a known key with a bad value is an error. */
 function normalizeSettings(body, fileTargets) {
   if (!body || typeof body !== "object" || Array.isArray(body)) return { error: "body: expected a JSON object" };
-  const keys = Object.keys(fileTargets).filter((k) => k !== "_note" && k !== "gymDay" && typeof fileTargets[k] === "number");
+  const keys = Object.keys(fileTargets).filter((k) => k !== "_note" && k !== "gymDay" && k !== "dinnerShare" && typeof fileTargets[k] === "number");
   const resolve = (k) => {
     if (keys.includes(k)) return k;
     if (k === "calories" || k === "kcal") return "energy_kcal";
@@ -272,9 +272,7 @@ async function slotContext(day, slot, env) {
   const dayObj = plan.days[day - 1] || { slots: {} };
   const slotVal = dayObj.slots[slot] || null;
   const byId = Object.fromEntries(library.map((m) => [m.id, m]));
-  const others = SLOT_TYPES.filter((s) => s !== slot)
-    .map((s) => dayObj.slots[s] && byId[dayObj.slots[s].mealId])
-    .filter(Boolean);
+  const others = Generator.cycleMeals(plan.days, day, ShelfLife.shopOffset(plan), byId); // Phase 111: dinners already placed this shop cycle
   let hints = null;
   try {
     hints = JSON.parse(hintsRaw);
@@ -305,8 +303,8 @@ const slotRef = (v) => (v && v.mealId ? { mealId: v.mealId, ...(v.variantId ? { 
 
 /** Phase 63: the KV reads and prefs both /plan/draft and /plan/reflow generate from. */
 async function planInputs(env, { useUp = false, budget = null } = {}) {
-  const [libRaw, mirror, planPrefs, hints, ratingsRaw, pantry, settings] = await Promise.all(
-    ["library", "plan", "planPrefs", "dayHints", "ratings", "pantry"].map((k) => readJSON(env, k)).concat(readSettings(env)));
+  const [libRaw, mirror, planPrefs, hints, ratingsRaw, pantry, eatenRaw, foodRaw, settings] = await Promise.all(
+    ["library", "plan", "planPrefs", "dayHints", "ratings", "pantry", "eatenLog", "foodLog"].map((k) => readJSON(env, k)).concat(readSettings(env)));
   const library = libraryOf(libRaw);
   const hasMirror = !!(mirror && Array.isArray(mirror.days));
   const startDate = (hasMirror && mirror.startDate) || Generator.isoToday();
@@ -319,6 +317,14 @@ async function planInputs(env, { useUp = false, budget = null } = {}) {
   prefs.repeatGap = pp.repeatGap || 0;
   prefs.shopOffset = ShelfLife.shopOffset(mirror); // Phase 68: shop cycles every 7 days from shopAnchor
   prefs.profile = Nutrition.profileOf(settings);
+  { // Phase 111: nutrients the last 7 logged days were short on (per call, never stored)
+    const fmt = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/London" });
+    const today = fmt.format(new Date());
+    const dates = Array.from({ length: 7 }, (_, i) => new Date(Date.parse(today + "T00:00:00Z") - (6 - i) * 86400000).toISOString().slice(0, 10));
+    const wt = Nutrition.withProfile(TARGETS, settings);
+    const log = [...(Array.isArray(eatenRaw) ? eatenRaw : []), ...eatEntries(foodRaw).map((e) => Nutrition.foodAsEaten(e, wt, FOOD.tagShare))];
+    prefs.loggedGaps = Nutrition.loggedGaps(log, Object.fromEntries(library.map((m) => [m.id, m])), dates, TAGS, wt, (e) => fmt.format(new Date(e.eatenAt)), PACK_DATA.planning);
+  }
   if (useUp) {
     const items = ShoppingList.useUpItems((pantry && pantry.items) || [], mirror, Generator.isoToday(), SHELF_DATA);
     if (items.length) prefs.useUp = { items, window: PACK_DATA.planning.useUpWindow || 6 };
@@ -644,7 +650,7 @@ async function nutrition(params, env) {
   if (dates) {
     const wt = Nutrition.withProfile(TARGETS, await readSettings(env));
     const g = Nutrition.weekGaps([...log, ...food.map((e) => Nutrition.foodAsEaten(e, wt, FOOD.tagShare))], byId, dates, TAGS, wt, (e) => dayFmt.format(new Date(e.eatenAt)));
-    return json(200, { from: dates[0], to: dates[dates.length - 1], nutrients: g.nutrients, notLogged: g.notLogged });
+    return json(200, { from: dates[0], to: dates[dates.length - 1], nutrients: g.nutrients, notLogged: g.notLogged, targets: wt, dinnerShare: wt.dinnerShare ?? 1 });
   }
   const gym = params.get("gym") === "1" && !!TARGETS.gymDay;
   const { eatenToday, foodToday, planned, cov, missing, partial } = await dayView(date, gym, { meals, byId, log, planRaw, dayFmt, food }, env);

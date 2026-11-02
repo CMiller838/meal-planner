@@ -943,6 +943,7 @@ body.chat-open { overflow: hidden; }
 .diff-row { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem; font-size: .8rem; background: var(--surface-alt); border: 1px solid var(--border); border-radius: .6rem; padding: .35rem .5rem; animation: mp-slot-in 220ms ease-out both; }
 .diff-row span { flex: 1 1 12rem; }
 .diff-row.rejected span { text-decoration: line-through; color: var(--text-dim); }
+.diff-because { flex: 1 1 100%; color: var(--text-dim); font-size: .72rem; }
 .chat-reason { flex: 1 1 100%; display: flex; flex-wrap: wrap; gap: .3rem; }
 .chat-reason-input { flex: 1 1 8rem; min-width: 0; }
 .diff-row button { padding: .2rem .6rem; font-size: .75rem; }

@@ -100,6 +100,32 @@ for (const [vp, size] of Object.entries({ pc: { width: 1440, height: 900 }, phon
     if (await page.locator('#plan-root .slot-card').count() < 7) throw new Error('fewer than 7 plan slots');
     await shot('plan');
   });
+  await step('phase 111: day chip shows protein against the dinner share with no "Short on"; meter target is 7 x the share; iron-short log steers early dinners', async () => {
+    const chip = await page.locator('#plan-root .coverage-list').first().innerText();
+    const m = chip.match(/Protein ~(\d+)g \/ (\d+)g/i);
+    if (!m || m[2] !== '60') throw new Error('chip: ' + chip);
+    if (/Short on/i.test(await page.locator('#plan-root').innerText().then(t => t.split('Short across')[0]))) throw new Error('Short on still shown');
+    const wk = await page.evaluate(() => { const l = document.querySelector('.m-prot'), b = document.querySelector('.meter-bar'); return { prot: parseInt(l.textContent.replace(/\D*(\d+).*/, '$1')), w: parseFloat(b.style.width) }; });
+    if (wk.prot && Math.abs(wk.w - Math.min(100, wk.prot / 420 * 100)) > 1.5) throw new Error('meter width ' + JSON.stringify(wk));
+    const score = async seeded => page.evaluate(async seeded => {
+      localStorage.removeItem('mp_eatenLog');
+      if (seeded) {
+        const lib = JSON.parse(localStorage.getItem('mp_library') || '[]');
+        const tags = (await (await fetch('ingredient-nutrient-tags.json')).json());
+        const t = tags.tags || tags, dayOf = i => new Date(Date.now() - i * 86400000).toISOString();
+        const dud = lib.find(x => !(x.ingredients || []).some(g => t[g.key] && t[g.key].iron));
+        localStorage.setItem('mp_eatenLog', JSON.stringify([1, 2, 3, 4].map(i => ({ id: 'w' + i, mealId: dud.id, eatenAt: dayOf(i) }))));
+      }
+      document.querySelector('#generate-btn').click();
+      await new Promise(r => setTimeout(r, 2500));
+      const t = ((await (await fetch('ingredient-nutrient-tags.json')).json()).tags) || (await (await fetch('ingredient-nutrient-tags.json')).json());
+      const plan = JSON.parse(localStorage.getItem('mp_plan'));
+      return plan.days.slice(0, 3).reduce((n, d) => { const m = JSON.parse(localStorage.getItem('mp_library')).find(x => x.id === (d.slots.dinner || {}).mealId); return n + ((m && m.ingredients) || []).filter(g => t[g.key] && t[g.key].iron).length; }, 0);
+    }, seeded);
+    const base0 = await score(false), seeded = await score(true);
+    await page.evaluate(() => localStorage.removeItem('mp_eatenLog'));
+    if (seeded < base0) throw new Error(`iron-tagged ingredients early: seeded ${seeded} < unseeded ${base0}`);
+  });
   await step('plan: Compare 3 weeks shows three cards; close keeps the plan, Use replaces it', async () => {
     await page.goto(`${base}/plan.html`);
     await page.waitForSelector('#plan-root .slot-card');
@@ -595,6 +621,17 @@ for (const [vp, size] of Object.entries({ pc: { width: 1440, height: 900 }, phon
     await page.click('#chat-exit');
     await page.waitForSelector('#plan-chat', { state: 'hidden' });
     if (await planLS() !== before) throw new Error('Exit changed mp_plan');
+  });
+  await step('chat: a place with why shows "Because:", one without shows none (Phase 111)', async () => {
+    chatMock.reply = { text: 'Done', edits: [{ type: 'place', day: 1, slot: 'dinner', mealId: 'roast-chicken', why: 'iron has been low' }, { type: 'place', day: 2, slot: 'dinner', mealId: 'chilli-con-carne' }] };
+    await openChat();
+    await say('two dinners');
+    await page.waitForSelector('#chat-diff .diff-row', { timeout: 8000 });
+    const rows = await page.locator('#chat-diff .diff-row').allInnerTexts();
+    const n = rows.filter(t => /Because: iron has been low/.test(t)).length;
+    if (n !== 1 || rows.filter(t => /Because:/.test(t)).length !== 1) throw new Error('because rows: ' + JSON.stringify(rows));
+    await page.click('#chat-exit');
+    await page.waitForSelector('#plan-chat', { state: 'hidden' });
   });
   await step('chat: bulk cards Accept writes plan.bulk, Undo clears it, Exit leaves mp_plan identical (Phase 90a)', async () => {
     const orig = await planLS();

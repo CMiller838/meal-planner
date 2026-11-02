@@ -37,6 +37,9 @@ assert '"meals":[{"id":"x"}]' in pb and "Spend so far" in pb and "Briefing" in p
 assert b.brief_of([{"open": True, "context": {"brief": {"a": 1}}}]) == {"a": 1} and b.brief_of([{"text": "x"}]) is None
 pr = b.build_prompt(msgs, {"day": 2}, brief={"a": 1}, resumed=True, send_brief=False)
 assert pr == 'Context: {"day": 2}\nUser: msg19' and "Briefing" in b.build_prompt(msgs, {}, brief={"a": 1}, resumed=True)
+# Phase 111: the because rule rides with the briefing
+assert "brief.nutrition" in b.build_prompt([], {}, brief={"a": 1}) and "brief.nutrition" not in b.build_prompt([], {})
+
 # Phase 109: bar-mode prompt (live edit set only) and the silent opener
 pbar = b.build_prompt([{"id": 3, "from": "user", "text": "swap tue"}], {"mode": "bar"}, brief={"library": []})
 assert '"type":"meals"' in pbar and '"type":"swapDay"' in pbar and "Plan with me" in pbar and "User: swap tue" in pbar

@@ -82,7 +82,7 @@
     place: (e) => isDay(e.day) && isSlot(e.slot) && mealId(e) && (e.variantId === undefined || str(e.variantId, 80)) && (e.cookId === undefined || str(e.cookId, 120))
       && (e.leftover === undefined || e.leftover === true) && (e.portions === undefined || (e.leftover === true && Number.isInteger(e.portions) && e.portions >= 1 && e.portions <= 12)) && !(e.leftover && e.cookId)
       && (e.freezeFrom === undefined || (isDay(e.freezeFrom) && e.slot === "dinner" && !e.cookId && !e.leftover))
-      && { type: "place", day: e.day, slot: e.slot, mealId: e.mealId, ...(e.freezeFrom ? { freezeFrom: e.freezeFrom } : {}), ...(e.variantId ? { variantId: str(e.variantId, 80) } : {}), ...(e.cookId ? { cookId: str(e.cookId, 120) } : {}), ...(e.leftover ? { leftover: true, ...(e.portions ? { portions: e.portions } : {}) } : {}) },
+      && { type: "place", day: e.day, slot: e.slot, mealId: e.mealId, ...(typeof e.why === "string" && e.why.length <= 140 && e.why.trim() ? { why: e.why.trim() } : {}), ...(e.freezeFrom ? { freezeFrom: e.freezeFrom } : {}), ...(e.variantId ? { variantId: str(e.variantId, 80) } : {}), ...(e.cookId ? { cookId: str(e.cookId, 120) } : {}), ...(e.leftover ? { leftover: true, ...(e.portions ? { portions: e.portions } : {}) } : {}) },
     // Phase 90a: a bulk-buy proposal; the app recomputes the numbers and shows a card (Accept writes plan.bulk).
     // Phase 98: a cheaper-ingredient proposal; the app recomputes the saving and shows a card (Accept writes slot.subs).
     cheaper: (e) => str(e.key, 60) && str(e.to, 60) && Number.isInteger(e.shopDay) && e.shopDay >= -6 && e.shopDay <= 28 && { type: "cheaper", key: str(e.key, 60), to: str(e.to, 60), shopDay: e.shopDay },
