@@ -28,7 +28,8 @@ Each heading in `docs/roadmap.md` ends `[S]`, `[M]` or `[L]`. "Plan Phase N" is 
 - **[S]** — no spec. Write ≤10 checkbox lines straight under the phase in `tasks.md`. Stop.
 - **[M]** — this skill, steps below. Sonnet is fine.
 - **[L]** — same steps in plan mode (EnterPlanMode), and record any real architectural
-  fork as an ADR in `docs/ARCHITECTURE.md`. Sonnet is fine; use Opus only when the phase has a real
+  fork as an ADR in `docs/ARCHITECTURE.md`. Plan mode only lets you write the plan file, so write it in spec format
+  (the step 4 sections, per sub-spec); after approval, copy it into the spec files instead of re-deriving it. Sonnet is fine; use Opus only when the phase has a real
   architectural fork to decide (planning re-reads the repo, so Opus costs much more here).
 
 **Model check.** Do not stop to ask. If you are on Opus for an [S] or [M] phase, or on Sonnet for an [L] phase

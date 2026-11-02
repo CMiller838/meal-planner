@@ -987,3 +987,33 @@ Spec: `.claude/specs/phase105.md` (planned batches via `place.freezeFrom`, cooke
 - [ ] Live: with real Hermes and `tools/hermes_chat_bridge.py` running, open Shopping, switch the bar to Ask, type "swap Tuesday dinner": the plan changes, the list redraws without a reload, an Undo toast appears and restores the plan.
 - [ ] Live: on the installed Android PWA, focus the Ask input: the bar lifts above the keyboard, no gap under it, not hidden behind the tab bar.
 - [ ] Live: ask Hermes "what's quick with leftover chicken?": up to 6 tappable meal rows appear, each with Open and Eat.
+
+## Phase 110: Dinners only, remove breakfast, lunch and snack
+- Spec: `.claude/specs/phase110.md` [L]
+- [ ] Live: on the installed phone PWA with your real plan, open Plan: old breakfasts/lunches are gone, every dinner is kept; ask Hermes in Plan with Hermes to plan the week and it proposes dinners only.
+
+## Phase 111: Dinner-share nutrition targets
+- Spec: `.claude/specs/phase111.md` [L]
+
+## Phase 112: Tonight hero and dinner menu board
+- Spec: `.claude/specs/phase112.md` [L]
+
+## Phase 113: Swipe Discover for dinners
+- Spec: `.claude/specs/phase113.md` [M]
+
+## Phase 114: App shell, bottom tabs and Hermes bar
+- Spec: `.claude/specs/phase114.md` [M]
+
+## Phase 115: Browse cards and full-recipe Details sheet
+- Spec: `.claude/specs/phase115.md` [L]
+
+## Phase 116: Shopping aisle accordion
+- Spec: `.claude/specs/phase116.md` [M]
+
+## Phase 118: Plan with Hermes, wizard then chat
+- Spec: `.claude/specs/phase118a.md` [M] (wizard)
+- Spec: `.claude/specs/phase118b.md` [L] (night-by-night chat)
+- [ ] Live: on the phone PWA, wizard → swipe through a week of night cards with the Hermes bridge running; type "quicker" on a busy night.
+
+## Phase 119: Finish shop review and Freezer drawer
+- Spec: `.claude/specs/phase119.md` [M]

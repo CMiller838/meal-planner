@@ -256,3 +256,54 @@ Full specs: `.claude/archive/roadmap_20261026.md` (v5 and v6 prose and every pha
 ## Phase 109: Hermes on every page, live edits, search-and-log in Browse [L] — done (built 2026-10-30; live checks left to in-use testing) (check.py --changed 3/3: worker, ui pages, ui walk)
 
 Goal: a docked bar on every page with a Log/Ask toggle; Ask talks to Hermes and its small edits (swap, skip, rate, place) apply live on the current screen with Undo; Browse search finds meals and loose foods, logs them, and filters meals by several ingredients. Spec: `.claude/specs/phase109.md`.
+
+---
+
+# v8 — Dinners only, and a livelier plan (Phases 110-118)
+
+Added 2026-11-01. The app plans one meal a night. Breakfast, lunch and snack slots are **removed** (not hidden): the
+generator, plan, chat, Worker and data stop knowing them. Order: 110 → 111 → 112; 113 is independent. UI phases 112 and
+113-118 each start from a user-picked `ui-prototyper` variant (`design-prototypes/ui-concepts/dinner-board-*.html`,
+`discover-swipe-*.html`, `shell-*`, `browse-*`, `shopping-*`, `cook-*`, `planchat-*`), applied with `restyle-from-prototype`.
+
+## Phase 110: Dinners only, remove breakfast, lunch and snack [L] — not started
+
+Goal: one slot per day (`dinner`) end to end; stored plans, ratings and food-log entries from older slots migrate or are dropped safely, `lunchEffort` and the "Also plan lunch" setup go, and the Worker, chat edits (`place`, `swap`, `backfill`) and `mealTypes` filtering all agree. Architectural fork: slot shape (`d.slots.dinner` kept vs flat `d.dinner`), ADR needed.
+
+## Phase 111: Dinner-share nutrition targets [L] — not started
+
+Goal: coverage and the plan meter judge dinners against a data-driven dinner share of the daily target (`nutrition-targets.json`, 0.375), gaps are judged over the shop week's dinners, the generator and Hermes aim dinners at nutrients the last 7 logged days were short on, and Hermes says when a pick is nutrient-driven. Requires Phase 110. The health and diet screen is a separate `notion_assistant` phase (handoff in the spec).
+
+## Phase 112: Tonight hero and dinner menu board [L] — not started
+
+Goal: replace the 3-row day grid with a 14-night board and a big Tonight card (cook, swap, skip, eating out, I ate it), leftover chains drawn between nights; built from the chosen dinner-board prototype. Requires Phase 110 and a picked prototype.
+
+## Phase 113: Swipe Discover for dinners [M] — not started
+
+Goal: Discover becomes a card stack (right adds to the library, left dismisses, tap opens detail) with button and keyboard fallbacks, Undo and nutrient-gap chips; hard exclusions still apply; built from the chosen discover-swipe prototype. Requires a picked prototype.
+
+Picked 2026-11-01 (phone-first): board A, swipe A, shell A, browse A, shopping A, cook C, Plan with Hermes = planchat A wizard (plus a start-date step) handing into planchat C chat. Eaten page (eaten-a/b/c) not picked yet. 114-118 each need 110 done only where they touch slots; shell (114) is independent and should go first so later pages share one frame.
+
+## Phase 114: App shell, bottom tabs and Hermes bar [M] — not started
+
+Goal: shell-a on every page: 5-tab bottom bar (Tonight, Browse, Discover, Shopping, Eaten), theme toggle, the Hermes Log/Ask bar docked above it (tabs hide while typing, lifts with the keyboard); tabs move to the top on PC. Reworks `ate-box.js`/`bar-chat.js` placement, not their logic.
+
+## Phase 115: Browse cards and full-recipe Details sheet [L] — not started
+
+Goal: browse-a photo cards plus ONE Details sheet used from Browse, Plan and Discover: short description on top, then photo, stats, the whole recipe (tickable ingredients, numbered method), variant picker, thumb dock (Add to plan, Eat, Cook mode). Reads `meal.description`/`instructions`; meals missing them show a gap note.
+
+## Phase 116: Shopping aisle accordion [M] — not started
+
+Goal: shopping-a: aisle cards with progress and tick animation, pantry tab, week total vs budget dock, Finish shop. `buildLists` stays the one implementation.
+
+## Phase 117: Cook mode, focus stack [L] — dropped (2026-11-01: Phase 79 cook mode already covers it; a web app cannot drive the phone Clock timers)
+
+Goal: cook-c: previous/current/next step, timer ring, ingredients drawer, keep-awake chip, finish asks portion and leftovers through the existing `eatPortion`/Cooks paths (never the pantry from a portion-eat).
+
+## Phase 118: Plan with Hermes, wizard then chat [L] — not started
+
+Goal: planchat-a's 5-step wizard with an added start-date step (feeds `opts.firstSlot`/start, Phase 83), then a transition into planchat-c's in-chat meal cards with swipe accept/reject and the pill ticker. Requires Phase 110.
+
+## Phase 119: Finish shop review and Freezer drawer [M] — not started
+
+Goal: Finish shop opens one review sheet (prototype `stock-b.html`: two-column "this week | freezer" +/- steppers per ticked plan line, editable amount, Fridge/Freezer/Cupboard, use-by, "Rest after plan" chip, skipped lines left out) whose single Confirm writes the pantry in one batch with Undo; the Pantry tab gains an "In the freezer" group (weeks frozen, "use soon" from 8 weeks). Amounts come from the list (`bulk.freeze` prefills the split); the "Fill from order photo" button is a disabled stub for a later Hermes phase. Replaces Phase 116's wrap-up handler. This adds a second app-side pantry writer, so it updates the pantry invariants in CLAUDE.md. Requires Phase 116.

@@ -555,3 +555,10 @@ it is still pending (404 once the assistant folded it into `items`); `kind: "rul
 
 Phase 101: `POST /plan/edit` takes `userSaid: true`; honoured only for `X-Actor: hermes` with only skip/out/backfill edits, the parked draft then carries `direct: true` (and `backfilled`, which every edit draft now carries). The app adopts a direct draft with no banner (`adoptDirect` in `plan.js`: snapshot, `applyDraft`, toast with Undo); the Worker still never writes the plan.
 - `ate-box.js` (Phase 102): self-injecting docked "I ate" bar on every page; `MP.AteBox.suggest`/`recents` are pure, `MP.eatMeal` (`data.js`) pairs `logPortion` with the plan tick.
+
+## v13 - dinners only (Phase 110)
+
+The plan keeps the `d.slots` map with `dinner` as its only key (rejected: a flat `d.dinner`, which would rewrite ~150
+call sites, `planMirror`, `mp_planUndo` and the KV mirror for no user-visible gain). Old stored plans are normalised on
+every read by the pure `MP.dinnersOnly` (`data.js`); library `mealTypes` are stripped to `["dinner"]` or `[]` on read
+(`[]` = log-only, never planned). `firstSlot` is gone; the Worker ignores it when sent.

@@ -1,0 +1,220 @@
+<!doctype html>
+<html lang="en" data-theme="dark"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Plan chat A: step-by-step setup, dot ticker</title>
+<style>
+:root,[data-theme="dark"]{--bg:#1c1410;--bg-2:#26190f;--surface:#241a13;--surface-alt:#2c2018;--text:#f3e6d4;--text-dim:#c9b79f;--accent:#d4633b;--accent-2:#7a9a6b;--butter:#e8b74a;--danger:#ff6b4a;--border:#4a382b;--shadow:rgba(15,9,5,.45);--radius:18px;--on-accent:#fff;--on-butter:#3a2a10;--accent-hover:#b94f2c;--accent-glow:rgba(212,99,59,.5);--on-cork:#fff6ea;--scrim:rgba(0,0,0,.55);--motion-base:180ms;--motion-exit:120ms;--ease-lift:cubic-bezier(.2,.9,.3,1.4);--tabbar-h:3.6rem;--ph-l:34%}
+[data-theme="light"]{--bg:#6b4f3a;--bg-2:#7a5c44;--surface:#fdf6ec;--surface-alt:#f7ecda;--text:#2b1d14;--text-dim:#6b5847;--accent:#d4633b;--accent-2:#5c8a4c;--butter:#e8b74a;--danger:#c1421a;--border:#e3d3ba;--shadow:rgba(43,29,20,.18);--ph-l:62%}
+*{box-sizing:border-box}
+html{color-scheme:dark light;-webkit-tap-highlight-color:transparent}
+body{margin:0;background:linear-gradient(var(--bg),var(--bg-2)) fixed;color:var(--text);font:16px/1.4 "Segoe UI Rounded",Nunito,"Trebuchet MS",system-ui,sans-serif;transition:background .4s,color .4s;min-height:100dvh}
+h1,h2,h3,p,ul,ol{margin:0}ul,ol{padding:0;list-style:none}
+button,input,textarea,select{font:inherit;color:inherit}button{cursor:pointer}
+:focus-visible{outline:3px solid var(--butter);outline-offset:2px}
+[hidden]{display:none!important}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+.ic{width:1.4rem;height:1.4rem;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.ib{display:inline-grid;place-items:center;flex:none;color:var(--text);font-size:1.25rem;width:2.9rem;height:2.9rem;border-radius:50%;border:1px solid var(--border);background:var(--surface);transition:transform var(--motion-base),background var(--motion-base)}
+.ib:hover{transform:translateY(-1px)}.ib:active{transform:scale(.95)}
+.ib.pri{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
+.btn{min-height:44px;padding:.55rem 1rem;border-radius:.8rem;border:1px solid var(--border);background:var(--surface-alt);color:var(--text);font-weight:800;white-space:nowrap;display:inline-flex;align-items:center;justify-content:center;gap:.4rem;transition:transform var(--motion-base),background var(--motion-base),box-shadow var(--motion-base)}
+.btn:hover:not(:disabled){transform:translateY(-1px);box-shadow:0 4px 10px var(--shadow)}
+.btn:active:not(:disabled){transform:scale(.95)}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.btn.pri{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}.btn.pri:hover:not(:disabled){background:var(--accent-hover)}
+.btn.sm{padding:.3rem .8rem;font-size:.88rem}
+.btn.lg{min-height:56px;font-size:1.1rem;border-radius:1rem}
+.btn.ghost{background:transparent}
+.card{color:var(--text);background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:0 6px 16px var(--shadow)}
+.dim{color:var(--text-dim)}
+.chips{display:flex;flex-wrap:wrap;gap:.4rem}
+.chip{display:inline-block;padding:.12rem .55rem;border-radius:999px;font-size:.7rem;font-weight:800;text-transform:uppercase;letter-spacing:.04em;background:color-mix(in srgb,var(--accent-2) 22%,transparent);border:1px solid var(--accent-2)}
+.chip.busy{background:color-mix(in srgb,var(--butter) 25%,transparent);border-color:var(--butter)}
+button.tg{min-height:44px;padding:.3rem .9rem;border-radius:999px;border:1.5px solid var(--border);background:var(--surface-alt);font-weight:800;font-size:.9rem;transition:transform var(--motion-base),background var(--motion-base)}
+button.tg:active{transform:scale(.95)}
+button.tg[aria-pressed=true]{background:var(--butter);color:var(--on-butter);border-color:var(--butter)}
+.bd{display:inline-block;padding:.1rem .55rem;border-radius:999px;font-size:.75rem;font-weight:800;border:1.5px solid var(--border)}
+.bd.ok{border-color:var(--accent-2);background:color-mix(in srgb,var(--accent-2) 25%,transparent)}
+.bd.no{border-color:var(--danger);color:var(--danger)}
+.toast{position:fixed;width:max-content;left:50%;bottom:var(--toast-b,5.5rem);transform:translate(-50%,20px);opacity:0;pointer-events:none;z-index:80;display:flex;gap:.75rem;align-items:center;max-width:min(92vw,520px);background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:.8rem;padding:.5rem .6rem .5rem .9rem;box-shadow:0 8px 24px var(--shadow);transition:opacity var(--motion-base),transform var(--motion-base) var(--ease-lift)}
+.toast.on{opacity:1;transform:translate(-50%,0);pointer-events:auto}
+.ph{display:grid;place-items:center;background:linear-gradient(135deg,hsl(var(--h) 50% var(--ph-l)),hsl(calc(var(--h) + 35) 45% calc(var(--ph-l) - 10%)));color:var(--on-cork)}
+@keyframes rise{from{opacity:0;transform:translateY(8px)}}
+@keyframes pop{from{opacity:0;transform:scale(.92)}}
+@media(prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-property:opacity,background,color!important;transition-duration:.15s!important;scroll-behavior:auto!important}.btn:hover,.ib:hover{transform:none!important}}
+
+:root{--toast-b:6.5rem}
+.app{height:var(--vvh,100dvh);max-width:720px;margin:0 auto;display:flex;flex-direction:column;overflow:hidden}
+.hdr{display:flex;align-items:center;gap:.6rem;padding:.5rem .8rem;padding-top:max(.5rem,env(safe-area-inset-top));color:var(--on-cork)}
+.hdr h1{font-size:1.15rem;margin-right:auto}
+.sec{flex:1;min-height:0;display:flex;flex-direction:column}
+.thread{flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;padding:.8rem;display:flex;flex-direction:column;gap:.6rem;overscroll-behavior:contain}
+.msg{max-width:88%;padding:.6rem .85rem;border-radius:1.1rem;animation:rise .25s ease-out both}
+.msg.h{align-self:flex-start;background:var(--surface);border:1px solid var(--border);border-bottom-left-radius:.3rem}
+.msg.u{align-self:flex-end;background:var(--accent);color:var(--on-accent);border-bottom-right-radius:.3rem}
+.dots{display:flex;gap:.3rem;padding:.25rem .15rem}.dots span{width:.5rem;height:.5rem;border-radius:50%;background:var(--text-dim);animation:bounce 1s infinite}.dots span:nth-child(2){animation-delay:.15s}.dots span:nth-child(3){animation-delay:.3s}@keyframes bounce{40%{transform:translateY(-4px);opacity:.5}}
+.mc{padding:.8rem .9rem;display:grid;gap:.45rem;align-self:stretch;animation:rise .3s var(--ease-lift) both;transition:opacity .25s,border-color .25s;scroll-margin:.5rem}
+.mc[data-st=rep]{opacity:.5}.mc[data-st=no]{opacity:.7}.mc[data-st=ok]{border-color:var(--accent-2)}
+.mc.flash{outline:3px solid var(--butter);outline-offset:2px}
+.mc h3{font-size:1.1rem}.mh{display:flex;gap:.5rem;align-items:center;color:var(--text-dim);font-size:.9rem}
+.why{font-size:.9rem}
+.mc .acts{display:flex;flex-wrap:wrap;gap:.4rem;align-items:center}.mc .acts>.btn:not(.sm){flex:1}
+.wrapc{padding:1rem;display:grid;gap:.6rem;align-self:stretch;animation:rise .3s var(--ease-lift) both}
+.wrapc li{display:flex;gap:.5rem;align-items:center}.wrapc .ic{color:var(--accent-2)}.wrapc .warn .ic{color:var(--butter)}
+.comp{display:flex;gap:.5rem;padding:.5rem .8rem calc(.5rem + env(safe-area-inset-bottom));background:var(--bg-2);border-top:1px solid var(--border)}
+.comp input{flex:1;min-width:0;min-height:48px;border-radius:999px;border:1px solid var(--border);background:var(--surface);padding:0 1rem;font-size:16px}
+.sug{display:flex;gap:.4rem;overflow-x:auto;padding:.4rem .8rem;scrollbar-width:none;background:var(--bg-2)}.sug button{flex:none}
+.cell{display:grid;place-items:center;align-content:center;border-radius:.7rem;border:1.5px solid var(--border);background:var(--surface-alt);color:var(--text);padding:.15rem;position:relative;line-height:1.1;transition:background var(--motion-base),border-color var(--motion-base),transform var(--motion-base)}
+.cell:active{transform:scale(.95)}
+.cell b{font-size:.62rem;color:var(--text-dim);text-transform:uppercase}.cell i{font-style:normal;font-weight:800;font-size:.95rem}
+.cell .m{font-size:.62rem;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cell.ok{background:color-mix(in srgb,var(--accent-2) 30%,var(--surface));border-color:var(--accent-2)}
+.cell.new{animation:pop .35s var(--ease-lift)}
+.cell.pend{border-style:dashed;border-color:var(--butter)}
+.cell.busy::after{content:"";position:absolute;top:3px;right:3px;width:.4rem;height:.4rem;border-radius:50%;background:var(--butter)}
+.mt{display:flex;align-items:center;gap:.6rem;font-size:.8rem;font-weight:800}
+.meter{height:.55rem;border-radius:99px;background:var(--surface-alt);border:1px solid var(--border);overflow:hidden;flex:1;min-width:3rem}.meter i{display:block;height:100%;width:0;background:var(--accent-2);transition:width .5s ease-out}.meter.over i{background:var(--danger)}
+.stp{display:flex;align-items:center;justify-content:center;gap:1.2rem;margin:.4rem 0 .8rem}.stp .ib{width:3.4rem;height:3.4rem;font-size:1.6rem}.stp output{min-width:7rem;text-align:center;font-size:1.1rem}.stp output b{font-size:2.6rem;display:block;line-height:1}
+.pre{justify-content:center;margin-bottom:.5rem}.rtxt{text-align:center}
+.dows{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:.35rem}.dow{padding:0;min-width:0;border-radius:.9rem;min-height:56px}
+.big{display:block;font-size:2.2rem;font-weight:800;text-align:center;margin:.2rem 0}
+input[type=range]{width:100%;accent-color:var(--accent);height:44px}
+.ctl{display:grid;gap:.5rem}.ctl .dim{font-size:.9rem}
+.pf{display:flex;flex-wrap:wrap;gap:.5rem}
+
+.prog{display:flex;gap:.3rem;padding:0 1rem .6rem}.prog i{flex:1;height:.3rem;border-radius:9px;background:color-mix(in srgb,var(--on-cork) 25%,transparent);transition:background .3s}.prog i.on{background:var(--butter)}
+.step{flex:1;overflow-y:auto;padding:1rem 1.2rem;display:grid;align-content:start;gap:1rem;color:var(--on-cork)}
+.step>*{animation:rise .3s ease-out both}
+.step h2{font-size:1.8rem;line-height:1.1}.step>p{opacity:.85}
+.step .ctl{background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:var(--radius);padding:1rem;box-shadow:0 6px 16px var(--shadow)}
+.rev{display:grid;gap:.5rem;background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:var(--radius);padding:1rem}.rev div{display:flex;justify-content:space-between;gap:1rem}.rev b{text-align:right}
+.thumb{display:flex;gap:.6rem;padding:.7rem 1rem calc(.7rem + env(safe-area-inset-bottom));background:var(--bg-2);border-top:1px solid var(--border)}.thumb .pri{flex:1}
+.tick{margin:0 .8rem;padding:.55rem .6rem;display:grid;gap:.4rem}
+.wk{display:flex;gap:.35rem;overflow-x:auto;padding-bottom:.2rem;scrollbar-width:thin}
+.wk .cell{flex:none;width:2.9rem;height:3.4rem}.wk .cell .m{display:none}
+</style></head><body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<symbol id="i-tonight" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M3 10h18M8 3v4M16 3v4"/></symbol>
+<symbol id="i-browse" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="2"/><rect x="14" y="3" width="7" height="7" rx="2"/><rect x="3" y="14" width="7" height="7" rx="2"/><rect x="14" y="14" width="7" height="7" rx="2"/></symbol>
+<symbol id="i-disc" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M15.5 8.5l-2 5-5 2 2-5z"/></symbol>
+<symbol id="i-shop" viewBox="0 0 24 24"><path d="M5 8h14l-1 12H6z"/><path d="M9 8a3 3 0 016 0"/></symbol>
+<symbol id="i-eaten" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M8 12.5l3 3 5-6"/></symbol>
+<symbol id="i-send" viewBox="0 0 24 24"><path d="M12 19V5M5 12l7-7 7 7"/></symbol>
+<symbol id="i-l" viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></symbol>
+<symbol id="i-r" viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></symbol>
+<symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></symbol>
+<symbol id="i-timer" viewBox="0 0 24 24"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l3 2M9 2h6"/></symbol>
+<symbol id="i-list" viewBox="0 0 24 24"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></symbol>
+<symbol id="i-bolt" viewBox="0 0 24 24"><path d="M13 2L4 14h7l-1 8 9-12h-7z"/></symbol>
+<symbol id="i-chat" viewBox="0 0 24 24"><path d="M4 5h16v11H9l-5 4z"/></symbol>
+<symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7"/></symbol>
+</defs></svg>
+<div class="app"><header class="hdr"><button class="ib" id="back" aria-label="Exit planning, nothing is saved"><svg class="ic " aria-hidden="true"><use href="#i-l"/></svg></button><h1>Plan with Hermes</h1><button class="ib" id="theme" aria-label="Toggle dark or light theme">&#9680;</button></header>
+<section class="sec" id="setup"><div class="prog" id="prog" aria-hidden="true"></div><div class="step" id="step"></div>
+<div class="thumb"><button class="btn lg ghost" id="prev">Back</button><button class="btn lg pri" id="next">Next</button></div></section>
+<section class="sec" id="chat" hidden><div class="card tick"><div class="wk" id="wk" aria-label="Your nights"></div><div class="mt"><span id="cnt"></span><span class="meter"><i id="bar"></i></span><span id="est"></span></div></div>
+<ol class="thread" id="thread" aria-live="polite"></ol><div class="sug" id="sug"><button type="button" class="tg">Quicker</button><button type="button" class="tg">Cheaper</button><button type="button" class="tg">More veg</button><button type="button" class="tg">Fish</button><button type="button" class="tg">Surprise me</button></div><form class="comp" id="cf" autocomplete="off"><input id="ci" type="text" enterkeyhint="send" aria-label="Message Hermes" placeholder="Tell Hermes what to change"><button class="ib pri" aria-label="Send"><svg class="ic " aria-hidden="true"><use href="#i-send"/></svg></button></form></section></div>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+<script>
+const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
+const RM=matchMedia('(prefers-reduced-motion: reduce)').matches;
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+const h=s=>{const t=document.createElement('template');t.innerHTML=s.trim();return t.content.firstElementChild};
+$('#theme').onclick=()=>{const r=document.documentElement;r.dataset.theme=r.dataset.theme==='dark'?'light':'dark'};
+let tt;function toast(msg,act,fn){const t=$('#toast');t.textContent='';const s=document.createElement('span');s.textContent=msg;t.append(s);if(act){const b=document.createElement('button');b.className='btn sm';b.textContent=act;b.onclick=()=>{fn();t.classList.remove('on')};t.append(b)}t.classList.add('on');clearTimeout(tt);tt=setTimeout(()=>t.classList.remove('on'),5000)}
+const vv=window.visualViewport;if(vv){const f=()=>{const r=document.documentElement.style;r.setProperty('--kb',Math.max(0,innerHeight-vv.height-vv.offsetTop)+'px');r.setProperty('--vvh',vv.height+'px')};vv.addEventListener('resize',f);vv.addEventListener('scroll',f)}
+
+const I=n=>`<svg class="ic" aria-hidden="true"><use href="#i-${n}"/></svg>`;
+const START=new Date(2026,9,29),D=i=>{const d=new Date(START);d.setDate(d.getDate()+i);return d};
+const WD=i=>D(i).toLocaleDateString('en-GB',{weekday:'short'}),DL=i=>D(i).toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short'});
+const DN=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+const TIERN=['','Budget','Mid','Treat'],EST=[0,4,7,11];
+const POOL=[
+{n:'Chicken & chorizo traybake',m:45,c:2,t:['Protein','Iron'],v:0,why:'Uses the chicken thighs and makes 4 portions for the next nights.'},
+{n:'Prawn & veg noodles',m:20,c:2,t:['Protein','Vit C'],v:1,why:'Ready fast and light on washing up.'},
+{n:'Veg lasagne',m:55,c:2,t:['Calcium','Fibre'],v:1,why:'Batch cook: two nights of leftovers follow.'},
+{n:'Lentil dal & rice',m:30,c:1,t:['Fibre','Iron'],v:1,why:'Pantry staples, one pot, very cheap.'},
+{n:'Beef ragu & wholewheat pasta',m:75,c:2,t:['Iron','Fibre','Protein'],v:0,why:'Fills your iron gap this week; freezes well.'},
+{n:'Chicken wraps & slaw',m:20,c:1,t:['Protein','Vit C'],v:1,why:'Quick, and uses the cabbage that is going soft.'},
+{n:'Salmon, sweet potato & greens',m:30,c:3,t:['Omega-3','Vit C','Fibre'],v:1,why:'Your omega-3 for the week in one tray.'},
+{n:'Chickpea & spinach curry',m:35,c:1,t:['Fibre','Iron','Calcium'],v:1,why:'Cheapest dinner in the library, makes 4.'},
+{n:'Homemade pizza night',m:45,c:2,t:['Calcium','Protein'],v:0,why:'A weekend treat that is still on budget.'},
+{n:'Turkey meatballs & pasta',m:30,c:1,t:['Protein','Iron'],v:0,why:'Budget pick, 30 minutes.'},
+{n:'Roast chicken & veg',m:90,c:3,t:['Protein','Vit C'],v:1,why:'Sunday roast; the carcass becomes soup.'},
+{n:'Veg stir-fry noodles',m:20,c:1,t:['Vit C','Fibre'],v:1,why:'Twenty minutes, mostly vegetables.'},
+{n:'Fish pie',m:50,c:2,t:['Omega-3','Calcium','Protein'],v:0,why:'Second fish dish this fortnight.'},
+{n:'Sausage & bean casserole',m:40,c:1,t:['Fibre','Protein'],v:0,why:'One pot, cheap, good for cold nights.'},
+{n:'Baked cod, potatoes & peas',m:35,c:2,t:['Omega-3','Protein'],v:1,why:'Simple and quick.'}];
+const PREFS=['Quick on busy days','More veg','Batch cook','Use up pantry','Fish weekly','Cheaper picks'];
+const S={days:14,busy:new Set([2,5]),budget:45,prefs:new Set(['Quick on busy days','More veg']),plan:{},pend:null,used:new Set(),last:-1};
+const isBusy=i=>S.busy.has(D(i).getDay());
+function renderWk(){const w=$('#wk');if(!w)return;let n=0,cost=0;
+w.innerHTML=Array.from({length:S.days},(_,i)=>{const p=S.plan[i],st=p?'ok':S.pend===i?'pend':'';if(p){n++;cost+=EST[p.c]}
+return `<button type="button" class="cell ${st}${isBusy(i)?' busy':''}${S.last===i?' new':''}" data-i="${i}" aria-label="${DL(i)}${isBusy(i)?', busy day':''}: ${p?p.n:S.pend===i?'proposed':'not planned'}"><b>${WD(i).slice(0,2)}</b><i>${D(i).getDate()}</i><span class="m">${p?p.n.split(' ')[0].replace(/,$/,''):''}</span></button>`}).join('');
+S.last=-1;const bt=S.budget?Math.round(S.budget*S.days/7):0;
+if($('#cnt'))$('#cnt').textContent=`${n}/${S.days} planned`;
+if($('#est'))$('#est').textContent=bt?`£${cost} of £${bt}`:`£${cost}`;
+const m=$('#bar');if(m){m.style.width=(bt?Math.min(100,cost/bt*100):n/S.days*100)+'%';m.parentElement.classList.toggle('over',!!bt&&cost>bt)}}
+function daysUI(){const e=h(`<div class="ctl"><div class="stp"><button type="button" class="ib" data-d="-1" aria-label="One fewer night">&minus;</button><output aria-live="polite"><b></b>nights</output><button type="button" class="ib" data-d="1" aria-label="One more night">+</button></div><div class="chips pre">${[7,14,21,28].map(n=>`<button type="button" class="tg" data-n="${n}">${n}</button>`).join('')}</div><p class="dim rtxt"></p></div>`);
+const up=()=>{e.querySelector('b').textContent=S.days;e.querySelectorAll('[data-n]').forEach(b=>b.setAttribute('aria-pressed',+b.dataset.n===S.days));e.querySelector('.rtxt').textContent=`${DL(0)} to ${DL(S.days-1)}`;renderWk()};
+e.onclick=ev=>{const b=ev.target.closest('button');if(!b)return;if(b.dataset.d)S.days=Math.min(28,Math.max(1,S.days+ +b.dataset.d));if(b.dataset.n)S.days=+b.dataset.n;up()};up();return e}
+function busyUI(){const e=h(`<div class="ctl"><div class="dows">${[1,2,3,4,5,6,0].map(d=>`<button type="button" class="tg dow" data-w="${d}" aria-label="${DN[d]}" aria-pressed="${S.busy.has(d)}">${DN[d].slice(0,3)}</button>`).join('')}</div><p class="dim">Busy nights get dinners of 30 minutes or under.</p></div>`);
+e.onclick=ev=>{const b=ev.target.closest('[data-w]');if(!b)return;const d=+b.dataset.w;S.busy.has(d)?S.busy.delete(d):S.busy.add(d);b.setAttribute('aria-pressed',S.busy.has(d));renderWk()};return e}
+function budgetUI(){const e=h(`<div class="ctl"><output class="big" aria-live="polite"></output><input type="range" min="0" max="100" step="5" aria-label="Weekly dinner budget in pounds"><p class="dim rtxt">Slide to 0 for no target.</p></div>`);
+const r=e.querySelector('input'),o=e.querySelector('output');r.value=S.budget;const up=()=>{S.budget=+r.value;o.textContent=S.budget?`£${S.budget} a week`:'No target';renderWk()};r.oninput=up;up();return e}
+function prefsUI(){const e=h(`<div class="pf">${PREFS.map(p=>`<button type="button" class="tg" aria-pressed="${S.prefs.has(p)}">${p}</button>`).join('')}</div>`);
+e.onclick=ev=>{const b=ev.target.closest('button');if(!b)return;const p=b.textContent;S.prefs.has(p)?S.prefs.delete(p):S.prefs.add(p);b.setAttribute('aria-pressed',S.prefs.has(p))};return e}
+const busyTxt=()=>S.busy.size?[...S.busy].sort((a,b)=>(a||7)-(b||7)).map(d=>DN[d].slice(0,3)).join(', '):'none';
+const budTxt=()=>S.budget?`£${S.budget} a week`:'no budget target';
+const prefTxt=()=>S.prefs.size?[...S.prefs].join(', '):'no preferences';
+const summary=()=>`${S.days} nights from ${DL(0)}. Busy: ${busyTxt()}. Budget: ${budTxt()}. Preferences: ${prefTxt()}.`;
+const thread=$('#thread');
+const scr=()=>thread.lastElementChild&&thread.lastElementChild.scrollIntoView({block:'end',behavior:RM?'auto':'smooth'});
+function say(t,w='h'){const l=document.createElement('li');l.className='msg '+w;l.textContent=t;thread.append(l);scr();return l}
+function typing(){const l=h('<li class="msg h"><div class="dots" role="status" aria-label="Hermes is typing"><span></span><span></span><span></span></div></li>');thread.append(l);scr();return l}
+function pickMeal(i,pred){const ok=m=>!S.used.has(m.n);let c=POOL.filter(m=>ok(m)&&(!pred||pred(m))&&(!isBusy(i)||m.m<=30||!S.prefs.has('Quick on busy days')));
+if(!c.length)c=POOL.filter(ok);if(!c.length){S.used.clear();c=POOL.slice()}
+if(S.prefs.has('More veg'))c=[...c.filter(m=>m.v),...c.filter(m=>!m.v)];if(S.prefs.has('Cheaper picks'))c.sort((a,b)=>a.c-b.c);return c[0]}
+const nextDay=()=>{for(let i=0;i<S.days;i++)if(!S.plan[i]&&S.pend!==i)return i;return -1};
+function card(i,m){const c=h(`<li class="card mc" data-d="${i}"><div class="mh"><b>${DL(i)}</b>${isBusy(i)?'<span class="chip busy">Busy day</span>':''}</div><h3>${m.n}</h3><p class="dim">${m.m} min &middot; ${TIERN[m.c]} &middot; about £${EST[m.c]}</p><div class="chips">${m.t.map(t=>`<span class="chip">${t}</span>`).join('')}</div><p class="why">${m.why}</p><div class="acts"></div></li>`);c._m=m;setSt(c,'pend');return c}
+function setSt(c,st,r){c.dataset.st=st;const B=(a,t,k='btn')=>`<button type="button" class="${k}" data-act="${a}">${t}</button>`;
+c.querySelector('.acts').innerHTML=st==='pend'?B('acc','Accept','btn pri')+B('rej','Reject'):st==='ok'?'<span class="bd ok">Accepted</span>'+B('undo','Undo','btn sm'):
+st==='rejing'?'<span class="why">Why not?</span>'+['Too long','Had it lately','Too pricey','Not in the mood'].map(x=>`<button type="button" class="tg" data-act="why" data-r="${x}">${x}</button>`).join('')+B('back','Back','btn sm ghost'):
+st==='no'?`<span class="bd no">Rejected: ${r}</span>`+B('undo','Undo','btn sm'):'<span class="bd">Replaced</span>'}
+const cardOf=i=>[...thread.querySelectorAll(`.mc[data-d="${i}"]`)].pop();
+function propose(pred){const i=nextDay();if(i<0)return wrap();const m=pickMeal(i,pred);S.pend=i;thread.append(card(i,m));renderWk();scr()}
+let thinking=false;
+async function hermes(txt,pred){while(thinking)await sleep(100);thinking=true;const t=typing();await sleep(RM?150:1000);t.remove();if(txt)say(txt);propose(pred);thinking=false}
+function cont(){setTimeout(()=>{if(S.pend===null)hermes(nextDay()<0?'That fills every night.':'Next up.')},600)}
+function accept(c){const i=+c.dataset.d,m=c._m;S.plan[i]=m;S.pend=null;S.used.add(m.n);S.last=i;setSt(c,'ok');renderWk();toast(`Added ${m.n} to ${DL(i)}`,'Undo',()=>undo(c));cont()}
+function reject(c,r){const i=+c.dataset.d,m=c._m;S.pend=null;S.used.add(m.n);setSt(c,'no',r);renderWk();
+hermes(`Fair, ${r.toLowerCase()}. Trying another.`,r==='Too long'?x=>x.m<=30:r==='Too pricey'?x=>x.c===1:null)}
+function undo(c){const i=+c.dataset.d,m=c._m,was=c.dataset.st;if(was==='ok')delete S.plan[i];S.used.delete(m.n);
+if(S.pend!==null&&S.pend!==i){const o=cardOf(S.pend);if(o)setSt(o,'rep')}S.pend=i;S.last=-1;setSt(c,'pend');renderWk();c.scrollIntoView({block:'nearest',behavior:RM?'auto':'smooth'})}
+function wrap(){S.pend=null;const ps=Object.entries(S.plan),cost=ps.reduce((a,[,m])=>a+EST[m.c],0),bt=S.budget?Math.round(S.budget*S.days/7):0;
+const over=ps.filter(([i,m])=>isBusy(+i)&&m.m>30).length,veg=ps.filter(([,m])=>m.v).length;
+const row=(ok,t)=>`<li class="${ok?'':'warn'}">${I(ok?'check':'bolt')}<span>${t}</span></li>`;
+thread.append(h(`<li class="card wrapc"><h3>All ${S.days} nights planned</h3><ul>${row(true,ps.length+'/'+S.days+' dinners placed')}${row(!bt||cost<=bt,'Estimated £'+cost+(bt?' against £'+bt:''))}${row(!over,over?over+' busy night(s) over 30 min':'Every busy night is 30 minutes or under')}${row(veg>=ps.length/2,veg+' vegetable-led dinners')}</ul><button type="button" class="btn pri lg" data-act="save">Save plan</button></li>`));scr()}
+function send(txt){say(txt,'u');const l=txt.toLowerCase();let pred=null,rep='Sure, another option.';
+if(/quick|fast|short/.test(l)){pred=m=>m.m<=30;rep='Quicker it is, 30 minutes or under.'}
+else if(/cheap|budget|pric/.test(l)){pred=m=>m.c===1;rep='Going for a budget pick.'}
+else if(/veg/.test(l)){pred=m=>m.v;rep='More veg coming up.'}
+else if(/fish|salmon|cod/.test(l)){pred=m=>m.t.includes('Omega-3');rep='Fish then.'}
+else if(/surprise/.test(l))rep='Here is a wildcard.';
+if(S.pend!==null){const pc=cardOf(S.pend);if(pc){S.used.add(pc._m.n);setSt(pc,'rep')}S.pend=null}
+hermes(rep,pred)}
+thread.addEventListener('click',e=>{const b=e.target.closest('[data-act]');if(!b)return;const a=b.dataset.act;
+if(a==='save'){b.disabled=true;b.textContent='Saved';toast('Plan saved. Shopping list updated.');return}
+const c=b.closest('.mc');if(!c)return;
+if(a==='acc')accept(c);else if(a==='rej')setSt(c,'rejing');else if(a==='back')setSt(c,'pend');else if(a==='why')reject(c,b.dataset.r);else if(a==='undo')undo(c)});
+document.addEventListener('click',e=>{const b=e.target.closest('.cell');if(!b)return;const c=cardOf(+b.dataset.i);if(c){c.scrollIntoView({block:'center',behavior:RM?'auto':'smooth'});c.classList.add('flash');setTimeout(()=>c.classList.remove('flash'),1200)}else toast(DL(+b.dataset.i)+(isBusy(+b.dataset.i)?' is a busy day':' not planned yet'))});
+$('#cf').addEventListener('submit',e=>{e.preventDefault();const i=$('#ci');const v=i.value.trim();if(!v)return;i.value='';send(v)});
+$('#sug').addEventListener('click',e=>{const b=e.target.closest('button');if(b)send(b.textContent)});
+function startChat(){renderWk();hermes('Planning '+summary()+' I will propose one night at a time. Accept, reject, or tell me what to change.')}
+$('#back').onclick=()=>toast('Exit leaves your current plan untouched');
+const STEPS=[['How many nights?','Plan 1 to 28 dinners starting Thu 29 Oct.',daysUI],['Which nights are busy?','Tap the evenings you have little time.',busyUI],['Weekly budget?','Hermes compares costs but never picks on price alone.',budgetUI],['Any preferences?','Pick as many as you like.',prefsUI],['Ready?','Check this, then Hermes starts proposing.',()=>h(`<div class="rev"><div><span>Nights</span><b>${S.days} from ${DL(0)}</b></div><div><span>Busy</span><b>${busyTxt()}</b></div><div><span>Budget</span><b>${budTxt()}</b></div><div><span>Preferences</span><b>${prefTxt()}</b></div></div>`)]];
+let si=0;
+function showStep(){const [t,s,b]=STEPS[si];const st=$('#step');st.textContent='';st.append(h(`<h2>${t}</h2>`),h(`<p>${s}</p>`),b());$('#prog').innerHTML=STEPS.map((_,i)=>`<i class="${i<=si?'on':''}"></i>`).join('');$('#prev').style.visibility=si?'visible':'hidden';$('#next').textContent=si===STEPS.length-1?'Start planning':'Next';st.scrollTop=0}
+$('#prev').onclick=()=>{si--;showStep()};
+$('#next').onclick=()=>{if(si<STEPS.length-1){si++;showStep()}else{$('#setup').hidden=true;$('#chat').hidden=false;startChat()}};
+showStep();
+</script></body></html>

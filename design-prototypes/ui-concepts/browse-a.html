@@ -1,0 +1,221 @@
+<!doctype html>
+<html lang="en" data-theme="dark"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Browse A: photo cards, filter panel</title>
+<style>
+:root,[data-theme="dark"]{--bg:#1c1410;--bg-2:#26190f;--surface:#241a13;--surface-alt:#2c2018;--text:#f3e6d4;--text-dim:#c9b79f;--accent:#d4633b;--accent-2:#7a9a6b;--butter:#e8b74a;--danger:#ff6b4a;--border:#4a382b;--shadow:rgba(15,9,5,.45);--radius:18px;--on-accent:#fff;--on-butter:#3a2a10;--accent-hover:#b94f2c;--accent-glow:rgba(212,99,59,.5);--on-cork:#fff6ea;--scrim:rgba(0,0,0,.55);--motion-base:180ms;--motion-exit:120ms;--ease-lift:cubic-bezier(.2,.9,.3,1.4);--ease-out:cubic-bezier(.2,.8,.2,1);--tabbar-h:3.5rem;--ph-l:34%}
+[data-theme="light"]{--bg:#6b4f3a;--bg-2:#7a5c44;--surface:#fdf6ec;--surface-alt:#f7ecda;--text:#2b1d14;--text-dim:#6b5847;--accent:#d4633b;--accent-2:#4d7a3e;--butter:#e8b74a;--danger:#c1421a;--border:#e3d3ba;--shadow:rgba(43,29,20,.18);--ph-l:62%}
+*{box-sizing:border-box}html{color-scheme:dark light}
+body{margin:0;background:linear-gradient(var(--bg),var(--bg-2)) fixed;color:var(--text);font:16px/1.4 "Segoe UI Rounded",Nunito,"Trebuchet MS",system-ui,sans-serif;transition:background .4s,color .4s;padding-bottom:calc(var(--tabbar-h) + 5rem)}
+body.so{overflow:hidden}
+h1,h2,h3,h4,p,ul,ol{margin:0}ul,ol{padding:0;list-style:none}
+button,input,textarea{font:inherit;color:inherit}button{cursor:pointer}
+:focus-visible{outline:3px solid var(--butter);outline-offset:2px}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+.nav{position:sticky;top:0;z-index:30;display:flex;align-items:center;gap:.75rem;padding:.6rem 1rem;background:color-mix(in srgb,var(--bg) 85%,transparent);backdrop-filter:blur(8px);border-bottom:1px solid var(--border)}
+.brand{font-weight:800;color:var(--on-cork);text-decoration:none;margin-right:auto}
+.tabs{display:flex;gap:.25rem}
+.tabs a{color:var(--on-cork);text-decoration:none;font-weight:700;padding:.45rem .85rem;border-radius:999px;transition:background var(--motion-base),transform var(--motion-base)}
+.tabs a:hover{background:color-mix(in srgb,var(--on-cork) 15%,transparent);transform:translateY(-1px)}
+.tabs a[aria-current]{background:var(--accent);color:var(--on-accent)}
+.ib{color:var(--text);font-size:1.3rem;width:2.75rem;height:2.75rem;border-radius:50%;border:1px solid var(--border);background:var(--surface);transition:transform var(--motion-base);display:grid;place-items:center;padding:0;flex:none}
+.ib:hover{transform:translateY(-1px)}.ib:active{transform:scale(.95)}
+@media(max-width:639px){.nav{backdrop-filter:none}.tabs{position:fixed;inset:auto 0 0 0;height:calc(var(--tabbar-h) + env(safe-area-inset-bottom));z-index:40;justify-content:space-around;align-items:center;background:var(--bg-2);border-top:1px solid var(--border);padding:0 .25rem env(safe-area-inset-bottom)}.tabs a{padding:.5rem;font-size:.82rem;min-height:44px;display:flex;align-items:center}}
+main{max-width:1180px;margin:0 auto;padding:1rem;animation:rise .35s var(--ease-lift) both}
+@keyframes rise{from{opacity:0;transform:translateY(8px)}}
+@keyframes fade{from{opacity:0}}
+.top{margin-bottom:.9rem;color:var(--on-cork)}.top h1{font-size:1.6rem;line-height:1.1}.top p{opacity:.8;font-size:.9rem}
+.btn{min-height:44px;padding:.5rem 1rem;border-radius:.8rem;border:1px solid var(--border);background:var(--surface-alt);color:var(--text);font-weight:800;white-space:nowrap;display:inline-flex;align-items:center;justify-content:center;gap:.4rem;transition:transform var(--motion-base),background var(--motion-base),box-shadow var(--motion-base)}
+.btn:hover{transform:translateY(-1px);box-shadow:0 4px 10px var(--shadow)}.btn:active{transform:scale(.95)}
+.btn.pri{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}.btn.pri:hover{background:var(--accent-hover)}
+.btn.ok{background:var(--accent-2);border-color:var(--accent-2);color:var(--on-accent)}
+.btn.ghost{background:transparent}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:0 6px 16px var(--shadow)}
+.ph{position:relative;display:grid;place-items:center;overflow:hidden;background:linear-gradient(135deg,hsl(var(--h) 50% var(--ph-l)),hsl(calc(var(--h) + 35) 45% calc(var(--ph-l) - 10%)))}
+.ph svg{width:44%;max-width:110px;opacity:.55;fill:none;stroke:var(--on-cork);stroke-width:2.5}
+.chip{display:inline-block;padding:.12rem .55rem;border-radius:999px;font-size:.7rem;font-weight:800;text-transform:uppercase;letter-spacing:.04em;background:color-mix(in srgb,var(--accent-2) 22%,transparent);border:1px solid var(--accent-2)}
+.chips{display:flex;flex-wrap:wrap;gap:.3rem}
+.cost{display:inline-block;padding:.1rem .5rem;border-radius:.5rem;font-weight:800;font-size:.8rem;background:var(--butter);color:var(--on-butter)}
+.bd{display:inline-block;padding:.1rem .55rem;border-radius:999px;font-size:.72rem;font-weight:800;border:1.5px solid var(--accent-2);background:color-mix(in srgb,var(--accent-2) 25%,transparent)}
+.dim{color:var(--text-dim)}
+.fchip{min-height:44px;padding:.3rem .9rem;border-radius:999px;border:1.5px solid var(--border);background:var(--surface);font-weight:800;font-size:.85rem;white-space:nowrap;transition:transform var(--motion-base),background var(--motion-base)}
+.fchip:active{transform:scale(.95)}.fchip[aria-pressed=true]{background:var(--butter);color:var(--on-butter);border-color:var(--butter)}
+.frow{display:flex;gap:.4rem;overflow-x:auto;padding:.2rem 0;scrollbar-width:none}.frow::-webkit-scrollbar{display:none}
+.inp{width:100%;min-height:44px;border-radius:.8rem;border:1.5px solid var(--border);background:var(--surface);padding:.4rem .8rem;transition:border-color var(--motion-base),box-shadow var(--motion-base)}
+.inp:focus{outline:none;border-color:var(--butter);box-shadow:0 0 0 3px color-mix(in srgb,var(--butter) 40%,transparent)}
+.tok{min-height:36px;padding:.1rem .3rem .1rem .7rem;border-radius:999px;border:1.5px solid var(--accent);background:color-mix(in srgb,var(--accent) 22%,transparent);font-weight:800;font-size:.85rem;display:inline-flex;align-items:center;gap:.3rem;animation:rise .2s ease-out both}
+.tok b{display:grid;place-items:center;width:28px;height:28px;border-radius:50%}
+.empty{text-align:center;padding:2rem 1rem;color:var(--on-cork);display:grid;gap:.6rem;justify-items:center;animation:rise .3s both}
+.toast{position:fixed;width:max-content;left:50%;bottom:calc(var(--tabbar-h) + .75rem);transform:translate(-50%,20px);opacity:0;pointer-events:none;z-index:95;display:flex;gap:.75rem;align-items:center;max-width:min(92vw,520px);background:var(--surface);border:1px solid var(--border);border-radius:.8rem;padding:.4rem .5rem .4rem .9rem;box-shadow:0 8px 24px var(--shadow);transition:opacity var(--motion-base),transform var(--motion-base) var(--ease-lift)}
+.toast.on{opacity:1;transform:translate(-50%,0);pointer-events:auto}
+.toast button{background:none;border:0;font-weight:800;color:var(--butter);min-height:44px;padding:0 .6rem}
+body.so .toast{bottom:6.5rem}
+@media(min-width:640px){.toast{bottom:1.25rem}body.so .toast{bottom:6.5rem}body{padding-bottom:5rem}}
+/* sheet shell */
+.ov{position:fixed;inset:0;background:var(--scrim);opacity:0;pointer-events:none;transition:opacity var(--motion-base);z-index:70}.ov.on{opacity:1;pointer-events:auto}
+.sheet{position:fixed;left:0;right:0;bottom:0;max-height:92dvh;z-index:80;background:var(--surface);border:1px solid var(--border);border-bottom:0;border-radius:22px 22px 0 0;transform:translateY(100%);visibility:hidden;transition:transform .28s var(--ease-out),visibility 0s .28s;display:flex;flex-direction:column;overflow:hidden}
+.sheet.on{transform:none;visibility:visible;transition:transform .28s var(--ease-out)}
+.grab{width:42px;height:5px;border-radius:9px;background:var(--border);margin:.5rem auto .2rem;flex:none}
+.scr{overflow:auto;flex:1;min-height:0;overscroll-behavior:contain;padding:.4rem 1rem 1.2rem;display:grid;gap:.9rem;align-content:start}
+.dock{flex:none;display:flex;gap:.5rem;padding:.6rem 1rem calc(.6rem + env(safe-area-inset-bottom));border-top:1px solid var(--border);background:var(--surface)}
+.dock .btn{flex:1}.dock .pri{flex:2}
+.sh-h{display:flex;gap:.6rem;align-items:flex-start;justify-content:space-between}.sh-h h2{font-size:1.4rem;line-height:1.15}
+.desc{font-size:1rem;color:var(--text-dim);line-height:1.45}
+.stats{display:flex;flex-wrap:wrap;gap:.4rem .8rem;font-weight:800;align-items:center}
+.pick{display:flex;gap:.4rem;flex-wrap:wrap}.pick .fchip{min-height:44px}
+.vnote{font-size:.85rem;color:var(--text-dim);margin-top:.3rem}
+.lo{background:var(--surface-alt);border-left:4px solid var(--butter);border-radius:.5rem;padding:.55rem .75rem;font-size:.9rem}
+.sec{font-size:1.05rem;display:flex;justify-content:space-between;align-items:baseline;gap:.5rem}.sec small{color:var(--text-dim);font-weight:700;font-size:.8rem}
+.ings{display:grid;gap:.1rem}
+.ing{display:flex;align-items:center;gap:.7rem;min-height:44px;padding:.1rem .3rem;border-radius:.6rem;cursor:pointer;transition:background var(--motion-base)}
+.ing:hover{background:var(--surface-alt)}
+.ing input{appearance:none;width:26px;height:26px;border-radius:8px;border:2px solid var(--border);background:var(--surface);flex:none;display:grid;place-items:center;cursor:pointer;transition:background var(--motion-base),border-color var(--motion-base),transform var(--motion-base)}
+.ing input:checked{background:var(--accent-2);border-color:var(--accent-2)}.ing input:active{transform:scale(.9)}
+.ing input:checked::after{content:"";width:6px;height:12px;border:solid var(--on-accent);border-width:0 3px 3px 0;transform:rotate(45deg) translate(-1px,-1px)}
+.ing input:focus-visible{outline:3px solid var(--butter);outline-offset:2px}
+.ing .q{margin-left:auto;color:var(--text-dim);font-weight:700;font-size:.9rem;text-align:right}
+.ing .nm{transition:opacity var(--motion-base)}.ing input:checked~.nm{text-decoration:line-through;opacity:.55}
+.hv{font-size:.68rem;font-weight:800;text-transform:uppercase;letter-spacing:.04em;padding:.05rem .45rem;border-radius:999px;border:1.5px solid var(--accent-2);color:var(--accent-2);white-space:nowrap}
+.steps{display:grid;gap:.7rem;counter-reset:s}
+.steps li{display:grid;grid-template-columns:2rem 1fr;gap:.7rem;line-height:1.45}
+.steps li::before{counter-increment:s;content:counter(s);width:2rem;height:2rem;border-radius:50%;display:grid;place-items:center;font-weight:800;background:var(--accent);color:var(--on-accent)}
+.sec2{display:flex;gap:.5rem}.sec2 .btn{flex:1}
+.cookv{position:absolute;inset:0;z-index:5;background:var(--surface);display:flex;flex-direction:column;padding:1rem 1rem calc(1rem + env(safe-area-inset-bottom));animation:fade .2s both}
+.cookv .ck{flex:1;display:grid;align-content:center;gap:1rem;text-align:center;padding:1rem 0}
+.cookv .big{font-size:1.45rem;line-height:1.35;font-weight:700}.cookv .num{font-size:.9rem;font-weight:800;color:var(--accent)}
+.cookv .bar{height:.5rem;border-radius:9px;background:var(--surface-alt);border:1px solid var(--border);overflow:hidden}.cookv .bar i{display:block;height:100%;background:var(--accent-2);transition:width .3s ease-out}
+.cookv .row{display:flex;gap:.5rem}.cookv .row .btn{flex:1;min-height:56px;font-size:1.05rem}
+.form{display:grid;gap:.6rem}.form label{font-weight:800;font-size:.9rem;display:grid;gap:.25rem}
+textarea.inp{min-height:90px;resize:vertical}
+.m-in{animation:rise .3s ease-out both;animation-delay:calc(var(--i,0)*35ms)}
+.swap{display:grid;gap:.4rem}
+@media(prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;transition-property:opacity,background,color!important;transition-duration:.15s!important;scroll-behavior:auto!important}.btn:hover,.ib:hover{transform:none!important}.sheet{transform:none!important}}
+
+.bar0{position:sticky;top:3.9rem;z-index:20;display:grid;gap:.5rem;padding:.5rem 0 .6rem;background:linear-gradient(var(--bg) 70%,transparent)}
+.srow{display:flex;gap:.5rem}.srow .btn{position:relative}
+.badge{position:absolute;top:-6px;right:-6px;min-width:22px;height:22px;border-radius:99px;background:var(--accent);color:var(--on-accent);font-size:.75rem;display:grid;place-items:center}.badge:empty{display:none}
+#fp{display:grid;grid-template-rows:0fr;transition:grid-template-rows .22s ease-out}#fp.open{grid-template-rows:1fr}#fp>div{overflow:hidden;min-height:0}
+.fpin{display:grid;gap:.5rem;padding:.7rem;border-radius:var(--radius);background:var(--surface);border:1px solid var(--border);margin-top:.2rem}
+.fpin label{font-weight:800;font-size:.85rem}.irow{display:flex;gap:.5rem}#tokens{display:flex;flex-wrap:wrap;gap:.3rem}
+.cnt{color:var(--on-cork);font-size:.85rem;opacity:.85;margin:.2rem 0 .6rem}
+.grid{display:grid;gap:1rem}@media(min-width:640px){.grid{grid-template-columns:repeat(2,1fr)}}@media(min-width:1000px){.grid{grid-template-columns:repeat(3,1fr)}}
+.mc{overflow:hidden;display:flex;flex-direction:column;animation:rise .3s ease-out both;animation-delay:calc(var(--i,0)*35ms);transition:transform .35s var(--ease-lift),box-shadow .35s}
+.mc:hover{transform:translateY(-3px);box-shadow:0 10px 22px var(--shadow)}
+.mc .ph{height:150px;border:0;width:100%;padding:0;cursor:pointer}.mc .ph .cost{position:absolute;top:.6rem;right:.6rem}.mc .ph .bd{position:absolute;top:.6rem;left:.6rem}
+.mc .cb{padding:.8rem 1rem 1rem;display:grid;gap:.5rem;flex:1}.mc h3{font-size:1.1rem;line-height:1.2}.mc .mt{font-size:.85rem;color:var(--text-dim);font-weight:700}
+.mc .acts{display:flex;gap:.5rem;margin-top:auto;padding-top:.2rem}.mc .acts .btn{flex:1}
+.fab{position:fixed;right:1rem;bottom:calc(var(--tabbar-h) + env(safe-area-inset-bottom) + 1rem);z-index:35;min-height:52px;border-radius:99px;padding:0 1.2rem;box-shadow:0 8px 20px var(--shadow)}
+@media(min-width:640px){.fab{bottom:1.5rem}}
+.sheet{max-width:640px;margin:0 auto}
+@media(min-width:900px){.sheet{top:0;left:auto;right:0;bottom:0;max-height:none;width:520px;max-width:none;border-radius:22px 0 0 22px;border:1px solid var(--border);transform:translateX(100%)}.sheet.on{transform:none}.grab{display:none}}
+.sheet .ph{height:180px;border-radius:14px}
+</style></head><body>
+<header class="nav"><a class="brand" href="#">Meal Planner</a>
+<nav class="tabs" aria-label="Main"><a href="#" aria-current="page">Browse</a><a href="#">Discover</a><a href="#">Plan</a><a href="#">Shopping</a><a href="#">Eaten</a></nav>
+<button class="ib" id="theme" aria-label="Toggle dark or light theme">&#9680;</button></header>
+<main><div class="top"><h1>Browse &amp; Add</h1><p>Your liked dinners. Tap a photo for the full recipe.</p></div>
+<div class="bar0"><div class="srow"><input class="inp" id="q" type="search" placeholder="Search meals or ingredients" aria-label="Search meals or ingredients" autocomplete="off"><button class="btn" data-act="fp" aria-expanded="false" aria-controls="fp">Filter<span class="badge" id="fcount"></span></button></div>
+<div class="frow" role="group" aria-label="Filters" id="tagrow"></div>
+<div id="fp"><div><div class="fpin"><label for="ing">Must contain all of these ingredients</label><div class="irow"><input class="inp" id="ing" list="dl" placeholder="Type, then Enter" enterkeyhint="done" autocomplete="off"><button class="btn" data-act="addtok" aria-label="Add ingredient">Add</button></div><div id="tokens"></div><div class="frow" id="sugrow"></div><button class="btn ghost" data-act="clear">Clear all</button></div></div></div></div>
+<p class="cnt" id="count" aria-live="polite"></p><div class="grid" id="list"></div>
+<button class="btn pri fab" data-act="add">+ Add meal</button></main>
+<datalist id="dl"><option value="chicken"><option value="rice"><option value="spinach"><option value="chickpeas"><option value="salmon"><option value="potatoes"><option value="onion"><option value="carrots"></datalist>
+<div class="ov" id="ov"></div>
+<div class="sheet" id="sh" role="dialog" aria-modal="true" aria-labelledby="st"></div>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+<script>
+const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const CN=['','Budget','Mid','Treat'],eff=m=>m<=30?'Quick':m<=55?'Medium':'Project';
+// id,name,desc,min,cost,servings,tags,hue,variants,leftover note,ingredients[name,qty,have],steps
+let M=[
+{id:1,n:'Chicken & chorizo traybake',d:'One tray, smoky and crisp-edged. Cooks while you do something else, and the leftovers reheat well.',m:45,c:3,s:4,t:['Protein','Vit C','Iron'],h:20,vars:[['Standard',''],['Veggie','Swap chicken and chorizo for chickpeas and smoked paprika.'],['Lighter','Skip the chorizo, add extra peppers.']],lo:'Batch cook: 4 portions. Next two nights are leftovers (reheat 10 min).',ing:[['Chicken thighs','8',1],['Chorizo','150 g',0],['Baby potatoes','600 g',1],['Red peppers','3',0],['Red onion','2',1],['Olive oil','3 tbsp',1],['Smoked paprika','2 tsp',1]],steps:['Heat the oven to 200C (180C fan).','Chop potatoes into chunky halves and the peppers and onions into wedges. Tip everything onto a large tray.','Add chicken and sliced chorizo, drizzle with oil and paprika, season and toss.','Roast for 35 to 40 minutes, turning once, until the chicken is golden and cooked through.','Rest for 5 minutes and spoon the red oil from the tray over the top.']},
+{id:2,n:'Beef ragu & wholewheat pasta',d:'Slow, rich and freezer-friendly. Make it once, eat it three times.',m:75,c:2,s:4,t:['Iron','Fibre','Protein'],h:10,vars:[['Standard',''],['Lentil','Half the mince swapped for green lentils, cheaper and more fibre.']],lo:'Batch cook: 4 portions. Freezes for 3 months.',ing:[['Beef mince','500 g',1],['Chopped tomatoes','2 tins',1],['Carrots','2',1],['Celery','2 sticks',0],['Onion','1',1],['Wholewheat pasta','320 g',1],['Beef stock','300 ml',0]],steps:['Fry the finely chopped onion, carrot and celery in oil for 8 minutes until soft.','Add the mince and brown well, breaking it up.','Stir in tomatoes and stock, then simmer on low for 45 minutes.','Boil the pasta and toss with a ladle of ragu.','Serve topped with extra sauce.']},
+{id:3,n:'Chickpea & spinach curry',d:'A fast store-cupboard curry with plenty of iron and fibre. Ready in 35 minutes.',m:35,c:1,s:4,t:['Fibre','Iron','Calcium'],h:95,vars:[['Standard',''],['Creamier','Finish with 3 tbsp of yoghurt.']],lo:'Batch cook: 4 portions. Keeps 3 days in the fridge.',ing:[['Chickpeas','2 tins',1],['Spinach','200 g',0],['Coconut milk','400 ml',1],['Curry paste','3 tbsp',1],['Onion','1',1],['Basmati rice','250 g',1]],steps:['Soften the onion for 5 minutes, then stir in the curry paste for 1 minute.','Add chickpeas and coconut milk, simmer for 15 minutes.','Stir through the spinach until wilted.','Serve with rice.']},
+{id:4,n:'Salmon, sweet potato & greens',d:'Omega-3 on a weeknight. One tray, thirty minutes, hardly any washing up.',m:30,c:2,s:2,t:['Omega-3','Vit C','Fibre'],h:170,vars:[['Standard','']],lo:'',ing:[['Salmon fillets','2',0],['Sweet potatoes','2',1],['Broccoli','1 head',0],['Soy sauce','2 tbsp',1],['Lemon','1',1]],steps:['Roast sweet potato wedges at 200C for 15 minutes.','Add salmon and broccoli to the tray with soy and lemon.','Roast for 12 more minutes.']},
+{id:5,n:'Veg lasagne',d:'Layers of roasted veg and ricotta. Sunday-sized, with portions for the week.',m:55,c:2,s:4,t:['Calcium','Fibre'],h:45,vars:[['Standard',''],['Dairy-light','Use half the cheese, add white beans.']],lo:'Batch cook: 4 portions.',ing:[['Courgettes','2',0],['Aubergine','1',0],['Ricotta','250 g',0],['Lasagne sheets','9',1],['Passata','500 g',1],['Mozzarella','125 g',1]],steps:['Roast sliced courgette and aubergine for 20 minutes.','Layer sauce, veg, sheets and ricotta in a dish, finishing with mozzarella.','Bake at 190C for 35 minutes until bubbling.']},
+{id:6,n:'Veg stir-fry noodles',d:'Crunchy veg, sticky sauce, done in the time it takes to boil the noodles.',m:20,c:1,s:2,t:['Vit C','Fibre'],h:130,vars:[['Standard',''],['Protein','Add cubed tofu fried first.']],lo:'',ing:[['Egg noodles','200 g',1],['Mixed stir-fry veg','400 g',0],['Soy sauce','3 tbsp',1],['Garlic','2 cloves',1],['Ginger','1 thumb',0]],steps:['Cook noodles and drain.','Stir-fry veg, garlic and ginger on high for 4 minutes.','Toss in noodles and soy, serve hot.']},
+{id:7,n:'Fish pie',d:'Creamy, comforting and proper. Smoked haddock for depth.',m:50,c:2,s:2,t:['Omega-3','Calcium','Protein'],h:210,vars:[['Standard',''],['Pea & sweetcorn','Stir a handful of frozen peas into the sauce.']],lo:'',ing:[['Mixed fish pie fish','400 g',0],['Potatoes','700 g',1],['Milk','500 ml',1],['Butter','40 g',1],['Flour','40 g',1]],steps:['Boil and mash the potatoes.','Make a white sauce with butter, flour and milk, add the fish.','Top with mash and bake at 200C for 25 minutes.']},
+{id:8,n:'Roast chicken & veg',d:'The Sunday roast, with a carcass for soup the next night.',m:90,c:3,s:4,t:['Protein','Vit C'],h:50,vars:[['Standard','']],lo:'Batch cook: 4 portions. Carcass becomes soup the next night.',ing:[['Whole chicken','1.6 kg',0],['Carrots','4',1],['Parsnips','3',0],['Potatoes','800 g',1],['Thyme','4 sprigs',0]],steps:['Heat the oven to 200C.','Rub the chicken with oil and salt, roast 80 minutes with the veg alongside.','Rest 15 minutes before carving.']}
+];
+const plate='<svg viewBox="0 0 64 64" aria-hidden="true"><circle cx="32" cy="32" r="26"/><circle cx="32" cy="32" r="16"/><path d="M4 8v18M9 8v18M14 8v18M9 26v30"/></svg>';
+const photo=(m,cls='')=>`<div class="ph ${cls}" style="--h:${m.h}" role="img" aria-label="Photo placeholder for ${esc(m.n)}">${plate}</div>`;
+const costB=c=>`<span class="cost" title="${CN[c]}">${'£'.repeat(c)}<span class="sr"> ${CN[c]}</span></span>`;
+const tagsH=m=>`<span class="chips">${m.t.map(t=>`<span class="chip">${esc(t)}</span>`).join('')}</span>`;
+const S={q:'',ing:[],tags:new Set(),ticks:{},vr:{},cur:null,cook:null,eaten:new Set(),tab:'ov'};
+const SUG=['chicken','rice','spinach','chickpeas','salmon','potatoes'];
+const TAGS=['Quick','Budget','Batch','Iron','Fibre','Protein','Omega-3','Calcium','Vit C'];
+const hasT=(m,t)=>t==='Quick'?m.m<=30:t==='Budget'?m.c===1:t==='Batch'?m.s>=4:m.t.includes(t);
+const hit=(m,w)=>m.ing.some(i=>i[0].toLowerCase().includes(w));
+const filtered=()=>M.filter(m=>(!S.q||m.n.toLowerCase().includes(S.q)||hit(m,S.q))&&S.ing.every(w=>hit(m,w))&&[...S.tags].every(t=>hasT(m,t)));
+const eatenBd=m=>S.eaten.has(m.id)?'<span class="bd">Eaten today</span>':'';
+function render(){
+ const f=filtered();$('#list').innerHTML=f.length?V.list(f):`<div class="empty"><strong>No dinners match</strong><span>Try removing a filter or ingredient.</span><button class="btn" data-act="clear">Clear filters</button></div>`;
+ $('#count').textContent=f.length+' of '+M.length+' dinners';
+ $$('#tokens').forEach(t=>t.innerHTML=S.ing.map(w=>`<button class="tok" data-act="rmtok" data-v="${esc(w)}" aria-label="Remove ingredient ${esc(w)}">${esc(w)} <b aria-hidden="true">&times;</b></button>`).join(''));
+ $$('[data-tag]').forEach(b=>b.setAttribute('aria-pressed',S.tags.has(b.dataset.tag)));
+ $$('[data-sug]').forEach(b=>b.setAttribute('aria-pressed',S.ing.includes(b.dataset.sug)));
+ const n=$('#fcount');if(n)n.textContent=S.ing.length+S.tags.size||'';
+ if(V.after)V.after();
+}
+let tt;function toast(msg,undo){const t=$('#toast');t.innerHTML=`<span>${esc(msg)}</span>`+(undo?'<button data-act="undo">Undo</button>':'');t.onUndo=undo;t.classList.add('on');clearTimeout(tt);tt=setTimeout(()=>t.classList.remove('on'),4500)}
+const need=m=>m.ing.filter((i,k)=>!i[2]&&!(S.ticks[m.id]||{})[k]).length;
+const vpick=m=>`<div><div class="pick" role="radiogroup" aria-label="Variant">${m.vars.map((v,k)=>`<button class="fchip" role="radio" aria-checked="${(S.vr[m.id]||0)===k}" aria-pressed="${(S.vr[m.id]||0)===k}" data-act="var" data-k="${k}">${esc(v[0])}</button>`).join('')}</div><p class="vnote" data-vnote>${esc(m.vars[S.vr[m.id]||0][1])}</p></div>`;
+const loH=m=>m.lo?`<div class="lo"><strong>Leftovers:</strong> ${esc(m.lo)}</div>`:`<div class="lo"><strong>Cooked fresh.</strong> No leftovers planned.</div>`;
+const ingH=m=>`<ul class="ings">${m.ing.map((i,k)=>`<li><label class="ing"><input type="checkbox" data-act="tick" data-k="${k}" ${(S.ticks[m.id]||{})[k]?'checked':''}><span class="nm">${esc(i[0])}</span>${i[2]?'<span class="hv">In pantry</span>':''}<span class="q">${esc(i[1])}</span></label></li>`).join('')}</ul>`;
+const needH=m=>`<small data-need>${need(m)?need(m)+' to buy':'Everything covered'}</small>`;
+const stepsH=m=>`<ol class="steps">${m.steps.map(s=>`<li><span>${esc(s)}</span></li>`).join('')}</ol>`;
+const statsH=m=>`<div class="stats"><span>${m.m} min</span><span>${m.s} serving${m.s>1?'s':''}</span>${costB(m.c)}<span>${eff(m.m)}</span></div>`;
+const sh=()=>$('#sh');
+let opener=null;
+function openSheet(html,from){opener=from||document.activeElement;sh().innerHTML=html;sh().classList.add('on');$('#ov').classList.add('on');document.body.classList.add('so');S.cook=null;const f=sh().querySelector('[data-act=close]');f&&f.focus({preventScroll:true})}
+function closeSheet(){sh().classList.remove('on');$('#ov').classList.remove('on');document.body.classList.remove('so');S.cur=null;S.cook=null;opener&&opener.focus&&opener.focus({preventScroll:true})}
+function openMeal(id,from){const m=M.find(x=>x.id==id);S.cur=m;S.tab='ov';openSheet(V.sheet(m),from)}
+function drawCook(){const m=S.cur,n=m.steps.length,k=S.cook;let c=$('#cookv');if(!c){c=document.createElement('div');c.id='cookv';c.className='cookv';c.setAttribute('role','region');c.setAttribute('aria-label','Cook mode');sh().appendChild(c)}
+ c.innerHTML=`<div class="sh-h"><h3>${esc(m.n)}</h3><button class="ib" data-act="cookx" aria-label="Exit cook mode">&times;</button></div><div class="ck"><div class="num">Step ${k+1} of ${n}</div><p class="big" aria-live="polite">${esc(m.steps[k])}</p><div class="bar"><i style="width:${(k+1)/n*100}%"></i></div></div><div class="row"><button class="btn" data-act="cookp" ${k?'':'disabled'}>Back</button><button class="btn pri" data-act="cookn">${k<n-1?'Next step':'Done cooking'}</button></div>`;
+ c.querySelector('.pri').focus({preventScroll:true})}
+const addH=()=>`<div class="grab"></div><div class="scr"><div class="sh-h"><h2 id="st">Add a dinner</h2><button class="ib" data-act="close" aria-label="Close">&times;</button></div><form class="form" id="addf"><label>Name<input class="inp" id="an" required placeholder="e.g. Sausage & bean casserole"></label><label>Ingredients, one per line<textarea class="inp" id="ai" placeholder="500 g sausages&#10;2 tins beans"></textarea></label><label>Method, one step per line<textarea class="inp" id="as"></textarea></label><div class="sec2"><button type="button" class="btn" data-act="close">Cancel</button><button class="btn pri" type="submit">Save to library</button></div></form><p class="dim" style="font-size:.85rem">Or find ideas on <a href="#" style="color:var(--butter)">Discover</a>.</p></div>`;
+document.addEventListener('submit',e=>{if(e.target.id!=='addf')return;e.preventDefault();const n=$('#an').value.trim();if(!n)return;const L=x=>$(x).value.split('\n').map(s=>s.trim()).filter(Boolean);
+ M.unshift({id:Date.now(),n,d:'Added just now.',m:30,c:2,s:2,t:['Protein'],h:Math.floor(Math.random()*360),vars:[['Standard','']],lo:'',ing:L('#ai').map(s=>[s,'',0]),steps:L('#as').length?L('#as'):['No method yet.']});closeSheet();render();toast('Saved '+n)});
+document.addEventListener('input',e=>{if(e.target.id==='q'){S.q=e.target.value.trim().toLowerCase();render()}});
+function addTok(){const i=$('#ing');const w=i.value.trim().toLowerCase().replace(/,$/,'');if(w&&!S.ing.includes(w))S.ing.push(w);i.value='';render()}
+document.addEventListener('keydown',e=>{if(e.target.id==='ing'&&(e.key==='Enter'||e.key===',')){e.preventDefault();addTok()}
+ if(e.target.id==='ing'&&e.key==='Backspace'&&!e.target.value&&S.ing.length){S.ing.pop();render()}
+ if(e.key==='Escape'&&sh().classList.contains('on')){S.cook!==null?(S.cook=null,$('#cookv').remove()):closeSheet()}});
+document.addEventListener('change',e=>{if(e.target.dataset.act!=='tick')return;const m=S.cur,t=S.ticks[m.id]=S.ticks[m.id]||{};t[e.target.dataset.k]=e.target.checked;$$('[data-need]').forEach(n=>n.textContent=need(m)?need(m)+' to buy':'Everything covered')});
+document.addEventListener('click',e=>{
+ if(e.target.id==='ov')return closeSheet();
+ if(!e.target.closest('[data-more]')&&$('#more'))$('#more').hidden=true;
+ const b=e.target.closest('[data-act]');if(!b||b.tagName==='INPUT')return;const a=b.dataset.act,m=S.cur||M.find(x=>x.id==b.dataset.id);
+ if(a==='open')openMeal(b.dataset.id,b);
+ else if(a==='close')closeSheet();
+ else if(a==='add')openSheet(addH(),b);
+ else if(a==='addtok')addTok();
+ else if(a==='rmtok'){S.ing=S.ing.filter(w=>w!==b.dataset.v);render()}
+ else if(a==='sug'){const w=b.dataset.v;S.ing=S.ing.includes(w)?S.ing.filter(x=>x!==w):[...S.ing,w];render()}
+ else if(a==='tag'){const t=b.dataset.v;S.tags.has(t)?S.tags.delete(t):S.tags.add(t);render()}
+ else if(a==='clear'){S.q='';S.ing=[];S.tags.clear();$('#q').value='';render()}
+ else if(a==='fp'){const p=$('#fp');const o=p.classList.toggle('open');b.setAttribute('aria-expanded',o)}
+ else if(a==='eat'){const x=m;S.eaten.add(x.id);render();toast('Logged '+x.n+' for tonight',()=>{S.eaten.delete(x.id);render();toast('Undone')});if(S.cur)closeSheet()}
+ else if(a==='plan'){toast('Added '+m.n+' to Fri 6 Nov');closeSheet()}
+ else if(a==='swap'){toast('Pick a night to swap '+m.n+' into');closeSheet()}
+ else if(a==='edit'){toast('Edit opens the meal form (prototype)')}
+ else if(a==='var'){S.vr[m.id]=+b.dataset.k;$$('[data-act=var]').forEach(x=>{const on=+x.dataset.k===+b.dataset.k;x.setAttribute('aria-pressed',on);x.setAttribute('aria-checked',on)});$$('[data-vnote]').forEach(n=>n.textContent=m.vars[+b.dataset.k][1])}
+ else if(a==='cook'){S.cook=0;drawCook()}
+ else if(a==='cookn'){if(S.cook<m.steps.length-1){S.cook++;drawCook()}else{S.cook=null;$('#cookv').remove();toast('Nice. Mark it eaten when you sit down.')}}
+ else if(a==='cookp'){S.cook--;drawCook()}
+ else if(a==='cookx'){S.cook=null;$('#cookv').remove()}
+ else if(a==='tab'){S.tab=b.dataset.v;$$('[data-act=tab]').forEach(x=>{x.setAttribute('aria-selected',x===b);x.tabIndex=x===b?0:-1});$$('[data-panel]').forEach(p=>p.hidden=p.dataset.panel!==b.dataset.v)}
+ else if(a==='more'){const mo=$('#more');mo.hidden=!mo.hidden}
+ else if(a==='undo'){const t=$('#toast');t.onUndo&&t.onUndo()}
+});
+$('#theme').onclick=()=>{const h=document.documentElement;h.dataset.theme=h.dataset.theme==='dark'?'light':'dark'};
+
+const sugH=()=>SUG.map(w=>`<button class="fchip" data-act="sug" data-v="${w}" data-sug="${w}" aria-pressed="false">${w}</button>`).join('');
+const tagBtns=()=>TAGS.map(t=>`<button class="fchip" data-act="tag" data-v="${t}" data-tag="${t}" aria-pressed="false">${t}</button>`).join('');
+
+$('#tagrow').innerHTML=tagBtns();$('#sugrow').innerHTML=sugH();
+const V={list:f=>f.map((m,i)=>`<article class="mc card" style="--i:${Math.min(i,7)}"><button class="ph" style="--h:${m.h}" data-act="open" data-id="${m.id}" aria-label="Details for ${esc(m.n)}">${plate}${costB(m.c)}${eatenBd(m)}</button><div class="cb"><h3>${esc(m.n)}</h3><div class="mt">${m.m} min &middot; ${m.s} servings &middot; ${eff(m.m)}</div>${tagsH(m)}<div class="acts"><button class="btn pri" data-act="eat" data-id="${m.id}">Eat</button><button class="btn" data-act="open" data-id="${m.id}">Details</button></div></div></article>`).join(''),
+sheet:m=>`<div class="grab"></div><div class="scr"><div class="sh-h"><h2 id="st">${esc(m.n)}</h2><button class="ib" data-act="close" aria-label="Close">&times;</button></div><p class="desc">${esc(m.d)}</p>${photo(m)}${statsH(m)}${tagsH(m)}${vpick(m)}${loH(m)}<h3 class="sec">Ingredients ${needH(m)}</h3>${ingH(m)}<h3 class="sec">Method</h3>${stepsH(m)}<div class="sec2"><button class="btn" data-act="swap">Swap</button><button class="btn" data-act="edit">Edit</button></div></div><div class="dock"><button class="btn pri" data-act="plan">Add to plan</button><button class="btn ok" data-act="eat">Eat</button><button class="btn" data-act="cook">Cook mode</button></div>`};
+
+render();
+</script></body></html>

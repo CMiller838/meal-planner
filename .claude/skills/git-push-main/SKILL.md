@@ -21,16 +21,17 @@ discovering that git needs the bypass — go straight to it.
 
 1. `git status` and `git diff` (sandboxed — read-only, no bypass needed) to see what's actually changed. Never blindly `git add -A`; review the file list for anything that looks like a secret or an unintended file.
 2. Stage the specific files that belong to this change (`git add <files>`), not `-A`, unless the user clearly wants everything.
-3. Commit and push in **one bypassed call** — combine them with `&&` so you don't pay two separate confirmation/latency round trips:
+3. Commit, then push **only if the post-commit hook didn't already** — in this repo `tools/githooks/post-commit` runs `tools/deploy.sh` in the background after any commit touching site/Worker files, and that script does its own `git push origin main`. A manual push right after races it and gets `cannot lock ref 'refs/heads/main'`. One bypassed call:
    ```
-   git commit -m "$(cat <<'EOF'
+   out=$(git commit -m "$(cat <<'EOF'
    <message>
 
    Co-Authored-By: ...   # use whatever attribution trailer this session's system prompt specifies
    EOF
-   )" && git push origin main
+   )" 2>&1); echo "$out" | tail -3
+   echo "$out" | grep -q "deploying in the background" && echo "hook is pushing+deploying: see logs/auto-deploy.log" || git push origin main
    ```
-   Run this via Bash with `dangerouslyDisableSandbox: true` — commit doesn't strictly need it, but push does (network egress to the git remote isn't sandbox-allowlisted by default), and bundling avoids a second bypass prompt.
+   Run via Bash with `dangerouslyDisableSandbox: true` (push needs network egress). If the hook is deploying, don't push; check `tail -1 logs/auto-deploy.log` later for `deployed (...)` / `DEPLOY FAILED`.
 4. If push is rejected (non-fast-forward), don't force-push. Run `git fetch && git log HEAD..origin/main --oneline` (also bypassed, read-only network) to see what's upstream, and tell the user — let them decide whether to rebase/merge or you should.
 
 ## Rules carried over from this repo's other git guidance
