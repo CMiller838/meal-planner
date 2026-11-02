@@ -3446,6 +3446,19 @@
       check("chatBriefing: the spec fields", br.start === "2026-09-07" && br.days === 6 && deepEqual(br.timeCaps, { 1: 30 }) && deepEqual(br.profile.allergies, ["peanut"]) && br.ratings.e.rating === "up" && br.pantry[0].name === "rice" && deepEqual(br.gaps, [["iron"], []]) && br.plan.length === 6 && br.plan[1].slots.dinner === "e" && br.meals.length === 8);
       const bm = br.meals.find((m) => m.id === "p"), ba = br.meals.find((m) => m.id === "a");
       check("chatBriefing: totalMins wins over estMins, leadsTo on a batch parent, leftoverOf on its child", bm.totalMins === 60 && !bm.estMins && deepEqual(ba.leadsTo, ["b"]) && br.meals.find((m) => m.id === "b").leftoverOf === "a");
+      { // Phase 112: dinnerChain
+        const bm = { a: { id: "a", servings: 4 }, b: { id: "b", leftoverOf: "a" }, z: { id: "z" } };
+        const pl = (...sl) => ({ days: sl.map((x, i) => ({ day: i + 1, slots: x ? { dinner: x } : {} })) });
+        const c1 = MP.dinnerChain(pl({ mealId: "a" }, { mealId: "b" }, { mealId: "b" }, { mealId: "z" }), bm);
+        check("112 dinnerChain: cook -> 2 leftovers chained, lone meal null", c1[0].kind === "cook" && c1[0].linkNext && c1[1].kind === "leftover" && c1[1].srcDay === 1 && c1[1].linkNext && c1[2].kind === "leftover" && !c1[2].linkNext && c1[3].kind === null && !c1[3].linkNext && !c1[1].orphan);
+        const c2 = MP.dinnerChain(pl(null, { mealId: "b" }), bm);
+        check("112 dinnerChain: cook skipped -> orphan, no link", c2[1].kind === "leftover" && c2[1].orphan && c2[1].srcDay === null && !c2[0].linkNext);
+        const c3 = MP.dinnerChain(pl({ eatingOut: true, name: "Pub" }, { mealId: "b" }), bm);
+        check("112 dinnerChain: eating-out cook -> orphan", c3[0].kind === null && c3[1].orphan);
+        const c4 = MP.dinnerChain(pl({ mealId: "z", fromCook: "c1" }, { mealId: "z", fromCook: "c1" }), bm);
+        check("112 dinnerChain: fromCook is a leftover, never orphan", c4[0].kind === "leftover" && !c4[0].orphan && c4[0].srcDay === null && !c4[0].linkNext);
+        check("112 dinnerChain: empty / null plan", MP.dinnerChain({ days: [] }, bm).length === 0 && MP.dinnerChain(null, bm).length === 0 && MP.dinnerChain(pl({ mealId: "a" }), bm)[0].kind === null);
+      }
       { // Phase 110: dinnersOnly + getLibrary strip
         const old = { startDate: "2026-09-07", firstSlot: "lunch", days: [{ day: 1, slots: { breakfast: { mealId: "x" }, lunch: { mealId: "y" }, dinner: { mealId: "z", locked: true }, snack: null } }, { day: 2, slots: { lunch: { mealId: "y" } } }, { day: 3 }] };
         const d = MP.dinnersOnly(old);

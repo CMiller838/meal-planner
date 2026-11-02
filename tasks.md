@@ -999,6 +999,10 @@ Spec: `.claude/specs/phase105.md` (planned batches via `place.freezeFrom`, cooke
 
 ## Phase 112: Tonight hero and dinner menu board
 - Spec: `.claude/specs/phase112.md` [L]
+- [x] Logic 1: `MP.dinnerChain` + test.html cases + sw.js cache v111 
+- [x] UI 2-5: board markup/CSS, plan.js render + hero, walk.mjs asserts, UI_STYLE line
+- [x] Built and tester PASS 2026-11-02 (check.py 10/10; walk covers hero, chains, expand, cook gate, sheets, eaten, guided).
+- [ ] Live: on the phone PWA, open a plan with a batch cook and leftovers, tap a night's header: it expands its actions and the leftover shows "Leftover of <date>" joined by a bar
 
 ## Phase 113: Swipe Discover for dinners
 - Spec: `.claude/specs/phase113.md` [M]

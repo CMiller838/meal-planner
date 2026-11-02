@@ -375,7 +375,7 @@ for (const [vp, size] of Object.entries({ pc: { width: 1440, height: 900 }, phon
   await step('what-if: hovering the top deck card shows a preview and leaves mp_plan byte-identical', async () => {
     await page.goto(`${base}/plan.html`);
     await page.waitForSelector('#plan-root .slot-card');
-    await page.click('#plan-root .slot-card');
+    await page.click('#plan-root .slot-card .tc-h'); await page.click('#plan-root .slot-card .tc-b [data-tn="details"]');
     await page.click('.day-swap-btn[data-slot="dinner"]');
     await page.waitForSelector('#swap-deck .swipe-card');
     const before = await page.evaluate(() => localStorage.getItem('mp_plan'));
@@ -407,10 +407,10 @@ for (const [vp, size] of Object.entries({ pc: { width: 1440, height: 900 }, phon
       if (!/Can.t do that/.test(t)) throw new Error('drag neither swapped nor refused: ' + n0 + ' -> ' + n1 + ' ' + t);
     }
     if (await page.locator('#day-view:visible, .day-sheet:visible').count()) throw new Error('a drop opened the day view');
-    await page.evaluate(() => { document.querySelector('#plan-root .slot-card[data-day="3"][data-slot="dinner"]').focus(); });
+    await page.evaluate(() => { document.querySelector('#plan-root .slot-card[data-day="3"][data-slot="dinner"] .tc-h').focus(); });
     const n2 = await page.evaluate(() => document.querySelector('#plan-root .slot-card[data-day="4"][data-slot="dinner"] .slot-meal').textContent);
     await page.keyboard.press('Alt+ArrowDown');
-    const f = await page.evaluate(() => document.activeElement.dataset.day + document.activeElement.dataset.slot);
+    const f = await page.evaluate(() => (c => c.dataset.day + c.dataset.slot)(document.activeElement.closest('.slot-card')));
     if (f !== '4dinner') throw new Error('focus not kept on the moved slot: ' + f);
     await page.evaluate(() => document.querySelector('#plan-root .slot-card[data-day="1"][data-slot="dinner"]'));
     const d1 = await page.textContent('#plan-root .day-row[data-day="1"] .slot-card[data-slot="dinner"] .slot-meal');
@@ -418,14 +418,14 @@ for (const [vp, size] of Object.entries({ pc: { width: 1440, height: 900 }, phon
     await drag('#plan-root .day-row[data-day="1"] .day-grip', '#plan-root .day-row[data-day="2"] h3');
     const e1 = await page.textContent('#plan-root .day-row[data-day="1"] .slot-card[data-slot="dinner"] .slot-meal');
     if (d1 !== d2 && e1 === d1) { const t = await page.textContent('.toast'); if (!/Can.t do that|Swapped days/.test(t)) throw new Error('day drag neither swapped nor refused: ' + t); }
-    await page.click('#plan-root .slot-card[data-day="5"][data-slot="dinner"]');
+    await page.click('#plan-root .slot-card[data-day="5"] .tc-h'); await page.click('#plan-root .slot-card[data-day="5"] [data-tn="details"]');
     await page.waitForSelector('.day-swap-btn');
     await shot('plan-drag');
   });
   await step('swap deck: Pass x3 walks the ranked order, counter drops, Take changes the plan, arrow keys work', async () => {
     await page.goto(`${base}/plan.html`);
     await page.waitForSelector('#plan-root .slot-card');
-    await page.click('#plan-root .slot-card');
+    await page.click('#plan-root .slot-card .tc-h'); await page.click('#plan-root .slot-card .tc-b [data-tn="details"]');
     await page.click('.day-swap-btn[data-slot="dinner"]');
     await page.waitForSelector('#swap-deck .swipe-card');
     const names = () => page.locator('#swap-deck .swipe-card h3').allTextContents();
@@ -443,6 +443,47 @@ for (const [vp, size] of Object.entries({ pc: { width: 1440, height: 900 }, phon
     await page.waitForSelector('#swap-overlay.hidden', { state: 'attached' });
     const saved = await page.evaluate(() => localStorage.getItem('mp_plan'));
     if (saved === before) throw new Error('Take did not change mp_plan');
+  });
+  await step('phase 112: Tonight hero + dinner board (hero actions, chain labels, expand, cook gate, eaten, guided hides hero)', async () => {
+    await page.goto(`${base}/plan.html`);
+    await page.waitForSelector('#plan-root .slot-card');
+    const setPlan = async (mut) => {
+      await page.evaluate((m) => { const p = JSON.parse(localStorage.getItem('mp_plan')); p.startDate = MP.Generator.isoToday(); new Function('p', m)(p); localStorage.setItem('mp_plan', JSON.stringify(p)); }, mut);
+      await page.reload(); await page.waitForSelector('#plan-root .slot-card');
+    };
+    await setPlan(`p.days[0].slots.dinner = { mealId: 'roast-chicken' }; p.days[1].slots.dinner = { mealId: 'chicken-fajitas' };`);
+    const hero = await page.textContent('#tonight');
+    if (await page.locator('#tonight[hidden]').count()) throw new Error('hero hidden');
+    if (!/Tonight/.test(hero) || !/Cook now/.test(hero) || !/Roast chicken/i.test(hero)) throw new Error('hero lacks tonight/cook now/name: ' + hero.slice(0, 160));
+    if (!await page.locator('#plan-root .day-row[data-day="1"] .lk, #plan-root .day-row[data-day="1"].lk').count()) throw new Error('no .lk link on cook night');
+    if (!/Leftover of/.test(await page.textContent('#plan-root .day-row[data-day="2"]'))) throw new Error('no "Leftover of" label');
+    const hd = '#plan-root .slot-card[data-day="3"] .tc-h';
+    await page.click(hd);
+    if (await page.getAttribute(hd, 'aria-expanded') !== 'true') throw new Error('header click did not expand');
+    if (!await page.locator('#plan-root .slot-card[data-day="3"] [data-tn="cook"][disabled]').count()) throw new Error('Cook now on a non-tonight card not disabled');
+    await page.click(hd);
+    if (await page.getAttribute(hd, 'aria-expanded') !== 'false') throw new Error('second click did not collapse');
+    await page.click(hd); await page.click('#plan-root .slot-card[data-day="3"] [data-tn="details"]');
+    await page.waitForSelector('.day-swap-btn');
+    await page.evaluate(() => document.querySelectorAll('.modal-overlay').forEach((o) => o.classList.add('hidden')));
+    await page.click('#tonight [data-tn="skip"]'); await page.waitForSelector('#eat-overlay:not(.hidden) .skip-why'); await page.click('#eat-sheet .close-btn');
+    await page.click('#tonight [data-tn="out"]'); await page.waitForSelector('#eat-overlay:not(.hidden) .out-name'); await page.click('#eat-sheet .close-btn');
+    await page.click('#tonight [data-tn="done"]'); await page.waitForSelector('#eat-overlay:not(.hidden) [data-act="ate"]'); await page.click('#eat-sheet .close-btn');
+    await page.click('#tonight [data-tn="swap"]'); await page.waitForSelector('#swap-overlay:not(.hidden) #swap-deck'); await page.click('#swap-sheet .close-btn');
+    await shot('plan-board');
+    await setPlan(`p.days[0].slots.dinner = { mealId: 'chicken-fajitas' };`);
+    if (!/No cook/.test(await page.textContent('#plan-root .day-row[data-day="1"]'))) throw new Error('orphan leftover lacks "No cook"');
+    await setPlan(`p.days[0].slots.dinner = { mealId: 'roast-chicken', eatenAt: new Date().toISOString() };`);
+    if (!/Eaten/.test(await page.textContent('#plan-root .day-row[data-day="1"]'))) throw new Error('eaten night lacks "Eaten"');
+    if (/Cook now/.test(await page.textContent('#tonight'))) throw new Error('hero Cook now on an eaten night');
+    await setPlan(`delete p.startDate; p.days.forEach(d => { if (d.slots.dinner) d.slots.dinner.eatenAt = new Date().toISOString(); });`);
+    if (!await page.locator('#tonight[hidden]').count()) throw new Error('hero shown with every night eaten');
+    await page.evaluate(() => localStorage.removeItem('mp_plan'));
+    await page.goto(`${base}/plan.html?guided=1`);
+    await page.waitForSelector('#swap-sheet h2');
+    if (!await page.locator('#tonight[hidden]').count()) throw new Error('hero visible in guided mode');
+    await page.click('#swap-sheet .close-btn');
+    await page.evaluate(() => localStorage.removeItem('mp_plan'));
   });
   await step('guided: one Dinner pass only (slots= ignored); closing leaves mp_plan untouched', async () => {
     await page.goto(`${base}/plan.html`);
@@ -728,7 +769,7 @@ for (const [vp, size] of Object.entries({ pc: { width: 1440, height: 900 }, phon
     await page.goto(`${base}/plan.html`);
     await W('#plan-root .slot-card');
     await page.evaluate(() => MP.Sync.writeLocalItems('pantry', []));
-    await page.click('#plan-root .slot-card');
+    await page.click('#plan-root .slot-card .tc-h'); await page.click('#plan-root .slot-card .tc-b [data-tn="details"]');
     await page.click('.day-swap-btn[data-slot="dinner"]');
     await W('.deck-cooknow');
     await page.click('.deck-cooknow');

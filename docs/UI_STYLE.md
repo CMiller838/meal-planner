@@ -53,6 +53,7 @@ when next touched, do not add more.
 - Sheets: bottom `.modal-sheet` over a dark overlay; confirmations and undo via `.toast`.
 - Status: colour plus text (`--danger`, `--accent-2`, `--butter`), `.banner` / `.hermes-banner` for notices; empty states use `.empty`.
 - Plan screens: `.week-block`, `.day-row`, `.slot-card`; shopping uses `.shop-block` / `.shop-line`.
+- Phase 112 plan board: `#tonight` hero (`.hero`, today's night or "Next up") above a `.board` timeline of `.day-row` > `.node` + `.slot-card.tc`; the `.tc-h` header (div role=button, not a `<button>`, so drag-swap still starts) expands `.tc-b` actions; chains drawn with `.lk`. Source `design-prototypes/ui-concepts/dinner-board-a.html`.
 - Meter: sticky `.meter-strip` under the nav, built once and updated in place; `.meter-bar` width eases via CSS transition, numbers count up ~400 ms on edit only (instant on first paint, staged reveal, reduced motion).
 
 ## Component sources

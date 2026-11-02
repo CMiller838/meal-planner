@@ -1282,7 +1282,7 @@
   }
   function focusSlot(s) {
     const el = document.querySelector(`#plan-root .slot-card[data-day="${s.day}"][data-slot="${s.slot}"]`);
-    if (el) el.focus();
+    if (el) (el.querySelector(".tc-h") || el).focus();
   }
 
   /** Re-derive prefs (and the chips) from basePrefs + current hints; dismissals take effect at once. */
@@ -1475,10 +1475,96 @@
   }
   window.pickTomorrow = pickTomorrow; window.candidatesFor = candidatesFor; // walk.mjs drives the refusal path and checks the order
 
+  // ---- Phase 112: Tonight hero + dinner timeline (render-only; every action calls an existing handler) ----
+  const openDays = new Set(); // expanded timeline cards: view state, never saved
+  let chainNow = [];
+  const fmtDay = (day) => plan.startDate
+    ? new Date(slotDate(day) + "T12:00:00").toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" })
+    : `Day ${day}`;
+  const nodeNum = (day) => plan.startDate ? new Date(slotDate(day) + "T12:00:00").getDate() : day;
+  function nightState(day) {
+    const slot = plan.days[day - 1].slots.dinner, meal = mealAt(day, "dinner");
+    const iso = plan.startDate ? slotDate(day) : "", today = MP.Generator.isoToday();
+    const state = slot && slot.eatingOut ? "out" : !meal ? "empty" : slot.eatenAt ? "eaten" : "plan";
+    return { slot, meal, em: meal ? effectiveMealAt(day, "dinner") : null, state, today: !!iso && iso === today, past: !!iso && iso < today,
+      locked: !!(meal && slot.locked), name: state === "out" ? outName(slot) : meal ? meal.name : "Nothing planned" };
+  }
+  const badgesHtml = (st) => st.state === "eaten" ? `<span class="bd eaten">Eaten</span>` : st.state === "out" ? `<span class="bd out">Eating out</span>` : "";
+  function chainLabel(day, ch) {
+    if (ch.kind === "leftover") return ch.orphan ? "No cook: source night skipped" : ch.srcDay != null ? `Leftover of ${esc(fmtDay(ch.srcDay))}` : "Leftover portion";
+    if (ch.kind === "cook") { const n = chainNow.filter((c) => c.srcDay === day).length; return `Batch cook · ${n} leftover night${n === 1 ? "" : "s"}`; }
+    return "";
+  }
+  function actsHtml(day, st) {
+    const b = (act, label, cls, extra) => `<button class="${cls === "pri" ? "primary" : "ghost"}" data-tn="${act}" data-day="${day}"${extra || ""}>${label}</button>`;
+    const details = b("details", "Details");
+    if (st.state === "eaten") return details;
+    if (st.state === "empty") return b("swap", "Add a meal", "pri") + details;
+    if (st.state === "out") return b("out", "Edit") + b("swap", "Add a meal") + details;
+    return b("cook", "Cook now", "pri", st.today ? "" : ` disabled title="Only tonight can be cooked now"`)
+      + b("swap", "Swap") + b("skip", "Skip") + b("out", "Eating out") + b("done", "I ate it")
+      + b("lock", st.locked ? "Locked 🔒" : "Lock", "", ` aria-pressed="${st.locked}"`) + details
+      + `<button class="ghost reroll-btn" data-tn="reroll" data-day="${day}" aria-label="Reroll day ${day}" title="Reroll this day">🎲 Reroll</button>`
+      + `<button class="ghost reroll-btn swapday-btn" data-tn="swapday" data-day="${day}" aria-label="Swap day ${day} with another day">⇄ Swap day</button>`;
+  }
+  /** Hero night: today's plan day, else the first still-open night ("Next up"); null = nothing to show. */
+  function heroDay() {
+    const t = plan.startDate && planDayOf(plan.startDate, MP.Generator.isoToday(), plan.days.length);
+    if (t) return { day: t, tag: "Tonight" };
+    const d = plan.days.find((x) => nightState(x.day).state === "plan");
+    return d ? { day: d.day, tag: "Next up" } : null;
+  }
+  function renderTonight(h) {
+    const el = document.getElementById("tonight");
+    if (!el) return;
+    el.hidden = guidedActive || !h;
+    if (el.hidden) { el.innerHTML = ""; return; }
+    const st = nightState(h.day), ch = chainNow[h.day - 1] || {};
+    el.innerHTML = `<article class="hero st-${st.state}"><span class="tag hero-tag">${h.tag} · ${esc(fmtDay(h.day))}</span>
+      <div class="hb"><h2>${esc(st.name)}</h2>
+      <div class="mt">${badgesHtml(st)}<span class="cl">${chainLabel(h.day, ch)}</span></div>
+      ${st.em ? tagRowHtml(st.em) : ""}
+      <div class="tn-acts">${actsHtml(h.day, st)}</div></div></article>`;
+  }
+  function wireBoard(root) {
+    const toggle = (hd) => {
+      const row = hd.closest(".day-row"), day = Number(row.dataset.day), on = !openDays.has(day);
+      on ? openDays.add(day) : openDays.delete(day);
+      row.classList.toggle("open", on);
+      hd.setAttribute("aria-expanded", String(on));
+      hd.setAttribute("aria-label", hd.getAttribute("aria-label").replace(/(Hide|Show) actions$/, (on ? "Hide" : "Show") + " actions"));
+    };
+    root.querySelectorAll(".tc-h").forEach((hd) => {
+      hd.addEventListener("click", () => toggle(hd));
+      hd.addEventListener("keydown", (e) => { if ((e.key === "Enter" || e.key === " ") && !e.altKey) { e.preventDefault(); toggle(hd); } });
+    });
+    if (root._tnWired) return;
+    root._tnWired = true; // delegated: the hero and the timeline survive re-renders
+    const tn = document.getElementById("tonight");
+    [root, tn].forEach((el) => el && el.addEventListener("click", tonightAct));
+  }
+  function tonightAct(e) {
+    const b = e.target.closest("[data-tn]");
+    if (!b || b.disabled) return;
+    const day = Number(b.dataset.day), act = b.dataset.tn, meal = mealAt(day, "dinner");
+    if (act === "cook") {
+      const slot = plan.days[day - 1].slots.dinner, em = effectiveMealAt(day, "dinner");
+      if (meal) MP.CookMode.open(meal, em, () => openEatSheet(em, day, "dinner", slot.variantId), slot.variantId);
+    } else if (act === "swap") openSwapPicker(day, "dinner");
+    else if (act === "skip") openSkipSheet(day, "dinner");
+    else if (act === "out") openOutSheet(day, "dinner");
+    else if (act === "done") openDoneSheet(day, "dinner");
+    else if (act === "lock") toggleLock(day, "dinner");
+    else if (act === "reroll") rerollDay(day);
+    else if (act === "swapday") openSwapDay(day);
+    else if (act === "details") openDayView(day);
+  }
+
   function renderPlan(staged) {
     mealsById = Object.fromEntries(library.map((m) => [m.id, m]));
     warnings = MP.ShelfLife.checkPlanWarnings(plan, mealsById, shelfData, MP.Sync.localItems("pantry"));
     const root = document.getElementById("plan-root");
+    const chain = chainNow = MP.dinnerChain(plan, mealsById);
     let html = "";
     for (const weekStart of [1, 8]) {
       const weekDays = plan.days.slice(weekStart - 1, weekStart + 6);
@@ -1491,21 +1577,19 @@
           ${weekShort.length ? "Short across the week: " + weekShort.map(labelize).join(", ") : "All tracked nutrients covered this week"}
         </div>`;
       for (const d of weekDays) {
-        const heading = dayHeading(d.day);
-        html += `<div class="day-row" data-day="${d.day}">
-          <h3><span class="day-grip" aria-label="Drag to swap days">⠿</span>${heading}${hintChipHtml(d.day)}<button class="reroll-btn" data-day="${d.day}" aria-label="Reroll day ${d.day}" title="Reroll this day">🎲 Reroll</button><button class="reroll-btn swapday-btn" data-day="${d.day}" aria-label="Swap day ${d.day} with another day" title="Swap this day with another">⇄ Swap day</button></h3>
-          <div class="slot-grid">
-            ${SLOT_TYPES.map((slotType) => {
-              const meal = mealAt(d.day, slotType);
-              const warn = warnings[`${d.day}-${slotType}`];
-              const locked = meal && plan.days[d.day - 1].slots[slotType].locked;
-              return `<div class="slot-card ${meal ? "" : "empty"}${locked ? " locked" : ""}" data-day="${d.day}" data-slot="${slotType}" tabindex="0" role="button">
-                <div class="slot-type">${slotType}${locked ? ` <span class="lock-icon" aria-label="Locked">🔒</span>` : ""}</div>
-                <div class="slot-meal">${meal ? esc(meal.name) : plan.days[d.day - 1].slots[slotType] && plan.days[d.day - 1].slots[slotType].eatingOut ? esc(outName(plan.days[d.day - 1].slots[slotType])) : "tap to add"}</div>
-                ${ratingHintHtml(meal)}
-                ${warningHtml(d.day, slotType, warn)}
-              </div>`;
-            }).join("")}
+        const heading = dayHeading(d.day), st = nightState(d.day), ch = chain[d.day - 1] || {};
+        const open = openDays.has(d.day);
+        html += `<div class="day-row st-${st.state}${ch.linkNext ? " lk" : ""}${st.past ? " past" : ""}${st.today ? " today" : ""}${open ? " open" : ""}" data-day="${d.day}">
+          <span class="node" aria-hidden="true">${nodeNum(d.day)}</span>
+          <h3><span class="day-grip" aria-label="Drag to swap days">⠿</span>${heading}${st.today ? ` <span class="bd">Tonight</span>` : ""}${hintChipHtml(d.day)}</h3>
+          <div class="slot-card tc${st.meal ? "" : " empty"}${st.locked ? " locked" : ""}" data-day="${d.day}" data-slot="dinner">
+            <div class="tc-h" role="button" tabindex="0" aria-expanded="${open}" aria-label="${esc(heading)}: ${esc(st.name)}. ${open ? "Hide" : "Show"} actions">
+              <div class="slot-meal">${esc(st.name)}${st.locked ? ` <span class="lock-icon" aria-label="Locked">🔒</span>` : ""}</div>
+              <div class="tc-m">${badgesHtml(st)}<span class="cl">${chainLabel(d.day, ch)}</span></div>
+            </div>
+            ${ratingHintHtml(st.meal)}
+            ${warningHtml(d.day, "dinner", warnings[`${d.day}-dinner`])}
+            <div class="tc-b"><div><div class="in">${st.em ? tagRowHtml(st.em) : ""}<div class="tn-acts">${actsHtml(d.day, st)}</div></div></div></div>
           </div>
           ${coverageHtml(dayMeals(d.day))}
         </div>`;
@@ -1525,15 +1609,9 @@
         renderPlan();
       });
     });
-    root.querySelectorAll(".reroll-btn:not(.swapday-btn)").forEach((b) => b.addEventListener("click", () => rerollDay(Number(b.dataset.day))));
-    root.querySelectorAll(".swapday-btn").forEach((b) => b.addEventListener("click", () => openSwapDay(Number(b.dataset.day))));
     document.getElementById("unlock-btn").hidden = !lockCount();
-    root.querySelectorAll(".slot-card").forEach((el) => {
-      el.addEventListener("click", (e) => {
-        if (e.target.closest(".move-btn")) return;
-        openDayView(Number(el.dataset.day));
-      });
-    });
+    wireBoard(root);
+    renderTonight(heroDay());
     wireMoveBtns(root);
     wireDragSwap(root);
     if (staged) {

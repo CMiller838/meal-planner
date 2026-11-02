@@ -43,7 +43,7 @@ Own calls:
 
 ## Tasks
 ### Logic (TDD)
-- [ ] 1. `test.html` cases for `MP.dinnerChain` (cook→2 leftovers linkNext chain; lone meal null; orphan when cook skipped; eating-out cook; `fromCook`; empty plan); implement in `data.js`; bump `sw.js` `CACHE`.
+- [x] 1. `test.html` cases for `MP.dinnerChain` (cook→2 leftovers linkNext chain; lone meal null; orphan when cook skipped; eating-out cook; `fromCook`; empty plan); implement in `data.js`; bump `sw.js` `CACHE`.
 ### UI (`ui-build`, restyle from `dinner-board-a.html`)
 - [ ] 2. `plan.html` `#tonight` + `.board` wrapper; `style.css` board/hero/timeline/card styles from the prototype in house tokens, both themes, PC and 390 px.
 - [ ] 3. `plan.js`: card markup in `renderPlan` using `MP.dinnerChain`; `renderTonight`; action delegation to the existing handlers; expand/collapse + keyboard; hide hero while `guidedActive`.

@@ -274,7 +274,7 @@ Goal: one slot per day (`dinner`) end to end; stored plans, ratings and food-log
 
 Goal: coverage and the plan meter judge dinners against a data-driven dinner share of the daily target (`nutrition-targets.json`, 0.375), gaps are judged over the shop week's dinners, the generator and Hermes aim dinners at nutrients the last 7 logged days were short on, and Hermes says when a pick is nutrient-driven. Requires Phase 110. The health and diet screen is a separate `notion_assistant` phase (handoff in the spec).
 
-## Phase 112: Tonight hero and dinner menu board [L] — not started
+## Phase 112: Tonight hero and dinner menu board [L] — built 2026-11-02, live checks pending
 
 Goal: replace the 3-row day grid with a 14-night board and a big Tonight card (cook, swap, skip, eating out, I ate it), leftover chains drawn between nights; built from the chosen dinner-board prototype. Requires Phase 110 and a picked prototype.
 

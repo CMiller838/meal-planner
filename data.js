@@ -364,6 +364,32 @@
     return out;
   }
 
+  /** Phase 112, pure: per plan day { day, kind: "cook"|"leftover"|null, srcDay, linkNext, orphan } for the timeline bars.
+   *  A leftover is a dinner whose meal has `leftoverOf` (its cook = nearest earlier day cooking that meal; none = orphan) or a
+   *  `fromCook` slot (cook lives in Cooks, not the plan: no srcDay, never orphan). A cook is a night some leftover points to. */
+  function dinnerChain(plan, mealsById) {
+    const days = (plan && plan.days) || [];
+    const dn = (i) => (days[i] && days[i].slots && days[i].slots.dinner) || null;
+    const out = days.map((d, i) => ({ day: d.day, kind: null, srcDay: null, linkNext: false, orphan: false, _i: i }));
+    out.forEach((e) => {
+      const s = dn(e._i);
+      if (!s || s.eatingOut || !s.mealId) return;
+      const m = mealsById && mealsById[s.mealId];
+      if (s.fromCook) { e.kind = "leftover"; return; }
+      if (!m || !m.leftoverOf) return;
+      e.kind = "leftover";
+      for (let j = e._i - 1; j >= 0; j--) { const c = dn(j); if (c && c.mealId === m.leftoverOf && !c.eatingOut) { e.srcDay = days[j].day; break; } }
+      if (e.srcDay == null) e.orphan = true;
+    });
+    out.forEach((e) => { if (e.kind === "leftover" && e.srcDay != null) out.find((c) => c.day === e.srcDay).kind = "cook"; });
+    out.forEach((e, i) => {
+      const n = out[i + 1];
+      if (!n || n.kind !== "leftover" || n.srcDay == null) return;
+      e.linkNext = e.kind === "cook" ? n.srcDay === e.day : e.kind === "leftover" && n.srcDay === e.srcDay;
+    });
+    return out.map(({ _i, ...r }) => r);
+  }
+
   /** Phase 110, pure: each day's slots reduced to { dinner } (absent stays absent), firstSlot dropped. Bad input comes back as is. */
   function dinnersOnly(plan) {
     if (!plan || !Array.isArray(plan.days)) return plan;
@@ -925,6 +951,7 @@
   };
   MP.isBatch = isBatch;
   MP.chainDays = chainDays;
+  MP.dinnerChain = dinnerChain;
   MP.reflowPlan = reflowPlan;
   MP.dinnersOnly = dinnersOnly;
   MP.pushSlot = pushSlot;
