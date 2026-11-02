@@ -1022,3 +1022,4 @@ Spec: `.claude/specs/phase105.md` (planned batches via `place.freezeFrom`, cooke
 
 ## Phase 119: Finish shop review and Freezer drawer
 - Spec: `.claude/specs/phase119.md` [M]
+- [ ] Live: On the phone PWA, tick a few shop lines, press Finish shop, split one item to the freezer, press Confirm, then open the Pantry tab: "In the freezer" group first with a "just frozen" chip; Undo restores the pantry.

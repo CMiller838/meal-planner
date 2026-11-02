@@ -194,11 +194,12 @@ window.MP = window.MP || {};
           if (op.qty) item.qty = op.qty;
           result.push(item);
         } else {
-          const { useBy, out, storage } = result[idx];
+          const { useBy, out, storage, frozenOn } = result[idx];
           const zero = op.qty && (MP.ShoppingList.parseQty(op.qty) || {}).value === 0;
           result[idx] = op.qty ? { ...result[idx], qty: op.qty } : { name: result[idx].name };
           if (storage) result[idx].storage = storage;
           if (!op.qty && useBy) result[idx].useBy = useBy;
+          if (!op.qty && frozenOn) result[idx].frozenOn = frozenOn;
           if (zero && out) result[idx].out = true; else delete result[idx].out; // bought / qty > 0 clears out
         }
       } else if (op.type === "out") {
@@ -210,10 +211,14 @@ window.MP = window.MP || {};
         if (idx === -1) continue;
         const { useBy: _drop, ...rest } = result[idx];
         result[idx] = MP.ShelfLife.isIsoDate(op.useBy) ? { ...rest, useBy: op.useBy } : rest;
+      } else if (op.type === "frozenOn") {
+        if (idx === -1) continue;
+        const { frozenOn: _drop, ...rest } = result[idx];
+        result[idx] = MP.ShelfLife.isIsoDate(op.frozenOn) ? { ...rest, frozenOn: op.frozenOn } : rest;
       } else if (op.type === "storage") {
         if (idx === -1) continue;
-        const { storage: _drop, ...rest } = result[idx];
-        result[idx] = MP.ShelfLife.STORAGES.includes(op.storage) ? { ...rest, storage: op.storage } : rest;
+        const { storage: _drop, frozenOn: _f, ...rest } = result[idx];
+        result[idx] = MP.ShelfLife.STORAGES.includes(op.storage) ? { ...rest, storage: op.storage, ...(op.storage === "freezer" && _f ? { frozenOn: _f } : {}) } : rest;
       } else if (op.type === "remove") {
         if (idx !== -1) result.splice(idx, 1);
       }

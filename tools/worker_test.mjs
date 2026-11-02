@@ -81,6 +81,10 @@ assert.equal((await call("PUT", "/pantry", "a", pan({ name: "Milk", useBy: "2026
 assert.equal((await call("GET", "/pantry", "a")).body.items[0].useBy, "2026-10-30");
 for (const bad of ["2026-02-30", "tomorrow", 5, "2026-1-1"])
   assert.equal((await call("PUT", "/pantry", "a", pan({ name: "Milk", useBy: bad }))).status, 400, String(bad));
+// Phase 119: frozenOn
+for (const bad of ["2026-02-30", "soon", 5])
+  assert.equal((await call("PUT", "/pantry", "a", pan({ name: "Peas (frozen)", storage: "freezer", frozenOn: bad }))).status, 400, String(bad));
+assert.equal((await call("PUT", "/pantry", "a", pan({ name: "Peas (frozen)", storage: "freezer", frozenOn: "2026-10-01" }))).status, 204);
 assert.equal((await call("PUT", "/pantry", "a", pan({ name: "Rice", out: true }))).status, 204);
 assert.equal((await call("GET", "/pantry", "a")).body.items[0].out, true);
 assert.equal((await call("PUT", "/pantry", "a", pan({ name: "Rice", out: "yes" }))).status, 400);

@@ -21,7 +21,7 @@ for (const [vp, size] of Object.entries({ pc: { width: 1440, height: 900 }, phon
   const step = async (name, fn) => {
     const t0 = Date.now(), ms = () => ` (${((Date.now() - t0) / 1000).toFixed(1)}s)`;
     try { await fn(); console.log(`ok   ${vp} ${name}${ms()}`); }
-    catch (e) { failed++; console.log(`FAIL ${vp} ${name}: ${String(e.message).split('\n')[0].slice(0, 160)}`); }
+    catch (e) { failed++; console.log(`FAIL ${vp} ${name}: ${process.env.WALK_FULL ? String(e.message).slice(0, 1500) : String(e.message).split("\n")[0].slice(0, 160)}`); }
   };
   const shot = n => shots && page.screenshot({ path: path.join(shots, `walk-${vp}-${n}.png`) });
   const theme = () => page.evaluate(() => document.documentElement.dataset.theme);
@@ -123,6 +123,19 @@ for (const [vp, size] of Object.entries({ pc: { width: 1440, height: 900 }, phon
     await page.waitForSelector('#shopping-root .shop-line', { timeout: 10000 });
     await shot('shopping');
   });
+  await step('pantry freezer group (Phase 119): first, weeks chips, undated has none', async () => {
+    await page.goto(`${base}/shopping.html`);
+    await page.evaluate(() => { const d = n => new Date(Date.now() - n * 864e5).toLocaleDateString('en-CA');
+      MP.Sync.writeLocalItems('pantry', [{ name: 'Rice', qty: '1kg' }, { name: 'Old peas', storage: 'freezer', frozenOn: d(63) }, { name: 'New fish', storage: 'freezer', frozenOn: d(0) }, { name: 'Mystery mince', storage: 'freezer' }]); });
+    await page.goto(`${base}/shopping.html#pantry`);
+    await page.waitForSelector('.pan-group');
+    if ((await page.locator('.pan-group').first().textContent()) !== 'In the freezer') throw new Error('freezer group not first');
+    const row = n => page.locator('#pantry-root .prod-row', { hasText: n });
+    if (!/9 wk · use soon/.test(await row('Old peas').innerText())) throw new Error('9 wk chip missing');
+    if (!/just frozen/.test(await row('New fish').innerText())) throw new Error('just frozen chip missing');
+    if (await row('Mystery mince').locator('.frz-chip').count()) throw new Error('undated freezer item shows a chip');
+    await page.evaluate(() => MP.Sync.writeLocalItems('pantry', []));
+  });
   await step('shopping accordion (Phase 116): cards, ticks, done collapse, dock budget, add/remove, Finish shop, #adhoc', async () => {
     const msgs = [];
     page.on('console', m => { if (m.type() === 'error') msgs.push(m.text()); });
@@ -180,6 +193,7 @@ for (const [vp, size] of Object.entries({ pc: { width: 1440, height: 900 }, phon
     // (f)
     await page.fill('#adhoc-name', 'bin bags'); await page.click('#adhoc-add-btn');
     if (!await page.locator('#finish-shop').isDisabled()) throw new Error('Finish shop should start disabled');
+    await page.locator('#shopping-root .shop-block:first-child .shop-line:not(.covered):not(.ticked) [data-skip]').first().click();
     for (let i = 0; i < 200; i++) {
       const more = await page.evaluate(() => {
         const el = document.querySelector('#shopping-root .shop-block:first-child .aisle-card .shop-line:not(.covered):not(.skipped):not(.ticked) input[type=checkbox]');
@@ -190,15 +204,67 @@ for (const [vp, size] of Object.entries({ pc: { width: 1440, height: 900 }, phon
     }
     if (await page.locator('#finish-shop').isDisabled()) throw new Error('Finish shop should enable when all ticked');
     const pantry = () => page.evaluate(() => JSON.stringify(MP.Sync.localItems('pantry')));
-    const p0 = await pantry();
+    const same = () => page.evaluate(() => ['mp_cooks', 'mp_eatenLog', 'mp_plan'].map(k => localStorage.getItem(k)).join('|'));
+    const rows = page.locator('#shop-review .rv-row');
+    // Phase 119 review sheet: (a) rows = ticked lines, skipped one in the Left out note
+    const nTicked = await page.locator('#shopping-root .shop-block:first-child .shop-line.ticked:not(.covered):has(.shop-qty)').count(); // essentials have no qty and no row
+    const skippedName = await page.evaluate(() => (document.querySelector('#shopping-root .shop-block:first-child .shop-line.skipped .shop-name') || {}).textContent);
     await page.click('#finish-shop');
-    await page.waitForSelector('.toast:has-text("Shop complete")');
+    await page.waitForSelector('#shop-review .rv-row'); await page.waitForTimeout(500); await shot('shop-review');
+    if (await rows.count() !== nTicked) throw new Error(`review rows ${await rows.count()} != ticked ${nTicked}`);
+    if (skippedName && !(await page.innerText('.rv-left')).includes(skippedName.trim())) throw new Error('skipped line missing from Left out note');
+    // (c) photo stub is disabled
+    if (!await page.locator('#rv-photo').isDisabled() || !/Not built yet/.test(await page.innerText('.rv-photo-note'))) throw new Error('photo stub wrong');
+    // (h) Escape closes, focus returns, no horizontal scroll
+    if (vp === 'phone' && await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)) throw new Error('review sheet scrolls horizontally');
+    const r0 = await rows.first().evaluate(li => ({ name: li.querySelector('.rv-top b').textContent, unit: (li.querySelector('[data-amt]').parentElement.textContent.trim().replace(/^Amount\s*/, '')) || 'each' }));
+    await page.keyboard.press('Escape');
+    if (await page.locator('#modal-overlay:not(.hidden)').count()) throw new Error('Escape did not close the review');
+    if (await page.evaluate(() => document.activeElement && document.activeElement.id) !== 'finish-shop') throw new Error('focus did not return to Finish shop');
+    // seed an existing matching-unit item for row 0, then reopen
+    await page.evaluate(([n, u]) => MP.Sync.writeLocalItems('pantry', [{ name: n, qty: u === 'each' ? '1' : '100' + u }]), [r0.name, r0.unit]);
+    const p0 = await pantry(), same0 = await same();
+    await page.click('#finish-shop');
+    await page.waitForSelector('#shop-review .rv-row');
+    if (await rows.first().locator('.rv-note').count()) throw new Error('matching unit should sum, not "replaces"');
+    // (b) stepper sums to the amount; Rest after plan = amount - need
+    const split = rows.filter({ has: page.locator('.rv-split') }).last();
+    const splitName = await split.locator('.rv-top b').textContent();
+    await split.locator('[data-amt]').fill('500'); await split.locator('[data-amt]').dispatchEvent('change');
+    const sp = rows.filter({ hasText: splitName });
+    await sp.locator('[data-mv="1"]').click();
+    const vals = async () => sp.evaluate(li => ({ u: parseFloat(li.querySelector('.rv-use').textContent), f: parseFloat(li.querySelector('.rv-fz').textContent) }));
+    { const v = await vals(); if (Math.abs(v.u + v.f - 500) > 0.5 || !(v.f > 0)) throw new Error('stepper split does not sum: ' + JSON.stringify(v)); }
+    await sp.locator('[data-mv="-1"]').click(); await sp.locator('[data-mv="1"]').click();
+    { const v = await vals(); if (Math.abs(v.u + v.f - 500) > 0.5) throw new Error('stepper sum drifted'); }
+    const need = parseFloat((await sp.locator('.rv-top .muted').textContent()).replace(/[^\d.]/g, ''));
+    await sp.locator('[data-rest]').click();
+    { const v = await vals(); if (Math.abs(v.f - Math.max(0, 500 - need)) > 0.5) throw new Error(`Rest after plan: freezer ${v.f}, expected ${Math.max(0, 500 - need)}`); }
+    { const v = await vals(); await sp.locator(v.f >= 500 ? '[data-mv="-1"]' : '[data-mv="1"]').click(); } // keep both halves real for (d)
+    const fzWant = (await vals()).f;
+    // (d) Confirm: one write, plain + (frozen) items
+    await page.click('#rv-confirm');
+    await page.waitForSelector('.toast:has-text("in the freezer")');
+    const items = await page.evaluate(() => MP.Sync.localItems('pantry'));
+    const keys = items.map(i => i.name.toLowerCase());
+    if (new Set(keys).size !== keys.length) throw new Error('duplicate pantry names');
+    const today = await page.evaluate(() => new Date().toLocaleDateString('en-CA'));
+    const fz = items.find(i => i.name === `${splitName} (frozen)`);
+    if (!fz || fz.storage !== 'freezer' || fz.frozenOn !== today) throw new Error('frozen half wrong: ' + JSON.stringify(fz));
+    if (!items.find(i => i.name === splitName)) throw new Error('plain half missing');
+    if (fzWant > 0 && !(fz.qty.value > 0)) throw new Error('frozen qty missing');
+    // (e) the seeded row summed
+    const seeded = items.find(i => i.name.toLowerCase() === r0.name.toLowerCase());
+    if (!seeded || !(seeded.qty.value > (r0.unit === 'each' ? 1 : 100))) throw new Error('existing item not summed: ' + JSON.stringify(seeded));
+    // (i) nothing but pantry + ad-hoc changed
+    if (await same() !== same0) throw new Error('Confirm touched cooks / eaten log / plan');
     if (await page.locator('.aisle-card .shop-line', { hasText: 'bin bags' }).count()) throw new Error('ticked ad-hoc line not deleted');
-    if (/pantry/i.test(await page.innerText('.toast'))) throw new Error('toast must not mention the pantry');
+    // (f) Undo restores exactly
     await page.click('.toast button:text("Undo")');
     if (!await page.locator('.aisle-card .shop-line.ticked', { hasText: 'bin bags' }).count()) throw new Error('Undo did not restore the ad-hoc line as got');
-    if (await pantry() !== p0) throw new Error('Finish shop / Undo touched the pantry');
-    await page.locator('.aisle-card .shop-line', { hasText: 'bin bags' }).locator('[data-del]').click();
+    if (await pantry() !== p0) throw new Error('Undo did not restore the pantry: ' + await pantry() + ' vs ' + p0);
+    await page.evaluate(() => MP.Sync.writeLocalItems('pantry', []));
+    await page.locator('.aisle-card .shop-line', { hasText: 'bin bags' }).locator('[data-del]').dispatchEvent('click'); // its card is collapsed (all ticked), so a real click can't reach ×
     // (g)
     await page.goto(`${base}/shopping.html#adhoc`);
     await page.waitForSelector('#panel-planned:not(.hidden)');

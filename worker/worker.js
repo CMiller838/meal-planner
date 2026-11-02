@@ -1263,6 +1263,7 @@ function itemsError(parsed) {
     if (qErr) return qErr;
     if (item.out != null && typeof item.out !== "boolean") return "out must be a boolean";
     if (item.useBy != null && !ShelfLife.isIsoDate(item.useBy)) return "useBy must be YYYY-MM-DD";
+    if (item.frozenOn != null && !ShelfLife.isIsoDate(item.frozenOn)) return "frozenOn must be YYYY-MM-DD";
     if (item.storage != null && !ShelfLife.STORAGES.includes(item.storage)) return "storage must be fridge, freezer or cupboard";
   }
   return null;

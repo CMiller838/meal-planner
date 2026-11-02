@@ -202,12 +202,127 @@
     setTimeout(() => el.remove(), 8000);
   }
 
-  // wrap-up only: nothing here writes the pantry (Phase 119 replaces this with a review sheet)
-  function finishShop() {
-    const done = extras().filter((l) => l.state === "got");
+  // ---- Phase 119: the Finish shop review sheet. Confirm is the second pantry writer (one batch via reviewOps, with Undo) ----
+  let rv = null; // { rows, left } while the sheet is open
+  const rvStep = (unit) => (unit === "g" || unit === "ml" ? 100 : 1);
+  const rvNum = (n, unit) => `${Math.round(n * 10) / 10}${unit === "each" ? "" : unit}`;
+
+  function reviewRows() {
+    const first = lists && Object.keys(lists).length ? lists[Object.keys(lists).map(Number).sort((a, b) => a - b).filter((d) => !cycleOver(d))[0]] : null;
+    const states = new Map(MP.Sync.shoppingLines().map((l) => [l.id, l]));
+    const today = localIso(), rows = [], left = [];
+    const mk = (name, amt, need, freeze, adhoc) => {
+      const st = MP.ShelfLife.storageFor({ name }, shelfData);
+      const store = st ? st.storage : null;
+      const est = MP.ShelfLife.estimateUseBy({ name, storage: store }, plan, today, shelfData);
+      return { name, unit: amt.unit, amount: amt.value, need, freeze: Math.min(freeze, amt.value), store, useBy: est || "", adhoc, id: adhoc };
+    };
+    (first ? first.lines : []).forEach((l) => {
+      if (!(l.packs > 0)) return;
+      const state = stateOf(first.shopDay, l, states);
+      if (state !== "got") { left.push(l.label); return; }
+      const amt = l.needed ? { value: l.needed.value, unit: l.needed.unit } : { value: l.packs, unit: "each" };
+      const fz = l.bulk && l.bulk.freeze > 0 ? l.bulk.freeze : 0;
+      const r = mk(l.label, amt, l.needed ? Math.max(0, l.needed.value - (l.bulk ? fz : 0)) : amt.value, fz, null);
+      r.freeze = Math.min(fz, amt.value);
+      rows.push(r);
+    });
+    extras().filter((l) => l.state === "got").forEach((l) => {
+      const q = SL().parseQty(l.qty) || { value: 1, unit: "each" };
+      rows.push(mk(l.label, q, q.value, 0, l.id));
+    });
+    return { rows, left };
+  }
+
+  function rvRowHtml(r, i) {
+    const items = MP.Sync.localItems("pantry");
+    const old = items.find((x) => SL().normalizeKey(x.name) === SL().normalizeKey(r.name));
+    const replaces = old && old.qty && !SL().sumQty(old.qty, { value: r.amount, unit: r.unit });
+    const split = !r.adhoc && r.store !== "freezer";
+    return `<li class="rv-row" data-i="${i}">
+      <div class="rv-top"><b>${esc(r.name)}</b>${r.adhoc ? ` <span class="added-tag">added</span>` : ` <span class="muted">plan needs ${esc(rvNum(r.need, r.unit))}</span>`}</div>
+      ${split ? `<div class="rv-split" role="group" aria-label="Split ${esc(r.name)}">
+        <div class="rv-col"><span>Use this week</span><b class="rv-use">${esc(rvNum(r.amount - r.freeze, r.unit))}</b></div>
+        <div class="rv-step"><button type="button" class="ghost" data-mv="-1" aria-label="Move ${esc(rvNum(rvStep(r.unit), r.unit))} to this week"${r.freeze <= 0 ? " disabled" : ""}>−</button><button type="button" class="ghost" data-mv="1" aria-label="Move ${esc(rvNum(rvStep(r.unit), r.unit))} to the freezer"${r.freeze >= r.amount ? " disabled" : ""}>+</button></div>
+        <div class="rv-col"><span>To freezer</span><b class="rv-fz">${esc(rvNum(r.freeze, r.unit))}</b></div>
+        <button type="button" class="chip" data-rest>Rest after plan</button></div>` : ""}
+      <div class="rv-fields">
+        <label>Amount <input type="number" min="0" step="any" value="${r.amount}" data-amt aria-label="Amount of ${esc(r.name)}"> ${esc(r.unit === "each" ? "" : r.unit)}</label>
+        <span class="rv-store" role="radiogroup" aria-label="Storage for ${esc(r.name)}">${MP.ShelfLife.STORAGES.map((st) => `<label><input type="radio" name="rv-st-${i}" value="${st}" data-store${st === r.store ? " checked" : ""}> ${st[0].toUpperCase() + st.slice(1)}</label>`).join("")}</span>
+        <label>Use-by <input type="date" value="${esc(r.useBy)}" data-ub aria-label="Use-by for ${esc(r.name)}"></label>
+      </div>
+      ${replaces ? `<p class="rv-note">replaces what you had (${esc(MP.qtyText(old.qty))})</p>` : ""}
+    </li>`;
+  }
+
+  function openReviewSheet() {
+    rv = reviewRows();
+    const sheet = openSheet(`<div id="shop-review"><h2>Finish shop</h2>
+      <p class="muted">Confirm what you bought. Split any of it between this week and the freezer.</p>
+      ${rv.rows.length ? `<ul class="rv-list">${rv.rows.map(rvRowHtml).join("")}</ul>` : `<p class="empty">Nothing ticked</p>`}
+      ${rv.left.length ? `<p class="rv-left muted">Left out, not ticked: ${rv.left.map(esc).join(", ")}</p>` : ""}
+      <button type="button" class="ghost" id="rv-photo" disabled>Fill from order photo</button>
+      <p class="muted rv-photo-note">Hermes will read a photo of your order and fill this in. Not built yet.</p>
+      <div class="top-actions"><button type="button" class="btn" id="rv-confirm">Confirm</button></div></div>`);
+    const box = sheet.querySelector("#shop-review"); // fresh per open, so listeners never stack on the shared sheet
+    const redraw = (li, focus) => {
+      const i = +li.dataset.i;
+      li.insertAdjacentHTML("afterend", rvRowHtml(rv.rows[i], i));
+      const next = li.nextElementSibling;
+      li.remove();
+      const f = focus && (next.querySelector(focus) || next.querySelector("[data-mv]:not(:disabled)"));
+      if (f) f.focus();
+    };
+    // typing an amount updates the split in place: replacing nodes mid-edit would swallow the next click
+    const syncSplit = (li, r) => {
+      const use = li.querySelector(".rv-use"), fz = li.querySelector(".rv-fz");
+      if (!use) return;
+      use.textContent = rvNum(r.amount - r.freeze, r.unit); fz.textContent = rvNum(r.freeze, r.unit);
+      li.querySelector('[data-mv="-1"]').disabled = r.freeze <= 0; li.querySelector('[data-mv="1"]').disabled = r.freeze >= r.amount;
+    };
+    box.addEventListener("click", (e) => {
+      const li = e.target.closest(".rv-row");
+      if (li) {
+        const r = rv.rows[li.dataset.i], mv = e.target.closest("[data-mv]");
+        if (mv) { r.freeze = Math.max(0, Math.min(r.amount, r.freeze + (+mv.dataset.mv) * rvStep(r.unit))); redraw(li, `[data-mv="${mv.dataset.mv}"]:not(:disabled)`); }
+        else if (e.target.closest("[data-rest]")) { r.freeze = Math.max(0, Math.min(r.amount, r.amount - r.need)); redraw(li, "[data-rest]"); }
+      }
+      if (e.target.closest("#rv-confirm:not(:disabled)")) confirmReview(e.target.closest("#rv-confirm"));
+    });
+    box.addEventListener("input", (e) => {
+      const li = e.target.closest(".rv-row");
+      if (!li || !e.target.matches("[data-amt]")) return;
+      const r = rv.rows[li.dataset.i];
+      r.amount = Math.max(0, Number(e.target.value) || 0); r.freeze = Math.min(r.freeze, r.amount); syncSplit(li, r);
+    });
+    box.addEventListener("change", (e) => {
+      const li = e.target.closest(".rv-row");
+      if (!li) return;
+      const r = rv.rows[li.dataset.i];
+      if (e.target.matches("[data-store]")) { r.store = e.target.value; redraw(li, `[data-store][value="${r.store}"]`); }
+      else if (e.target.matches("[data-ub]")) r.useBy = e.target.value;
+    });
+  }
+
+  function confirmReview(btn) {
+    if (!rv) return;
+    btn.disabled = true;
+    const today = localIso(), done = extras().filter((l) => l.state === "got");
+    const rows = rv.rows.map((r) => ({ name: r.name, amount: { value: r.amount, unit: r.unit }, freeze: r.freeze, store: r.store, useBy: r.useBy, wholeFreezer: r.store === "freezer" }));
+    const { ops, undoOps } = SL().reviewOps(rows, MP.Sync.localItems("pantry"), today);
+    const write = (list) => { list.forEach((o) => MP.Sync.queueOp(o)); MP.Sync.writeLocalItems("pantry", MP.Sync.applyOps(MP.Sync.localItems("pantry"), list)); MP.Sync.flushOps(); };
+    if (ops.length) write(ops);
     done.forEach((l) => MP.Sync.setLine({ id: l.id, state: "deleted" }));
+    rv = null;
+    closeSheet();
     render();
-    toast("Shop complete", "Undo", () => { done.forEach((l) => MP.Sync.setLine({ id: l.id, state: "got" })); render(); });
+    const n = ops.filter((o) => o.type === "add").length, m = ops.filter((o) => o.type === "storage" && o.storage === "freezer").length;
+    toast(`${n} entries added to the pantry, ${m} in the freezer`, "Undo", () => {
+      if (undoOps.length) write(undoOps);
+      done.forEach((l) => MP.Sync.setLine({ id: l.id, state: "got" }));
+      render(); renderPantry();
+    });
+    renderPantry();
   }
 
   function render() {
@@ -269,7 +384,7 @@
       MP.Sync.setLine({ id: SL().planLineId(plan, b.dataset.skip, b.dataset.key), state: skipped ? "needed" : "skipped", source: "plan" });
       render();
     });
-    document.getElementById("shop-dock").addEventListener("click", (e) => { if (e.target.closest("#finish-shop:not(:disabled)")) finishShop(); });
+    document.getElementById("shop-dock").addEventListener("click", (e) => { if (e.target.closest("#finish-shop:not(:disabled)")) openReviewSheet(); });
     new ResizeObserver(() => { if (!document.getElementById("shop-dock").hidden) applyDock(); }).observe(document.getElementById("shop-dock"));
     document.getElementById("adhoc-form").addEventListener("submit", (e) => {
       e.preventDefault();
@@ -303,9 +418,12 @@
   const proteinText = (v) => `£${v.per25g.toFixed(2)} / 25 g protein${v.estimated ? ' <span class="est" title="Price or protein is an estimate">est.</span>' : ""}`;
 
   function closeSheet() {
+    const wasReview = !!sheetEl().querySelector("#shop-review") && !document.getElementById("modal-overlay").classList.contains("hidden");
+    if (wasReview) rv = null;
     stopCamera();
     stopCamera = () => {};
     document.getElementById("modal-overlay").classList.add("hidden");
+    if (wasReview) { const f = document.getElementById("finish-shop"); if (f) f.focus(); }
   }
 
   let sheetDragOn = false;
@@ -516,21 +634,30 @@
       ${MP.ShelfLife.STORAGES.map((s) => `<option value="${s}"${s === cur ? " selected" : ""}>${s}</option>`).join("")}</select>`;
   }
 
+  function frozenChip(item, today) {
+    const w = item.storage === "freezer" ? MP.ShelfLife.frozenWeeks(item, today) : null;
+    return w == null ? "" : `<span class="frz-chip${w >= 8 ? " soon" : ""}">${w < 1 ? "just frozen" : `${w} wk${w >= 8 ? " · use soon" : ""}`}</span>`;
+  }
+
   function pantryHtml(items, products) {
     const today = localIso(), plan = loadPlan();
     expiring = MP.ShelfLife.expiringItems(items, plan, today, 2, shelfData);
-    const rows = items.map((item) => {
+    const rowOf = (item) => {
       const key = MP.ShoppingList.normalizeKey(item.name);
       const p = MP.Products.forIngredient(products, key);
       return `<li class="shop-line prod-row${item.out ? " used-up" : ""}">
         <input type="checkbox" class="pan-tick" data-tick="${esc(item.name)}"${item.out ? " checked" : ""} aria-label="Used up: ${esc(item.name)}">
         <input type="text" class="pan-qty" data-qty="${esc(item.name)}" value="${esc(MP.qtyText(item.qty))}" placeholder="qty" aria-label="Quantity of ${esc(item.name)}">
         <span class="shop-name">${esc(item.name)}</span>
+        ${frozenChip(item, today)}
         ${useByHtml(item, today, plan)}
         ${storageHtml(item)}
         <button class="prod-chip muted" data-rm="${esc(item.name)}" aria-label="Remove ${esc(item.name)}">✕</button>
         ${p ? chipHtml(p) : `<button class="prod-chip muted" data-link="${esc(key)}">Link product</button>`}</li>`;
-    });
+    };
+    const frozen = items.filter((i) => i.storage === "freezer" && !i.out).sort((a, b) => (a.frozenOn || "9999").localeCompare(b.frozenOn || "9999"));
+    const rest = items.filter((i) => !frozen.includes(i));
+    const list = (arr) => `<ul class="shop-list">${arr.map(rowOf).join("")}</ul>`;
     const best = MP.Products.rank(products, packData);
     const all = [...products].sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt));
     const strip = expiring.length ? `<div class="useup-strip" role="region" aria-label="Use these up">
@@ -543,7 +670,9 @@
       ${strip}
       <h3>In your pantry</h3>
       <form id="pan-add" class="top-actions"><input id="pan-add-name" placeholder="Add item" required aria-label="Item name"><input id="pan-add-qty" placeholder="qty (optional)" aria-label="Quantity"><button class="btn">Add</button></form>
-      ${rows.length ? `<ul class="shop-list">${rows.join("")}</ul>` : `<p class="empty">Nothing in your pantry.</p>`}
+      ${frozen.length ? `<h3 class="pan-group">In the freezer</h3>${list(frozen)}` : ""}
+      ${frozen.length && rest.length ? `<h3 class="pan-group">Fridge &amp; cupboard</h3>` : ""}
+      ${rest.length ? list(rest) : frozen.length ? "" : `<p class="empty">Nothing in your pantry.</p>`}
       <h3>All products</h3>
       ${best.length ? `<h3>Best protein value</h3><ol class="shop-list best-protein">${best.map((r) => `<li class="shop-line prod-row">${chipHtml(r.product)} <span class="prot-value">${proteinText(r)}</span></li>`).join("")}</ol>` : ""}
       ${all.length ? `<ul class="shop-list">${all.map((p) => `<li class="shop-line prod-row">${chipHtml(p)}</li>`).join("")}</ul>` : `<p class="empty">No products yet. Scan one to start.</p>`}

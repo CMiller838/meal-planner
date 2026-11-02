@@ -877,6 +877,34 @@
 
   // 30b. Phase 39 — "ran out" flag
   {
+    {
+      const { sumQty, reviewOps } = MP.ShoppingList, { frozenWeeks } = MP.ShelfLife;
+      check("sumQty: same unit sums, kg normalised", deepEqual(sumQty("500g", { value: 1, unit: "kg" }), { value: 1500, unit: "g", raw: "1500g" }));
+      check("sumQty: unit mismatch / unparseable -> null", sumQty("500g", "2l") === null && sumQty("lots", "2") === null);
+      const T = "2026-11-02";
+      const split = reviewOps([{ name: "Chicken", amount: { value: 1000, unit: "g" }, freeze: 400, store: "fridge", useBy: "2026-11-05" }], [], T);
+      const adds = split.ops.filter((o) => o.type === "add");
+      check("reviewOps: split -> plain + (frozen) item", adds.length === 2 && adds[0].name === "Chicken" && adds[0].qty.value === 600 && adds[1].name === "Chicken (frozen)" && adds[1].qty.value === 400);
+      const after = MP.Sync.applyOps([], split.ops);
+      check("reviewOps: frozen half is freezer + frozenOn today + 3 month use-by", deepEqual(after[1], { name: "Chicken (frozen)", qty: { value: 400, unit: "g", raw: "400g" }, storage: "freezer", useBy: "2027-02-02", frozenOn: T }) && after[0].storage === "fridge" && !after[0].frozenOn);
+      check("reviewOps: undo of fresh names removes them", deepEqual(MP.Sync.applyOps(after, split.undoOps), []));
+      const whole = reviewOps([{ name: "Peas", amount: { value: 2, unit: "each" }, freeze: 0, store: "freezer", useBy: "" }], [], T);
+      const wa = MP.Sync.applyOps([], whole.ops);
+      check("reviewOps: whole-freezer row keeps plain name, frozenOn set", wa.length === 1 && wa[0].name === "Peas" && wa[0].frozenOn === T && wa[0].storage === "freezer");
+      const have = [{ name: "chicken", qty: "500g", useBy: "2026-11-01", storage: "fridge" }, { name: "Rice", qty: "lots" }];
+      const sum = reviewOps([{ name: "Chicken", amount: { value: 500, unit: "g" }, freeze: 0, store: "fridge", useBy: "" }, { name: "Rice", amount: { value: 1000, unit: "g" }, freeze: 0, store: "cupboard", useBy: "" }, { name: "Zero", amount: { value: 0, unit: "g" }, freeze: 0, store: "fridge" }], have, T);
+      const sa = MP.Sync.applyOps(have, sum.ops);
+      check("reviewOps: existing same unit sums, mismatch replaces, zero row dropped", sa[0].qty.value === 1000 && sa[1].qty.value === 1000 && sa.length === 2);
+      const norm = (l) => JSON.stringify(l.map((i) => Object.fromEntries(Object.entries(i).sort())));
+      check("reviewOps: undo restores existing items exactly", norm(MP.Sync.applyOps(sa, sum.undoOps)) === norm(have));
+      check("frozenWeeks: 0/6/7/56 days and no date", frozenWeeks({ frozenOn: T }, T) === 0 && frozenWeeks({ frozenOn: "2026-10-27" }, T) === 0 && frozenWeeks({ frozenOn: "2026-10-26" }, T) === 1 && frozenWeeks({ frozenOn: "2026-09-07" }, T) === 8 && frozenWeeks({}, T) === null);
+      const fo = [{ name: "Peas", storage: "freezer" }];
+      const f1 = MP.Sync.applyOps(fo, [{ type: "frozenOn", name: "Peas", frozenOn: T }]);
+      check("applyOps frozenOn: set, bad date clears, qty-less add keeps, storage change drops",
+        f1[0].frozenOn === T && !MP.Sync.applyOps(f1, [{ type: "frozenOn", name: "Peas", frozenOn: "soon" }])[0].frozenOn
+        && MP.Sync.applyOps(f1, [{ type: "add", name: "Peas" }])[0].frozenOn === T
+        && !MP.Sync.applyOps(f1, [{ type: "storage", name: "Peas", storage: "fridge" }])[0].frozenOn);
+    }
     const { applyOps } = MP.Sync;
     const base = [{ name: "Rice", qty: "500g" }, { name: "Milk" }];
     const out = applyOps(base, [{ type: "out", name: "rice" }]);

@@ -214,6 +214,12 @@
     return d.toISOString().slice(0, 10);
   }
 
+  /** Phase 119: whole weeks since a freezer item's `frozenOn`; null when it has none. */
+  function frozenWeeks(item, todayIso) {
+    if (!item || !isIsoDate(item.frozenOn) || !isIsoDate(todayIso)) return null;
+    return Math.max(0, Math.floor((isoMs(todayIso) - isoMs(item.frozenOn)) / (7 * DAY)));
+  }
+
   /** Where an item lives: entered `storage` wins, else the category default
    * (fridgeDays -> fridge, frozenMonths only -> freezer, ambient -> cupboard);
    * uncategorised -> null (never guessed). A bad stored value counts as blank. */
@@ -286,5 +292,5 @@
     return out.sort((a, b) => a.daysLeft - b.daysLeft);
   }
 
-  MP.ShelfLife = { load, checkPlanWarnings, defrostNotes, shopDayFor, shopOffset, rawSafeOn, INGREDIENT_CATEGORY, isIsoDate, estimateUseBy, expiringItems, storageFor, addMonths, leftoverEatBy, leftoverView, STORAGES };
+  MP.ShelfLife = { load, checkPlanWarnings, defrostNotes, shopDayFor, shopOffset, rawSafeOn, INGREDIENT_CATEGORY, isIsoDate, estimateUseBy, expiringItems, storageFor, frozenWeeks, addMonths, leftoverEatBy, leftoverView, STORAGES };
 })(typeof globalThis !== "undefined" ? globalThis : this);

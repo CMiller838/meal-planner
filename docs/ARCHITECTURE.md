@@ -231,7 +231,7 @@ The authoritative route list is `export const ROUTES` in `worker/worker.js` (gen
   gained an optional trailing `have` argument (a pantry key index) — `plan.js`
   builds it synchronously from `MP.ShoppingList.pantryIndex({ items:
   MP.Sync.localItems("pantry") })` and passes it through. This is a second
-  pantry **reader**; `plan.js`'s `commitCook` remains the only pantry writer.
+  pantry **reader**; `plan.js`'s `commitCook` remains the main pantry writer (Phase 119's Finish shop review Confirm is the second, one batch with Undo).
   As of Phase 31, `pantryOverlap` is quantity-aware — "in sufficient
   quantity", not just "present" — so `pickVariant` now prefers a variant
   whose ingredients are fully stocked over one that's merely present but

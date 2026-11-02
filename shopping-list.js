@@ -474,6 +474,54 @@
     return { value, unit: have.unit, raw };
   }
 
+  const qtyRaw = (value, unit) => `${value % 1 === 0 ? value : value.toFixed(1).replace(/\.0$/, "")}${unit === "each" ? "" : unit}`;
+  const mkQty = (value, unit) => { value = Math.round(value * 1000) / 1000; return { value, unit, raw: qtyRaw(value, unit) }; };
+
+  /** Phase 119: have + add as a structured qty; null when either is unparseable or the units differ. */
+  function sumQty(have, add) {
+    const h = parseQty(have), a = parseQty(add);
+    return h && a && h.unit === a.unit ? mkQty(h.value + a.value, h.unit) : null;
+  }
+
+  /**
+   * Phase 119: the Finish shop review's batch. rows = [{ name, amount: {value,unit}|null, freeze, store, useBy, wholeFreezer }].
+   * A split row's freezer half is its own "<name> (frozen)" item. Returns { ops, undoOps } (all list "pantry"); undoOps
+   * restore each touched name to its prior state. Pure: the caller writes.
+   */
+  function reviewOps(rows, pantryItems, todayIso) {
+    const ops = [], undoOps = [], seen = new Set();
+    const find = (name) => (pantryItems || []).find((i) => normalizeKey(i.name) === normalizeKey(name));
+    const op = (o) => ({ list: "pantry", ...o });
+    const put = (name, value, unit, store, useBy, frozenOn) => {
+      const old = find(name), k = normalizeKey(name);
+      if (!seen.has(k)) {
+        seen.add(k);
+        if (!old) undoOps.push(op({ type: "remove", name }));
+        else {
+          const nm = old.name;
+          undoOps.push(op(old.qty ? { type: "add", name: nm, qty: old.qty } : { type: "add", name: nm }));
+          if (old.out) undoOps.push(op({ type: "out", name: nm }));
+          undoOps.push(op({ type: "storage", name: nm, storage: old.storage || null }), op({ type: "useBy", name: nm, useBy: old.useBy || null }), op({ type: "frozenOn", name: nm, frozenOn: old.frozenOn || null }));
+        }
+      }
+      const nm = old ? old.name : name;
+      const sum = old && old.qty ? sumQty(old.qty, { value, unit }) : null;
+      ops.push(op({ type: "add", name: nm, qty: sum || mkQty(value, unit) }), op({ type: "storage", name: nm, storage: store || null }), op({ type: "useBy", name: nm, useBy: useBy || null }));
+      ops.push(op({ type: "frozenOn", name: nm, frozenOn: store === "freezer" ? frozenOn : null }));
+    };
+    (rows || []).forEach((r) => {
+      const a = r.amount;
+      if (!a || !(a.value > 0)) return;
+      const whole = r.wholeFreezer || r.store === "freezer";
+      const frozenUse = r.store === "freezer" && r.useBy ? r.useBy : MP.ShelfLife.addMonths(todayIso, 3);
+      if (whole) return put(r.name, a.value, a.unit, "freezer", frozenUse, todayIso);
+      const fz = Math.min(a.value, Math.max(0, Number(r.freeze) || 0));
+      if (a.value - fz > 0) put(r.name, a.value - fz, a.unit, r.store, r.useBy, null);
+      if (fz > 0) put(`${r.name} (frozen)`, fz, a.unit, "freezer", MP.ShelfLife.addMonths(todayIso, 3), todayIso);
+    });
+    return { ops, undoOps };
+  }
+
   /**
    * The eat-flow decision table for one meal, pure and DOM/I-O free.
    * used: {[ingredientKey]: qtyString} — absent/empty means not consumed.
@@ -683,5 +731,5 @@
     return out.sort((a, b) => b.saving - a.saving);
   }
 
-  MP.ShoppingList = { cheaperSwaps, bulkOptions, useUpItems, scaleMeal, scaleShortfall, mealsUsing, load, loadGroups, groupIndex, buildLists, parseQty, packsFor, normalizeKey, aisleFor, groupByAisle, progress, lineId, planLineId, mergeLines, adhocView, adhocToLines, LINE_STATES, LINE_SOURCES, pantryIndex, pantryOverlap, hasEnough, isSkippedIngredient, cookable, quickPicks, remainingQty, eatPlan, priceFor, mealCost, costIndex, costTier, costBadgeHtml };
+  MP.ShoppingList = { cheaperSwaps, bulkOptions, useUpItems, scaleMeal, scaleShortfall, mealsUsing, load, loadGroups, groupIndex, buildLists, parseQty, packsFor, normalizeKey, aisleFor, groupByAisle, progress, lineId, planLineId, mergeLines, adhocView, adhocToLines, LINE_STATES, LINE_SOURCES, pantryIndex, pantryOverlap, hasEnough, isSkippedIngredient, cookable, quickPicks, remainingQty, sumQty, reviewOps, eatPlan, priceFor, mealCost, costIndex, costTier, costBadgeHtml };
 })(typeof globalThis !== "undefined" ? globalThis : this);

@@ -305,6 +305,6 @@ Goal: cook-c: previous/current/next step, timer ring, ingredients drawer, keep-a
 
 Goal: planchat-a's 5-step wizard with an added start-date step (feeds `opts.firstSlot`/start, Phase 83), then a transition into planchat-c's in-chat meal cards with swipe accept/reject and the pill ticker. Requires Phase 110.
 
-## Phase 119: Finish shop review and Freezer drawer [M] — not started
+## Phase 119: Finish shop review and Freezer drawer [M] — built 2026-11-02, live checks pending
 
 Goal: Finish shop opens one review sheet (prototype `stock-b.html`: two-column "this week | freezer" +/- steppers per ticked plan line, editable amount, Fridge/Freezer/Cupboard, use-by, "Rest after plan" chip, skipped lines left out) whose single Confirm writes the pantry in one batch with Undo; the Pantry tab gains an "In the freezer" group (weeks frozen, "use soon" from 8 weeks). Amounts come from the list (`bulk.freeze` prefills the split); the "Fill from order photo" button is a disabled stub for a later Hermes phase. Replaces Phase 116's wrap-up handler. This adds a second app-side pantry writer, so it updates the pantry invariants in CLAUDE.md. Requires Phase 116.

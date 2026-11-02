@@ -105,7 +105,7 @@ Installable as a PWA on Android Chrome via `manifest.json` + `sw.js`.
   meal to schedule — nutrition ranking via `pickMeal`/`rankByGap` decides which
   meal, same rule as cost above. The generator is a second pantry **reader**
   (`MP.ShoppingList.pantryIndex` fed from `MP.Sync.localItems("pantry")`);
-  `plan.js`'s `commitCook` remains the only pantry **writer**.
+  `plan.js`'s `commitCook` remains the main pantry **writer**. The Finish shop review's Confirm (Phase 119, `shopping.js` `confirmReview`, via `reviewOps`) is the second, one batch with Undo.
 - **Shelf-life logic in `shelf-life.js`/`shelf-life.json` is category-based**
   (no purchase-date tracking exists) — shop day = every 7 days from `plan.shopAnchor` (day 1 and day 8 when absent), cooked day = first day a dinner is scheduled. Don't add
   per-SKU or purchase-date tracking without the user asking.
@@ -201,7 +201,7 @@ Installable as a PWA on Android Chrome via `manifest.json` + `sw.js`.
   **A computed remainder (Phase 31) is always structured**: `MP.ShoppingList.remainingQty` is its only producer (the
   pantry is a running balance, never a re-rounded display string). `pantryOverlap` means "on hand **in sufficient
   quantity**": absent is not counted, unparseable/unit-mismatched/amount-unknown stock falls back to "present".
-  `commitCook` (`plan.js`) is the only app-side writer of `qty` (the Worker's `POST /food-log`, Phase 80a, also writes it: deduct on eat, add on have); the Pantry tab also writes `useBy` and `storage`, and only those. `MP.Cooks` is mirrored to KV `cooks` via `MP.Sync.pushCooks` (Phase 43, `PUT /cooks` is Hermes-only); the portion-eat path still never touches the pantry.
+  `commitCook` (`plan.js`) and the Finish shop review's Confirm (Phase 119, `shopping.js` `confirmReview`, via `reviewOps`; one batch with Undo) are the only app-side writers of `qty`, and `frozenOn` (freezer items only, an ISO date, set only by that review, not a purchase date) (the Worker's `POST /food-log`, Phase 80a, also writes it: deduct on eat, add on have); the Pantry tab also writes `useBy` and `storage`, and only those. `MP.Cooks` is mirrored to KV `cooks` via `MP.Sync.pushCooks` (Phase 43, `PUT /cooks` is Hermes-only); the portion-eat path still never touches the pantry.
 
 ## Working style: plan with the user, build and test alone
 
