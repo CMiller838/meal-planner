@@ -61,7 +61,7 @@ const METHOD_PATH = /^\/meal\/([^/]+)\/method$/;
 const DRAFT_PATH = /^\/drafts\/([^/]+)$/;
 const NOTE_PENDING_PATH = /^\/notes\/pending\/([^/]+)$/;
 const RATING_PATH = /^\/meal\/([^/]+)\/rating$/;
-const SLOT_TYPES = ["breakfast", "lunch", "dinner", "snack"];
+const SLOT_TYPES = ["dinner"]; // Phase 110
 const MEALDB_BASE = "https://www.themealdb.com/api/json/v1/1/";
 const DISCOVER_LIMIT = 8;
 
@@ -323,22 +323,22 @@ async function planInputs(env, { useUp = false, budget = null } = {}) {
     const items = ShoppingList.useUpItems((pantry && pantry.items) || [], mirror, Generator.isoToday(), SHELF_DATA);
     if (items.length) prefs.useUp = { items, window: PACK_DATA.planning.useUpWindow || 6 };
   }
-  const nDays = (hasMirror && mirror.days.length) || 14, firstSlot = hasMirror ? mirror.firstSlot : undefined; // Phase 83
-  return { library, mirror, hasMirror, startDate, prefs, pantry, ratingsRaw, settings, nDays, firstSlot };
+  const nDays = (hasMirror && mirror.days.length) || 14;
+  return { library, mirror, hasMirror, startDate, prefs, pantry, ratingsRaw, settings, nDays };
 }
 
 /** Generator.generatePlan over `pool`, with `ranOut` pantry keys treated as absent (generation only; the pantry is never written). */
-function runGenerator({ startDate, prefs, pantry, ratingsRaw, settings, nDays, firstSlot }, pool, locked, ranOut = []) {
+function runGenerator({ startDate, prefs, pantry, ratingsRaw, settings, nDays }, pool, locked, ranOut = []) {
   const budgetObj = { costIndex: ShoppingList.costIndex(pool, PACK_DATA), groups: ShoppingList.groupIndex(SUB_GROUPS), ...PACK_DATA.planning };
   const have = ShoppingList.pantryIndex(pantry || { items: [] });
   ranOut.forEach((k) => delete have[k]);
-  return Generator.generatePlan(pool, TAGS, Nutrition.withProfile(TARGETS, settings), SHELF_DATA, startDate, budgetObj, have, prefs, (ratingsRaw && ratingsRaw.meals) || {}, locked, { days: nDays, firstSlot });
+  return Generator.generatePlan(pool, TAGS, Nutrition.withProfile(TARGETS, settings), SHELF_DATA, startDate, budgetObj, have, prefs, (ratingsRaw && ratingsRaw.meals) || {}, locked, { days: nDays });
 }
 
 /** POST /plan/draft: Generator.generatePlan around the synced inputs, merged over the plan mirror. Stores nothing. */
 async function draftPlan(body, env) {
   if (typeof body !== "object" || body === null || Array.isArray(body)) return json(400, "expected an object");
-  const { days = null, keep = [], avoid = [], budget = null, useUp = false, startDate: newStart = null, firstSlot = null, shopDay = null } = body;
+  const { days = null, keep = [], avoid = [], budget = null, useUp = false, startDate: newStart = null, shopDay = null } = body;
   const length = Number.isInteger(days) ? days : null; // Phase 84: an integer `days` is the new plan's length (with startDate); an array is the days to redo
   if (days !== null && length === null && (!Array.isArray(days) || !days.every((d) => Number.isInteger(d) && d >= 1 && d <= 28))) return json(400, "days must be integers 1-28");
   if (!Array.isArray(keep) || !keep.every((k) => k && Number.isInteger(k.day) && k.day >= 1 && k.day <= 28 && SLOT_TYPES.includes(k.slot))) return json(400, "keep must be [{ day 1-28, slot }]");
@@ -347,12 +347,11 @@ async function draftPlan(body, env) {
   if (typeof useUp !== "boolean") return json(400, "useUp must be a boolean");
   if (length !== null && !(length >= 1 && length <= 28)) return json(400, "days must be 1-28");
   if (newStart !== null && !(typeof newStart === "string" && /^\d{4}-\d{2}-\d{2}$/.test(newStart) && !isNaN(Date.parse(newStart)) && newStart >= Generator.isoToday())) return json(400, "startDate must be an ISO date, today or later");
-  if (firstSlot !== null && !SLOT_TYPES.includes(firstSlot)) return json(400, "firstSlot must be breakfast, lunch, dinner or snack");
   if (shopDay !== null && !(Number.isInteger(shopDay) && shopDay >= 0 && shopDay <= 6)) return json(400, "shopDay must be 0-6 (0 = Sunday)");
-  if ((firstSlot !== null || shopDay !== null || length !== null) && newStart === null) return json(400, "firstSlot, shopDay and a numeric days need startDate");
+  if ((shopDay !== null || length !== null) && newStart === null) return json(400, "shopDay and a numeric days need startDate");
 
   const inp = await planInputs(env, { useUp, budget });
-  if (newStart !== null) return freshStart(inp, { date: newStart, firstSlot, days: length, shopDay }, avoid);
+  if (newStart !== null) return freshStart(inp, { date: newStart, days: length, shopDay }, avoid);
   const { library, mirror, hasMirror, startDate, prefs, nDays } = inp;
   if (!library.length) return json(409, "library must be synced first");
   const want = new Set((Array.isArray(days) ? days : null) || Array.from({ length: nDays }, (_, i) => i + 1));
@@ -398,15 +397,15 @@ async function draftPlan(body, env) {
 /** Phase 84: a whole new plan from `s.date` (Phase 83 options), generated like Plan with me. The draft carries `start` so the app replaces the plan instead of merging. */
 function freshStart(inp, s, avoid = []) {
   if (!inp.library.length) return json(409, "library must be synced first");
-  const startDate = s.date, nDays = s.days || 14, firstSlot = s.firstSlot || undefined;
+  const startDate = s.date, nDays = s.days || 14;
   const shopAnchor = s.shopDay != null ? globalThis.MP.shopAnchorFor(startDate, s.shopDay) : startDate;
   const prefs = { ...inp.prefs, shopOffset: ShelfLife.shopOffset({ startDate, shopAnchor }) };
   const pool = inp.library.filter((m) => !avoid.includes(m.id));
-  const gen = runGenerator({ ...inp, startDate, prefs, nDays, firstSlot }, pool, {});
+  const gen = runGenerator({ ...inp, startDate, prefs, nDays }, pool, {});
   const changes = [];
   gen.days.forEach((d) => SLOT_TYPES.forEach((slot) => { const after = d.slots[slot]; if (after && (after.mealId || after.eatingOut)) changes.push({ day: d.day, slot, before: null, after: slotRef(after) }); }));
-  const draft = { id: draftId([startDate, nDays, firstSlot, shopAnchor, changes]), startDate, changes, summary: `new ${nDays}-day plan from ${startDate}`, start: { days: nDays, ...(firstSlot ? { firstSlot } : {}), shopAnchor } };
-  return json(200, { draft, plan: { startDate, firstSlot, shopAnchor, days: gen.days } });
+  const draft = { id: draftId([startDate, nDays, shopAnchor, changes]), startDate, changes, summary: `new ${nDays}-day plan from ${startDate}`, start: { days: nDays, shopAnchor } };
+  return json(200, { draft, plan: { startDate, shopAnchor, days: gen.days } });
 }
 
 /** POST /plan/apply: park a draft in KV planDraft for the app to adopt; never touches the plan mirror. */
@@ -425,12 +424,11 @@ async function applyDraft(body, env, who) {
   return json(200, await parkDraft(env, who, d));
 }
 
-/** Phase 84: a draft's `start` options, or null unless days is 1-28, firstSlot a slot (if set) and shopAnchor an ISO date. */
+/** Phase 84: a draft's `start` options, or null unless days is 1-28 and shopAnchor an ISO date. */
 function cleanStart(st) {
   if (!st || typeof st !== "object" || !Number.isInteger(st.days) || st.days < 1 || st.days > 28) return null;
   if (typeof st.shopAnchor !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(st.shopAnchor) || isNaN(Date.parse(st.shopAnchor))) return null;
-  if (st.firstSlot !== undefined && !SLOT_TYPES.includes(st.firstSlot)) return null;
-  return { days: st.days, ...(st.firstSlot ? { firstSlot: st.firstSlot } : {}), shopAnchor: st.shopAnchor };
+  return { days: st.days, shopAnchor: st.shopAnchor };
 }
 
 /** Park a draft in KV planDraft (once per id) and log it. `reflow` marks a Phase 63 re-flow draft. */
@@ -482,7 +480,7 @@ async function editRoute(body, env, who) {
   if (!inp.library.length) return json(409, "library must be synced first");
   const start = edits.filter((e) => e.type === "start").pop();
   if (start) {
-    const res = await freshStart(inp, { date: start.date, firstSlot: start.firstSlot, days: start.days, shopDay: start.shopDay });
+    const res = await freshStart(inp, { date: start.date, days: start.days, shopDay: start.shopDay });
     const out = await res.json();
     if (!res.ok) return json(res.status, out.error || out);
     await parkDraft(env, who, out.draft, true);
@@ -524,7 +522,7 @@ async function ranking(params, env) {
   }
 
   const slot = params.get("slot") || "dinner";
-  if (!SLOT_TYPES.includes(slot)) return json(400, "slot must be breakfast, lunch, dinner or snack");
+  if (!SLOT_TYPES.includes(slot)) return json(400, "slot must be dinner");
 
   const nRaw = params.get("n");
   const n = nRaw === null ? 3 : Number(nRaw);
@@ -989,7 +987,7 @@ async function why(params, env) {
   const day = Number(params.get("day"));
   if (!Number.isInteger(day) || day < 1 || day > 28) return json(400, "day must be 1-28");
   const slot = params.get("slot") || "dinner";
-  if (!SLOT_TYPES.includes(slot)) return json(400, "slot must be breakfast, lunch, dinner or snack");
+  if (!SLOT_TYPES.includes(slot)) return json(400, "slot must be dinner");
   const c = await slotContext(day, slot, env);
   if (c.err) return c.err;
   const mealId = params.get("meal") || "";

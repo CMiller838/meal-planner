@@ -6,8 +6,6 @@
   "use strict";
   const MP = (root.MP = root.MP || {});
 
-  const OTHER_SLOTS = ["breakfast", "lunch"];
-
   function isoToday() {
     const d = new Date();
     const mm = String(d.getMonth() + 1).padStart(2, "0");
@@ -295,7 +293,6 @@
   function generatePlan(library, tags, targets, shelfData, startDate, budget, have, prefs, ratings, locked, opts) {
     startDate = startDate || isoToday();
     const n = Math.min(28, Math.max(1, Math.floor(Number(opts && opts.days)) || 14));
-    const skipDay1 = ({ breakfast: [], lunch: ["breakfast"], dinner: ["breakfast", "lunch"], snack: ["breakfast", "lunch", "dinner"] })[opts && opts.firstSlot] || [];
     have = have || {};
     prefs = prefs || {};
     const mealsById = Object.fromEntries(library.map((m) => [m.id, m]));
@@ -338,7 +335,7 @@
     // Phase 66: locked/eaten slots go in untouched; they still count toward cost, halfKeys and recency.
     const isLocked = (day, slotType) => !!(locked && locked[day] && locked[day][slotType] && locked[day][slotType].mealId);
     for (let day = 1; day <= n; day++) {
-      for (const slotType of ["dinner"].concat(OTHER_SLOTS)) {
+      for (const slotType of ["dinner"]) {
         if (!isLocked(day, slotType)) continue;
         const slot = { ...locked[day][slotType] };
         days[day - 1].slots[slotType] = slot;
@@ -436,7 +433,6 @@
 
     for (let day = 1; day <= n; day++) {
       if (filled.has(day)) continue;
-      if (day === 1 && skipDay1.includes("dinner")) continue;
       const excludeIds = new Set();
       const prevId = prevMealId(day, "dinner");
       if (prevId) excludeIds.add(prevId);
@@ -446,25 +442,7 @@
       place(day, "dinner", meal);
     }
 
-    for (let day = 1; day <= n; day++) {
-      for (const slotType of OTHER_SLOTS) {
-        if (isLocked(day, slotType)) continue;
-        if (day === 1 && skipDay1.includes(slotType)) continue;
-        const pool = library.filter((m) => (m.mealTypes || []).includes(slotType));
-        const excludeIds = new Set();
-        const prevId = prevMealId(day, slotType);
-        if (prevId) excludeIds.add(prevId);
-        const nextId = nextMealId(day, slotType);
-        if (nextId) excludeIds.add(nextId);
-        const dayMealsSoFar = Object.values(days[day - 1].slots)
-          .map((s) => (s && s.mealId ? mealsById[s.mealId] : null))
-          .filter(Boolean);
-        const meal = pickMeal(pool, day, dayMealsSoFar, { excludeIds });
-        place(day, slotType, meal);
-      }
-    }
-
-    return { startDate, ...(skipDay1.length ? { firstSlot: opts.firstSlot } : {}), days, generatedAt: new Date().toISOString() };
+    return { startDate, days, generatedAt: new Date().toISOString() };
   }
 
   MP.Generator = { generatePlan, rankSlot, weekendRuns, batchRuns, weekdayOf, isoToday, pickVariant, chipHits, activeChips, effortOf };

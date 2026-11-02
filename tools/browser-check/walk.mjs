@@ -362,7 +362,7 @@ for (const [vp, size] of Object.entries({ pc: { width: 1440, height: 900 }, phon
   await step('plan: drag a card onto another swaps, a day grip swaps days, Alt+Arrow swaps, a tap still opens the day (Phase 103)', async () => {
     await page.goto(`${base}/plan.html`);
     await page.waitForSelector('#plan-root .slot-card');
-    const names = () => page.evaluate(() => [...document.querySelectorAll('#plan-root .day-row[data-day="1"] .slot-meal')].map((e) => e.textContent));
+    const names = () => page.evaluate(() => [...document.querySelectorAll('#plan-root .slot-card[data-slot="dinner"][data-day="1"] .slot-meal, #plan-root .slot-card[data-slot="dinner"][data-day="2"] .slot-meal')].map((e) => e.textContent));
     const drag = async (from, to) => {
       await page.locator(from).first().scrollIntoViewIfNeeded();
       await page.evaluate(([f]) => { const a = document.querySelector(f).getBoundingClientRect(); scrollBy(0, a.top - 0.3 * innerHeight); }, [from]); // sticky meter and docked bars (tab bar, ate-bar) can cover a row at the viewport edge
@@ -374,25 +374,25 @@ for (const [vp, size] of Object.entries({ pc: { width: 1440, height: 900 }, phon
       await page.mouse.up();
     };
     const n0 = await names();
-    await drag('#plan-root .slot-card[data-day="1"][data-slot="breakfast"]', '#plan-root .slot-card[data-day="1"][data-slot="lunch"]');
+    await drag('#plan-root .slot-card[data-day="1"][data-slot="dinner"]', '#plan-root .slot-card[data-day="2"][data-slot="dinner"]');
     const n1 = await names();
     if (n0[0] !== n1[1] || n0[1] !== n1[0] || n0[0] === n0[1]) {
       const t = await page.textContent('.toast');
       if (!/Can.t do that/.test(t)) throw new Error('drag neither swapped nor refused: ' + n0 + ' -> ' + n1 + ' ' + t);
     }
     if (await page.locator('#day-view:visible, .day-sheet:visible').count()) throw new Error('a drop opened the day view');
-    await page.evaluate(() => { document.querySelector('#plan-root .slot-card[data-day="3"][data-slot="lunch"]').focus(); });
-    const n2 = await page.evaluate(() => document.querySelector('#plan-root .slot-card[data-day="4"][data-slot="lunch"] .slot-meal').textContent);
+    await page.evaluate(() => { document.querySelector('#plan-root .slot-card[data-day="3"][data-slot="dinner"]').focus(); });
+    const n2 = await page.evaluate(() => document.querySelector('#plan-root .slot-card[data-day="4"][data-slot="dinner"] .slot-meal').textContent);
     await page.keyboard.press('Alt+ArrowDown');
     const f = await page.evaluate(() => document.activeElement.dataset.day + document.activeElement.dataset.slot);
-    if (f !== '4lunch') throw new Error('focus not kept on the moved slot: ' + f);
-    await page.evaluate(() => document.querySelector('#plan-root .slot-card[data-day="1"][data-slot="lunch"]'));
+    if (f !== '4dinner') throw new Error('focus not kept on the moved slot: ' + f);
+    await page.evaluate(() => document.querySelector('#plan-root .slot-card[data-day="1"][data-slot="dinner"]'));
     const d1 = await page.textContent('#plan-root .day-row[data-day="1"] .slot-card[data-slot="dinner"] .slot-meal');
     const d2 = await page.textContent('#plan-root .day-row[data-day="2"] .slot-card[data-slot="dinner"] .slot-meal');
     await drag('#plan-root .day-row[data-day="1"] .day-grip', '#plan-root .day-row[data-day="2"] h3');
     const e1 = await page.textContent('#plan-root .day-row[data-day="1"] .slot-card[data-slot="dinner"] .slot-meal');
     if (d1 !== d2 && e1 === d1) { const t = await page.textContent('.toast'); if (!/Can.t do that|Swapped days/.test(t)) throw new Error('day drag neither swapped nor refused: ' + t); }
-    await page.click('#plan-root .slot-card[data-day="5"][data-slot="lunch"]');
+    await page.click('#plan-root .slot-card[data-day="5"][data-slot="dinner"]');
     await page.waitForSelector('.day-swap-btn');
     await shot('plan-drag');
   });
@@ -418,29 +418,49 @@ for (const [vp, size] of Object.entries({ pc: { width: 1440, height: 900 }, phon
     const saved = await page.evaluate(() => localStorage.getItem('mp_plan'));
     if (saved === before) throw new Error('Take did not change mp_plan');
   });
-  await step('guided: slots=lunch adds a 3-card Lunch pass after dinners; closing leaves mp_plan untouched', async () => {
+  await step('guided: one Dinner pass only (slots= ignored); closing leaves mp_plan untouched', async () => {
     await page.goto(`${base}/plan.html`);
     await page.waitForSelector('#plan-root .slot-card'); // init saves mp_plan after its awaits; clearing earlier races it
     await page.evaluate(() => localStorage.removeItem('mp_plan'));
-    await page.goto(`${base}/plan.html?guided=1&slots=lunch,junk`);
+    await page.goto(`${base}/plan.html?guided=1&slots=lunch,junk&first=lunch`);
     await page.waitForSelector('#swap-sheet h2');
     let h = await page.textContent('#swap-sheet h2');
     if (!/Dinner/.test(h)) throw new Error('first pass should be Dinner: ' + h);
-    for (let i = 0; i < 30 && /Dinner/.test(h); i++) {   // pick the top dinner card (right) each day
-      await page.evaluate(() => {   // synthetic drag (a toast can sit over the card)
-        const c = document.querySelector('#swap-deck .swipe-card');
-        const ev = (t, x, el) => el.dispatchEvent(new MouseEvent(t, { clientX: x, clientY: 100, bubbles: true }));
-        ev('mousedown', 100, c); ev('mousemove', 400, window); ev('mouseup', 400, window);
-      });
-      await page.waitForTimeout(450);
-      h = (await page.textContent('#swap-sheet h2').catch(() => '')) || '';
-    }
-    if (!/Lunch/.test(h)) throw new Error('expected a Lunch pass, got: ' + h);
-    if (await page.locator('#swap-deck .swipe-card').count() > 3) throw new Error('lunch deck over 3 cards');
-    await shot('guided-lunch');
     await page.click('#swap-sheet .close-btn');
     await page.waitForSelector('#guided-review-banner:not(.hidden)');
     if (await page.evaluate(() => localStorage.getItem('mp_plan'))) throw new Error('mp_plan saved before Looks good');
+  });
+  await step('phase 110: old-shape plan loads dinners only; one card per day; no first-slot / also-row / library-filters; Not planned label', async () => {
+    await page.goto(`${base}/plan.html`);
+    await page.waitForSelector('#plan-root .slot-card');
+    const ids = await page.evaluate(() => { const p = JSON.parse(localStorage.getItem('mp_plan')); return p.days.map((d) => d.slots.dinner && d.slots.dinner.mealId); });
+    await page.evaluate(() => {
+      const p = JSON.parse(localStorage.getItem('mp_plan'));
+      p.firstSlot = 'lunch';
+      p.days.forEach((d) => { d.slots.breakfast = { ...d.slots.dinner }; d.slots.lunch = { ...d.slots.dinner }; });
+      localStorage.setItem('mp_plan', JSON.stringify(p));
+    });
+    await page.reload();
+    await page.waitForSelector('#plan-root .slot-card');
+    const bad = await page.locator('#plan-root .slot-card:not([data-slot="dinner"])').count();
+    if (bad) throw new Error('non-dinner cards rendered: ' + bad);
+    const perDay = await page.evaluate(() => [...document.querySelectorAll('#plan-root .day-row')].every((r) => r.querySelectorAll('.slot-card').length === 1));
+    if (!perDay) throw new Error('a day has != 1 slot card');
+    const ids2 = await page.evaluate(() => JSON.parse(localStorage.getItem('mp_plan')).days.map((d) => d.slots.dinner && d.slots.dinner.mealId));
+    if (JSON.stringify(ids) !== JSON.stringify(ids2)) throw new Error('dinner ids changed');
+    await page.goto(`${base}/plan-with-me.html`);
+    await page.waitForSelector('#pwm-generate-btn');
+    if (await page.locator('#also-row, #first-slot').count()) throw new Error('also-row / first-slot still present');
+    await page.goto(`${base}/index.html`);
+    await page.waitForSelector('#library-grid .card');
+    if (await page.locator('#library-filters').count()) throw new Error('library-filters still present');
+    await page.evaluate(() => {
+      const lib = JSON.parse(localStorage.getItem('mp_library') || 'null');
+      if (lib) { lib[0].mealTypes = []; localStorage.setItem('mp_library', JSON.stringify(lib)); }
+    });
+    await page.reload();
+    await page.waitForSelector('#library-grid .card');
+    if (!await page.locator('#library-grid .tag.not-planned').count()) throw new Error('no Not planned label');
   });
   // Phase 72: planning chat, /chat mocked by page.route (no Worker, no credential)
   const chatMock = { msgs: [], seq: 0, session: null, reply: null, bridgeAgeMs: 0 };
@@ -701,7 +721,7 @@ for (const [vp, size] of Object.entries({ pc: { width: 1440, height: 900 }, phon
     await page.click('#swap-sheet .close-btn');
     await page.click('#chat-cooknow');
     await W('#swap-sheet .cooknow-place');
-    await page.click('#swap-sheet .cooknow-place');
+    await page.locator('#swap-sheet .cooknow-place').last().click(); // dinner day 1 already holds the first ready meal from the deck step
     await W('#chat-diff .diff-row');
     await page.click('#chat-exit');
   });

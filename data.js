@@ -75,10 +75,22 @@
   let methodsFilled = false;
 
   /** Liked library = seed meals + any user-added discover meals, persisted in localStorage. */
+  /** Phase 110: mealTypes keeps only "dinner" ([] = not a dinner). Mutates; true when anything changed. */
+  function dinnerTypes(lib) {
+    let changed = false;
+    for (const m of lib) {
+      const t = (m.mealTypes || []).filter((x) => x === "dinner");
+      if (!Array.isArray(m.mealTypes) || t.length !== m.mealTypes.length) { m.mealTypes = t; changed = true; }
+    }
+    return changed;
+  }
+
   async function getLibrary() {
     const stored = localStorage.getItem(LS_LIBRARY);
     if (stored) {
       const lib = JSON.parse(stored);
+      // Unstamped, like fillMethods: a stamp would make this look like a newer edit.
+      if (dinnerTypes(lib)) localStorage.setItem(LS_LIBRARY, JSON.stringify(lib));
       if (!methodsFilled) {
         methodsFilled = true;
         try {
@@ -89,6 +101,7 @@
       return lib;
     }
     const seed = await loadSeedMeals();
+    dinnerTypes(seed);
     // Bypass saveLibrary(): stamping the seed would make a fresh browser's
     // 14 defaults look newer than a real Hermes library and push over it.
     localStorage.setItem(LS_LIBRARY, JSON.stringify(seed));
@@ -351,12 +364,19 @@
     return out;
   }
 
+  /** Phase 110, pure: each day's slots reduced to { dinner } (absent stays absent), firstSlot dropped. Bad input comes back as is. */
+  function dinnersOnly(plan) {
+    if (!plan || !Array.isArray(plan.days)) return plan;
+    const { firstSlot, ...rest } = plan;
+    return { ...rest, days: plan.days.map((d) => ({ ...d, slots: d && d.slots && d.slots.dinner ? { dinner: d.slots.dinner } : {} })) };
+  }
+
   /** Phase 63: why a re-flow body is bad, or null. */
   function reflowInputError(b) {
     if (typeof b !== "object" || b === null || Array.isArray(b)) return "expected an object";
     for (const k of ["skipped", "eatingOut"]) {
       const v = b[k];
-      if (v !== undefined && !(Array.isArray(v) && v.every((s) => s && Number.isInteger(s.day) && s.day >= 1 && s.day <= 28 && ["breakfast", "lunch", "dinner", "snack"].includes(s.slot)))) return `${k} must be [{ day 1-28, slot }]`;
+      if (v !== undefined && !(Array.isArray(v) && v.every((s) => s && Number.isInteger(s.day) && s.day >= 1 && s.day <= 28 && s.slot === "dinner"))) return `${k} must be [{ day 1-28, slot }]`;
     }
     for (const s of b.eatingOut || []) {
       if (s.name !== undefined && !(typeof s.name === "string" && s.name.length <= 60)) return "eatingOut name must be a string of at most 60 chars";
@@ -376,7 +396,7 @@
 
   /** Slot as the change log sees it: eating-out keeps its name/text, a meal its variant. */
   const slotRef = (s) => (s && s.eatingOut ? { eatingOut: true, ...(s.name ? { name: s.name } : {}), ...(s.text ? { text: s.text } : {}) } : s && s.mealId ? { mealId: s.mealId, ...(s.variantId ? { variantId: s.variantId } : {}), ...(s.subs && s.subs.length ? { subs: s.subs } : {}) } : null);
-  const SLOT_ORDER = ["breakfast", "lunch", "dinner", "snack"];
+  const SLOT_ORDER = ["dinner"];
   /** Phase 81: eating-out slot from an input entry; a bare re-mark keeps the name/text already there. */
   function outSlot(e, prev) {
     const name = typeof e.name === "string" ? e.name.trim().slice(0, 60) : "", text = typeof e.text === "string" ? e.text.trim().slice(0, 200) : "";
@@ -398,14 +418,6 @@
   function estMins(meal) {
     const n = ((meal && meal.method) || []).reduce((a, st) => a + (st && Number.isFinite(st.minutes) ? st.minutes : 0), 0);
     return n > 0 ? n : null;
-  }
-
-  /** Phase 99, pure: how much work a lunch is. reheat = a leftover child; assemble = 15 min or under (no mins known: prepEffort quick); else cook. */
-  function lunchEffort(meal) {
-    if (meal.leftoverOf) return "reheat";
-    if (meal.servings >= 2) return "cook";
-    const mins = meal.totalMins || estMins(meal);
-    return (mins ? mins <= 15 : (meal.prepEffort || "quick") === "quick") ? "assemble" : "cook";
   }
 
   /** Phase 105: planned-batch portions still spare on the dinner at `day`: servings - 1 (the cook) - chain leftover days - frozenFrom slots on it. */
@@ -443,7 +455,7 @@
       if (!m) { no("unknown meal"); continue; }
       const s = dd.slots[p.slot];
       if (s && ((s.mealId && (s.locked || s.eatenAt)) || s.frozenFrom)) { no("eaten, locked or frozen"); continue; }
-      if (!(m.mealTypes || []).includes(p.slot)) { no(`not a ${p.slot} meal`); continue; }
+      if (!(m.mealTypes || []).includes("dinner")) { no("not a dinner meal"); continue; }
       const mx = MP.Exclusions;
       const chk = mx ? mx.check(m, c.terms || []) : { ok: true, reasons: [] };
       if (!chk.ok) { no(chk.reasons.join(", ")); continue; }
@@ -453,7 +465,6 @@
       if (p.portions !== undefined && !p.leftover) { no("portions need leftover"); continue; }
       let cookRec = null;
       if (p.cookId) {
-        if (!["dinner", "lunch"].includes(p.slot)) { no("a cook can only fill lunch or dinner"); continue; }
         cookRec = (c.cooks || []).find((r) => r && r.id === p.cookId);
         if (!cookRec || !(cookRec.portionsLeft > 0)) { no("no such cook, or none left"); continue; }
         if (cookRec.mealId !== m.id) { no("that cook is a different meal"); continue; }
@@ -632,7 +643,7 @@
     const london = (d) => new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/London" }).format(d);
     let ticked = null;
     try {
-      const plan = JSON.parse(localStorage.getItem("mp_plan"));
+      const plan = dinnersOnly(JSON.parse(localStorage.getItem("mp_plan")));
       ticked = tickPlanEaten(plan, meal.id, london(new Date()), whenIso);
       if (ticked && london(new Date(whenIso)) !== london(new Date())) ticked = null;
       if (ticked) {
@@ -649,7 +660,7 @@
    *  `{ eatingOut: true }` and stay that way on later re-flows.
    *  Returns { plan, changes: [{ day, slot, before, after }], ignored: [{ day, slot, reason }] }. */
   function reflowPlan(plan, input, mealsById, fromDay, generate) {
-    const SLOTS = ["breakfast", "lunch", "dinner", "snack"];
+    const SLOTS = ["dinner"];
     const id = (d, t) => d + ":" + t;
     const slotAt = (d, t) => plan.days[d - 1] && plan.days[d - 1].slots[t];
     const held = (d, t) => { const s = slotAt(d, t); return d < fromDay || !!(s && s.mealId && (s.locked || s.eatenAt)); };
@@ -752,9 +763,9 @@
     if (!plan || !plan.startDate || !Array.isArray(plan.days)) return null;
     const shift = Math.round((Date.parse(todayIso) - Date.parse(plan.startDate)) / 86400000);
     if (!(shift > 0)) return null;
-    const stamp = { shopAnchor: plan.shopAnchor || plan.startDate, rolledFrom: plan.startDate, rolledAt: new Date().toISOString(), firstSlot: undefined }; // Phase 83: a rolled day 1 is a whole day
+    const stamp = { shopAnchor: plan.shopAnchor || plan.startDate, rolledFrom: plan.startDate, rolledAt: new Date().toISOString() };
     if (shift >= plan.days.length) return { plan: { ...generate({}, todayIso), ...stamp }, shift };
-    const SLOTS = ["breakfast", "lunch", "dinner", "snack"];
+    const SLOTS = ["dinner"];
     const kept = plan.days.slice(shift).map((d, i) => ({
       ...d, day: i + 1,
       slots: Object.fromEntries(Object.entries(d.slots).map(([t, sl]) => [t, sl && Number.isInteger(sl.frozenFrom) ? { ...sl, frozenFrom: Math.min(sl.frozenFrom - shift, sl.frozenFrom - shift < 1 ? -1 : Infinity) } : sl])),
@@ -915,13 +926,13 @@
   MP.isBatch = isBatch;
   MP.chainDays = chainDays;
   MP.reflowPlan = reflowPlan;
+  MP.dinnersOnly = dinnersOnly;
   MP.pushSlot = pushSlot;
   MP.moveSlot = moveSlot;
   MP.swapSlots = swapSlots;
   MP.placeSlots = placeSlots;
   MP.spareOf = spareOf;
   MP.estMins = estMins;
-  MP.lunchEffort = lunchEffort;
   MP.orphanLeftovers = orphanLeftovers;
   MP.orphanDays = orphanDays;
   MP.swapDays = swapDays;

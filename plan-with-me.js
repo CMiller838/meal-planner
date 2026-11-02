@@ -225,18 +225,11 @@ window.MP = window.MP || {};
 
     renderSummary();
 
-    document.getElementById("also-row").addEventListener("click", (e) => {
-      const btn = e.target.closest("button[data-slot]");
-      if (!btn) return;
-      btn.setAttribute("aria-pressed", String(btn.classList.toggle("active")));
-    });
-
     document.getElementById("pwm-generate-btn").addEventListener("click", () => {
       MP.PlanPrefs.save([...busyDays].filter((d) => d <= planDays()), [...chips], profileBudget() ? MP.PlanPrefs.get(true).budgetTarget : budgetTarget, document.getElementById("freeze-batches").checked, document.getElementById("repeat-gap").value, document.getElementById("rolling-plan").checked, MP.PlanPrefs.get(true).timeCaps);
       if (MP.Sync) MP.Sync.pushPlanPrefs();
-      const extras = [...document.querySelectorAll("#also-row button.active")].map((b) => b.dataset.slot);
       const start = document.getElementById("start-date").value;
-      location.href = "plan.html?guided=1" + (start ? "&start=" + start : "") + "&days=" + planDays() + "&first=" + document.getElementById("first-slot").value + "&shop=" + document.getElementById("shop-day").value + (extras.length ? "&slots=" + extras.join(",") : "");
+      location.href = "plan.html?guided=1" + (start ? "&start=" + start : "") + "&days=" + planDays() + "&shop=" + document.getElementById("shop-day").value;
     });
   }
 

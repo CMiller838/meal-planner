@@ -9,7 +9,7 @@
 
   function loadPlan() {
     const stored = localStorage.getItem(LS_PLAN);
-    return stored ? JSON.parse(stored) : null;
+    return stored ? MP.dinnersOnly(JSON.parse(stored)) : null;
   }
 
   // Phase 55: old per-plan ticks become pending "got" lines once, then the key goes.

@@ -13,7 +13,7 @@ window.MP = window.MP || {};
   const LS_PLACEMENTS_ACKED = "mp_hermes_placements_acked";
   const LS_EATEN_LOG = "mp_eatenLog";
   const LS_EAT_ACKED = "mp_eat_requests_acked";
-  const SLOT_TYPES = ["breakfast", "lunch", "dinner", "snack"];
+  const SLOT_TYPES = ["dinner"];
 
   function finite(n) {
     return Number.isFinite(n) ? n : null;
@@ -336,7 +336,7 @@ window.MP = window.MP || {};
       }
       return { day: d.day, slots };
     });
-    return { startDate: plan.startDate || null, ...(plan.shopAnchor ? { shopAnchor: plan.shopAnchor } : {}), ...(plan.firstSlot ? { firstSlot: plan.firstSlot } : {}), ...(Array.isArray(plan.bulk) && plan.bulk.length ? { bulk: plan.bulk.map((b) => ({ key: b.key, shopDay: b.shopDay })) } : {}), days };
+    return { startDate: plan.startDate || null, ...(plan.shopAnchor ? { shopAnchor: plan.shopAnchor } : {}), ...(Array.isArray(plan.bulk) && plan.bulk.length ? { bulk: plan.bulk.map((b) => ({ key: b.key, shopDay: b.shopDay })) } : {}), days };
   }
 
   /** Best-effort, failure-silent — the plan mirror is derived data. */
@@ -548,7 +548,7 @@ window.MP = window.MP || {};
     try {
       const m = await req("GET", "/plan");
       if (!m || !Array.isArray(m.days) || !m.days.length || !m.startDate) return null;
-      return { startDate: m.startDate, ...(m.shopAnchor ? { shopAnchor: m.shopAnchor } : {}), ...(m.firstSlot ? { firstSlot: m.firstSlot } : {}), ...(Array.isArray(m.bulk) && m.bulk.length ? { bulk: m.bulk } : {}), days: m.days.map((d) => ({ day: d.day, slots: d.slots || {} })), generatedAt: new Date().toISOString(), restoredFromHermes: true };
+      return { startDate: m.startDate, ...(m.shopAnchor ? { shopAnchor: m.shopAnchor } : {}), ...(Array.isArray(m.bulk) && m.bulk.length ? { bulk: m.bulk } : {}), days: m.days.map((d) => ({ day: d.day, slots: d.slots || {} })), generatedAt: new Date().toISOString(), restoredFromHermes: true };
     } catch { return null; }
   }
 
@@ -629,7 +629,7 @@ window.MP = window.MP || {};
       const remote = await req("GET", "/placements");
       const pending = newPlacements(remote, localStorage.getItem(LS_PLACEMENTS_ACKED));
       if (!pending.length) return "noop";
-      const plan = JSON.parse(localStorage.getItem("mp_plan") || "null");
+      const plan = MP.dinnersOnly(JSON.parse(localStorage.getItem("mp_plan") || "null"));
       const library = JSON.parse(localStorage.getItem("mp_library") || "[]");
       if (!plan) return "noop";
       const { plan: newPlan, applied, rejected } = MP.Plan.applyPlacements(plan, pending, library);

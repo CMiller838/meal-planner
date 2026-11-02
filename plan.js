@@ -4,7 +4,7 @@
 
   const { esc, labelize } = MP;
   const LS_PLAN = "mp_plan";
-  const SLOT_TYPES = ["breakfast", "lunch", "dinner"];
+  const SLOT_TYPES = ["dinner"];
   const STAGE_STEP_MS = 30;
   const STAGE_MAX_MS = 1800;
 
@@ -41,7 +41,7 @@
 
 
   let startOverride; // Plan with me: ?start=ISO for the guided plan only
-  let genOpts; // Phase 83: { days, firstSlot, shopWeekday } for one generation; absent = the current plan's own length and first slot
+  let genOpts; // Phase 83: { days, shopWeekday } for one generation; absent = the current plan's own length and first slot
   function generatePlan(override, locked, ranOut, avoid) {
     const lib = avoid && avoid.length ? library.filter((m) => !avoid.includes(m.id)) : library;
     const budget = packData
@@ -54,7 +54,7 @@
       override = Object.assign({}, override, { shopOffset: MP.ShelfLife.shopOffset({ startDate: start, shopAnchor: MP.shopAnchorFor(start, genOpts.shopWeekday) }) });
     }
     const gen = MP.Generator.generatePlan(lib, tagsData.tags, tagsData.targets, shelfData, startOverride, budget, have, Object.assign({}, prefs, override, { profile: MP.Nutrition.profileOf(MP.Sync.settings()) }), MP.Ratings.get(), locked,
-      genOpts || (plan ? { days: plan.days.length, firstSlot: plan.firstSlot } : undefined));
+      genOpts || (plan ? { days: plan.days.length } : undefined));
     if (basePrefs.rolling !== false) gen.shopAnchor = genOpts && genOpts.shopWeekday != null ? MP.shopAnchorFor(gen.startDate, genOpts.shopWeekday) : gen.startDate; // Phase 68: a fresh plan starts a new shop cadence; rolls/rerolls read only its days
     return gen;
   }
@@ -335,7 +335,7 @@
 
   function loadPlan() {
     const stored = localStorage.getItem(LS_PLAN);
-    return stored ? JSON.parse(stored) : generatePlan();
+    return stored ? MP.dinnersOnly(JSON.parse(stored)) : generatePlan();
   }
 
   function savePlan() {
@@ -421,7 +421,7 @@
     const start = edits.filter((e) => e.type === "start").pop(); // ponytail: a chat `start` swaps the working plan wholesale, no per-slot Accept/Reject; Exit still leaves mp_plan untouched
     if (start && !(ctx && ctx.plan)) {
       startOverride = start.date;
-      genOpts = { days: start.days || pl.days.length, firstSlot: start.firstSlot, shopWeekday: start.shopDay != null ? start.shopDay : null };
+      genOpts = { days: start.days || pl.days.length, shopWeekday: start.shopDay != null ? start.shopDay : null };
       plan = generatePlan();
       startOverride = genOpts = undefined;
       changes.notes.push(`New plan from ${start.date}`);
@@ -673,13 +673,12 @@
         id: m.id, cost: cost(m), name: m.name, mealTypes: m.mealTypes, servings: m.servings || 1,
         ...(m.prepEffort ? { prepEffort: m.prepEffort } : {}), ...(m.leftoverOf ? { leftoverOf: m.leftoverOf } : {}), ...(kids[m.id] ? { leadsTo: kids[m.id] } : {}),
         ...(m.freezable !== undefined ? { freezable: m.freezable } : {}), ...(m.totalMins ? { totalMins: m.totalMins } : est ? { estMins: est } : {}),
-        ...((m.mealTypes || []).includes("lunch") ? { lunchEffort: MP.lunchEffort(m) } : {}),
         ...(Array.isArray(m.variants) && m.variants.length ? { variants: m.variants.map((v) => ({ id: v.id, name: v.name, cost: cost(m, v.id) })) } : {}),
         ...(m.tags && m.tags.length ? { tags: m.tags } : {}), ...(m.description ? { description: m.description } : {}),
       };
     });
     const brief = {
-      start: c.plan.startDate, days: c.plan.days.length, ...(c.plan.firstSlot ? { firstSlot: c.plan.firstSlot } : {}), shopAnchor: c.plan.shopAnchor || c.plan.startDate,
+      start: c.plan.startDate, days: c.plan.days.length, shopAnchor: c.plan.shopAnchor || c.plan.startDate,
       busyDays: c.prefs.busyDays || [], freeDays: c.prefs.freeDays || [], chips: c.prefs.chips || [], budgetTarget: Number(c.prefs.budgetTarget) || 0,
       freezeBatches: c.prefs.freezeBatches !== false, repeatGap: c.prefs.repeatGap || 0, timeCaps: (c.base && c.base.timeCaps) || {},
       profile: { allergies: s.allergies || [], never: s.never || [], likes: s.likes || [], dislikes: s.dislikes || [] },
@@ -871,9 +870,10 @@
   function restore() {
     const raw = localStorage.getItem(LS_UNDO);
     if (!raw) return null;
-    localStorage.setItem(LS_PLAN, raw);
-    window.dispatchEvent(new CustomEvent("mp:plan-saved", { detail: JSON.parse(raw) }));
-    return JSON.parse(raw);
+    const back = MP.dinnersOnly(JSON.parse(raw));
+    localStorage.setItem(LS_PLAN, JSON.stringify(back));
+    window.dispatchEvent(new CustomEvent("mp:plan-saved", { detail: back }));
+    return back;
   }
   /** Pure: MP.reflowPlan with the page's generator. ctx = { fromDay, generate(locked, ranOutKeys) }. */
   function reflow(planIn, input, lib, ctx) {
@@ -900,7 +900,7 @@
   }
 
   // ---- Skip that asks, and named eating out (Phase 81) ----
-  const OUT_TIME = { breakfast: "08:00", lunch: "13:00", dinner: "19:00", snack: "16:00" };
+  const OUT_TIME = { dinner: "19:00" };
   const outName = (s) => (s && s.name) || "Eating out";
   const slotDate = (day) => { const d = new Date(plan.startDate + "T12:00:00"); d.setDate(d.getDate() + day - 1); return d.toLocaleDateString("sv"); };
   const showEatSheet = (html, wire) => {
@@ -1144,12 +1144,12 @@
       .join("")}</div>`;
   }
 
-  function coverageHtml(meals, partialDay) {
+  function coverageHtml(meals) {
     const cov = MP.Nutrition.dayCoverage(meals, tagsData.tags, tagsData.targets);
     const shortList = [...cov.missing, ...cov.partial];
     const bits = [
       `Protein ~${cov.proteinGramsApprox}g / ${cov.proteinTarget}g (approx)`,
-      partialDay ? "Part day: nutrient gaps not flagged" : shortList.length ? `Short on: ${shortList.map(labelize).join(", ")}` : "All tracked nutrients covered",
+      shortList.length ? `Short on: ${shortList.map(labelize).join(", ")}` : "All tracked nutrients covered",
     ];
     if (cov.sodiumCaution) bits.push("⚠ high sodium day");
     return `<div class="coverage-list"><span class="tag">${bits.join(" · ")}</span></div>`;
@@ -1494,7 +1494,7 @@
               </div>`;
             }).join("")}
           </div>
-          ${coverageHtml(dayMeals(d.day), d.day === 1 && !!plan.firstSlot)}
+          ${coverageHtml(dayMeals(d.day))}
         </div>`;
       }
       html += `</div>`;
@@ -1596,7 +1596,7 @@
     const all = c.cands(day, slotType).filter((m) => ready.has(m.id) && MP.Exclusions.check(m, c.terms).ok);
     const start = offset > 0 && offset < all.length ? offset : 0;
     const byId = Object.fromEntries(c.library.map((m) => [m.id, m]));
-    const leftovers = slotType === "lunch" || slotType === "dinner"
+    const leftovers = slotType === "dinner"
       ? MP.ShelfLife.leftoverView(c.cooks, c.today, c.shelfData).filter((l) => byId[l.mealId] && (byId[l.mealId].mealTypes || []).includes(slotType))
         .slice(0, 2).map((l) => ({ cookId: l.id, mealId: l.mealId, name: l.name, portions: l.portionsLeft, eatBy: l.eatBy }))
       : [];
@@ -1639,13 +1639,6 @@
     document.getElementById("swap-overlay").classList.add("hidden");
     swapCtx = null;
     variantCtx = null;
-  }
-
-  const GUIDED_EXTRAS = ["breakfast", "lunch"];
-  // "?slots=lunch,junk,lunch" -> ["dinner","lunch"]; dinner always first, extras in fixed order.
-  function parseGuidedSlots(search) {
-    const asked = new Set(String(new URLSearchParams(search).get("slots") || "").split(","));
-    return ["dinner", ...GUIDED_EXTRAS.filter((s) => asked.has(s))];
   }
 
   function startGuidedWalkthrough(passes) {
@@ -1962,7 +1955,7 @@
       <button class="close-btn" aria-label="Close">✕</button>
       <h2>${esc(dayHeading(day))}</h2>
       ${SLOT_TYPES.map((slotType) => daySlotHtml(day, slotType)).join("")}
-      ${coverageHtml(dayMeals(day), day === 1 && !!plan.firstSlot)}`;
+      ${coverageHtml(dayMeals(day))}`;
     sheet.querySelector(".close-btn").addEventListener("click", closeDayView);
     wireMoveBtns(sheet);
     sheet.querySelectorAll(".day-swap-btn").forEach((b) =>
@@ -2296,7 +2289,7 @@
     const undoLogs = [];
     if (draft.start) { // Phase 84: a `start` draft regenerates through generatePlan with the Phase 83 options; the Worker's changes were the preview
       startOverride = draft.startDate;
-      genOpts = { days: draft.start.days, firstSlot: draft.start.firstSlot, shopWeekday: new Date(draft.start.shopAnchor + "T12:00:00Z").getUTCDay() };
+      genOpts = { days: draft.start.days, shopWeekday: new Date(draft.start.shopAnchor + "T12:00:00Z").getUTCDay() };
       plan = generatePlan();
       startOverride = genOpts = undefined;
       savePlan();
@@ -2378,7 +2371,7 @@
   // Phase 109: the docked bar changed mp_plan (already snapshotted and mirrored); redraw unless a chat/guided session holds a working copy
   window.addEventListener("mp:plan-live", (e) => {
     if (!plan || guidedActive || chat) return;
-    plan = e.detail && Array.isArray(e.detail.days) ? e.detail : JSON.parse(localStorage.getItem(LS_PLAN) || "null") || plan;
+    plan = MP.dinnersOnly(e.detail && Array.isArray(e.detail.days) ? e.detail : JSON.parse(localStorage.getItem(LS_PLAN) || "null")) || plan;
     renderPlan();
   });
 
@@ -2510,13 +2503,13 @@
   });
 
   window.addEventListener("mp:placements-applied", (e) => {
-    plan = JSON.parse(localStorage.getItem(LS_PLAN) || "null") || plan;
+    plan = MP.dinnersOnly(JSON.parse(localStorage.getItem(LS_PLAN) || "null")) || plan;
     if (openLeftoverCooks(plan, library)) savePlan();
     renderPlan();
     renderPlacementBanner(e.detail);
   });
 
-  MP.Plan = { neighbour, cookNowFor, applyCheaperEdits, cheaperCandidates, fridgeWindow, fridgeHave, applyBulkEdits, applyFreezeEdits, applyChatEdits, applyMealEdits, applyRateEdits, chatBriefing, chatContext, tieFor, effectiveBudget, budgetSwaps, resetChatPrefs, reflow, snapshot, restore, planMetrics, whatIf, fixGap, wrapUp, cookMinsFor, tickerFor, parseGuidedSlots, applyPlacements, openLeftoverCooks, logPortion, matchEatRequests, applyEatRequests };
+  MP.Plan = { neighbour, cookNowFor, applyCheaperEdits, cheaperCandidates, fridgeWindow, fridgeHave, applyBulkEdits, applyFreezeEdits, applyChatEdits, applyMealEdits, applyRateEdits, chatBriefing, chatContext, tieFor, effectiveBudget, budgetSwaps, resetChatPrefs, reflow, snapshot, restore, planMetrics, whatIf, fixGap, wrapUp, cookMinsFor, tickerFor, applyPlacements, openLeftoverCooks, logPortion, matchEatRequests, applyEatRequests };
 
   // ---- Planning chat with Hermes (Phase 72) ----
   // The working plan is `plan` itself with guidedActive on (no savePlan runs); Exit restores the snapshot, Save commits.
@@ -2558,11 +2551,10 @@
         <b>${esc(dayShortOf(day))}</b><span class="cw-name">${esc(dinnerName)}</span><span class="cw-mins">${esc(minsTxt)}</span>${dot ? `<i class="cw-dot" aria-label="Changed"></i>` : ""}</button>`);
       const cells = SLOT_TYPES.map((t) => {
         const meal = mealAt(day, t), s = d.slots[t];
-        const early = day === 1 && plan.firstSlot && SLOT_TYPES.indexOf(t) < SLOT_TYPES.indexOf(plan.firstSlot);
         const isD = t === "dinner";
-        return `<div class="slot-card ${meal ? "" : "empty"}${s && s.locked ? " locked" : ""}${changed.has(day + ":" + t) ? " slot-diff" : ""}${early ? " before-start" : ""}${isD && cm.over ? " over-cap" : ""}" data-day="${day}" data-slot="${t}" tabindex="0" role="button">
+        return `<div class="slot-card ${meal ? "" : "empty"}${s && s.locked ? " locked" : ""}${changed.has(day + ":" + t) ? " slot-diff" : ""}${isD && cm.over ? " over-cap" : ""}" data-day="${day}" data-slot="${t}" tabindex="0" role="button">
         <div class="slot-type">${t}${s && s.locked ? ` <span class="lock-icon" aria-label="Locked">🔒</span>` : ""}</div>
-        <div class="slot-meal">${meal ? esc(meal.name) : s && s.eatingOut ? esc(outName(s)) : early ? "" : "tap to add"}</div>
+        <div class="slot-meal">${meal ? esc(meal.name) : s && s.eatingOut ? esc(outName(s)) : "tap to add"}</div>
         ${isD && minsTxt ? `<div class="cw-cook">${esc(minsTxt)}${cm.over ? ` · over ${cm.cap} min` : ""}</div>` : ""}</div>`;
       }).join("");
       cols.push(`<div class="cw-col${day === chat.day ? " sel" : ""}" data-day="${day}"><div class="cw-head">${esc(dayHeading(day))}</div>${cells}</div>`);
@@ -3205,10 +3197,10 @@
       const start = new URLSearchParams(location.search).get("start");
       if (/^\d{4}-\d{2}-\d{2}$/.test(start || "") && !isNaN(Date.parse(start)) && start >= new Date().toLocaleDateString("sv")) startOverride = start; // Phase 83: a past start is Phase 82's job
       const q = new URLSearchParams(location.search), days = Number(q.get("days")), shop = q.get("shop");
-      genOpts = { days: days >= 1 && days <= 28 ? Math.floor(days) : 14, firstSlot: q.get("first") || undefined, shopWeekday: /^[0-6]$/.test(shop || "") ? Number(shop) : null };
+      genOpts = { days: days >= 1 && days <= 28 ? Math.floor(days) : 14, shopWeekday: /^[0-6]$/.test(shop || "") ? Number(shop) : null };
       plan = generatePlan();
       startOverride = genOpts = undefined;
-      startGuidedWalkthrough(parseGuidedSlots(location.search));
+      startGuidedWalkthrough(["dinner"]);
     } else {
       plan = loadPlan();
       if (rollIfDue()) applyHints(plan.startDate);

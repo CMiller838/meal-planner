@@ -52,14 +52,14 @@ Pattern: every `SLOT_TYPES` / `SLOTS` / `SLOT_ORDER` list becomes `["dinner"]`; 
 
 ## Tasks
 ### Logic (TDD)
-- [ ] 1. `test.html` cases for `MP.dinnersOnly` (old shape, only-lunch day, `firstSlot` dropped, null, clean = equal) and the `getLibrary` strip (unstamped write-back only on change); implement in `data.js`; bump `sw.js` `CACHE`.
-- [ ] 2. Generator: delete other-slot fill, `skipDay1`, `firstSlot`; update `test.html` generator/Phase 83 cases (one slot per day; no `firstSlot` case).
-- [ ] 3. `data.js` slot lists, `placeSlots`/cook dinner-only, `rollPlan` stamp, `eatMeal` via `dinnersOnly`, delete `lunchEffort` (+ its Phase 99 `test.html` cases); `plan-chat.js` slots/freeze/`types()`/`start`; `shopping-list.js` + `shopping.js`; `bar-chat.js`; `hermes-sync.js`; `mealdb.js`. Move remaining `test.html` breakfast/lunch fixtures to dinner; add `validateReply` drops a `slot: "lunch"` edit.
-- [ ] 4. Worker: `SLOT_TYPES`, messages, `firstSlot` removed/ignored; `worker_test.mjs`: replace the `b1` breakfast fixtures, assert `slot: "breakfast"` → 400 on `/plan/edit`, `firstSlot` ignored on `/plan/generate`.
-- [ ] 5. Bridge prompt text + `test_hermes_chat_bridge.py`.
+- [x] 1. `test.html` cases for `MP.dinnersOnly` (old shape, only-lunch day, `firstSlot` dropped, null, clean = equal) and the `getLibrary` strip (unstamped write-back only on change); implement in `data.js`; bump `sw.js` `CACHE`.
+- [x] 2. Generator: delete other-slot fill, `skipDay1`, `firstSlot`; update `test.html` generator/Phase 83 cases (one slot per day; no `firstSlot` case).
+- [x] 3. `data.js` slot lists, `placeSlots`/cook dinner-only, `rollPlan` stamp, `eatMeal` via `dinnersOnly`, delete `lunchEffort` (+ its Phase 99 `test.html` cases); `plan-chat.js` slots/freeze/`types()`/`start`; `shopping-list.js` + `shopping.js`; `bar-chat.js`; `hermes-sync.js`; `mealdb.js`. Move remaining `test.html` breakfast/lunch fixtures to dinner; add `validateReply` drops a `slot: "lunch"` edit.
+- [x] 4. Worker: `SLOT_TYPES`, messages, `firstSlot` removed/ignored; `worker_test.mjs`: replace the `b1` breakfast fixtures, assert `slot: "breakfast"` → 400 on `/plan/edit`, `firstSlot` ignored on `/plan/generate`.
+- [x] 5. Bridge prompt text + `test_hermes_chat_bridge.py`.
 ### UI (`ui-build`)
-- [ ] 6. Plan with me: remove first-slot select and "Also choose" + handlers.
-- [ ] 7. Browse: remove type chips + filter; "Not planned" label; form "Plan as a dinner" checkbox.
-- [ ] 8. `plan.js`: `SLOT_TYPES`, guided passes, `OUT_TIME`, brief keys, cook-now leftovers, coverage flag, readers via `dinnersOnly`; plan grid still lays out cleanly with one row (PC + 390 px, both themes).
-- [ ] 9. `walk.mjs`: rewrite drag/Alt+Arrow steps to dinner across days, delete the guided `slots=lunch` step, add one assertion per Verification bullet.
-- [ ] 10. Docs: `SPEC.md`, `CLAUDE.md` invariant lines.
+- [x] 6. Plan with me: remove first-slot select and "Also choose" + handlers.
+- [x] 7. Browse: remove type chips + filter; "Not planned" label; form "Plan as a dinner" checkbox.
+- [x] 8. `plan.js`: `SLOT_TYPES`, guided passes, `OUT_TIME`, brief keys, cook-now leftovers, coverage flag, readers via `dinnersOnly`; plan grid still lays out cleanly with one row (PC + 390 px, both themes).
+- [x] 9. `walk.mjs`: rewrite drag/Alt+Arrow steps to dinner across days, delete the guided `slots=lunch` step, add one assertion per Verification bullet.
+- [x] 10. Docs: `SPEC.md`, `CLAUDE.md` invariant lines.

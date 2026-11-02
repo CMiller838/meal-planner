@@ -146,7 +146,7 @@
     }
     if (!threw) {
       for (const d of tinyPlan.days) {
-        if (!d.slots.breakfast.mealId || !d.slots.lunch.mealId || !d.slots.dinner.mealId) ok = false;
+        if (!d.slots.dinner.mealId || Object.keys(d.slots).join() !== "dinner") ok = false; // Phase 110: one slot per day
       }
       for (let day = 2; day <= 14; day++) {
         if (tinyPlan.days[day - 2].slots.dinner.mealId === tinyPlan.days[day - 1].slots.dinner.mealId) ok = false;
@@ -287,7 +287,7 @@
   function emptyPlanDays() {
     return Array.from({ length: 14 }, (_, i) => ({
       day: i + 1,
-      slots: { breakfast: null, lunch: null, dinner: null, snack: null },
+      slots: { dinner: null },
     }));
   }
 
@@ -304,28 +304,10 @@
     );
   }
 
-  // 11b. Batch lunch on back-to-back days is one cook
-  {
-    const days = emptyPlanDays();
-    [1, 2].forEach((d) => (days[d - 1].slots.lunch = { mealId: "chilli-con-carne" }));
-    const lists = MP.ShoppingList.buildLists({ startDate: "2026-09-07", days }, mealsById, packData);
-    const line = lists["1"].lines.find((l) => l.key === "beef_mince");
-    check("batch lunch on days 1-2 buys beef_mince once", !!line && deepEqual(line.needed, { value: 500, unit: "g" }));
-  }
-
-  // 11b. Batch lunch on back-to-back days is one cook
-  {
-    const days = emptyPlanDays();
-    [1, 2].forEach((d) => (days[d - 1].slots.lunch = { mealId: "chilli-con-carne" }));
-    const lists = MP.ShoppingList.buildLists({ startDate: "2026-09-07", days }, mealsById, packData);
-    const line = lists["1"].lines.find((l) => l.key === "beef_mince");
-    check("batch lunch on days 1-2 buys beef_mince once", !!line && deepEqual(line.needed, { value: 500, unit: "g" }));
-  }
-
   // 12. Non-batch repeat is not deduped (both occurrences counted, not folded into one)
   {
     const days = emptyPlanDays();
-    [1, 2].forEach((d) => (days[d - 1].slots.lunch = { mealId: "egg-pb-toast-snack" }));
+    [1, 2].forEach((d) => (days[d - 1].slots.dinner = { mealId: "egg-pb-toast-snack" }));
     const plan = { startDate: "2026-09-07", days };
     const eggPack = { items: { egg: { label: "Egg", packSize: 6, unit: "each", price: 1.75 } } };
     const lists = MP.ShoppingList.buildLists(plan, mealsById, eggPack);
@@ -341,7 +323,7 @@
     const days = emptyPlanDays();
     days[0].slots.dinner = { mealId: "roast-chicken" };
     days[1].slots.dinner = { mealId: "chicken-fajitas" };
-    days[2].slots.lunch = { mealId: "toastie-chicken-cheese" };
+    days[2].slots.dinner = { mealId: "toastie-chicken-cheese" };
     const plan = { startDate: "2026-09-07", days };
     const lists = MP.ShoppingList.buildLists(plan, mealsById, packData);
     const week1keys = [...lists["1"].lines, ...lists["1"].staples, ...lists["1"].estimated].map((l) => l.key);
@@ -637,8 +619,8 @@
       deepEqual(toMeal({ idMeal: "1", strCategory: "Pasta", strMeal: "x", strInstructions: "y" }).mealTypes, ["dinner"])
     );
     check(
-      'toMeal(strCategory: "Breakfast").mealTypes === ["breakfast"]',
-      deepEqual(toMeal({ idMeal: "1", strCategory: "Breakfast", strMeal: "x", strInstructions: "y" }).mealTypes, ["breakfast"])
+      'toMeal(strCategory: "Breakfast").mealTypes === [] (not a dinner)',
+      deepEqual(toMeal({ idMeal: "1", strCategory: "Breakfast", strMeal: "x", strInstructions: "y" }).mealTypes, [])
     );
     check(
       "CATEGORIES matches the 7 chip categories exactly",
@@ -685,7 +667,7 @@
   {
     const planWarnings = MP.ShelfLife.checkPlanWarnings(plan, mealsById, shelfData);
     const entries = Object.entries(planWarnings);
-    const SLOT_TYPES = ["breakfast", "lunch", "dinner", "snack"];
+    const SLOT_TYPES = ["dinner"];
     check("checkPlanWarnings returns at least one warning for this fixture plan", entries.length > 0);
     check(
       "every warning key is exactly `${day}-${slotType}` for a day in 1..14 and a real slot type",
@@ -1055,13 +1037,6 @@
   {
     const applyPlacements = MP.Plan.applyPlacements;
 
-    {
-      const g = (q) => MP.Plan.parseGuidedSlots(q).join();
-      check("parseGuidedSlots: none -> dinner only", g("?guided=1") === "dinner" && g("?slots=") === "dinner");
-      check("parseGuidedSlots: junk/dinner ignored", g("?slots=dinner,foo") === "dinner");
-      check("parseGuidedSlots: dedupe + fixed order", g("?slots=snack,lunch,lunch,breakfast") === "dinner,breakfast,lunch");
-    }
-
     // newPlacements
     check("newPlacements: [] for null remote", deepEqual(MP.Sync.newPlacements(null, null), []));
     check("newPlacements: [] for malformed remote", deepEqual(MP.Sync.newPlacements({}, null), []));
@@ -1085,8 +1060,8 @@
       check("p83: days:14 equals the default plan", ser(gp("2026-09-07")) === ser(gp("2026-09-07", { days: 14 })));
       const one = gp("2026-09-07", { days: 1 });
       check("p83: days=1 gives one day", one.days.length === 1 && !!one.days[0].slots.dinner);
-      const thu = gp("2026-09-10", { days: 10, firstSlot: "dinner" });
-      check("p83: Thursday-dinner 10-day plan has no day-1 breakfast or lunch", thu.days.length === 10 && !thu.days[0].slots.breakfast && !thu.days[0].slots.lunch && !!thu.days[0].slots.dinner && thu.firstSlot === "dinner" && !!thu.days[1].slots.breakfast);
+      const thu = gp("2026-09-10", { days: 10, firstSlot: "lunch" });
+      check("p83/110: 10 days, one dinner slot each, firstSlot ignored", thu.days.length === 10 && thu.firstSlot === undefined && thu.days.every((d) => Object.keys(d.slots).join() === "dinner"));
       check("p83: 28 days generates", gp("2026-09-07", { days: 28 }).days.length === 28);
       check("p83: weekendRuns honours n", deepEqual(G.weekendRuns("2026-09-07", 7), [[5, 6, 7]]));
       check("p83: shopAnchorFor weekday", MP.shopAnchorFor("2026-09-10", 1) === "2026-09-07" && MP.shopAnchorFor("2026-09-10", 4) === "2026-09-10" && MP.shopAnchorFor("2026-09-10", 5) === "2026-09-04");
@@ -1101,9 +1076,9 @@
       let keptAll = true, changedAny = false, noExcluded = true;
       for (const sd of starts) {
         const base = G.generatePlan(library, tags, targets, shelfData, sd);
-        const lk = { 2: { dinner: { ...base.days[1].slots.dinner, locked: true } }, 5: { lunch: { ...base.days[4].slots.lunch, locked: true } }, 9: { breakfast: { ...base.days[8].slots.breakfast, locked: true } } };
+        const lk = { 2: { dinner: { ...base.days[1].slots.dinner, locked: true } }, 5: { dinner: { ...base.days[4].slots.dinner, locked: true } }, 9: { dinner: { ...base.days[8].slots.dinner, locked: true } } };
         const re = G.generatePlan(library, tags, targets, shelfData, sd, undefined, undefined, { noBatch: true }, undefined, lk);
-        keptAll = keptAll && ser(re.days[1].slots.dinner) === ser(lk[2].dinner) && ser(re.days[4].slots.lunch) === ser(lk[5].lunch) && ser(re.days[8].slots.breakfast) === ser(lk[9].breakfast);
+        keptAll = keptAll && ser(re.days[1].slots.dinner) === ser(lk[2].dinner) && ser(re.days[4].slots.dinner) === ser(lk[5].dinner) && ser(re.days[8].slots.dinner) === ser(lk[9].dinner);
         changedAny = changedAny || re.days.some((d, i) => ser(d.slots) !== ser(base.days[i].slots));
         noExcluded = noExcluded && re.days.every((d) => Object.values(d.slots).every((s) => !s.mealId || !/mushroom/i.test(byId[s.mealId].name)));
       }
@@ -1182,7 +1157,7 @@
       const s1 = MP.swapSlots(p1, { day: 1, slot: "dinner" }, { day: 3, slot: "dinner" }, lib);
       check("swap slots: exchanges two meals, input untouched", ids(s1.plan) === "DBAN" && s1.changes.length === 2 && ser(p1) === keep);
       const s2 = MP.swapSlots(p1, { day: 1, slot: "dinner" }, { day: 1, slot: "lunch" }, lib);
-      check("swap slots: with an empty slot moves the meal and drops the empty key", !s2.plan.days[0].slots.dinner && s2.plan.days[0].slots.lunch.mealId === "A" && !("dinner" in s2.plan.days[0].slots));
+      check("swap slots: a non-dinner slot is refused (Phase 110)", s2.changes.length === 0 && s2.ignored[0].reason === "no such slot");
       const pe = mkp(["A", "B"]); pe.days[1].slots.dinner = { eatingOut: true, name: "Spoons" };
       check("swap slots: an eating-out marker moves", MP.swapSlots(pe, { day: 1, slot: "dinner" }, { day: 2, slot: "dinner" }, lib).plan.days[0].slots.dinner.name === "Spoons");
       check("swap slots: held and batch members are refused", [MP.swapSlots(p2, { day: 1, slot: "dinner" }, { day: 3, slot: "dinner" }, lib), MP.swapSlots(p3, { day: 1, slot: "dinner" }, { day: 2, slot: "dinner" }, lib)].every((r) => r.ignored.length === 1 && !r.changes.length));
@@ -1202,7 +1177,7 @@
       check("suggestSkipMove: plan end -> drop, default push", MP.suggestSkipMove(p3, 5, "dinner", lib, null, 1, []).how === "drop" && MP.suggestSkipMove(p1, 1, "dinner", lib, null, 1, []).how === "push");
       const rp = { startDate: "2026-09-08", days: Array.from({ length: 14 }, (_, i) => ({ day: i + 1, slots: i === 3 ? { dinner: { mealId: "roast-chicken" } } : {} })) };
       check("suggestSkipMove: next-day raw-unsafe -> drop", MP.suggestSkipMove(rp, 4, "dinner", { "roast-chicken": mealsById["roast-chicken"] }, shelfData, 1, []).how === "drop");
-      const tp = { startDate: "2026-09-08", days: [{ day: 1, slots: { lunch: { mealId: "N", eatenAt: "x" }, dinner: { mealId: "N" } } }, { day: 2, slots: { lunch: { mealId: "N", eatingOut: true }, dinner: { mealId: "N" } } }] };
+      const tp = { startDate: "2026-09-08", days: [{ day: 1, slots: { dinner: { mealId: "N" } } }, { day: 2, slots: { dinner: { mealId: "N" } } }] };
       const tpk = JSON.stringify(tp), tk = MP.tickPlanEaten(tp, "N", "2026-09-08", "W");
       check("tickPlanEaten: first uneaten matching slot today, pure", tk && tk.day === 1 && tk.slot === "dinner" && tk.plan.days[0].slots.dinner.eatenAt === "W" && JSON.stringify(tp) === tpk);
       check("tickPlanEaten: skips eatingOut, other days, other meals, no startDate", MP.tickPlanEaten(tp, "N", "2026-09-10", "W") === null && MP.tickPlanEaten(tp, "Z", "2026-09-08", "W") === null && MP.tickPlanEaten({ days: tp.days }, "N", "2026-09-08", "W") === null && MP.tickPlanEaten(null, "N", "2026-09-08", "W") === null && MP.tickPlanEaten(tp, "N", "2026-09-09", "W").slot === "dinner" && MP.tickPlanEaten(tp, "N", "2026-09-09", "W").day === 2);
@@ -1326,17 +1301,17 @@
     {
       const lib = [{ id: "m1", name: "Meal One" }, { id: "m2", name: "Meal Two" }];
       const p = { startDate: "2026-09-07", days: [
-        { day: 1, slots: { lunch: { mealId: "m1" }, dinner: { mealId: "m1" } } },
+        { day: 1, slots: { dinner: { mealId: "m1" } } },
         { day: 2, slots: { dinner: { mealId: "m2", eatenAt: "2026-09-08T19:00:00.000Z" } } },
       ] };
       const clone = JSON.parse(JSON.stringify(p));
       const at = (d, h) => new Date(2026, 8, d, h).toISOString();
       const r = (mealId, iso) => ({ id: `${mealId}:${iso}`, mealId, eatenAt: iso, requestedAt: iso });
       const two = MP.Plan.matchEatRequests(p, [r("m1", at(7, 12)), r("m1", at(7, 19)), r("m1", at(7, 20))], lib);
-      check("matchEatRequests: lands on the first un-eaten slot with that meal, then the next",
-        deepEqual(two.applied.map((a) => [a.day, a.slotType]), [[1, "lunch"], [1, "dinner"]]));
-      check("matchEatRequests: a third eat of the same meal that day is rejected as already eaten",
-        two.rejected.length === 1 && two.rejected[0].reason === "eaten");
+      check("matchEatRequests: lands on the un-eaten dinner slot with that meal",
+        deepEqual(two.applied.map((a) => [a.day, a.slotType]), [[1, "dinner"]]));
+      check("matchEatRequests: a second eat of the same meal that day is rejected as already eaten",
+        two.rejected.length === 2 && two.rejected[0].reason === "eaten");
       check("matchEatRequests: keeps the request's eatenAt and id", two.applied[0].eatenAt === at(7, 12) && two.applied[0].id === `m1:${at(7, 12)}`);
       check("matchEatRequests: input plan is not mutated", deepEqual(p, clone));
       check("matchEatRequests: an eaten slot is never overwritten",
@@ -1353,16 +1328,16 @@
         MP.Plan.matchEatRequests(p, [r("zzz", at(7, 12))], lib).rejected[0].reason === "unknown-meal");
       {
         const dup = [{ id: "m1", name: "Meal One" }];
-        const p2 = { startDate: "2026-09-07", days: [{ day: 1, slots: { lunch: { mealId: "m1" }, dinner: { mealId: "m1" } } }] };
+        const p2 = { startDate: "2026-09-07", days: [{ day: 1, slots: { dinner: { mealId: "m1" } } }, { day: 2, slots: { dinner: { mealId: "m1" } } }] };
         const once = MP.Plan.matchEatRequests(p2, [r("m1", at(7, 12)), r("m1", at(7, 12))], dup);
         check("confirm-cook: two identical queue entries apply once, the duplicate is reported eaten",
           once.applied.length === 1 && once.rejected.length === 1 && once.rejected[0].reason === "eaten");
-        p2.days[0].slots.lunch.eatenAt = at(7, 12);
+        p2.days[0].slots.dinner.eatenAt = at(7, 12);
         const replay = MP.Plan.matchEatRequests(p2, [r("m1", at(7, 12))], dup);
         check("confirm-cook: replay after eatenAt is set does not take the other slot",
           replay.applied.length === 0 && replay.rejected[0].reason === "eaten");
         check("confirm-cook: a different eatenAt still takes the free slot",
-          MP.Plan.matchEatRequests(p2, [r("m1", at(7, 19))], dup).applied.length === 1);
+          MP.Plan.matchEatRequests(p2, [r("m1", at(8, 19))], dup).applied.length === 1);
       }
       localStorage.setItem("mp_foodLog", "garbage");
       check("localFoodLog: a malformed mirror is []", deepEqual(MP.Sync.localFoodLog(), []));
@@ -2593,11 +2568,11 @@
       check("applySubs: qty override keeps key and label", q.ingredients[1].key === "sauce" && q.ingredients[1].qty === "100ml" && q.ingredients[1].label === "Sauce");
       check("applySubs: stale from + remove is a no-op", keys(MP.applySubs(meal, [{ from: "nope", to: null }])) === "chicken_breast,sauce");
       check("subsLabel: without / plus / qty", MP.subsLabel([{ from: "sauce", to: null, label: "Sauce" }, { from: null, to: "peppers", label: "Peppers" }, { from: "sauce", to: "sauce", label: "Sauce", qty: "100ml" }]) === "without Sauce, plus Peppers, Sauce (100ml)");
-      const plan = { startDate: "2999-01-01", days: [1, 2, 3].map((d) => ({ day: d, slots: {} })) };
+      const plan = { startDate: "2999-01-01", days: [1, 2, 3, 4, 5].map((d) => ({ day: d, slots: {} })) };
       plan.days[1].slots.dinner = { mealId: "m1" };
       plan.days[2].slots.dinner = { mealId: "m1", locked: true };
       plan.days[0].slots.dinner = { mealId: "kid" };
-      plan.days[0].slots.lunch = { eatingOut: true };
+      plan.days[3].slots.dinner = { eatingOut: true };
       const byId = { m1: meal, kid: { id: "kid", leftoverOf: "m1", ingredients: [{ key: "a", label: "A" }] } };
       const ss = (day, slot, subs, terms, pending) => MP.subSlot(plan, day, slot, subs, byId, 1, terms, pending);
       const add = { from: null, to: "peppers", label: "Peppers" };
@@ -2606,9 +2581,9 @@
       const again = MP.subSlot(ok.plan, 2, "dinner", [{ from: null, to: "peppers", label: "Pepper", qty: "2" }, { from: "sauce", to: null }], byId, 1);
       check("subSlot: same added `to` replaces, others append", again.plan.days[1].slots.dinner.subs.length === 2 && again.plan.days[1].slots.dinner.subs[0].qty === "2");
       const why = (r) => r.ignored.map((i) => i.reason).join();
-      check("subSlot: refuses no meal", why(ss(1, "snack", [add])) === "no meal there");
+      check("subSlot: refuses no meal", why(ss(5, "dinner", [add])) === "no meal there");
       check("subSlot: refuses held", why(ss(3, "dinner", [add])) !== "" && ss(3, "dinner", [add]).plan === plan);
-      check("subSlot: refuses eating out", why(ss(1, "lunch", [add])) === "eating out");
+      check("subSlot: refuses eating out", why(ss(4, "dinner", [add])) === "eating out");
       check("subSlot: refuses leftover slot", why(ss(1, "dinner", [add])) === "change the cook day instead");
       check("subSlot: stale from ignored", why(ss(2, "dinner", [{ from: "nope", to: null }])) === "no such ingredient");
       check("subSlot: refuses emptying the meal", why(ss(2, "dinner", [{ from: "chicken_breast", to: null }, { from: "sauce", to: null }])) === "nothing left to cook");
@@ -3275,12 +3250,13 @@
     { // Phase 84: plan-action edit types
       const ed = (list, today) => PC.validateReply({ edits: list }, vocab, today).reply.edits;
       const ok = ed([
-        { type: "start", date: "2999-01-05", firstSlot: "dinner", days: 7, shopDay: 5 }, { type: "skip", day: 3, slot: "dinner", how: "push" },
-        { type: "skip", day: 3, slot: "dinner", how: "move", to: { day: 4, slot: "lunch" } }, { type: "out", day: 5, slot: "dinner", name: " Spoons ", text: "burger" },
-        { type: "swap", a: { day: 1, slot: "lunch" }, b: { day: 2, slot: "lunch" } }, { type: "swapDay", a: 1, b: 2 },
-        { type: "backfill", day: 1, slot: "dinner", mealId: "m1" }, { type: "backfill", day: 1, slot: "lunch", name: "Pret", text: "baguette" },
+        { type: "start", date: "2999-01-05", days: 7, shopDay: 5 }, { type: "skip", day: 3, slot: "dinner", how: "push" },
+        { type: "skip", day: 3, slot: "dinner", how: "move", to: { day: 4, slot: "dinner" } }, { type: "out", day: 5, slot: "dinner", name: " Spoons ", text: "burger" },
+        { type: "swap", a: { day: 1, slot: "dinner" }, b: { day: 2, slot: "dinner" } }, { type: "swapDay", a: 1, b: 2 },
+        { type: "backfill", day: 1, slot: "dinner", mealId: "m1" }, { type: "backfill", day: 2, slot: "dinner", name: "Pret", text: "baguette" },
       ], "2026-01-01");
-      check("validateReply: every new edit type is kept and normalised", ok.map((e) => e.type).join() === "start,skip,skip,out,swap,swapDay,backfill,backfill" && ok[3].name === "Spoons" && ok[2].to.slot === "lunch");
+      check("validateReply: every new edit type is kept and normalised", ok.map((e) => e.type).join() === "start,skip,skip,out,swap,swapDay,backfill,backfill" && ok[3].name === "Spoons" && ok[2].to.slot === "dinner")
+      check("110: validateReply drops a slot: lunch edit", ed([{ type: "swap", a: { day: 1, slot: "lunch" }, b: { day: 2, slot: "dinner" } }, { type: "out", day: 5, slot: "lunch" }, { type: "backfill", day: 1, slot: "breakfast", name: "x" }], "2026-01-01").length === 0);
       const bad = ed([
         { type: "start", date: "2000-01-01" }, { type: "start", date: "nope" }, { type: "start", date: "2999-01-05", days: 40 }, { type: "start", date: "2999-01-05", shopDay: 7 },
         { type: "skip", day: 3, slot: "dinner", how: "move" }, { type: "skip", day: 3, slot: "dinner", how: "eat" }, { type: "out", day: 0, slot: "dinner" },
@@ -3439,9 +3415,21 @@
       check("chatBriefing: the spec fields", br.start === "2026-09-07" && br.days === 6 && deepEqual(br.timeCaps, { 1: 30 }) && deepEqual(br.profile.allergies, ["peanut"]) && br.ratings.e.rating === "up" && br.pantry[0].name === "rice" && deepEqual(br.gaps, [["iron"], []]) && br.plan.length === 6 && br.plan[1].slots.dinner === "e" && br.meals.length === 8);
       const bm = br.meals.find((m) => m.id === "p"), ba = br.meals.find((m) => m.id === "a");
       check("chatBriefing: totalMins wins over estMins, leadsTo on a batch parent, leftoverOf on its child", bm.totalMins === 60 && !bm.estMins && deepEqual(ba.leadsTo, ["b"]) && br.meals.find((m) => m.id === "b").leftoverOf === "a");
-      const le = MP.lunchEffort;
-      check("lunchEffort: reheat / assemble / cook by leftoverOf, mins, prepEffort", le({ leftoverOf: "a" }) === "reheat" && le({ totalMins: 10 }) === "assemble" && le({ totalMins: 40 }) === "cook" && le({ prepEffort: "quick" }) === "assemble" && le({ prepEffort: "batch" }) === "cook" && le({ method: [{ minutes: 5 }, { minutes: 8 }] }) === "assemble" && le({ method: [{ minutes: 30 }] }) === "cook");
-      check("chatBriefing: lunchEffort on a lunch meal, omitted on dinner-only", br.meals.filter((m) => (m.mealTypes || []).includes("lunch")).every((m) => m.lunchEffort) && br.meals.filter((m) => !(m.mealTypes || []).includes("lunch")).every((m) => m.lunchEffort === undefined) && br.meals.some((m) => m.lunchEffort) && br.meals.some((m) => !m.lunchEffort));
+      { // Phase 110: dinnersOnly + getLibrary strip
+        const old = { startDate: "2026-09-07", firstSlot: "lunch", days: [{ day: 1, slots: { breakfast: { mealId: "x" }, lunch: { mealId: "y" }, dinner: { mealId: "z", locked: true }, snack: null } }, { day: 2, slots: { lunch: { mealId: "y" } } }, { day: 3 }] };
+        const d = MP.dinnersOnly(old);
+        check("110 dinnersOnly: keeps only dinner, drops firstSlot, only-lunch day -> empty slots", Object.keys(d.days[0].slots).join() === "dinner" && d.days[0].slots.dinner.mealId === "z" && d.days[0].slots.dinner.locked === true && Object.keys(d.days[1].slots).length === 0 && Object.keys(d.days[2].slots).length === 0 && d.firstSlot === undefined && old.firstSlot === "lunch");
+        const clean = { startDate: "2026-09-07", days: [{ day: 1, slots: { dinner: { mealId: "z", fromCook: "c" } } }] };
+        check("110 dinnersOnly: null in = null out, clean plan deep-equal", MP.dinnersOnly(null) === null && MP.dinnersOnly("x") === "x" && JSON.stringify(MP.dinnersOnly(clean)) === JSON.stringify(clean));
+        const keepLib = localStorage.getItem("mp_library"), keepStamp = localStorage.getItem("mp_library_updated_at");
+        localStorage.setItem("mp_library", JSON.stringify([{ id: "q1", name: "Q", mealTypes: ["lunch", "dinner"], ingredients: [] }, { id: "q2", name: "R", mealTypes: ["breakfast"], ingredients: [] }]));
+        localStorage.setItem("mp_library_updated_at", "stamp-before");
+        const gl = await MP.getLibrary();
+        check("110 getLibrary: mealTypes strip to dinner, [] for non-dinner, stamp untouched", gl.find((m) => m.id === "q1").mealTypes.join() === "dinner" && gl.find((m) => m.id === "q2").mealTypes.length === 0 && localStorage.getItem("mp_library_updated_at") === "stamp-before" && JSON.parse(localStorage.getItem("mp_library")).every((m) => m.mealTypes.every((t) => t === "dinner")));
+        if (keepLib === null) localStorage.removeItem("mp_library"); else localStorage.setItem("mp_library", keepLib);
+        if (keepStamp === null) localStorage.removeItem("mp_library_updated_at"); else localStorage.setItem("mp_library_updated_at", keepStamp);
+      }
+      check("110: lunchEffort is gone", MP.lunchEffort === undefined && br.meals.every((m) => m.lunchEffort === undefined));
       const big = Array.from({ length: 600 }, (_, i) => meal("x" + i, { description: "d".repeat(80), tags: ["t".repeat(20)], mealTypes: ["lunch"] }));
       const bb = MP.Plan.chatBriefing({ plan: mkPlan(), library: big, prefs: {}, base: {}, settings: null, ratings: {}, pantry: [], metrics: { weekGaps: [[], []] } });
       check("chatBriefing: over 60000 drops descriptions, then non-dinner tags", JSON.stringify(bb).length <= 60000 && !bb.meals[0].description && !bb.meals[0].tags);
@@ -3462,8 +3450,8 @@
         && (() => { const two = MP.placeSlots(base, [{ day: 5, slot: "dinner", mealId: "chili", freezeFrom: 1 }, { day: 6, slot: "dinner", mealId: "chili", freezeFrom: 1 }, { day: 7, slot: "dinner", mealId: "chili", freezeFrom: 1 }, { day: 8, slot: "dinner", mealId: "chili", freezeFrom: 1 }], byId, cx); return two.refused.length === 1 && two.refused[0].why === "no spare portions left"; })());
       check("105 buildLists adds nothing for a frozenFrom slot", (() => { const a = Object.values(MP.ShoppingList.buildLists(base, byId, { items: {} }, null)).flatMap((l) => l.lines).length, b = Object.values(MP.ShoppingList.buildLists(r0.plan, byId, { items: {} }, null)).flatMap((l) => l.lines).length; return a === b; })());
       const v = (l) => MP.PlanChat.validateReply({ edits: l }, {}, "2026-01-01").reply.edits;
-      const fe = v([{ type: "freeze", cookId: "c1", places: [{ day: 5, slot: "dinner" }, { day: 6, slot: "lunch" }] }, { type: "freeze", cookId: "c1", places: [] }, { type: "freeze", cookId: "c1", places: [{ day: 5, slot: "dinner" }, { day: 5, slot: "dinner" }] }, { type: "freeze", cookId: "c1", places: [{ day: 5, slot: "snack" }] },
-        { type: "place", day: 5, slot: "dinner", mealId: "chili", freezeFrom: 1 }, { type: "place", day: 5, slot: "dinner", mealId: "chili", freezeFrom: 1, cookId: "c" }, { type: "place", day: 5, slot: "lunch", mealId: "chili", freezeFrom: 1 }]);
+      const fe = v([{ type: "freeze", cookId: "c1", places: [{ day: 5, slot: "dinner" }, { day: 6, slot: "dinner" }] }, { type: "freeze", cookId: "c1", places: [] }, { type: "freeze", cookId: "c1", places: [{ day: 5, slot: "dinner" }, { day: 5, slot: "dinner" }] }, { type: "freeze", cookId: "c1", places: [{ day: 5, slot: "snack" }] },
+        { type: "place", day: 5, slot: "dinner", mealId: "chili", freezeFrom: 1 }, { type: "place", day: 5, slot: "dinner", mealId: "chili", freezeFrom: 1, cookId: "c" }, { type: "place", day: 5, slot: "snack", mealId: "chili", freezeFrom: 1 }]);
       check("105 validateReply: freeze and freezeFrom kept/dropped", fe.length === 2 && fe[0].type === "freeze" && fe[0].places.length === 2 && fe[1].freezeFrom === 1);
       check("105 validateReply: max 3 freeze", v(Array.from({ length: 5 }, () => ({ type: "freeze", cookId: "c1", places: [{ day: 5, slot: "dinner" }] }))).length === 3);
       check("105 describe: freeze", MP.PlanChat.describe(fe, "2026-09-07").includes("freeze 2 portions"));
@@ -3600,10 +3588,10 @@
     check("cookMins: leftover = 0", cm(5, {}).mins === 0 && !cm(5, { 5: 10 }).over);
     check("cookMins: over a weekday cap (Mon=1), not over without one", cm(1, { 1: 10 }).over && cm(1, { 1: 10 }).cap === 10 && !cm(1, {}).over && !cm(1, { 1: 15 }).over);
     const nb = (d, s, dir) => JSON.stringify(MP.Plan.neighbour(pl, d, s, dir));
-    check("neighbour: left/right stay in the day and stop at its edges", nb(1, "lunch", "left") === '{"day":1,"slot":"breakfast"}' && nb(1, "lunch", "right") === '{"day":1,"slot":"dinner"}' && nb(1, "breakfast", "left") === "null" && nb(1, "dinner", "right") === "null");
+    check("neighbour: left/right are null with one slot a day", nb(1, "dinner", "left") === "null" && nb(1, "dinner", "right") === "null");
     check("neighbour: up/down keep the slot type, null off the first/last day", nb(2, "dinner", "up") === '{"day":1,"slot":"dinner"}' && nb(1, "dinner", "up") === "null" && nb(6, "dinner", "down") === '{"day":7,"slot":"dinner"}' && nb(7, "dinner", "down") === "null");
     const p28 = { days: Array.from({ length: 28 }, (_, i) => ({ day: i + 1, slots: {} })) };
-    check("neighbour: 28-day plan reaches day 28", MP.Plan.neighbour(p28, 27, "lunch", "down").day === 28 && MP.Plan.neighbour(p28, 28, "lunch", "down") === null);
+    check("neighbour: 28-day plan reaches day 28", MP.Plan.neighbour(p28, 27, "dinner", "down").day === 28 && MP.Plan.neighbour(p28, 28, "dinner", "down") === null);
     const snap = JSON.parse(JSON.stringify(pl)), baseM = MP.Plan.planMetrics(snap, X);
     pl.days[2].slots.dinner = { mealId: "q" };
     const tk = MP.Plan.tickerFor(pl, baseM, 0, X), now = MP.Plan.planMetrics(pl, X);
@@ -3848,7 +3836,7 @@
     check("90a: placeSlots cookId accepted", r.refused.length === 0 && r.plan.days[1].slots.dinner.fromCook === cook.id);
     const why = (x) => (x.refused[0] || {}).why || "";
     check("90a: placeSlots cookId over-allocation refused", /only 1 portion left/.test(why(MP.placeSlots(r.plan, [{ day: 3, slot: "dinner", mealId: "a", cookId: cook.id }], byId, ctx))));
-    check("90a: placeSlots cookId wrong meal, unknown, snack, breakfast refused", /different meal/.test(why(MP.placeSlots(p2, [{ day: 2, slot: "dinner", mealId: "b", cookId: cook.id }], byId, ctx))) && /no such cook/.test(why(MP.placeSlots(p2, [{ day: 2, slot: "dinner", mealId: "a", cookId: "zz" }], byId, ctx))) && /snack/.test(why(MP.placeSlots(p2, [{ day: 2, slot: "snack", mealId: "a", cookId: cook.id }], byId, ctx))));
+    check("90a: placeSlots cookId wrong meal, unknown, snack, breakfast refused", /different meal/.test(why(MP.placeSlots(p2, [{ day: 2, slot: "dinner", mealId: "b", cookId: cook.id }], byId, ctx))) && /no such cook/.test(why(MP.placeSlots(p2, [{ day: 2, slot: "dinner", mealId: "a", cookId: "zz" }], byId, ctx))) && /no such slot/.test(why(MP.placeSlots(p2, [{ day: 2, slot: "snack", mealId: "a", cookId: cook.id }], byId, ctx))));
     check("90a: placeSlots cookId past eat-by refused", /eat-by/.test(why(MP.placeSlots({ ...p2, days: days(300, () => ({})) }, [{ day: 290, slot: "dinner", mealId: "a", cookId: cook.id }], byId, ctx))));
     const pf = { startDate: "2026-09-07", days: days(14, (d) => (d === 2 ? { dinner: { mealId: "a", fromCook: cook.id } } : d === 10 ? { dinner: { mealId: "a" } } : {})) };
     check("90a: purchaseOccurrences skips fromCook", SL.buildLists(pf, byId, pack, null)[1] === undefined || SL.buildLists(pf, byId, pack, null)[1].lines.length === 0);

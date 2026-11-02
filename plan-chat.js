@@ -5,7 +5,7 @@
 (function (root) {
   "use strict";
 
-  const SLOTS = ["breakfast", "lunch", "dinner", "snack"];
+  const SLOTS = ["dinner"];
   const TEXT_MAX = 1500, EDITS_MAX = 60;
   const isDay = (d) => Number.isInteger(d) && d >= 1 && d <= 28;
   const isSlot = (s) => SLOTS.includes(s);
@@ -30,7 +30,7 @@
     const out = v.map((i) => i && typeof i === "object" && (str(i.key, 60) || str(i.name, 60)) && { ...(str(i.key, 60) ? { key: str(i.key, 60) } : {}), ...(str(i.name, 60) ? { name: str(i.name, 60) } : {}), qty: str(typeof i.qty === "number" ? String(i.qty) : i.qty, 40) });
     return out.every(Boolean) ? out : null;
   };
-  const types = (v) => { const t = Array.isArray(v) ? [...new Set(v.filter((x) => SLOTS.includes(x)))] : []; return t.length ? t : null; };
+  const types = (v) => (Array.isArray(v) ? [...new Set(v.filter((x) => x === "dinner"))] : null); // Phase 110: dinner or [] (not a dinner)
   const method = (v) => (Array.isArray(v) && v.length <= 12 && v.every((x) => typeof x === "string" && x.trim()) ? v.map((x) => x.trim().slice(0, 300)) : null);
   const mins = (v) => Number.isInteger(v) && v >= 1 && v <= 600;
   const servings = (v) => Number.isInteger(v) && v >= 1 && v <= 12;
@@ -65,8 +65,8 @@
     lock: (e) => isDay(e.day) && isSlot(e.slot) && { type: "lock", day: e.day, slot: e.slot },
     unlock: (e) => isDay(e.day) && isSlot(e.slot) && { type: "unlock", day: e.day, slot: e.slot },
     // Phase 84: plan actions. The app/Worker apply them through the data.js helpers (MP.applyPlanEdits); no meals chosen here.
-    start: (e, ids, today) => isIso(e.date) && (!today || e.date >= today) && (e.firstSlot === undefined || isSlot(e.firstSlot)) && (e.days === undefined || (Number.isInteger(e.days) && isDay(e.days))) && (e.shopDay === undefined || (Number.isInteger(e.shopDay) && e.shopDay >= 0 && e.shopDay <= 6))
-      && { type: "start", date: e.date, ...(e.firstSlot ? { firstSlot: e.firstSlot } : {}), ...(e.days ? { days: e.days } : {}), ...(e.shopDay !== undefined ? { shopDay: e.shopDay } : {}) },
+    start: (e, ids, today) => isIso(e.date) && (!today || e.date >= today) && (e.days === undefined || (Number.isInteger(e.days) && isDay(e.days))) && (e.shopDay === undefined || (Number.isInteger(e.shopDay) && e.shopDay >= 0 && e.shopDay <= 6))
+      && { type: "start", date: e.date, ...(e.days ? { days: e.days } : {}), ...(e.shopDay !== undefined ? { shopDay: e.shopDay } : {}) },
     skip: (e) => isDay(e.day) && isSlot(e.slot) && ["push", "move", "drop"].includes(e.how) && (e.how !== "move" || isPos(e.to))
       && { type: "skip", day: e.day, slot: e.slot, how: e.how, ...(e.how === "move" ? { to: pos(e.to) } : {}) },
     out: (e) => isDay(e.day) && isSlot(e.slot) && { type: "out", day: e.day, slot: e.slot, ...(str(e.name, 60) ? { name: str(e.name, 60) } : {}), ...(str(e.text, 200) ? { text: str(e.text, 200) } : {}) },
@@ -88,7 +88,7 @@
     cheaper: (e) => str(e.key, 60) && str(e.to, 60) && Number.isInteger(e.shopDay) && e.shopDay >= -6 && e.shopDay <= 28 && { type: "cheaper", key: str(e.key, 60), to: str(e.to, 60), shopDay: e.shopDay },
     // Phase 105: a freeze-ahead proposal for a cooked fridge batch; the app shows a card (Accept moves portions to the freezer).
     freeze: (e) => str(e.cookId, 120) && Array.isArray(e.places) && e.places.length >= 1 && e.places.length <= 4
-      && e.places.every((q) => q && isDay(q.day) && (q.slot === "lunch" || q.slot === "dinner")) && new Set(e.places.map((q) => q.day + q.slot)).size === e.places.length
+      && e.places.every((q) => q && isDay(q.day) && q.slot === "dinner") && new Set(e.places.map((q) => q.day + q.slot)).size === e.places.length
       && { type: "freeze", cookId: str(e.cookId, 120), places: e.places.map((q) => ({ day: q.day, slot: q.slot })) },
     bulk: (e) => str(e.key, 60) && Number.isInteger(e.shopDay) && e.shopDay >= -6 && e.shopDay <= 28 && { type: "bulk", key: str(e.key, 60), shopDay: e.shopDay },
     // Phase 90b: what the user says is left in the fridge; session-only in the app (chat.stock), never the pantry.
@@ -195,7 +195,7 @@
       else if (e.type === "lock") parts.push(`${name(e.day)}: ${e.slot} kept`);
       else if (e.type === "unlock") parts.push(`${name(e.day)}: ${e.slot} unlocked`);
       else if (e.type === "reroll") parts.push(`${name(e.day)}: ${e.slot ? e.slot + " " : ""}re-picked`);
-      else if (e.type === "start") parts.push(`new plan from ${e.date}${e.firstSlot ? `, first meal ${e.firstSlot}` : ""}${e.days ? `, ${e.days} days` : ""}${e.shopDay !== undefined ? `, shop on ${WEEKDAYS[e.shopDay]}` : ""}`);
+      else if (e.type === "start") parts.push(`new plan from ${e.date}${e.days ? `, ${e.days} days` : ""}${e.shopDay !== undefined ? `, shop on ${WEEKDAYS[e.shopDay]}` : ""}`);
       else if (e.type === "skip") parts.push(`${name(e.day)} ${e.slot}: ${{ push: "pushed to the next day", move: `moved to ${e.to ? name(e.to.day) + " " + e.to.slot : ""}`, drop: "dropped and re-picked" }[e.how]}`);
       else if (e.type === "out") parts.push(`${name(e.day)} ${e.slot}: eating out${e.name ? ` (${e.name})` : ""}`);
       else if (e.type === "swap") parts.push(`${name(e.a.day)} ${e.a.slot} swapped with ${name(e.b.day)} ${e.b.slot}`);

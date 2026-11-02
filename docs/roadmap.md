@@ -266,7 +266,7 @@ generator, plan, chat, Worker and data stop knowing them. Order: 110 → 111 →
 113-118 each start from a user-picked `ui-prototyper` variant (`design-prototypes/ui-concepts/dinner-board-*.html`,
 `discover-swipe-*.html`, `shell-*`, `browse-*`, `shopping-*`, `cook-*`, `planchat-*`), applied with `restyle-from-prototype`.
 
-## Phase 110: Dinners only, remove breakfast, lunch and snack [L] — blocked 2026-11-02: PIPELINE: BLOCKED commit needs `ALLOW_TEST_EDIT=1` (test guard flags removed assertions for deleted lunch/guided features); work is staged, tester PASS
+## Phase 110: Dinners only, remove breakfast, lunch and snack [L] — built 2026-11-02, live checks pending (check.py 10/10, worker_test, bridge test; tester PASS)
 
 Goal: one slot per day (`dinner`) end to end; stored plans, ratings and food-log entries from older slots migrate or are dropped safely, `lunchEffort` and the "Also plan lunch" setup go, and the Worker, chat edits (`place`, `swap`, `backfill`) and `mealTypes` filtering all agree. Architectural fork: slot shape (`d.slots.dinner` kept vs flat `d.dinner`), ADR needed.
 

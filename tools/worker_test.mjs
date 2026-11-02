@@ -558,7 +558,7 @@ assert.equal((await call("GET", "/today", "a")).body.water, 3); // /today untouc
 {
   kv.clear();
   const dinners = ["m1", "m2", "m3", "m4", "m5"].map((id) => ({ id, name: id.toUpperCase(), mealTypes: ["dinner"], ingredients: [{ key: "rice", label: "Rice" }] }));
-  const lib49 = [...dinners, { id: "b1", name: "Toast", mealTypes: ["breakfast"], ingredients: [{ key: "bread", label: "Bread" }] }];
+  const lib49 = [...dinners, { id: "b1", name: "Toast", mealTypes: [], ingredients: [{ key: "bread", label: "Bread" }] }];
   const empty = () => Array.from({ length: 14 }, (_, i) => ({ day: i + 1, slots: {} }));
   assert.equal((await call("POST", "/plan/draft", "a", {})).status, 409); // library not synced
   kv.set("library", JSON.stringify({ updatedAt: "2026-10-22T00:00:00.000Z", meals: lib49 }));
@@ -585,14 +585,13 @@ assert.equal((await call("GET", "/today", "a")).body.water, 3); // /today untouc
   const mirror = empty();
   mirror[0].slots.dinner = { mealId: "m5" };
   mirror[1].slots.dinner = { mealId: "m4", eatenAt: "2026-10-23T18:00:00.000Z" };
-  mirror[2].slots.breakfast = { mealId: "m1" }; // wrong type but not kept: replaced
+  mirror[2].slots.dinner = { mealId: "m1" }; // not kept: replaced
   kv.set("plan", JSON.stringify({ startDate: "2026-10-22", days: mirror }));
   d = await call("POST", "/plan/draft", "a", { keep: [{ day: 1, slot: "dinner" }] });
   assert.ok(!d.body.draft.changes.some((c) => (c.day === 1 || c.day === 2) && c.slot === "dinner"));
   assert.deepEqual([d.body.plan.days[0].slots.dinner, d.body.plan.days[1].slots.dinner.mealId], [{ mealId: "m5" }, "m4"]);
   assert.equal(d.body.draft.startDate, "2026-10-22");
-  const c3 = d.body.draft.changes.find((c) => c.day === 3 && c.slot === "breakfast");
-  assert.deepEqual(c3 && c3.before, { mealId: "m1" });
+  assert.ok(d.body.plan.days[2].slots.dinner.mealId); // not kept: regenerated
   // Phase 66: a locked mirror slot survives and the draft fills the rest
   mirror[4].slots.dinner = { mealId: "m3", locked: true };
   kv.set("plan", JSON.stringify({ startDate: "2026-10-22", days: mirror }));
@@ -703,9 +702,10 @@ assert.equal((await call("GET", "/today", "a")).body.water, 3); // /today untouc
     const e3 = await call("POST", "/plan/edit", "a", { edits: [{ type: "start", date: "2999-02-03", firstSlot: "dinner", days: 7, shopDay: 5 }, { type: "swapDay", a: 1, b: 2 }] });
     assert.deepEqual([e3.status, e3.body.status, e3.body.dropped], [200, "parked", 1]);
     const sd = JSON.parse(kv.get("planDraft"));
-    assert.deepEqual([sd.startDate, sd.start.days, sd.start.firstSlot, sd.start.shopAnchor], ["2999-02-03", 7, "dinner", "2999-02-01"]);
+    assert.deepEqual([sd.startDate, sd.start.days, sd.start.firstSlot, sd.start.shopAnchor], ["2999-02-03", 7, undefined, "2999-02-01"]);
     assert.equal((await call("POST", "/plan/edit", "a", { edits: [{ type: "start", date: "2000-01-01" }] })).status, 400); // past start dropped
-    const dr = await call("POST", "/plan/draft", "a", { startDate: "2999-02-03", days: 7, firstSlot: "dinner", shopDay: 5 });
+    assert.equal((await call("POST", "/plan/edit", "a", { edits: [{ type: "swap", a: { day: 1, slot: "breakfast" }, b: { day: 2, slot: "breakfast" } }] })).status, 400); // Phase 110: dinner only
+    const dr = await call("POST", "/plan/draft", "a", { startDate: "2999-02-03", days: 7, firstSlot: "lunch", shopDay: 5 }); // Phase 110: firstSlot ignored
     assert.deepEqual([dr.status, dr.body.plan.days.length, dr.body.draft.start.days], [200, 7, 7]);
     assert.equal((await call("POST", "/plan/draft", "a", { startDate: "2000-01-01" })).status, 400);
     assert.equal((await call("POST", "/plan/draft", "a", { days: 7 })).status, 400); // numeric days needs startDate

@@ -6,7 +6,6 @@
   let tagsData = null;
   let packData = null;
   let library = [];
-  let activeType = "";
   let formImage = null;
   let formVariants = [];
   let editingVariantId = null; // id of the variant being edited, null = new variant
@@ -274,16 +273,10 @@
     const grid = document.getElementById("library-grid");
     const query = document.getElementById("library-search").value;
     renderFoods(query);
-    const filtered = MP.filterMeals(library, query).filter(
-      (m) => !activeType || (m.mealTypes || []).includes(activeType)
-    );
+    const filtered = MP.filterMeals(library, query);
     if (!filtered.length) {
       const q = query.trim();
-      let msg;
-      if (q && activeType) msg = `No ${activeType} meals match "${esc(q)}".`;
-      else if (q) msg = `No meals match "${esc(q)}".`;
-      else if (activeType) msg = `No ${esc(activeType)} meals in your library yet.`;
-      else msg = "Your library is empty.";
+      const msg = q ? `No meals match "${esc(q)}".` : "Your library is empty.";
       grid.innerHTML = `<p class="empty">${msg}</p>`;
       return;
     }
@@ -296,6 +289,7 @@
           <h3>${esc(meal.name)}</h3>
           <p>${esc(meal.description || "")}</p>
           ${tagRowHtml(meal)}
+          ${(meal.mealTypes || []).includes("dinner") ? "" : `<span class="tag not-planned">Not planned</span>`}
         </div>
       </div>`
       )
@@ -538,7 +532,6 @@
   function openForm(meal) {
     const overlay = document.getElementById("modal-overlay");
     const sheet = document.getElementById("modal-sheet");
-    const types = ["breakfast", "lunch", "dinner"];
     sheet.innerHTML = `
       <button class="close-btn" aria-label="Close">✕</button>
       <h2>${meal ? "Edit meal" : "Add a meal"}</h2>
@@ -584,13 +577,7 @@
           <button id="form-image-clear" class="ghost hidden">Remove photo</button>
         </div>
       </div>
-      <div class="sync-field">Meal types
-        ${types
-          .map(
-            (t) => `<label><input type="checkbox" class="form-type" value="${t}"> ${esc(labelize(t))}</label>`
-          )
-          .join(" ")}
-      </div>
+      <div class="sync-field"><label><input type="checkbox" class="form-type" value="dinner"> Plan as a dinner</label></div>
       <p id="form-msg" class="muted"></p>
       <div class="modal-actions">
         <button id="form-save" class="btn">Save</button>
@@ -616,7 +603,7 @@
     sheet.querySelector("#form-variant-add").addEventListener("click", () => openVariantEditor(null));
     sheet.querySelector("#form-variant-save").addEventListener("click", saveVariant);
     sheet.querySelector("#form-variant-cancel").addEventListener("click", closeVariantEditor);
-    const mealTypes = meal ? meal.mealTypes || [] : [];
+    const mealTypes = meal ? meal.mealTypes || [] : ["dinner"];
     sheet.querySelectorAll(".form-type").forEach((cb) => {
       cb.checked = mealTypes.includes(cb.value);
     });
@@ -896,13 +883,6 @@
     document.getElementById("library-search").addEventListener("input", renderLibrary);
     document.getElementById("add-meal").addEventListener("click", () => openForm(null));
     document.getElementById("backfill-images").addEventListener("click", (e) => backfillImages(e.target));
-    document.getElementById("library-filters").addEventListener("click", (e) => {
-      const chip = e.target.closest(".chip");
-      if (!chip) return;
-      activeType = chip.dataset.type;
-      chip.parentElement.querySelectorAll(".chip").forEach((c) => c.classList.toggle("active", c === chip));
-      renderLibrary();
-    });
 
     [tagsData, library, packData] = await Promise.all([
       MP.Nutrition.load(),

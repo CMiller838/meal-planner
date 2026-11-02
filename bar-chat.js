@@ -9,10 +9,10 @@
   const POLL_MS = 1000, GIVE_UP_MS = 90000, FRESH_MS = 30000, BRIEF_MAX = 60000;
   const SS = "mp_barSession";
   const PLAN_EDITS = ["skip", "out", "swap", "swapDay", "backfill", "sub"];
-  const OUT_TIME = { breakfast: "08:00", lunch: "13:00", dinner: "19:00", snack: "16:00" };
-  const SLOTS = ["breakfast", "lunch", "dinner", "snack"];
+  const OUT_TIME = { dinner: "19:00" };
+  const SLOTS = ["dinner"];
   const today = () => new Date().toLocaleDateString("sv");
-  const readPlan = () => { try { return JSON.parse(localStorage.getItem("mp_plan") || "null"); } catch (e) { return null; } };
+  const readPlan = () => { try { return MP.dinnersOnly(JSON.parse(localStorage.getItem("mp_plan") || "null")); } catch (e) { return null; } };
   const slotIso = (plan, day) => { const d = new Date(`${plan.startDate}T12:00:00Z`); d.setUTCDate(d.getUTCDate() + day - 1); return d.toISOString().slice(0, 10); };
 
   let lib = [];

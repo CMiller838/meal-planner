@@ -54,7 +54,7 @@
       id: `api-${detail.idMeal}`,
       name: detail.strMeal,
       source: "themealdb",
-      mealTypes: detail.strCategory === "Breakfast" ? ["breakfast"] : ["dinner"],
+      mealTypes: detail.strCategory === "Breakfast" ? [] : ["dinner"],
       servings: 1,
       description: (detail.strInstructions || "").slice(0, 140).trim() + "…",
       instructions: detail.strInstructions || "",

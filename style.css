@@ -829,6 +829,7 @@ button.ghost.danger { color: var(--danger); border-color: var(--danger); }
 .rating-never[aria-pressed="true"] { border-color: var(--danger); color: var(--danger); }
 .rating-note { width: 100%; box-sizing: border-box; }
 .tag.never-badge { color: var(--danger); border-color: var(--danger); background: transparent; }
+.tag.not-planned { color: var(--muted); border-color: var(--border); background: transparent; }
 .rating-hint { font-size: .75rem; color: var(--accent-2); margin-top: .25rem; }
 .rating-hint.never { color: var(--danger); }
 @keyframes rating-in { from { opacity: 0; transform: translateY(4px); } }
@@ -919,7 +920,6 @@ body.chat-open { overflow: hidden; }
 .cw-cook { font-size: .75rem; color: var(--text-dim); }
 .slot-card.over-cap { border-color: var(--danger); }
 .slot-card.over-cap .cw-cook { color: var(--danger); font-weight: 700; }
-.slot-card.before-start { opacity: .45; }
 .chat-diff-all { display: flex; gap: .4rem; }
 .chat-diff-all[hidden] { display: none; }
 .chat-diff-all button { padding: .25rem .7rem; font-size: .8rem; }

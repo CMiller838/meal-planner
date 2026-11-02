@@ -176,8 +176,7 @@ first scheduled.
      or pointer events with a drag-follow + rotate transform, Tinder-style,
      with a threshold to commit vs. snap back) — not just two buttons
      pretending to be swipe.
-3. **2-Week Plan page**: 14-day grid (2 weeks x day slots: breakfast,
-   lunch, dinner, snack — reuse the existing Day A/Day B rotation shape
+3. **2-Week Plan page**: 14-day grid (2 weeks x one dinner slot per day; Phase 110 removed breakfast, lunch and snack from the plan — reuse the existing Day A/Day B rotation shape
    from `meal-plan-exeter.md` as the generator's starting point, then
    let the user freely edit).
    - **Generate plan** button seeds all 14 days from the liked library

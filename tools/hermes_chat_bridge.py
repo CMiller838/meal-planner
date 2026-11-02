@@ -31,9 +31,9 @@ SESSION_RESPONDER = "hermes chat -c {session} --create-if-missing -Q -q {prompt}
 ONESHOT_RESPONDER = "hermes -z {prompt} chat"
 FALLBACK = {"text": "Sorry, could you say that another way?", "edits": [], "ask": False}
 GIVE_UP = {"text": "I didn't follow, could you put it another way?", "edits": [], "ask": False}
-EDIT_TYPES = """Edit types (day is 1-14, slot is breakfast|lunch|dinner|snack):
+EDIT_TYPES = """Edit types (day is 1-14, slot is always "dinner"):
   {"type":"place","day":N,"slot":S,"mealId":ID,"variantId":ID,"cookId":ID,"leftover":true,"portions":1-12,"freezeFrom":N}  (puts a library meal in a slot; freezeFrom = the day of a planned batch dinner of that same meal whose spare portion this dinner eats from the freezer, at least 3 days after the cook, dinner slot only, not with cookId or leftover; leftover+portions = the user already cooked it and N portions are in the fridge, buys nothing, not with cookId; cookId = a briefing "cooks" entry for that meal, eaten from the freezer/fridge, buys nothing; the app refuses a held slot, wrong slot type, hard exclusions, "never" meals, orphan leftovers)
-  {"type":"freeze","cookId":"<a briefing cooks id in the fridge>","places":[{"day":N,"slot":"lunch|dinner"}]}  (freezes that many portions of an already-cooked fridge batch and eats them in those later slots, 1-4 places, max 3 per reply; the user accepts on a card)
+  {"type":"freeze","cookId":"<a briefing cooks id in the fridge>","places":[{"day":N,"slot":"dinner"}]}  (freezes that many portions of an already-cooked fridge batch and eats them in those later slots, 1-4 places, max 3 per reply; the user accepts on a card)
   {"type":"cheaper","key":"<a context.cheaper key>","to":"<its to>","shopDay":N}  (swaps an ingredient for a cheaper one on that shop's meals, only from context.cheaper; the user accepts on a card, max 3)
   {"type":"bulk","key":"<a briefing bulk key>","shopDay":N}  (proposes a bulk buy from the briefing's "bulk" list only; the user accepts on a card, max 5)
   {"type":"stock","items":[{"name":"<=60 chars","qty":"<=30 chars"}]}  (any chat: loose ingredients the user says they have in, 1-40 items; session-only, never the pantry or shopping list)
@@ -54,7 +54,7 @@ EDIT_TYPES = """Edit types (day is 1-14, slot is breakfast|lunch|dinner|snack):
 (days and slot are optional on chip, budget and reroll; days defaults to the day in focus. Up to 60 edits per reply.)"""
 
 # Phase 109: the docked bar's Ask mode. Live edit set only; anything else, tell the user to open Plan with me.
-BAR_EDIT_TYPES = """Edit types (day is 1-14, slot is breakfast|lunch|dinner|snack), applied at once with an Undo:
+BAR_EDIT_TYPES = """Edit types (day is 1-14, slot is always "dinner"), applied at once with an Undo:
   {"type":"skip","day":N,"slot":S,"how":"push|move|drop","to":{"day":N,"slot":S}}  (move needs to)
   {"type":"out","day":N,"slot":S,"name":"<=60 chars","text":"<=200 chars"}  (eating out)
   {"type":"swap","a":{"day":N,"slot":S},"b":{"day":N,"slot":S}}  {"type":"swapDay","a":N,"b":N}
@@ -142,12 +142,11 @@ def build_prompt(messages, context, opener=False, strict=False, brief=None, spen
         "You are Hermes, talking with the user as yourself, in your own voice: the way you'd talk over their shoulder while they look at the plan on screen."
         " Natural, warm, conversational; short plain sentences. No bullet lists, headings, bold, menus of options or 'I can help with...' lines, no chatbot filler."
         " Always answer what they just said first, then act. They can see the plan, gaps and costs on screen, so never recite them back.",
-        "How the user likes to plan (docs/MEAL_PLANNING_EXAMPLE.md): they react in plain language and each reaction becomes a rule (dislikes, 'no X this week', 'lunch should be toasties'); keep honouring it."
+        "How the user likes to plan (docs/MEAL_PLANNING_EXAMPLE.md): they react in plain language and each reaction becomes a rule (dislikes, 'no X this week', 'no fish this week'); keep honouring it."
         " The kitchen state comes from them, not guesses: ask what is already cooked, what is left and what they have in, and plan around it (cooked leftovers are cooks/leftover placements, so nothing is bought for them)."
         " Map their answers: meals already cooked -> place with leftover+portions (or cookId when the briefing's cooks list has it), loose ingredients -> a stock edit; ask once per chat."
         " When they ask what they can make with what's in, send a cookNow edit for that slot instead of listing meals from memory."
-        " Breakfast, lunch and dinner only, never leave a lunch empty, cook a batch dinner once and eat it again the next day, and never plan waffles (they're spontaneous, they'll say on the day)."
-        " Lunches: prefer library meals whose lunchEffort is reheat or assemble (about 15 minutes or under) and keep the cooking down; only when none fit propose a mealCreate with mealTypes [\"lunch\"] and totalMins 15 or less; no wraps, mushrooms or standalone egg."
+        " Plan dinners only, one a night: cook a batch dinner once and eat it again the next day, and never plan waffles (they're spontaneous, they'll say on the day)."
         " Place meals with place edits, then say what you placed and what's still open, and give the shop total once at the end rather than throughout.",
         "context.shop is the live shop total; for 'make it cheaper' propose only from context.cheaper and mention the saving (about £), never raise cost unprompted. "
         "Money: don't bring up budget or cost unless they do or the week is far over their target. Choose meals on nutrition, taste and what they said.",
