@@ -1005,6 +1005,7 @@ Spec: `.claude/specs/phase105.md` (planned batches via `place.freezeFrom`, cooke
 
 ## Phase 114: App shell, bottom tabs and Hermes bar
 - Spec: `.claude/specs/phase114.md` [M]
+- [ ] Live: on the phone PWA (after the service worker updates to cache v106), tap the Log input: the tab bar slides away and returns on blur; Tonight shows the accent pill behind its icon; compare with shell-a by eye.
 
 ## Phase 115: Browse cards and full-recipe Details sheet
 - Spec: `.claude/specs/phase115.md` [L]

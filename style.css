@@ -116,6 +116,8 @@ a { color: var(--accent); }
   transition: background .2s ease, color .2s ease, transform .15s ease;
 }
 .nav a:hover { transform: translateY(-1px); }
+.nav a { display: inline-flex; align-items: center; gap: .4rem; }
+.tab-ic { width: 1.15rem; height: 1.15rem; flex: 0 0 auto; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 .nav a.active { color: var(--on-accent); background: var(--accent); box-shadow: 0 3px 10px var(--accent-glow); }
 .nav .icon-btn { flex: 0 0 auto; }
 .nav button.icon-btn {
@@ -160,6 +162,8 @@ h1, h2, h3 { line-height: 1.2; }
   .card-grid { grid-template-columns: 1fr 1fr; }
   .nav .brand { display: flex; }
   .nav-links { flex: 0 1 auto; }
+  /* Phase 114: PC bar is a centred card */
+  .ate-bar { width: min(720px, 100%); border: 1px solid var(--border); border-bottom: none; border-radius: 1rem 1rem 0 0; }
 }
 
 .card {
@@ -1105,7 +1109,7 @@ body.has-ate-bar .toast { bottom: calc(5rem + env(safe-area-inset-bottom)); }
 @media (prefers-reduced-motion: reduce) { .eaten-row { animation: none; } .eaten-bar i { transition: none; } }
 
 /* ---- Phase 108: phone-first polish (<640 px): bottom tab bar, 44 px taps, sheet drag, page entry ---- */
-:root { --tabbar-h: 3.5rem; }
+:root { --tabbar-h: 4rem; }
 main { animation: m-enter var(--motion-base) ease-out both; }
 @media (max-width: 639px) {
   /* blur on .nav would trap the fixed tab bar inside it */
@@ -1117,10 +1121,15 @@ main { animation: m-enter var(--motion-base) ease-out both; }
     background: var(--surface); border-top: 1px solid var(--border); overflow: visible;
   }
   .nav-links > a {
-    flex: 1 1 0; display: flex; align-items: center; justify-content: center; text-align: center; white-space: normal;
+    flex: 1 1 0; display: flex; flex-direction: column; gap: .15rem; align-items: center; justify-content: center; text-align: center; white-space: normal;
     min-height: 44px; margin: .3rem .1rem; padding: 0 .2rem; font-size: .72rem; line-height: 1.15; border-radius: .8rem;
   }
-  body:has(input:focus, textarea:focus, select:focus) .nav-links { display: none; }
+  .nav-links > a .tab-ic { box-sizing: border-box; width: 3.4rem; height: 1.9rem; padding: .3rem 1rem; border-radius: 999px; transition: background .2s ease, transform .2s var(--ease-lift, ease); }
+  .nav-links > a.active { background: none; box-shadow: none; color: var(--accent); }
+  .nav-links > a.active .tab-ic { background: var(--accent); color: var(--on-accent); transform: scale(1.06); box-shadow: 0 3px 10px var(--accent-glow); }
+  .nav-links { transition: transform var(--motion-base) ease; }
+  body:has(input:focus, textarea:focus, select:focus) .nav-links { transform: translateY(100%); visibility: hidden; transition: transform var(--motion-base) ease, visibility 0s var(--motion-base); }
+  @media (prefers-reduced-motion: reduce) { .nav-links, body:has(input:focus, textarea:focus, select:focus) .nav-links { transition: none; } .nav-links > a .tab-ic { transition: none; } }
   body { padding-bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom) + 1rem); }
   body.has-ate-bar { padding-bottom: calc(var(--tabbar-h) + 5rem + env(safe-area-inset-bottom)); }
   .ate-bar { bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom)); padding-bottom: .5rem; }

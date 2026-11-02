@@ -62,6 +62,28 @@ for (const [vp, size] of Object.entries({ pc: { width: 1440, height: 900 }, phon
     await dragBy(160);
     await page.waitForSelector('#modal-overlay.hidden', { state: 'attached' });
   });
+  await step('app shell (Phase 114): icon tabs in order, bar hides on focus; PC pills and centred bar card', async () => {
+    const info = await page.evaluate(() => { const n = document.querySelector('.nav-links'), cs = getComputedStyle(n), b = document.querySelector('.ate-bar')?.getBoundingClientRect();
+      return { fixed: cs.position === 'fixed', tabs: [...n.querySelectorAll('a')].map((a) => a.querySelector('.tab-l')?.textContent + (a.querySelector('svg use') ? '+ic' : '')), activeIc: !!n.querySelector('a.active svg use'), bw: b && b.width, bx: b && b.left + b.width / 2, iw: innerWidth }; });
+    if (info.tabs.join() !== 'Tonight+ic,Browse+ic,Discover+ic,Shopping+ic,Eaten+ic') throw new Error('tabs ' + info.tabs);
+    if (!info.activeIc) throw new Error('active pill has no icon');
+    if (page.viewportSize().width >= 640) {
+      if (info.fixed) throw new Error('PC nav is fixed');
+      if (info.bw && (info.bw > 721 || Math.abs(info.bx - info.iw / 2) > 2)) throw new Error('PC bar ' + info.bw + ' @' + info.bx);
+      return;
+    }
+    if (!info.fixed) throw new Error('phone nav not fixed');
+    const input = page.locator('.ate-input');
+    if (await input.count()) {
+      if (await page.locator('.ate-recents:visible').count()) throw new Error('recents visible before focus');
+      await input.focus(); await page.waitForTimeout(350);
+      const hid = await page.evaluate(() => { const n = document.querySelector('.nav-links'); return getComputedStyle(n).visibility === 'hidden' || n.getBoundingClientRect().top >= innerHeight; });
+      if (!hid) throw new Error('tab bar still shown while typing');
+      await input.blur(); await page.waitForTimeout(350);
+      const back = await page.evaluate(() => document.querySelector('.nav-links').getBoundingClientRect().top < innerHeight);
+      if (!back) throw new Error('tab bar did not return');
+    }
+  });
   await step('theme toggle flips dark/light and persists', async () => {
     const before = await theme();
     await page.click('#theme-toggle');

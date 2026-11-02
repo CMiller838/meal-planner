@@ -284,7 +284,7 @@ Goal: Discover becomes a card stack (right adds to the library, left dismisses, 
 
 Picked 2026-11-01 (phone-first): board A, swipe A, shell A, browse A, shopping A, cook C, Plan with Hermes = planchat A wizard (plus a start-date step) handing into planchat C chat. Eaten page (eaten-a/b/c) not picked yet. 114-118 each need 110 done only where they touch slots; shell (114) is independent and should go first so later pages share one frame.
 
-## Phase 114: App shell, bottom tabs and Hermes bar [M] — not started
+## Phase 114: App shell, bottom tabs and Hermes bar [M] — built 2026-11-02, live checks pending
 
 Goal: shell-a on every page: 5-tab bottom bar (Tonight, Browse, Discover, Shopping, Eaten), theme toggle, the Hermes Log/Ask bar docked above it (tabs hide while typing, lifts with the keyboard); tabs move to the top on PC. Reworks `ate-box.js`/`bar-chat.js` placement, not their logic.
 

@@ -47,6 +47,7 @@ when next touched, do not add more.
 
 ## Patterns
 - Phone (<640 px): the nav links become a fixed bottom tab bar (`--tabbar-h`, safe-area padding, hidden while an input is focused, a sheet or chat is open); `.ate-bar` and toasts sit above it; taps are >= 44 px; plan `.top-actions` scroll sideways. `main` rises in once (`m-enter`). Sheets drag down from the top 48 px past 80 px to close (`MP.enableSheetDrag`, transform only, instant under reduced motion).
+- Phase 114 shell: tabs are Tonight/Browse/Discover/Shopping/Eaten with `nav-icons.svg` icons (`.tab-ic`); phone active tab = accent pill behind the icon, bar slides down when hiding; PC tabs are inline icon pills and `.ate-bar` is a centred card (<=720 px, rounded top).
 - Nav: sticky translucent bar, pill links, active link filled with `--accent`, round icon buttons.
 - Cards: paper surface, image on top, `.card-body`, `.card-actions`, uppercase `.tag` chips; grids are one column, widening at 640 px.
 - Sheets: bottom `.modal-sheet` over a dark overlay; confirmations and undo via `.toast`.
