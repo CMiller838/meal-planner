@@ -66,46 +66,99 @@ window.MP = window.MP || {};
     return vocabCache;
   }
 
-  MP.PlanPrefs = { KEY, get, save, loadVocab, profileBudget };
+  function noon(iso) {
+    const d = new Date(String(iso) + "T12:00:00");
+    return isNaN(d) ? new Date(new Date().toLocaleDateString("sv") + "T12:00:00") : d;
+  }
+
+  /** Phase 118a: nights 1..days (clamped 1..28) whose weekday (start + n-1) is in `weekdays` (0=Sun..6). Pure. */
+  function busyFromWeekdays(startIso, days, weekdays) {
+    const set = new Set(weekdays || []), n = Math.min(28, Math.max(1, Math.floor(Number(days)) || 14)), out = [];
+    for (let i = 1; i <= n; i++) {
+      const d = noon(startIso);
+      d.setDate(d.getDate() + i - 1);
+      if (set.has(d.getDay())) out.push(i);
+    }
+    return out;
+  }
+
+  /** Phase 118a: sorted unique weekdays of the given nights. Pure. */
+  function weekdaysFromBusy(startIso, busyDays) {
+    const out = new Set();
+    for (const n of busyDays || []) {
+      const d = noon(startIso);
+      d.setDate(d.getDate() + n - 1);
+      out.add(d.getDay());
+    }
+    return [...out].sort((a, b) => a - b);
+  }
+
+  MP.PlanPrefs = { KEY, get, save, loadVocab, profileBudget, busyFromWeekdays, weekdaysFromBusy };
 
   // ---- Page controller (no-ops when not on plan-with-me.html) ----
   const busyGrid = document.getElementById("busy-grid");
   if (!busyGrid) return;
 
   const { esc } = MP;
-  const busyDays = new Set();
   const chips = new Set();
   let budgetTarget = 0;
 
-  function weekdayShort(offset) {
-    const d = new Date();
-    const s = document.getElementById("start-date").value;
-    if (s) d.setTime(Date.parse(s + "T12:00:00"));
-    d.setDate(d.getDate() + offset);
-    return d.toLocaleDateString(undefined, { weekday: "short" });
-  }
+  const PD = () => document.getElementById("plan-days");
+  const startEl = () => document.getElementById("start-date");
+  const WEEK = [1, 2, 3, 4, 5, 6, 0]; // Mon..Sun as getDay values
+  const weekdays = new Set();
+  const DOW = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  let step = 0;
+  const LAST = 5;
 
-  /** Phase 83: the Customise length, clamped 1..28 (blank or junk = 14). */
+  /** Phase 83: the plan length, clamped 1..28 (blank or junk = 14). */
   function planDays() {
-    const n = Math.floor(Number(document.getElementById("plan-days").value));
+    const n = Math.floor(Number(PD().value));
     return n >= 1 && n <= 28 ? n : 14;
   }
 
+  function fmt(iso, off) {
+    const d = new Date(iso + "T12:00:00");
+    d.setDate(d.getDate() + off);
+    return d.toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" });
+  }
+  const rangeText = () => `${fmt(startEl().value, 0)} to ${fmt(startEl().value, planDays() - 1)}`;
+
   function renderBusyGrid() {
-    let html = "";
-    for (let day = 1; day <= planDays(); day++) {
-      const active = busyDays.has(day);
-      html += `<button class="busy-cell${active ? " is-busy" : ""}" data-day="${day}" aria-pressed="${active}">
-        <span class="busy-day">${day}</span><span class="busy-dow">${esc(weekdayShort(day - 1))}</span>
-      </button>`;
-    }
-    busyGrid.innerHTML = html;
+    busyGrid.innerHTML = WEEK.map((w) => {
+      const on = weekdays.has(w);
+      return `<button type="button" class="busy-cell${on ? " is-busy" : ""}" data-weekday="${w}" aria-pressed="${on}"><span class="busy-day">${DOW[w]}</span></button>`;
+    }).join("");
+  }
+
+  function setDays(n) {
+    PD().value = String(Math.min(28, Math.max(1, n)));
+    renderAll();
+  }
+
+  function renderAll() {
+    document.getElementById("nights-out").textContent = planDays();
+    document.getElementById("wiz-range").textContent = document.getElementById("wiz-range2").textContent = rangeText();
+    document.querySelectorAll("[data-nights]").forEach((b) => b.setAttribute("aria-pressed", String(Number(b.dataset.nights) === planDays())));
+    renderSummary();
+  }
+
+  function showStep(n) {
+    step = Math.max(0, Math.min(LAST, n));
+    document.querySelectorAll(".wiz-step").forEach((s) => { s.hidden = Number(s.dataset.step) !== step; });
+    document.getElementById("wiz-prog").style.width = ((step + 1) / (LAST + 1)) * 100 + "%";
+    document.getElementById("wiz-count").textContent = `Step ${step + 1} of ${LAST + 1}`;
+    document.getElementById("wiz-prev").hidden = step === 0;
+    document.getElementById("wiz-next").hidden = step === LAST;
+    document.getElementById("pwm-generate-btn").hidden = step !== LAST;
+    renderSummary();
   }
 
   function renderChips(vocab) {
     const row = document.getElementById("chip-row");
     if (!vocab || !Array.isArray(vocab.chips) || !vocab.chips.length) {
       row.hidden = true;
+      document.getElementById("chip-none").hidden = false;
       return;
     }
     row.hidden = false;
@@ -125,6 +178,7 @@ window.MP = window.MP || {};
     const row = document.getElementById("budget-row");
     if (!planning || !planning.budgetTarget) {
       row.hidden = true;
+      document.getElementById("budget-none").hidden = false;
       return;
     }
     row.hidden = false;
@@ -152,13 +206,18 @@ window.MP = window.MP || {};
   }
 
   function renderSummary() {
-    const el = document.getElementById("pref-summary");
-    const n = busyDays.size;
-    const p = chips.size;
-    const base = n || p
-      ? `${n} busy day${n === 1 ? "" : "s"} · ${p} preference${p === 1 ? "" : "s"}`
-      : "No busy days, no preferences";
-    el.textContent = budgetTarget > 0 ? `${base} · £${budgetTarget}/wk` : base;
+    const el = document.getElementById("pref-summary"), rv = document.getElementById("wiz-review");
+    const p = chips.size, locked = profileBudget(), bt = locked || budgetTarget;
+    const names = [...chips].map((id) => { const b = document.querySelector(`[data-chip="${CSS.escape(id)}"]`); return b ? b.textContent : id; });
+    const rows = [
+      `${planDays()} nights: ${rangeText()}`,
+      weekdays.size ? "Busy: " + WEEK.filter((w) => weekdays.has(w)).map((w) => DOW[w]).join(", ") : "No busy days",
+      bt > 0 ? `Budget: £${bt}/wk` : "Budget: No target",
+      p ? "Preferences: " + names.join(", ") : "No preferences",
+    ];
+    rv.textContent = "";
+    rows.forEach((t) => { const li = document.createElement("li"); li.textContent = t; rv.appendChild(li); });
+    el.textContent = "";
   }
 
   /** Phase 91: read-only standing notes (external text: textContent only). Hidden when there are none. */
@@ -179,26 +238,36 @@ window.MP = window.MP || {};
     if (MP.Sync) { renderNotes(); MP.Sync.fetchNotes().then(renderNotes); }
     if (MP.Sync) await MP.Sync.fetchSettings();
     const prefs = MP.Sync ? await MP.Sync.fetchPlanPrefs() : MP.PlanPrefs.get();
-    prefs.busyDays.forEach((d) => busyDays.add(d));
     budgetTarget = prefs.budgetTarget || 0;
     document.getElementById("freeze-batches").checked = prefs.freezeBatches !== false;
     document.getElementById("repeat-gap").value = String(prefs.repeatGap || 0);
     document.getElementById("rolling-plan").checked = prefs.rolling !== false;
-    const startEl = document.getElementById("start-date");
-    startEl.value = startEl.min = new Date().toLocaleDateString("sv");
+    const se = startEl();
+    se.value = se.min = new Date().toLocaleDateString("sv");
+    MP.PlanPrefs.weekdaysFromBusy(se.value, prefs.busyDays).forEach((w) => weekdays.add(w));
     renderBusyGrid();
-    document.getElementById("plan-days").addEventListener("change", () => { [...busyDays].forEach((d) => d > planDays() && busyDays.delete(d)); renderBusyGrid(); renderSummary(); });
-    startEl.addEventListener("change", () => { if (!startEl.value) startEl.value = startEl.min; renderBusyGrid(); });
+    renderAll();
+    showStep(0);
+    se.addEventListener("change", () => { if (!se.value || se.value < se.min) se.value = se.min; renderAll(); });
+    document.querySelectorAll("[data-start]").forEach((b) => b.addEventListener("click", () => {
+      const d = new Date(); d.setDate(d.getDate() + Number(b.dataset.start));
+      se.value = d.toLocaleDateString("sv"); renderAll();
+    }));
+    document.getElementById("nights-minus").addEventListener("click", () => setDays(planDays() - 1));
+    document.getElementById("nights-plus").addEventListener("click", () => setDays(planDays() + 1));
+    document.querySelectorAll("[data-nights]").forEach((b) => b.addEventListener("click", () => setDays(Number(b.dataset.nights))));
+    document.getElementById("wiz-next").addEventListener("click", () => showStep(step + 1));
+    document.getElementById("wiz-prev").addEventListener("click", () => showStep(step - 1));
 
     MP.ShoppingList.load()
       .then((packData) => renderBudget(packData && packData.planning))
       .catch(() => renderBudget(null));
 
     busyGrid.addEventListener("click", (e) => {
-      const btn = e.target.closest("button[data-day]");
+      const btn = e.target.closest("button[data-weekday]");
       if (!btn) return;
-      const day = Number(btn.dataset.day);
-      const active = busyDays.has(day) ? (busyDays.delete(day), false) : (busyDays.add(day), true);
+      const w = Number(btn.dataset.weekday);
+      const active = weekdays.has(w) ? (weekdays.delete(w), false) : (weekdays.add(w), true);
       btn.classList.toggle("is-busy", active);
       btn.setAttribute("aria-pressed", String(active));
       renderSummary();
@@ -226,7 +295,7 @@ window.MP = window.MP || {};
     renderSummary();
 
     document.getElementById("pwm-generate-btn").addEventListener("click", () => {
-      MP.PlanPrefs.save([...busyDays].filter((d) => d <= planDays()), [...chips], profileBudget() ? MP.PlanPrefs.get(true).budgetTarget : budgetTarget, document.getElementById("freeze-batches").checked, document.getElementById("repeat-gap").value, document.getElementById("rolling-plan").checked, MP.PlanPrefs.get(true).timeCaps);
+      MP.PlanPrefs.save(MP.PlanPrefs.busyFromWeekdays(startEl().value, planDays(), [...weekdays]), [...chips], profileBudget() ? MP.PlanPrefs.get(true).budgetTarget : budgetTarget, document.getElementById("freeze-batches").checked, document.getElementById("repeat-gap").value, document.getElementById("rolling-plan").checked, MP.PlanPrefs.get(true).timeCaps);
       if (MP.Sync) MP.Sync.pushPlanPrefs();
       const start = document.getElementById("start-date").value;
       location.href = "plan.html?guided=1" + (start ? "&start=" + start : "") + "&days=" + planDays() + "&shop=" + document.getElementById("shop-day").value;

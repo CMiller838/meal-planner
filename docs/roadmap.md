@@ -303,6 +303,8 @@ Goal: cook-c: previous/current/next step, timer ring, ingredients drawer, keep-a
 
 ## Phase 118: Plan with Hermes, wizard then chat [L] — not started
 
+Part 118a (wizard) built 2026-11-02, check.py 10/10; 118b pending.
+
 Goal: planchat-a's 5-step wizard with an added start-date step (feeds `opts.firstSlot`/start, Phase 83), then a transition into planchat-c's in-chat meal cards with swipe accept/reject and the pill ticker. Requires Phase 110.
 
 ## Phase 119: Finish shop review and Freezer drawer [M] — built 2026-11-02, live checks pending

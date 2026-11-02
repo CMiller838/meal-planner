@@ -1024,8 +1024,9 @@ Spec: `.claude/specs/phase105.md` (planned batches via `place.freezeFrom`, cooke
 - [ ] Live: on the phone PWA, tick every line in an aisle then Finish shop: card collapses, "Shop complete" toast with Undo, pantry unchanged.
 
 ## Phase 118: Plan with Hermes, wizard then chat
-- Spec: `.claude/specs/phase118a.md` [M] (wizard)
+- Spec: `.claude/specs/phase118a.md` [M] (wizard) — built 2026-11-02, check.py 10/10
 - Spec: `.claude/specs/phase118b.md` [L] (night-by-night chat)
+- [ ] Live: 118a: on the phone PWA, open Plan with me, step through all 6 steps, Start planning lands on the guided plan; "I ate" bar stays visible.
 - [ ] Live: on the phone PWA, wizard → swipe through a week of night cards with the Hermes bridge running; type "quicker" on a busy night.
 
 ## Phase 119: Finish shop review and Freezer drawer

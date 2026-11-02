@@ -1361,3 +1361,24 @@ body:has(.modal-overlay:not(.hidden)) .shop-dock, body.chat-open .shop-dock { di
 }
 @keyframes ms-side { from { transform: translateX(40px); opacity: 0; } }
 @media (prefers-reduced-motion: reduce) { .ms, .meal-card { animation: none; } .meal-card:hover { transform: none; } .ms-btn, .chip-row .fchip { transition: none; } }
+
+/* Phase 118a: Plan with me wizard */
+.wiz-prog { height: .5rem; border-radius: 99px; background: var(--surface-alt); border: 1px solid var(--border); overflow: hidden; }
+.wiz-prog i { display: block; height: 100%; width: 0; background: var(--accent-2); transition: width .35s ease-out; }
+.wiz-step { margin: 1rem 0; animation: wiz-rise .25s ease-out both; }
+.wiz-step[hidden] { display: none; }
+.wiz-pre { display: flex; flex-wrap: wrap; gap: .5rem; margin: .6rem 0; }
+.wiz-pre .chip { min-height: 44px; padding: .3rem 1rem; }
+.wiz-stp { display: flex; align-items: center; justify-content: center; gap: 1.2rem; margin: .6rem 0; }
+.wiz-stp output { min-width: 6rem; text-align: center; font-size: 2.6rem; font-weight: 800; }
+.wiz-ib { width: 3.2rem; height: 3.2rem; border-radius: 50%; border: 1px solid var(--border); background: var(--surface); color: var(--text); font-size: 1.6rem; cursor: pointer; transition: transform var(--motion-base); }
+.wiz-ib:active { transform: scale(.95); }
+.wiz-review { list-style: none; padding: 0; display: grid; gap: .4rem; margin: .6rem 0; }
+.wiz-review li { padding: .5rem .8rem; border: 1px solid var(--border); border-radius: .8rem; background: var(--surface); }
+.wiz-nav { display: flex; flex-wrap: wrap; gap: .6rem; align-items: center; margin: 1rem 0; }
+.wiz-nav button, .wiz-nav a { min-height: 44px; }
+.wiz .busy-cell { min-height: 56px; }
+.wiz .busy-grid { gap: .3rem; }
+@keyframes wiz-rise { from { opacity: 0; transform: translateY(8px); } }
+@media (prefers-reduced-motion: reduce) { .wiz-step { animation: none; } .wiz-prog i { transition: none; } }
+.wiz-nav [hidden] { display: none !important; }

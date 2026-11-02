@@ -58,3 +58,8 @@ when next touched, do not add more.
 
 ## Component sources
 Swipe deck: Discover (Phase 113) is a 3-card stack (`.fan-card`, `--i` offsets 12 px / .045 scale / 1.2 deg, top card only draggable, right adds, left dismisses, tap opens Details, Undo button) adapted from `design-prototypes/ui-concepts/discover-swipe-a.html`; earlier fan/filmstrip prototypes were `cork-kitchen-swipe-*.html`. Nothing is adapted from a library.
+
+## Wizard (Phase 118a)
+Plan with me is one page of `.wiz-step[data-step]` sections shown one at a time under a `.wiz-prog` bar; Back/Next/Start planning
+sit in-flow in `.wiz-nav` (never fixed, so the "I ate" bar stays visible). Choices are `.chip` presets, a `.wiz-ib` −/+ stepper,
+and `.busy-cell` weekday toggles; steps enter with the `wiz-rise` fade (off under reduced motion).

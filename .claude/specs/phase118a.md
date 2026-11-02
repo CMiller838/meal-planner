@@ -65,9 +65,9 @@ Phase 118 is split: this part builds and tests alone (it hands off to today's `p
 
 ## Tasks
 ### Logic (TDD)
-- [ ] 1. `test.html` cases: Monday start + Tue + 14 → `[2,9]`; Sunday start wraps the week; days 1; empty weekdays → `[]`;
+- [x] 1. `test.html` cases: Monday start + Tue + 14 → `[2,9]`; Sunday start wraps the week; days 1; empty weekdays → `[]`;
       `weekdaysFromBusy(busyFromWeekdays(...))` round-trips; then implement both in `plan-with-me.js`; bump `sw.js` `CACHE`.
 ### UI
-- [ ] 2. `restyle-from-prototype` from `planchat-a.html` into `plan-with-me.html` + `style.css`: 6 steps incl. the start-date step, house tokens, both themes, 390 px.
-- [ ] 3. `plan-with-me.js` step controller: show/hide steps, progress, Back/Next, stepper + chips, weekday toggles, budget, chips, Review summary + More options, Start planning (save + URL).
-- [ ] 4. `walk.mjs`: the Verification assertions above (each its own check); update the notes step.
+- [x] 2. `restyle-from-prototype` from `planchat-a.html` into `plan-with-me.html` + `style.css`: 6 steps incl. the start-date step, house tokens, both themes, 390 px.
+- [x] 3. `plan-with-me.js` step controller: show/hide steps, progress, Back/Next, stepper + chips, weekday toggles, budget, chips, Review summary + More options, Start planning (save + URL).
+- [x] 4. `walk.mjs`: the Verification assertions above (each its own check); update the notes step.

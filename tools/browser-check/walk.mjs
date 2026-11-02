@@ -499,6 +499,33 @@ for (const [vp, size] of Object.entries({ pc: { width: 1440, height: 900 }, phon
     await page.waitForSelector('#guided-review-banner:not(.hidden)');
     if (await page.evaluate(() => localStorage.getItem('mp_plan'))) throw new Error('mp_plan saved before Looks good');
   });
+  await step('phase 118a: wizard walks 6 steps, Back, busy weekday toggle saves [2,9], lands on guided=1 days=14, Review shows notes + More options', async () => {
+    await page.goto(`${base}/plan-with-me.html`);
+    await page.waitForSelector('#wiz-next');
+    if (!await page.locator('#wiz-prev').isHidden()) throw new Error('Back visible on step 1');
+    const next = await page.evaluate(() => { const d = new Date(); d.setDate(d.getDate() + ((8 - d.getDay()) % 7 || 7)); return d.toLocaleDateString('sv'); });
+    await page.fill('#start-date', next); await page.dispatchEvent('#start-date', 'change');
+    const w0 = await page.evaluate(() => document.getElementById('wiz-prog').style.width);
+    await page.click('#wiz-next');
+    const w1 = await page.evaluate(() => document.getElementById('wiz-prog').style.width);
+    if (parseFloat(w1) <= parseFloat(w0)) throw new Error('progress did not fill: ' + w0 + ' -> ' + w1);
+    await page.click('#wiz-prev');
+    if (await page.locator('.wiz-step[data-step="0"]').isHidden()) throw new Error('Back did not return to step 1');
+    await page.click('#wiz-next'); await page.click('#wiz-next');
+    await page.evaluate(() => document.querySelectorAll('#busy-grid .is-busy').forEach((b) => b.click()));
+    await page.click('#busy-grid [data-weekday="2"]');
+    for (let i = 0; i < 3; i++) await page.click('#wiz-next');
+    if (!await page.locator('#pwm-generate-btn').isVisible()) throw new Error('no Start planning on Review');
+    if (!await page.locator('#wiz-next').isHidden()) throw new Error('Next visible on Review');
+    await page.click('.customise summary');
+    if (!await page.locator('.customise #shop-day').isVisible()) throw new Error('More options lacks #shop-day');
+    if (await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)) throw new Error('horizontal scroll');
+    await shot('wizard-review');
+    await page.click('#pwm-generate-btn');
+    await page.waitForURL(/plan\.html\?guided=1.*days=14/, { timeout: 8000 });
+    const bd = await page.evaluate(() => JSON.parse(localStorage.getItem('mp_planPrefs')).busyDays);
+    if (JSON.stringify(bd) !== '[2,9]') throw new Error('busyDays ' + JSON.stringify(bd));
+  });
   await step('phase 110: old-shape plan loads dinners only; one card per day; no first-slot / also-row / library-filters; Not planned label', async () => {
     await page.goto(`${base}/plan.html`);
     await page.waitForSelector('#plan-root .slot-card');
@@ -518,7 +545,7 @@ for (const [vp, size] of Object.entries({ pc: { width: 1440, height: 900 }, phon
     const ids2 = await page.evaluate(() => JSON.parse(localStorage.getItem('mp_plan')).days.map((d) => d.slots.dinner && d.slots.dinner.mealId));
     if (JSON.stringify(ids) !== JSON.stringify(ids2)) throw new Error('dinner ids changed');
     await page.goto(`${base}/plan-with-me.html`);
-    await page.waitForSelector('#pwm-generate-btn');
+    await page.waitForSelector('#pwm-generate-btn', { state: 'attached' });
     if (await page.locator('#also-row, #first-slot').count()) throw new Error('also-row / first-slot still present');
     await page.goto(`${base}/index.html`);
     await page.waitForSelector('#library-grid .meal-card');
@@ -637,6 +664,8 @@ for (const [vp, size] of Object.entries({ pc: { width: 1440, height: 900 }, phon
     await page.waitForSelector('#plan-chat', { state: 'hidden' });
     if (await planLS() !== orig) throw new Error('note edits changed mp_plan');
     await page.goto(`${base}/plan-with-me.html`);
+    await page.waitForSelector('#wiz-next');
+    for (let i = 0; i < 5; i++) await page.click('#wiz-next');
     await page.waitForSelector('#notes-list li');
     if (!/No fish/.test(await page.locator('#notes-list').innerText()) || !/waiting for Obsidian/.test(await page.locator('#notes-list').innerText())) throw new Error('Standing notes list: ' + await page.locator('#notes-list').innerText());
     await shot('notes-list');

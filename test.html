@@ -2134,6 +2134,15 @@
     const P = MP.PlanPrefs;
     const KEY = P.KEY;
 
+    // Phase 118a helpers (2026-11-02 is a Monday)
+    check("busyFromWeekdays Mon start, Tue, 14 -> [2,9]", deepEqual(P.busyFromWeekdays("2026-11-02", 14, [2]), [2, 9]));
+    check("busyFromWeekdays Sunday start wraps the week", deepEqual(P.busyFromWeekdays("2026-11-01", 14, [0, 6]), [1, 7, 8, 14]));
+    check("busyFromWeekdays 1 night", deepEqual(P.busyFromWeekdays("2026-11-02", 1, [1, 2]), [1]));
+    check("busyFromWeekdays empty weekdays -> []", deepEqual(P.busyFromWeekdays("2026-11-02", 14, []), []));
+    check("busyFromWeekdays clamps days to 28", deepEqual(P.busyFromWeekdays("2026-11-02", 99, [1]), [1, 8, 15, 22]));
+    check("busyFromWeekdays bad date = today, no throw", Array.isArray(P.busyFromWeekdays("nope", 7, [0, 1, 2, 3, 4, 5, 6])));
+    check("weekdaysFromBusy round-trips", deepEqual(P.weekdaysFromBusy("2026-11-02", P.busyFromWeekdays("2026-11-02", 14, [2, 5])), [2, 5]));
+
     localStorage.removeItem(KEY);
     check("get() with key absent -> empty default", deepEqual(P.get(), { busyDays: [], chips: [], freezeBatches: true, repeatGap: 0, rolling: true, timeCaps: {}, budgetTarget: 0 }));
 
