@@ -45,9 +45,9 @@ Own calls:
 
 ## Tasks
 ### Logic (TDD)
-- [ ] 1. `test.html` cases for `gapHits` and `undismiss`; implement in `nutrition.js` / `data.js`; bump `sw.js` `CACHE`.
+- [x] 1. `test.html` cases for `gapHits` and `undismiss`; implement in `nutrition.js` / `data.js`; bump `sw.js` `CACHE`.
 ### UI (`ui-build`, restyle from `discover-swipe-a.html`)
-- [ ] 2. `discover.html` markup (deck, Dismiss/Details/Add, Undo, toast, modal, no Breakfast chip); drop Breakfast from `mealdb.js` `CATEGORIES`; `style.css` restyle in both themes at PC and 390 px.
-- [ ] 3. `discover.js`: new card (photo, cost badge, gap chips, ingredient line), pointer drag + tap, `decide`/history/`undo`, Details sheet with Save for later, keyboard, empty state + bring back, reduced motion.
-- [ ] 4. `walk.mjs` steps for each behaviour in Verification, screenshots at both widths and themes.
-- [ ] 5. `docs/UI_STYLE.md` line; run `python3 check.py`.
+- [x] 2. `discover.html` markup (deck, Dismiss/Details/Add, Undo, toast, modal, no Breakfast chip); drop Breakfast from `mealdb.js` `CATEGORIES`; `style.css` restyle in both themes at PC and 390 px.
+- [x] 3. `discover.js`: new card (photo, cost badge, gap chips, ingredient line), pointer drag + tap, `decide`/history/`undo`, Details sheet with Save for later, keyboard, empty state + bring back, reduced motion.
+- [x] 4. `walk.mjs` steps for each behaviour in Verification, screenshots at both widths and themes.
+- [x] 5. `docs/UI_STYLE.md` line; run `python3 check.py`.

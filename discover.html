@@ -30,7 +30,7 @@
 <main>
   <section class="section" style="margin-top:1rem;">
     <h1 style="color:#fff6ea;font-size:1.6rem;margin:0 0 4px;text-align:center;">Pin up something good</h1>
-    <p class="muted" style="text-align:center;">Swipe right to like, left to pass, up to save for later.</p>
+    <p class="muted" style="text-align:center;">Swipe right to add, left to dismiss, tap for details.</p>
     <div id="discover-filters" class="chip-row hscroll">
       <button class="chip active" data-cat="">All</button>
       <button class="chip" data-cat="Chicken">Chicken</button>
@@ -40,7 +40,6 @@
       <button class="chip" data-cat="Pork">Pork</button>
       <button class="chip" data-cat="Lamb">Lamb</button>
       <button class="chip" data-cat="Vegetarian">Vegetarian</button>
-      <button class="chip" data-cat="Breakfast">Breakfast</button>
       <button class="chip" data-filter="pantry" aria-pressed="false">Using what's left</button>
     </div>
     <p class="muted" id="gap-note" style="text-align:center;"></p>
@@ -48,13 +47,12 @@
       <div class="fan-progress" id="fan-progress"></div>
       <div class="fan-deck" id="fan-deck"></div>
       <div class="fan-controls">
-        <button class="fan-btn skip" id="fan-skip" title="Pass">✕</button>
-        <button class="fan-btn super" id="fan-super" title="Save for later">★</button>
-        <button class="fan-btn like" id="fan-like" title="Like">♥</button>
+        <button class="fan-btn skip" id="fan-skip" aria-label="Dismiss (left arrow)">✕ Dismiss</button>
+        <button class="fan-btn" id="fan-details" aria-label="Details (up arrow)">Details</button>
+        <button class="fan-btn like" id="fan-like" aria-label="Add to library (right arrow)">♥ Add</button>
+        <button class="fan-btn" id="fan-undo" aria-label="Undo (Z)" disabled>↶ Undo</button>
       </div>
-      <p class="swipe-hint">Drag the card — or use the buttons</p>
-      <div class="fan-filmstrip-title">Up next</div>
-      <div class="fan-filmstrip" id="fan-filmstrip"></div>
+      <p class="keys-hint">← dismiss · → add · ↑ or Enter details · Z undo</p>
     </div>
   </section>
 
@@ -64,6 +62,9 @@
   </section>
 </main>
 
+<div id="disc-overlay" class="modal-overlay hidden">
+  <div id="disc-sheet" class="modal-sheet" role="dialog" aria-modal="true" aria-label="Meal details" tabindex="-1"></div>
+</div>
 <div id="toast-root"></div>
 
 <script src="data.js"></script>

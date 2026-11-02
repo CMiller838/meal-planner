@@ -55,4 +55,4 @@ when next touched, do not add more.
 - Meter: sticky `.meter-strip` under the nav, built once and updated in place; `.meter-bar` width eases via CSS transition, numbers count up ~400 ms on edit only (instant on first paint, staged reveal, reduced motion).
 
 ## Component sources
-Swipe deck, fan and filmstrip are original to this project (prototypes `cork-kitchen-swipe-*.html`). Nothing is adapted from a library.
+Swipe deck: Discover (Phase 113) is a 3-card stack (`.fan-card`, `--i` offsets 12 px / .045 scale / 1.2 deg, top card only draggable, right adds, left dismisses, tap opens Details, Undo button) adapted from `design-prototypes/ui-concepts/discover-swipe-a.html`; earlier fan/filmstrip prototypes were `cork-kitchen-swipe-*.html`. Nothing is adapted from a library.

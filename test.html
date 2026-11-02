@@ -628,8 +628,8 @@
       deepEqual(toMeal({ idMeal: "1", strCategory: "Breakfast", strMeal: "x", strInstructions: "y" }).mealTypes, ["breakfast"])
     );
     check(
-      "CATEGORIES matches the 8 chip categories exactly",
-      deepEqual(CATEGORIES, ["Chicken", "Beef", "Seafood", "Pasta", "Pork", "Lamb", "Vegetarian", "Breakfast"])
+      "CATEGORIES matches the 7 chip categories exactly",
+      deepEqual(CATEGORIES, ["Chicken", "Beef", "Seafood", "Pasta", "Pork", "Lamb", "Vegetarian"])
     );
   }
 
@@ -1337,6 +1337,18 @@
         const fe = MP.Nutrition.foodAsEaten({ id: "f1", name: "x", when: "2026-09-07T12:00:00Z", nutrients: { vitC_mg: { value: 40 } } }, tg, 0.1);
         const wg = MP.Nutrition.weekGaps([fe], {}, ["2026-09-07"], {}, tg, () => "2026-09-07");
         check("gap strip: a food-log entry marks its day logged", wg.days[0].logged && wg.nutrients.length > 0);
+      }
+      {
+        const tg = { spinach: { iron_mg: "high", vitC_mg: "med" }, rice: { carbs_g: "high" }, beans: { fibre_g: "high" } };
+        const m = { ingredients: [{ key: "spinach" }, { key: "beans" }, { key: "nope" }] };
+        check("gapHits: only covered gap nutrients, in gap order", deepEqual(MP.Nutrition.gapHits(m, ["fibre_g", "carbs_g", "iron_mg"], tg), ["fibre_g", "iron_mg"]));
+        check("gapHits: max 2", MP.Nutrition.gapHits(m, ["iron_mg", "vitC_mg", "fibre_g"], tg).length === 2);
+        check("gapHits: none / no ingredients give []", MP.Nutrition.gapHits(m, ["carbs_g"], tg).length === 0 && MP.Nutrition.gapHits({}, ["iron_mg"], tg).length === 0);
+        sessionStorage.removeItem("mp_dismissed_discover");
+        MP.dismiss("u1", "U1"); MP.dismiss("u2", "U2"); MP.undismiss("u1");
+        const dd = MP.getDismissed();
+        check("undismiss: removes the id, leaves others", !dd.has("u1") && dd.has("u2"));
+        sessionStorage.removeItem("mp_dismissed_discover");
       }
       check("newSince: only entries after the ack, ascending",
         deepEqual(MP.Sync.newSince([r("b", at(7, 13)), r("a", at(7, 11)), r("c", at(7, 9))], at(7, 10)).map((x) => x.mealId), ["a", "b"]));

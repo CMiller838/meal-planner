@@ -833,6 +833,13 @@
     if (MP.Prefs) MP.Prefs.bump({ id: mealId, name }, "dismissed");
   }
 
+  /** Undo a dismiss (Phase 113). Leaves the taste counter alone. */
+  function undismiss(mealId) {
+    const set = getDismissed();
+    set.delete(mealId);
+    sessionStorage.setItem(SS_DISMISSED, JSON.stringify([...set]));
+  }
+
   /** "Save for later" pile from the Discover fan deck — persisted separately
    *  from the liked library so a save isn't the same as adding to the plan. */
   function getSavedLater() {
@@ -934,6 +941,7 @@
   MP.filterMeals = filterMeals;
   MP.getDismissed = getDismissed;
   MP.dismiss = dismiss;
+  MP.undismiss = undismiss;
   MP.getSavedLater = getSavedLater;
   MP.saveForLater = saveForLater;
   MP.removeSavedLater = removeSavedLater;

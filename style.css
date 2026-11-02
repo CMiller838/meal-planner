@@ -253,51 +253,60 @@ section.section h2 { display: flex; align-items: center; gap: .5rem; color: var(
   padding: 2rem 1rem;
 }
 
-/* ---- Fanned discover deck (Discover page) ---- */
-.fan-wrap { max-width: 460px; margin: 0 auto; }
-.fan-progress { text-align: center; color: var(--text-dim); font-size: .82rem; margin-bottom: 10px; font-weight: 700; letter-spacing: .3px; }
-.fan-deck { position: relative; height: 440px; margin-bottom: 14px; touch-action: none; }
+/* ---- Discover card stack (Phase 113; adapted from design-prototypes/ui-concepts/discover-swipe-a.html) ---- */
+.fan-wrap { max-width: 440px; margin: 0 auto; }
+.fan-progress { text-align: center; color: var(--on-cork); font-size: .85rem; margin-bottom: 8px; font-weight: 700; min-height: 1.2em; }
+.fan-deck { position: relative; height: 500px; margin: .6rem 0 1.2rem; }
 .fan-card {
-  position: absolute; left: 50%; top: 0; width: 100%; max-width: 300px; height: 410px; margin-left: -150px;
-  background: var(--surface); border-radius: 24px;
-  box-shadow: 0 6px 16px var(--shadow), 0 1px 0 rgba(255, 255, 255, .4) inset;
-  display: flex; flex-direction: column; overflow: hidden; cursor: grab;
-  transition: transform .4s cubic-bezier(.2, .9, .22, 1.4), opacity .35s ease;
-  user-select: none; -webkit-user-select: none;
-  transform-origin: 50% 120%;
+  position: absolute; inset: 0; background: var(--surface); color: var(--text); border: 1px solid var(--border);
+  border-radius: var(--radius); box-shadow: 0 10px 28px var(--shadow);
+  display: flex; flex-direction: column; overflow: hidden; user-select: none; -webkit-user-select: none;
+  z-index: calc(10 - var(--i));
+  transform: translateY(calc(var(--i) * 12px)) scale(calc(1 - var(--i) * .045)) rotate(calc(var(--i) * 1.2deg));
+  transform-origin: 50% 100%;
 }
-.fan-card.dragging { transition: none; cursor: grabbing; }
-.fan-card .card-img { flex: 1; min-height: 170px; }
-.fan-card .card-body { padding: 14px 18px 18px; }
+.fan-card.top { cursor: grab; touch-action: none; }
+.fan-card.dragging { cursor: grabbing; }
+.fan-card.fly { transition: transform .24s ease-in, opacity .24s; }
+.fan-card .card-img { flex: 1 1 46%; min-height: 140px; width: 100%; object-fit: cover; pointer-events: none; }
+.fan-body { padding: .8rem 1rem 1rem; }
+.fan-body h3 { margin: 0 0 .3rem; font-size: 1.3rem; line-height: 1.15; }
+.fan-gaps { display: flex; flex-wrap: wrap; gap: .35rem; margin: .4rem 0 0; }
+.fan-gap { font-size: .7rem; text-transform: uppercase; letter-spacing: .04em; font-weight: 800; padding: .25rem .55rem; border-radius: 999px; background: var(--butter); color: var(--on-butter); }
+.fan-ing { margin: .6rem 0 0; color: var(--text-dim); font-size: .85rem; }
+.fan-ing b { color: var(--text); }
 .fan-stamp {
-  position: absolute; top: 18px; padding: 6px 14px; border: 4px solid; border-radius: 12px;
-  font-weight: 900; font-size: 1.25rem; letter-spacing: 1px; text-transform: uppercase; opacity: 0; pointer-events: none;
+  position: absolute; top: 1rem; font-weight: 900; letter-spacing: .1em; font-size: 1.5rem; text-transform: uppercase;
+  border: 3px solid; border-radius: .6rem; padding: .1rem .6rem; opacity: 0; background: var(--scrim); pointer-events: none; z-index: 2;
 }
-.fan-stamp.like { left: 16px; color: var(--accent-2); border-color: var(--accent-2); transform: rotate(-16deg); }
-.fan-stamp.skip { right: 16px; color: var(--danger); border-color: var(--danger); transform: rotate(16deg); }
-.fan-stamp.super { left: 50%; bottom: 16px; top: auto; transform: translateX(-50%); color: var(--butter); border-color: var(--butter); }
+.fan-stamp.like { left: 1rem; color: var(--accent-2); transform: rotate(-12deg); }
+.fan-stamp.skip { right: 1rem; color: var(--danger); transform: rotate(12deg); }
+.fan-deck { height: min(500px, max(380px, calc(100vh - 400px))); }
+.fan-deck.adv .fan-card.top { animation: fan-promote .26s var(--ease-lift) both; }
+.fan-deck.adv .fan-card.third { animation: fan-in .26s ease-out both; }
+@keyframes fan-promote { from { transform: translateY(12px) scale(.955) rotate(1.2deg); } }
+@keyframes fan-in { from { opacity: 0; } }
 
-.fan-controls { display: flex; justify-content: center; align-items: center; gap: 18px; margin-bottom: 6px; }
+.fan-controls { display: flex; justify-content: center; align-items: center; gap: .6rem; flex-wrap: wrap; margin-bottom: .4rem; }
 .fan-btn {
-  width: 52px; height: 52px; border-radius: 50%; border: none; font-size: 1.35rem; cursor: pointer;
-  box-shadow: 0 6px 16px var(--shadow); background: var(--surface); color: var(--text); transition: transform .15s ease;
+  min-height: 44px; padding: 0 1.1rem; border-radius: .8rem; border: 1px solid var(--border); background: var(--surface);
+  color: var(--text); font-weight: 800; cursor: pointer; transition: transform var(--motion-base), background var(--motion-base);
 }
-.fan-btn:hover { transform: translateY(-3px) scale(1.06); }
-.fan-btn:active { transform: scale(.88); }
-.fan-btn.skip { color: var(--danger); }
-.fan-btn.like { color: var(--accent); width: 62px; height: 62px; font-size: 1.65rem; }
-.fan-btn.super { color: var(--butter); }
-
-.fan-filmstrip-title { color: var(--text-dim); font-size: .7rem; text-transform: uppercase; letter-spacing: 1px; margin: 0 0 8px; font-weight: 800; }
-.fan-filmstrip { display: flex; gap: 10px; overflow-x: auto; padding: 6px 2px 16px; }
-.film-card {
-  flex: 0 0 auto; width: 70px; height: 88px; background: var(--surface); border-radius: 10px;
-  box-shadow: 0 6px 16px var(--shadow);
-  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
-  transform: rotate(var(--r, 0deg)); opacity: .85;
+.fan-btn:hover { transform: translateY(-1px); }
+.fan-btn:active { transform: scale(.95); }
+.fan-btn.like { background: var(--accent-2); color: var(--on-accent); border-color: var(--accent-2); }
+.fan-btn.skip { color: var(--danger); border-color: var(--danger); }
+.fan-btn:disabled { opacity: .4; pointer-events: none; }
+.fan-btn:focus-visible, .fan-card:focus-visible { outline: 3px solid var(--butter); outline-offset: 2px; }
+.fan-empty-btn { margin-top: .8rem; }
+.fan-sheet-actions { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: 1rem; clear: both; }
+.fan-sheet-actions .fan-btn { flex: 1 1 auto; }
+.fan-sheet-ing { color: var(--text-dim); }
+.keys-hint { text-align: center; font-size: .75rem; color: var(--on-cork); opacity: .85; margin: .2rem 0; }
+@media (prefers-reduced-motion: reduce) {
+  .fan-deck.adv .fan-card { animation: none !important; }
+  .fan-card.fly { transition: none; }
 }
-.film-card .e { font-size: 1.5rem; }
-.film-card .n { font-size: .55rem; font-weight: 700; text-align: center; padding: 0 4px; line-height: 1.15; color: var(--text); }
 
 /* ---- Modal / bottom sheet ---- */
 .modal-overlay {

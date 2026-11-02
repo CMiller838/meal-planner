@@ -278,7 +278,7 @@ Goal: coverage and the plan meter judge dinners against a data-driven dinner sha
 
 Goal: replace the 3-row day grid with a 14-night board and a big Tonight card (cook, swap, skip, eating out, I ate it), leftover chains drawn between nights; built from the chosen dinner-board prototype. Requires Phase 110 and a picked prototype.
 
-## Phase 113: Swipe Discover for dinners [M] — not started
+## Phase 113: Swipe Discover for dinners [M] — built 2026-11-02, live checks pending
 
 Goal: Discover becomes a card stack (right adds to the library, left dismisses, tap opens detail) with button and keyboard fallbacks, Undo and nutrient-gap chips; hard exclusions still apply; built from the chosen discover-swipe prototype. Requires a picked prototype.
 

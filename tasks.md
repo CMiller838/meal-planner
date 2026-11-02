@@ -1000,6 +1000,8 @@ Spec: `.claude/specs/phase105.md` (planned batches via `place.freezeFrom`, cooke
 
 ## Phase 113: Swipe Discover for dinners
 - Spec: `.claude/specs/phase113.md` [M]
+- [x] Built and tester PASS 2026-11-02 (check.py 10/10; walk covers swipe, drag, details, keys, undo, save, bring back).
+- [ ] Live: on the phone PWA, open Discover with the real TheMealDB pool; swipe a card right (adds), left (dismisses), tap (details), then Undo restores it.
 
 ## Phase 114: App shell, bottom tabs and Hermes bar
 - Spec: `.claude/specs/phase114.md` [M]

@@ -720,6 +720,74 @@ for (const [vp, size] of Object.entries({ pc: { width: 1440, height: 900 }, phon
     if (!g.above || g.over || !g.h) throw new Error('layout: ' + JSON.stringify(g));
     for (const th of ['light', 'dark']) { await page.evaluate(t => { document.documentElement.dataset.theme = t; }, th); await shot('bar-' + th); }
   });
+  await step('discover (Phase 113): card stack, buttons, drag, tap/Esc, keys, undo, save, bring back, no Breakfast chip', async () => {
+    const tagKeys = await page.evaluate(async () => Object.keys(await (await fetch('ingredient-nutrient-tags.json')).json()).filter(k => k[0] !== '_'));
+    const mk = (n, keys) => ({ id: `api-t${n}`, name: `Test meal ${n}`, source: 'themealdb', mealTypes: ['dinner'], servings: 1, description: 'd', instructions: '', image: null, ingredients: keys.map(k => ({ key: k, qty: '1', label: k.replace(/_/g, ' ') })) });
+    const pool = [mk(1, tagKeys.slice(0, 20)), mk(2, ['rice']), mk(3, ['rice']), mk(4, ['rice']), mk(5, ['rice'])];
+    const seed = async () => {
+      await page.goto(`${base}/discover.html`);
+      await page.evaluate(p => { sessionStorage.clear(); sessionStorage.setItem('mp_discover_pool:', JSON.stringify(p)); localStorage.removeItem('mp_saved_later'); }, pool);
+      await page.reload(); await page.waitForSelector('#fan-deck .fan-card.top');
+    };
+    const inLib = id => page.evaluate(async i => (await MP.getLibrary()).some(m => m.id === i), id);
+    const dismissed = () => page.evaluate(() => [...MP.getDismissed()]);
+    const topName = () => page.innerText('#fan-deck .fan-card.top h3');
+    const settle = () => page.waitForTimeout(400);
+    await seed();
+    if (await page.locator('#discover-filters [data-cat="Breakfast"]').count()) throw new Error('Breakfast chip present');
+    const txt = await page.innerText('#fan-deck .fan-card.top');
+    if (!/Test meal 1/.test(txt) || !/Ingredients/.test(txt)) throw new Error('top card content: ' + txt);
+    if (!await page.locator('#fan-deck .fan-card.top .fan-gap').count()) throw new Error('no gap chip on the top card');
+    if (!await page.locator('#fan-undo:disabled').count()) throw new Error('Undo enabled with no history');
+    await shot('discover');
+    await page.click('#fan-like'); await settle();
+    if (!await inLib('api-t1')) throw new Error('Add did not add to the library');
+    if (await topName() !== 'Test meal 2') throw new Error('did not advance');
+    await page.click('#fan-skip'); await settle();
+    if (!(await dismissed()).includes('api-t2')) throw new Error('Dismiss did not dismiss');
+    // drag: short springs back, right adds, left dismisses
+    const drag = async (dx) => { const b = await page.locator('#fan-deck .fan-card.top').boundingBox(); const x = b.x + b.width / 2, y = b.y + b.height / 2; await page.mouse.move(x, y); await page.mouse.down(); await page.mouse.move(x + dx, y, { steps: 6 }); await page.mouse.up(); await settle(); };
+    await drag(50);
+    if (await topName() !== 'Test meal 3' || await page.locator('#disc-overlay:not(.hidden)').count()) throw new Error('short drag changed state');
+    await drag(160);
+    if (!await inLib('api-t3')) throw new Error('drag right did not add');
+    await drag(-160);
+    if (!(await dismissed()).includes('api-t4')) throw new Error('drag left did not dismiss');
+    // undo: dismiss then add
+    await page.click('#fan-undo'); await settle();
+    if ((await dismissed()).includes('api-t4') || await topName() !== 'Test meal 4') throw new Error('Undo after dismiss');
+    // tap opens details, Esc closes and focus returns
+    const b = await page.locator('#fan-deck .fan-card.top').boundingBox();
+    await page.mouse.click(b.x + b.width / 2, b.y + b.height / 2);
+    await page.waitForSelector('#disc-overlay:not(.hidden)');
+    await shot('discover-sheet');
+    await page.keyboard.press('Escape');
+    await page.waitForSelector('#disc-overlay.hidden', { state: 'attached' });
+    if (!await page.evaluate(() => document.activeElement.classList.contains('top'))) throw new Error('focus did not return to the card');
+    // keys
+    await page.keyboard.press('ArrowUp'); await page.waitForSelector('#disc-overlay:not(.hidden)');
+    await page.keyboard.press('Escape');
+    await page.keyboard.press('Enter'); await page.waitForSelector('#disc-overlay:not(.hidden)');
+    await page.keyboard.press('Escape');
+    await page.keyboard.press('ArrowRight'); await settle();
+    if (!await inLib('api-t4')) throw new Error('ArrowRight did not add');
+    await page.keyboard.press('z'); await settle();
+    if (await inLib('api-t4') || await topName() !== 'Test meal 4') throw new Error('Z did not undo an add');
+    await page.keyboard.press('ArrowLeft'); await settle();
+    if (!(await dismissed()).includes('api-t4')) throw new Error('ArrowLeft did not dismiss');
+    // sheet Save for later lands in the pile
+    await page.click('#fan-details'); await page.waitForSelector('#disc-overlay:not(.hidden)');
+    await page.click('#disc-sheet [data-act="save"]'); await settle();
+    if (!/Test meal 5/.test(await page.innerText('#saved-grid'))) throw new Error('not in the saved pile');
+    // empty deck: bring back
+    if (!/Bring back \d+ dismissed/.test(await page.innerText('#fan-deck'))) throw new Error('no bring-back button');
+    await shot('discover-empty');
+    await page.click('#fan-bring-back'); await page.waitForSelector('#fan-deck .fan-card.top');
+    if ((await dismissed()).length) throw new Error('dismissed not restored');
+    if (await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)) throw new Error('horizontal scroll');
+    for (const th of ['light', 'dark']) { await page.evaluate(t => { document.documentElement.dataset.theme = t; }, th); await page.waitForTimeout(500); await shot('discover-' + th); }
+    await page.evaluate(async () => { await MP.removeFromLibrary('api-t1'); await MP.removeFromLibrary('api-t3'); localStorage.removeItem('mp_saved_later'); sessionStorage.clear(); });
+  });
   await step('no uncaught page errors during the walk', async () => { if (errs.length) throw new Error(errs[0]); });
   await ctx.close();
 }

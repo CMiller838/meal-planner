@@ -1,10 +1,9 @@
-// Discover page controller: fanned 3-card swipe deck (like / pass / save for
-// later) over TheMealDB suggestions, plus the saved-for-later pile below it.
+// Discover page controller (Phase 113): swipe card stack (right add, left dismiss,
+// tap for details, Undo) over TheMealDB suggestions, plus the saved-for-later pile.
 (function () {
   "use strict";
 
   const { esc, labelize } = MP;
-  const FAN_ANGLES = [0, -6, 5];
 
   let pool = [];
   let idx = 0;
@@ -13,6 +12,10 @@
   let pantryFirst = false;
   let pantryKeys = null;
   let packData = null;
+  let busy = false;
+  let hist = [];
+  let gaps = [];
+  let nutTags = null;
 
   function toast(msg) {
     const root = document.getElementById("toast-root");
@@ -30,141 +33,192 @@
     return `<div class="card-img placeholder">🍽</div>`;
   }
 
-  function cardInner(meal) {
-    return `
-      <div class="fan-stamp like">Liked</div>
-      <div class="fan-stamp skip">Pass</div>
-      <div class="fan-stamp super">Saved</div>
-      ${cardImageHtml(meal)}
-      <div class="card-body">
-        <h3>${esc(meal.name)}</h3>
-        <p>${esc(meal.description || "")}</p>
-        ${tagRowHtml(meal)}
-      </div>`;
-  }
-
   function tagRowHtml(meal) {
     const badge = MP.ShoppingList.costBadgeHtml(meal, packData);
     return badge ? `<div class="tag-row">${badge}</div>` : "";
+  }
+
+  function gapChipsHtml(meal) {
+    if (!nutTags) return "";
+    const hits = MP.Nutrition.gapHits(meal, gaps, nutTags);
+    return hits.length ? `<div class="fan-gaps">${hits.map((g) => `<span class="fan-gap">Fills ${esc(labelize(g))}</span>`).join("")}</div>` : "";
+  }
+
+  function ingLineHtml(meal) {
+    const ings = (meal.ingredients || []).map((i) => i.label || labelize(i.key));
+    if (!ings.length) return "";
+    const more = ings.length > 4 ? ` +${ings.length - 4} more` : "";
+    return `<p class="fan-ing"><b>Ingredients</b> ${esc(ings.slice(0, 4).join(", "))}${more}</p>`;
+  }
+
+  function cardInner(meal) {
+    return `
+      <div class="fan-stamp like">Add</div>
+      <div class="fan-stamp skip">Dismiss</div>
+      ${cardImageHtml(meal)}
+      <div class="fan-body">
+        <h3>${esc(meal.name)}</h3>
+        ${tagRowHtml(meal)}
+        ${gapChipsHtml(meal)}
+        ${ingLineHtml(meal)}
+      </div>`;
+  }
+
+  const still = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const topEl = () => document.querySelector("#fan-deck .fan-card.top");
+  const sheetOpen = () => !document.getElementById("disc-overlay").classList.contains("hidden");
+
+  function updateUndo() {
+    document.getElementById("fan-undo").disabled = !hist.length;
   }
 
   function makeDraggable(el) {
     let startX = 0, startY = 0, dx = 0, dy = 0, dragging = false;
     const likeStamp = el.querySelector(".fan-stamp.like");
     const skipStamp = el.querySelector(".fan-stamp.skip");
-    const superStamp = el.querySelector(".fan-stamp.super");
-    const base = el.dataset.base || "";
-
-    function down(e) {
-      dragging = true;
+    function reset() {
+      el.style.transform = "";
+      likeStamp.style.opacity = 0; skipStamp.style.opacity = 0;
+    }
+    el.addEventListener("pointerdown", (e) => {
+      if (busy || sheetOpen()) return;
+      dragging = true; dx = 0; dy = 0;
       el.classList.add("dragging");
       el.setPointerCapture(e.pointerId);
       startX = e.clientX; startY = e.clientY;
-    }
-    function move(e) {
+    });
+    el.addEventListener("pointermove", (e) => {
       if (!dragging) return;
       dx = e.clientX - startX; dy = e.clientY - startY;
-      const rot = dx / 14;
-      el.style.transform = `${base} translate(${dx}px, ${dy}px) rotate(${rot}deg)`;
+      el.style.transform = `translate(${dx}px, ${Math.min(dy, 40)}px) rotate(${dx / 18}deg)`;
       likeStamp.style.opacity = Math.max(0, Math.min(1, dx / 90));
       skipStamp.style.opacity = Math.max(0, Math.min(1, -dx / 90));
-      superStamp.style.opacity = Math.max(0, Math.min(1, -dy / 80));
-    }
-    function up() {
+    });
+    function end(e) {
       if (!dragging) return;
       dragging = false;
       el.classList.remove("dragging");
-      const threshold = 100;
-      if (dy < -threshold && Math.abs(dy) > Math.abs(dx)) decide(el, "super");
-      else if (dx > threshold) decide(el, "like");
-      else if (dx < -threshold) decide(el, "skip");
-      else {
-        el.style.transform = base;
-        likeStamp.style.opacity = 0; skipStamp.style.opacity = 0; superStamp.style.opacity = 0;
-      }
+      if (e.type === "pointercancel") return reset();
+      if (Math.abs(dx) < 6 && Math.abs(dy) < 6) { reset(); return openDetails(pool[idx]); }
+      if (dx > 100) decide("add");
+      else if (dx < -100) decide("dismiss");
+      else reset();
     }
-    el.addEventListener("pointerdown", down);
-    el.addEventListener("pointermove", move);
-    el.addEventListener("pointerup", up);
-    el.addEventListener("pointercancel", up);
+    el.addEventListener("pointerup", end);
+    el.addEventListener("pointercancel", end);
   }
 
-  function decide(el, dir) {
+  /** One decision on the top card: dir = add | dismiss | save. Ignored while the previous fly-out runs. */
+  function decide(dir) {
     const meal = pool[idx];
-    if (!meal) return;
-    if (dir === "like") {
-      MP.addToLibrary(meal);
-      toast(`Added "${meal.name}" to your library`);
-      el.style.transform = "translate(700px, -30px) rotate(24deg)";
-    } else if (dir === "super") {
-      MP.saveForLater(meal);
-      toast(`Saved "${meal.name}" for later`);
-      el.style.transform = "translate(0, -650px) rotate(0deg) scale(.9)";
-      renderSaved();
-    } else {
-      MP.dismiss(meal.id, meal.name);
-      el.style.transform = "translate(-700px, -30px) rotate(-24deg)";
-    }
-    el.style.opacity = "0";
+    if (!meal || busy) return;
+    busy = true;
+    if (dir === "add") { MP.addToLibrary(meal); toast(`Added "${meal.name}" to your library`); }
+    else if (dir === "save") { MP.saveForLater(meal); toast(`Saved "${meal.name}" for later`); renderSaved(); }
+    else { MP.dismiss(meal.id, meal.name); toast(`Dismissed "${meal.name}"`); }
+    hist.push({ dir, meal, idx });
     idx++;
-    setTimeout(renderDeck, 260);
+    updateUndo();
+    const el = topEl();
+    const finish = () => { busy = false; renderDeck(true); };
+    if (el && !still()) {
+      el.classList.add("fly");
+      el.style.transform = dir === "add" ? "translate(130%, -20px) rotate(20deg)" : dir === "dismiss" ? "translate(-130%, -20px) rotate(-20deg)" : "translateY(-30px) scale(.9)";
+      el.style.opacity = "0";
+      setTimeout(finish, 240);
+    } else finish();
   }
 
-  function renderDeck() {
+  /** Reverse the last decision (not the soft taste counter). */
+  function undo() {
+    if (busy || !hist.length) return;
+    const h = hist.pop();
+    if (h.dir === "add") MP.removeFromLibrary(h.meal.id);
+    else if (h.dir === "save") { MP.removeSavedLater(h.meal.id); renderSaved(); }
+    else MP.undismiss(h.meal.id);
+    idx = h.idx;
+    toast(`Undone: "${h.meal.name}"`);
+    updateUndo();
+    renderDeck(true);
+  }
+
+  function renderDeck(advance) {
     const deck = document.getElementById("fan-deck");
     const progress = document.getElementById("fan-progress");
     deck.innerHTML = "";
+    deck.classList.toggle("adv", !!advance);
     const upcoming = pool.slice(idx, idx + 3);
+    document.getElementById("fan-details").disabled = !upcoming.length;
+    document.getElementById("fan-like").disabled = !upcoming.length;
+    document.getElementById("fan-skip").disabled = !upcoming.length;
     if (!upcoming.length) {
       const msg = loadFailed
         ? "Couldn't reach TheMealDB — check your connection and tap the chip again."
         : activeCat
         ? `No more ${esc(activeCat)} suggestions — try another chip.`
         : "📌 No more suggestions right now — check back later.";
-      deck.innerHTML = `<div class="swipe-empty">${msg}</div>`;
+      const n = MP.getDismissed().size;
+      deck.innerHTML = `<div class="swipe-empty">${msg}${n ? `<br><button class="fan-btn fan-empty-btn" id="fan-bring-back">Bring back ${n} dismissed</button>` : ""}</div>`;
       progress.textContent = "";
-      document.getElementById("fan-filmstrip").innerHTML = "";
+      const bb = document.getElementById("fan-bring-back");
+      if (bb) bb.addEventListener("click", () => { MP.getDismissed().forEach((id) => MP.undismiss(id)); loadPool(activeCat); });
       return;
     }
     progress.textContent = `Reviewed ${idx} of ${pool.length}`;
-    upcoming.forEach((meal, i) => {
+    // render back-to-front so the top card is last in the DOM (and focus order)
+    for (let i = upcoming.length - 1; i >= 0; i--) {
       const el = document.createElement("div");
-      el.className = "fan-card";
-      el.innerHTML = cardInner(meal);
-      const angle = FAN_ANGLES[i] || 0;
-      const finalT = `translateY(${i * 6}px) scale(${1 - i * 0.05}) rotate(${angle}deg)`;
-      el.dataset.base = finalT;
-      el.style.zIndex = String(10 - i);
-      el.style.transform = `translateY(${i * 6 + 60}px) scale(${1 - i * 0.05}) rotate(${angle}deg)`;
-      el.style.opacity = "0";
+      el.className = "fan-card" + (i === 0 ? " top" : i === 2 ? " third" : "");
+      el.style.setProperty("--i", i);
+      el.innerHTML = cardInner(upcoming[i]);
       deck.appendChild(el);
-      requestAnimationFrame(() => {
-        el.style.transform = finalT;
-        el.style.opacity = i < 2 ? "1" : "0.55";
-      });
-      if (i === 0) makeDraggable(el);
-    });
-    renderFilmstrip();
+      if (i === 0) {
+        el.tabIndex = 0;
+        el.setAttribute("aria-label", `${upcoming[i].name}. Arrow right adds, left dismisses, up for details.`);
+        makeDraggable(el);
+      }
+    }
   }
 
-  function renderFilmstrip() {
-    const filmstrip = document.getElementById("fan-filmstrip");
-    filmstrip.innerHTML = "";
-    pool.slice(idx + 1, idx + 7).forEach((meal, i) => {
-      const c = document.createElement("div");
-      c.className = "film-card";
-      c.style.setProperty("--r", i % 2 ? "3deg" : "-3deg");
-      c.innerHTML = `<div class="e">🍽</div><div class="n"></div>`;
-      c.querySelector(".n").textContent = meal.name;
-      filmstrip.appendChild(c);
-    });
+  function closeDetails() {
+    document.getElementById("disc-overlay").classList.add("hidden");
+    const t = topEl();
+    if (t) t.focus();
+  }
+
+  function openDetails(meal) {
+    if (!meal) return;
+    const sheet = document.getElementById("disc-sheet");
+    const ings = (meal.ingredients || []).map((i) => `<li>${esc(((i.qty ? i.qty + " " : "") + (i.label || labelize(i.key))).trim())}</li>`).join("");
+    sheet.innerHTML = `
+      <button class="close-btn" id="disc-close" aria-label="Close">✕</button>
+      ${meal.image ? `<img src="${esc(meal.image)}" alt="${esc(meal.name)}">` : ""}
+      <h2>${esc(meal.name)}</h2>
+      ${tagRowHtml(meal)}
+      ${gapChipsHtml(meal)}
+      <h3>Ingredients</h3>
+      <ul class="ingredient-list fan-sheet-ing">${ings}</ul>
+      <div class="fan-sheet-actions">
+        <button class="fan-btn skip" data-act="dismiss">✕ Dismiss</button>
+        <button class="fan-btn" data-act="save">Save for later</button>
+        <button class="fan-btn like" data-act="add">♥ Add to library</button>
+        <button class="fan-btn" data-act="close">Close</button>
+      </div>`;
+    document.getElementById("disc-overlay").classList.remove("hidden");
+    sheet.focus();
+    sheet.querySelectorAll("[data-act]").forEach((b) => b.addEventListener("click", () => {
+      const act = b.dataset.act;
+      closeDetails();
+      if (act !== "close") decide(act);
+    }));
+    document.getElementById("disc-close").addEventListener("click", closeDetails);
   }
 
   function renderSaved() {
     const grid = document.getElementById("saved-grid");
     const saved = MP.getSavedLater();
     if (!saved.length) {
-      grid.innerHTML = `<p class="empty">Nothing saved yet — swipe up on a card to save it for later.</p>`;
+      grid.innerHTML = `<p class="empty">Nothing saved yet — open a card's details and tap "Save for later".</p>`;
       return;
     }
     grid.innerHTML = saved
@@ -200,17 +254,23 @@
     });
   }
 
-  document.getElementById("fan-like").addEventListener("click", () => {
-    const top = document.querySelector("#fan-deck .fan-card");
-    if (top) decide(top, "like");
-  });
-  document.getElementById("fan-skip").addEventListener("click", () => {
-    const top = document.querySelector("#fan-deck .fan-card");
-    if (top) decide(top, "skip");
-  });
-  document.getElementById("fan-super").addEventListener("click", () => {
-    const top = document.querySelector("#fan-deck .fan-card");
-    if (top) decide(top, "super");
+  document.getElementById("fan-like").addEventListener("click", () => decide("add"));
+  document.getElementById("fan-skip").addEventListener("click", () => decide("dismiss"));
+  document.getElementById("fan-details").addEventListener("click", () => openDetails(pool[idx]));
+  document.getElementById("fan-undo").addEventListener("click", undo);
+  document.getElementById("disc-overlay").addEventListener("click", (e) => { if (e.target.id === "disc-overlay") closeDetails(); });
+  MP.enableSheetDrag(document.getElementById("disc-sheet"), closeDetails);
+
+  document.addEventListener("keydown", (e) => {
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+    if (sheetOpen()) { if (e.key === "Escape") closeDetails(); return; }
+    if (e.target.closest && e.target.closest("input, textarea, select")) return;
+    const k = e.key;
+    if (k === "z" || k === "Z") undo();
+    else if (k === "ArrowRight") { e.preventDefault(); decide("add"); }
+    else if (k === "ArrowLeft") { e.preventDefault(); decide("dismiss"); }
+    else if (k === "ArrowUp") { e.preventDefault(); openDetails(pool[idx]); }
+    else if (k === "Enter" && e.target === topEl()) openDetails(pool[idx]);
   });
 
   /** Ids the deck must never show: already in the library, dismissed, or saved for later.
@@ -278,18 +338,19 @@
     loadFailed = false;
     document.getElementById("fan-deck").innerHTML = `<div class="swipe-empty">Loading suggestions…</div>`;
     document.getElementById("fan-progress").textContent = "";
-    document.getElementById("fan-filmstrip").innerHTML = "";
+    hist = []; busy = false; updateUndo();
     let next;
-    let gaps = [];
+    let g2 = [];
     try {
       const [ids, g] = await Promise.all([excludeIds(), libraryGaps()]);
-      gaps = g;
+      g2 = g;
       next = await MP.MealDB.getDiscoverPool(ids, cat);
       // ponytail: reorders the 10 the pool already picked, doesn't widen the pick.
       // Raise mealdb POOL_LIMIT if the top card stops feeling gap-relevant.
-      if (gaps.length) {
+      if (g2.length) {
         const { tags } = await MP.Nutrition.load();
-        next = MP.Nutrition.rankByGap(next, gaps, tags);
+        nutTags = tags;
+        next = MP.Nutrition.rankByGap(next, g2, tags);
       }
       if (MP.Prefs) {
         const library = await MP.getLibrary();
@@ -304,6 +365,7 @@
     if (cat !== activeCat) return;
     pool = next;
     idx = 0;
+    gaps = g2;
     renderGapNote(gaps);
     renderDeck();
   }
@@ -317,7 +379,7 @@
       chip.classList.toggle("active", pantryFirst);
       if (pantryFirst) {
         pool = orderPool(pool, await pantryIndexCached());
-        idx = 0;
+        idx = 0; hist = []; updateUndo();
         renderDeck();
       } else {
         loadPool(activeCat);

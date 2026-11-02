@@ -12,7 +12,7 @@
   const SS_POOL = "mp_discover_pool";
   const POOL_LIMIT = 10;
   const CANDIDATE_LIMIT = 12;
-  const CATEGORIES = ["Chicken", "Beef", "Seafood", "Pasta", "Pork", "Lamb", "Vegetarian", "Breakfast"];
+  const CATEGORIES = ["Chicken", "Beef", "Seafood", "Pasta", "Pork", "Lamb", "Vegetarian"];
 
   /** Unique idMeal values from filter.php results, shuffled, capped at `limit`.
    *  Fisher-Yates, descending loop, so rnd() === ~1 yields the identity permutation.

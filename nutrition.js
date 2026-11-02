@@ -53,6 +53,12 @@
     return [...names].sort();
   }
 
+  /** Gap nutrients a meal covers, in `gaps` order, first 2. Display only (Phase 113 card chips). */
+  function gapHits(meal, gaps, tags) {
+    const has = new Set(tagsForMeal(meal, tags));
+    return (gaps || []).filter((g) => has.has(g)).slice(0, 2);
+  }
+
   /** Coverage checklist for one day's meals (array of meal objects). */
   function dayCoverage(meals, tags, targets) {
     const { scores, proteinGrams } = scoresForMeals(meals, tags);
@@ -169,5 +175,5 @@
       .map((x) => x.meal);
   }
 
-  MP.Nutrition = { load, tagsForMeal, dayCoverage, weekCoverage, rankByGap, gapScore, TRACKED_NUTRIENTS, withGymDay, withProfile, profileOf, eatenDayCoverage, weekGaps, foodAsEaten };
+  MP.Nutrition = { load, tagsForMeal, gapHits, dayCoverage, weekCoverage, rankByGap, gapScore, TRACKED_NUTRIENTS, withGymDay, withProfile, profileOf, eatenDayCoverage, weekGaps, foodAsEaten };
 })(typeof globalThis !== "undefined" ? globalThis : this);
