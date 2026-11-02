@@ -4,6 +4,16 @@
 INPUT=$(cat)
 cd "${CLAUDE_PROJECT_DIR:-.}" || exit 0
 [[ -f check.py ]] || exit 0
+# A pipeline build is running and this session is NOT one of its builders (no pipeline.sh ancestor): the tree is the
+# builder's half-finished work, so a check here only fails falsely and steals CPU. Builder sessions still check.
+if pgrep -f 'tools/pipeline\.sh' >/dev/null; then
+    p=$PPID; mine=0
+    while [[ $p -gt 1 ]]; do
+        grep -qa 'pipeline\.sh' "/proc/$p/cmdline" 2>/dev/null && { mine=1; break; }
+        p=$(awk '{print $4}' "/proc/$p/stat" 2>/dev/null) || break
+    done
+    [[ $mine == 0 ]] && exit 0
+fi
 STAMP=.claude/.last-green
 # hash of every uncommitted change, tracked and untracked (gitignore respected)
 # Markdown (specs, docs, tasks.md) is left out: planning sessions only edit those, and check.py has nothing to say about them

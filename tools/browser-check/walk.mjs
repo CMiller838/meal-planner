@@ -15,7 +15,8 @@ const browser = await chromium.launch(process.env.BROWSER_CHANNEL ? { channel: p
 if (shots) fs.mkdirSync(shots, { recursive: true });
 let failed = 0;
 
-for (const [vp, size] of Object.entries({ pc: { width: 1440, height: 900 }, phone: { width: 390, height: 844 } })) {
+const only = arg('vp', ''); // --vp pc|phone runs one viewport (check.py runs the two in parallel); none = both
+for (const [vp, size] of Object.entries({ pc: { width: 1440, height: 900 }, phone: { width: 390, height: 844 } }).filter(([k]) => !only || k === only)) {
   const ctx = await browser.newContext({ viewport: size }), page = await ctx.newPage(), errs = [];
   page.on('pageerror', e => errs.push(String(e)));
   const step = async (name, fn) => {
@@ -153,7 +154,7 @@ for (const [vp, size] of Object.entries({ pc: { width: 1440, height: 900 }, phon
   });
   await step('pantry freezer group (Phase 119): first, weeks chips, undated has none', async () => {
     await page.goto(`${base}/shopping.html`);
-    await page.evaluate(() => { const d = n => new Date(Date.now() - n * 864e5).toLocaleDateString('en-CA');
+    await page.evaluate(() => { const d = n => { const t = new Date(); t.setDate(t.getDate() - n); return t.toLocaleDateString('en-CA'); }; /* calendar days, not 24h blocks: ms maths is off by a day near midnight across a DST change */
       MP.Sync.writeLocalItems('pantry', [{ name: 'Rice', qty: '1kg' }, { name: 'Old peas', storage: 'freezer', frozenOn: d(63) }, { name: 'New fish', storage: 'freezer', frozenOn: d(0) }, { name: 'Mystery mince', storage: 'freezer' }]); });
     await page.goto(`${base}/shopping.html#pantry`);
     await page.waitForSelector('.pan-group');

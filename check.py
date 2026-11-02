@@ -74,7 +74,10 @@ def all_checks():
         rel = BROWSER.relative_to(ROOT)
         pre = f'cd {rel} && {{ test -d node_modules || {{ echo "run: cd {rel} && npm ci"; exit 1; }}; }} && '
         yield "ui pages", ["bash", "-c", pre + f"node ui-check.mjs --theme-key {THEME_KEY}"]
-        yield "ui walk", ["bash", "-c", pre + "node walk.mjs"]
+        # PC and phone are independent (own server, own browser context): run them side by side, ~half the wall time
+        par = ('T=$(mktemp -d); node walk.mjs --vp pc >$T/pc 2>&1 & a=$!; node walk.mjs --vp phone >$T/ph 2>&1 & b=$!; '
+               'wait $a; r1=$?; wait $b; r2=$?; cat $T/pc $T/ph; rm -rf $T; exit $((r1 || r2))')
+        yield "ui walk", ["bash", "-c", pre + par]
     if (UI / "package.json").exists():
         yield "ui selftest", ["npm", "run", "--silent", "selftest"]
         yield "ui build", ["npm", "run", "--silent", "build"]
@@ -107,7 +110,27 @@ def changed_files():
     return git("diff", "HEAD", "--name-only") + git("ls-files", "-o", "--exclude-standard")
 
 
+def tree_hash():
+    """HEAD plus every uncommitted non-markdown change (tracked and untracked): the same tree hashes the same."""
+    import hashlib
+    g = lambda *a: subprocess.run(["git", *a], cwd=ROOT, capture_output=True).stdout
+    h = hashlib.md5(g("rev-parse", "HEAD") + g("diff", "HEAD", "--", ".", ":!*.md"))
+    for f in g("ls-files", "-o", "--exclude-standard", "-z", "--", ".", ":!*.md").split(b"\0"):
+        if f:
+            h.update(f)
+            try:
+                h.update((ROOT / f.decode()).read_bytes())
+            except OSError:
+                pass
+    return h.hexdigest()
+
+
+UI_STAMP = ROOT / "logs" / ".ui-green"  # logs/ is gitignored, so the stamp never changes the tree it describes
+UI_CHECKS = ("ui pages", "ui walk")
+
+
 def main(argv):
+    full = not argv  # a bare run (pre-commit, tester, builder): may reuse the browser checks' last green result
     if argv == ["--changed"]:
         # quick check for the Stop hook; the pre-commit hook still runs everything
         argv = pick(changed_files(), [n for n, _ in all_checks() if n != "secrets"])
@@ -119,6 +142,12 @@ def main(argv):
     if not checks:
         sys.exit(f"no checks match {' '.join(argv)}")
     failed = []
+    # ponytail: the two browser checks (~3 min) are skipped when this exact tree already passed them; CHECK_FORCE=1 reruns
+    th = tree_hash() if full and not os.environ.get("CHECK_FORCE") else None
+    reused = []
+    if th and UI_STAMP.exists() and UI_STAMP.read_text().strip() == th:
+        reused = [n for n, _ in checks if n in UI_CHECKS]
+        checks = [(n, c) for n, c in checks if n not in UI_CHECKS]
 
     def timed(item):
         t = time.time()
@@ -131,13 +160,18 @@ def main(argv):
     (ROOT / "logs").mkdir(exist_ok=True)
     with open(ROOT / "logs" / "check-times.tsv", "a") as f:  # per-check seconds, for tuning (logs/ is gitignored)
         f.writelines(f"{time.strftime('%Y-%m-%dT%H:%M:%S')}\t{n}\t{sec:.1f}\n" for (n, _), (_, _, sec) in zip(checks, results))
+    for n in reused:
+        print(f"ok   {n} (reused: tree unchanged since the last green run)", flush=True)
     for (name, cmd), (ok, out, _) in zip(checks, results):
         print(f"{'ok  ' if ok else 'FAIL'} {name}", flush=True)
         if not ok:
             failed.append(name)
             lines = [l for l in out.splitlines() if l.strip() and not re.match(r"^\s*(vite|transforming|rendering)", l)]
             print("\n".join("     " + l for l in lines[-TAIL:]))
-    print(f"\n{len(checks) - len(failed)}/{len(checks)} passed" + (f"; failed: {', '.join(failed)}" if failed else ""))
+    total = len(checks) + len(reused)
+    print(f"\n{total - len(failed)}/{total} passed" + (f"; failed: {', '.join(failed)}" if failed else ""))
+    if th and not failed and all(any(n == u for n, _ in checks) or u in reused for u in UI_CHECKS):
+        UI_STAMP.write_text(th)
     return 1 if failed else 0
 
 
