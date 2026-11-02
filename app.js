@@ -269,77 +269,109 @@
     });
   }
 
+  const chips = new Set(); // active Browse chips: quick | budget | batch | <nutrient tag name>
+
+  function nutrientChips() {
+    const seen = new Set(Object.values((tagsData && tagsData.tags) || {}).flatMap((t) => (t && typeof t === "object" ? Object.keys(t) : [])));
+    return Object.keys((tagsData && tagsData.targets) || {})
+      .filter((k) => !k.endsWith("_cap"))
+      .map((k) => k.replace(/_(g|mg|mcg|kcal)$/, ""))
+      .filter((n, i, a) => seen.has(n) && a.indexOf(n) === i);
+  }
+
+  function renderChips() {
+    const row = document.getElementById("browse-chips");
+    const all = [["quick", "Quick"], ["budget", "Budget"], ["batch", "Batch"], ...nutrientChips().map((n) => [n, n.charAt(0).toUpperCase() + n.slice(1)])];
+    row.innerHTML = all.map(([k, l]) => `<button type="button" class="fchip" data-chip="${esc(k)}" aria-pressed="${chips.has(k)}">${esc(l)}</button>`).join("");
+    row.querySelectorAll("[data-chip]").forEach((b) => b.addEventListener("click", () => {
+      chips.has(b.dataset.chip) ? chips.delete(b.dataset.chip) : chips.add(b.dataset.chip);
+      b.setAttribute("aria-pressed", chips.has(b.dataset.chip));
+      renderLibrary();
+    }));
+  }
+
+  function eatenTodayIds() {
+    const today = new Date().toLocaleDateString("sv");
+    let log = [];
+    try { log = JSON.parse(localStorage.getItem("mp_eatenLog") || "[]"); } catch (e) {}
+    return new Set(log.filter((e) => e && e.eatenAt && new Date(e.eatenAt).toLocaleDateString("sv") === today).map((e) => e.mealId));
+  }
+
+  function mealMeta(meal) {
+    const mins = meal.totalMins || (MP.estMins && MP.estMins(meal));
+    return [mins ? `${mins} min` : "", meal.servings ? `${meal.servings} serving${meal.servings === 1 ? "" : "s"}` : "", meal.prepEffort || ""].filter(Boolean).join(" · ");
+  }
+
   function renderLibrary() {
     const grid = document.getElementById("library-grid");
     const query = document.getElementById("library-search").value;
     renderFoods(query);
-    const filtered = MP.filterMeals(library, query);
+    const filtered = MP.chipFilter(MP.filterMeals(library, query), [...chips], { tags: tagsData && tagsData.tags, packData });
     if (!filtered.length) {
       const q = query.trim();
-      const msg = q ? `No meals match "${esc(q)}".` : "Your library is empty.";
-      grid.innerHTML = `<p class="empty">${msg}</p>`;
+      const msg = q || chips.size ? "No dinners match" + (q ? ` "${esc(q)}"` : "") + "." : "Your library is empty.";
+      grid.innerHTML = `<p class="empty">${msg}${chips.size || q ? ` <button type="button" class="ghost" id="clear-filters">Clear filters</button>` : ""}</p>`;
+      const clr = document.getElementById("clear-filters");
+      if (clr) clr.addEventListener("click", () => { chips.clear(); document.getElementById("library-search").value = ""; renderChips(); renderLibrary(); });
       return;
     }
+    const eaten = eatenTodayIds();
     grid.innerHTML = filtered
       .map(
-        (meal) => `
-      <div class="card" data-id="${esc(meal.id)}">
-        ${cardImageHtml(meal)}
-        <div class="card-body">
+        (meal, i) => `
+      <div class="meal-card" data-id="${esc(meal.id)}" style="animation-delay:${Math.min(i, 12) * 35}ms">
+        <button type="button" class="mc-ph${meal.image ? "" : " placeholder"}" data-act="details" aria-label="Details: ${esc(meal.name)}">
+          ${meal.image ? `<img src="${esc(meal.image)}" alt="" loading="lazy">` : "🍽"}
+        </button>
+        <div class="mc-body">
           <h3>${esc(meal.name)}</h3>
-          <p>${esc(meal.description || "")}</p>
+          <p class="mc-meta">${esc(mealMeta(meal))}</p>
           ${tagRowHtml(meal)}
           ${(meal.mealTypes || []).includes("dinner") ? "" : `<span class="tag not-planned">Not planned</span>`}
+          <div class="mc-acts"><button type="button" class="ghost" data-act="eat">Eat</button><button type="button" class="btn" data-act="details">Details</button></div>
         </div>
       </div>`
       )
       .join("");
-    grid.querySelectorAll(".card").forEach((card) => {
-      card.addEventListener("click", () => {
-        const meal = library.find((m) => m.id === card.dataset.id);
-        if (meal) openDetail(meal);
-      });
+    grid.querySelectorAll(".meal-card").forEach((card, i) => {
+      const meal = filtered[i];
+      const ph = card.querySelector(".mc-ph");
+      const cost = card.querySelector(".tag.cost");
+      if (cost) { cost.classList.add("mc-cost"); ph.appendChild(cost); }
+      if (eaten.has(meal.id)) { const bd = document.createElement("span"); bd.className = "mc-bd"; bd.textContent = "Eaten today"; ph.appendChild(bd); }
+      card.querySelectorAll("[data-act]").forEach((b) => b.addEventListener("click", () => openDetail(meal, { eatOpen: b.dataset.act === "eat" })));
     });
   }
 
-  function openDetail(meal) {
+  /** Phase 115: the shared MealSheet with Browse's dock (Add to plan, Eat, Cook mode), More (Edit, Delete, Accept steps) and rating row. */
+  function openDetail(meal, o) {
+    let eatOpen = !!(o && o.eatOpen);
     const method = MP.methodOf(meal);
-    const overlay = document.getElementById("modal-overlay");
-    const sheet = document.getElementById("modal-sheet");
-    const ingredientsHtml = (meal.ingredients || [])
-      .map((i) => `<li>${esc(i.label || labelize(i.key))}${i.qty ? " — " + esc(i.qty) : ""}${untracked(i.key) ? ` <span class="tag untracked">not tracked yet</span>` : ""}</li>`)
-      .join("");
-    sheet.innerHTML = `
-      <button class="close-btn" aria-label="Close">✕</button>
-      ${meal.image ? `<img src="${esc(meal.image)}" alt="${esc(meal.name)}">` : ""}
-      <h2>${esc(meal.name)}</h2>
-      ${tagRowHtml(meal)}
-      <p>${esc(meal.description || "")}</p>
-      <h3>Ingredients</h3>
-      <ul class="ingredient-list">${ingredientsHtml}</ul>
-      <h3>Instructions ${method.status === "drafted" ? `<span class="tag drafted-badge">Drafted</span>` : ""}</h3>
-      ${MP.methodHtml(meal)}
-      ${meal.variants && meal.variants.length && method.steps.length ? `<p class="muted">Steps are for the base recipe; variants have no steps of their own.</p>` : ""}
-      <div class="modal-actions">
-        ${method.status === "drafted" ? `<button id="detail-accept" class="btn">Accept steps</button>` : ""}
-        <button id="detail-eat" class="btn">Eat</button>
-        <button id="detail-edit" class="btn">Edit</button>
-        <button id="detail-delete" class="ghost danger">Delete</button>
-      </div>
-    `;
-    sheet.querySelector(".close-btn").addEventListener("click", closeDetail);
-    sheet.querySelector(".modal-actions").before(MP.Ratings.rowEl(meal.id, renderLibrary, toast));
-    sheet.querySelector("#detail-edit").addEventListener("click", () => openForm(meal));
-    const accept = sheet.querySelector("#detail-accept");
-    if (accept) accept.addEventListener("click", () => {
-      const accepted = { ...meal, methodStatus: "accepted" };
-      library = MP.upsertMeal(accepted);
-      renderLibrary();
-      openDetail(accepted);
+    MP.MealSheet.open(meal, {
+      tagsHtml: tagRowHtml(meal),
+      actions: [
+        { id: "plan", label: "Add to plan", kind: "pri" },
+        { id: "eat", label: "Eat", kind: "ok", onClick: (c) => openEatRow(c.meal, c.sheetEl) },
+        { id: "cook", label: "Cook mode", onClick: (c) => {
+          c.close();
+          MP.CookMode.open(c.meal, MP.effectiveMeal(c.meal, c.variantId), () => openDetail(c.meal, { eatOpen: true }), c.variantId);
+        } },
+      ],
+      more: [
+        ...(method.status === "drafted" ? [{ id: "accept", label: "Accept steps", onClick: (c) => {
+          const accepted = { ...c.meal, methodStatus: "accepted" };
+          library = MP.upsertMeal(accepted);
+          renderLibrary();
+          openDetail(accepted);
+        } }] : []),
+        { id: "edit", label: "Edit", onClick: (c) => { c.close(); openForm(c.meal); } },
+        { id: "delete", label: "Delete", onClick: (c) => deleteMeal(c.meal) },
+      ],
+      afterRender: (sheet) => {
+        sheet.querySelector(".ms-more").before(MP.Ratings.rowEl(meal.id, renderLibrary, toast));
+        if (eatOpen) { eatOpen = false; openEatRow(meal, sheet); }
+      },
     });
-    sheet.querySelector("#detail-delete").addEventListener("click", () => deleteMeal(meal));
-    sheet.querySelector("#detail-eat").addEventListener("click", () => openEatRow(meal, sheet));
-    overlay.classList.remove("hidden");
   }
 
   /** Phase 92: log-only portion-eat from Browse; ticks today's matching plan slot, never touches the pantry. */
@@ -354,7 +386,8 @@
       ${MP.isBatch(meal) ? '<label class="muted eat-keep-l hidden"><input type="checkbox" class="eat-keep"> <span class="eat-keep-t"></span></label>' : ""}
       <label class="muted">When <input type="datetime-local" class="eat-when" max="${nowLocal()}" value="${nowLocal()}"></label>
       <div class="rating-btns"><button class="btn eat-log">Log</button><button class="ghost eat-cancel">Cancel</button></div>`;
-    sheet.querySelector(".modal-actions").after(row);
+    sheet.querySelector(".ms-extra").append(row);
+    row.scrollIntoView({ block: "nearest" });
     const out = row.querySelector(".eat-n");
     const sizeIn = row.querySelector(".eat-size"), keepL = row.querySelector(".eat-keep-l");
     const restNow = () => Math.floor((meal.servings || 1) - (+out.textContent) * (+sizeIn.value));
@@ -382,6 +415,7 @@
       const kept = keep && MP.Cooks && MP.Cooks.open(meal, null, rest) ? ` — kept ${rest}` : "";
       if (MP.Prefs) MP.Prefs.bump(meal, "eaten");
       closeDetail();
+      setTimeout(renderLibrary, 60); // logPortion writes the log a tick later: refresh "Eaten today"
       toast(`Logged ${n} × ${meal.name}${size !== 1 ? ` (${size}×)` : ""}${ticked ? " — plan ticked" : ""}${kept}`);
     });
   }
@@ -400,6 +434,7 @@
   }
 
   function closeDetail() {
+    MP.MealSheet.close();
     document.getElementById("modal-overlay").classList.add("hidden");
   }
 
@@ -889,6 +924,7 @@
       MP.getLibrary(),
       MP.ShoppingList.load().catch(() => null),
     ]);
+    renderChips();
     renderLibrary();
     initSyncSettings();
     initActivity();

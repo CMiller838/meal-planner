@@ -288,7 +288,7 @@ Picked 2026-11-01 (phone-first): board A, swipe A, shell A, browse A, shopping A
 
 Goal: shell-a on every page: 5-tab bottom bar (Tonight, Browse, Discover, Shopping, Eaten), theme toggle, the Hermes Log/Ask bar docked above it (tabs hide while typing, lifts with the keyboard); tabs move to the top on PC. Reworks `ate-box.js`/`bar-chat.js` placement, not their logic.
 
-## Phase 115: Browse cards and full-recipe Details sheet [L] — not started
+## Phase 115: Browse cards and full-recipe Details sheet [L] — built 2026-11-02, live checks pending (check.py 10/10 incl. walk steps for Verification 1-16, tester PASS)
 
 Goal: browse-a photo cards plus ONE Details sheet used from Browse, Plan and Discover: short description on top, then photo, stats, the whole recipe (tickable ingredients, numbered method), variant picker, thumb dock (Add to plan, Eat, Cook mode). Reads `meal.description`/`instructions`; meals missing them show a gap note.
 

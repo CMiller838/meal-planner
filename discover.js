@@ -66,7 +66,7 @@
 
   const still = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
   const topEl = () => document.querySelector("#fan-deck .fan-card.top");
-  const sheetOpen = () => !document.getElementById("disc-overlay").classList.contains("hidden");
+  const sheetOpen = () => { const o = document.getElementById("meal-sheet-overlay"); return !!o && !o.classList.contains("hidden"); };
 
   function updateUndo() {
     document.getElementById("fan-undo").disabled = !hist.length;
@@ -181,37 +181,23 @@
   }
 
   function closeDetails() {
-    document.getElementById("disc-overlay").classList.add("hidden");
+    MP.MealSheet.close();
     const t = topEl();
     if (t) t.focus();
   }
 
+  /** Phase 115: the shared MealSheet; each dock action closes it, then decides on the top card. */
   function openDetails(meal) {
     if (!meal) return;
-    const sheet = document.getElementById("disc-sheet");
-    const ings = (meal.ingredients || []).map((i) => `<li>${esc(((i.qty ? i.qty + " " : "") + (i.label || labelize(i.key))).trim())}</li>`).join("");
-    sheet.innerHTML = `
-      <button class="close-btn" id="disc-close" aria-label="Close">✕</button>
-      ${meal.image ? `<img src="${esc(meal.image)}" alt="${esc(meal.name)}">` : ""}
-      <h2>${esc(meal.name)}</h2>
-      ${tagRowHtml(meal)}
-      ${gapChipsHtml(meal)}
-      <h3>Ingredients</h3>
-      <ul class="ingredient-list fan-sheet-ing">${ings}</ul>
-      <div class="fan-sheet-actions">
-        <button class="fan-btn skip" data-act="dismiss">✕ Dismiss</button>
-        <button class="fan-btn" data-act="save">Save for later</button>
-        <button class="fan-btn like" data-act="add">♥ Add to library</button>
-        <button class="fan-btn" data-act="close">Close</button>
-      </div>`;
-    document.getElementById("disc-overlay").classList.remove("hidden");
-    sheet.focus();
-    sheet.querySelectorAll("[data-act]").forEach((b) => b.addEventListener("click", () => {
-      const act = b.dataset.act;
-      closeDetails();
-      if (act !== "close") decide(act);
-    }));
-    document.getElementById("disc-close").addEventListener("click", closeDetails);
+    const go = (act) => () => { closeDetails(); decide(act); };
+    MP.MealSheet.open(meal, {
+      tagsHtml: tagRowHtml(meal) + gapChipsHtml(meal),
+      actions: [
+        { id: "add", label: "♥ Add to library", kind: "pri", onClick: go("add") },
+        { id: "dismiss", label: "✕ Dismiss", onClick: go("dismiss") },
+        { id: "save", label: "Save for later", onClick: go("save") },
+      ],
+    });
   }
 
   function renderSaved() {
@@ -258,8 +244,6 @@
   document.getElementById("fan-skip").addEventListener("click", () => decide("dismiss"));
   document.getElementById("fan-details").addEventListener("click", () => openDetails(pool[idx]));
   document.getElementById("fan-undo").addEventListener("click", undo);
-  document.getElementById("disc-overlay").addEventListener("click", (e) => { if (e.target.id === "disc-overlay") closeDetails(); });
-  MP.enableSheetDrag(document.getElementById("disc-sheet"), closeDetails);
 
   document.addEventListener("keydown", (e) => {
     if (e.metaKey || e.ctrlKey || e.altKey) return;

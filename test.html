@@ -26,6 +26,7 @@
 <script src="plan-chat.js"></script>
 <script src="bar-chat.js"></script>
 <script src="cook-mode.js"></script>
+<script src="meal-sheet.js"></script>
 <script src="plan.js"></script>
 <script>
 (async function () {
@@ -3352,6 +3353,24 @@
       check("applyMealEdits: remove refused while in the plan", r.refused.length === 1 && /day 3/.test(r.refused[0].why) && store.length === 2);
       r = MP.Plan.applyMealEdits([{ type: "mealRemove", mealId: "m1" }], mk(noPlan));
       check("applyMealEdits: remove works outside the plan, Undo restores", r.applied.length === 1 && store.length === 1 && (r.applied[0].undo(), store.length === 2));
+    }
+    { // Phase 115: chipFilter, MealSheet.toBuy / nights
+      const tags = { chicken_breast: { protein: "high", calcium: "low" }, milk: { calcium: "med" } };
+      const mk = (id, extra) => ({ id, name: id, servings: 1, ingredients: [{ key: "chicken_breast" }], ...extra });
+      const ms = [mk("a", { totalMins: 20 }), mk("b", { method: [{ text: "x", minutes: 40 }] }), mk("c", { prepEffort: "quick" }), mk("d", { prepEffort: "long" }), mk("e", { totalMins: 25, servings: 4, ingredients: [{ key: "milk" }] })];
+      const ids = (l) => l.map((m) => m.id).join("");
+      check("chipFilter: quick by totalMins, estMins, prepEffort fallback", ids(MP.chipFilter(ms, ["quick"], { tags })) === "ace");
+      check("chipFilter: batch", ids(MP.chipFilter(ms, ["batch"], { tags })) === "e");
+      check("chipFilter: nutrient high/med hits, low misses", ids(MP.chipFilter(ms, ["protein"], { tags })) === "abcd" && ids(MP.chipFilter(ms, ["calcium"], { tags })) === "e");
+      check("chipFilter: chips AND; empty = all", ids(MP.chipFilter(ms, ["quick", "protein"], { tags })) === "ac" && MP.chipFilter(ms, [], { tags }) === ms);
+      const pk = { items: {}, categories: {}, costTiers: { cheap: 1, med: 5 } };
+      check("chipFilter: budget without pack data matches nothing", MP.chipFilter(ms, ["budget"], { tags }).length === 0);
+      const eff = { ingredients: [{ key: "milk" }, { key: "rice" }, { key: "onion" }] };
+      check("toBuy: pantry hit, tick, both, unknown key", MP.MealSheet.toBuy(eff, { milk: "" }, []) === 2 && MP.MealSheet.toBuy(eff, {}, ["rice"]) === 2 && MP.MealSheet.toBuy(eff, { milk: "" }, ["rice", "onion"]) === 0 && MP.MealSheet.toBuy({ ingredients: [{ key: "zzz" }] }, {}, []) === 1);
+      const plan = { startDate: "2026-11-01", days: [{ day: 1, slots: { dinner: { mealId: "a" } } }, { day: 2, slots: { dinner: { mealId: "a", eatenAt: "x" } } }, { day: 3, slots: { dinner: { eatingOut: true } } }, { day: 4, slots: {} }, { day: 5, slots: { dinner: { mealId: "b" } } }] };
+      const nt = MP.MealSheet.nights(plan, "2026-11-02", { a: { name: "A" }, b: { name: "B" } });
+      check("nights: past days dropped, held / out / free / meal states", nt.map((n) => n.day + n.state).join() === "2held,3out,4free,5meal" && nt[3].name === "B" && /Mon 2 Nov/.test(nt[0].label), nt.map((n) => n.day + n.state).join());
+      check("nights: no plan = []", MP.MealSheet.nights(null, "2026-11-02").length === 0);
     }
     { // Phase 88: place/cap/rate, limits, totalMins, estMins, placeSlots, timeCaps
       const ed = (list) => PC.validateReply({ edits: list }, vocab, "2026-01-01").reply.edits;

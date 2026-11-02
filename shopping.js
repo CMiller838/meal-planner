@@ -722,12 +722,9 @@
     sheet.querySelectorAll("[data-meal]").forEach((b) => b.addEventListener("click", () => mealSheet(found[b.dataset.meal].meal)));
   }
 
+  /** Phase 115: the shared MealSheet, plan-only dock. */
   function mealSheet(meal) {
-    openSheet(`${meal.image ? `<img src="${esc(meal.image)}" alt="${esc(meal.name)}">` : ""}
-      <h2>${esc(meal.name)}</h2><p>${esc(meal.description || "")}</p>
-      <h3>Ingredients</h3>
-      <ul class="ingredient-list">${(meal.ingredients || []).map((i) => `<li>${esc(i.label || i.key)}${i.qty ? " — " + esc(i.qty) : ""}</li>`).join("")}</ul>
-      <h3>Instructions</h3><p>${esc(meal.instructions || "")}</p>`);
+    MP.MealSheet.open(meal, { actions: [{ id: "plan", label: "Add to plan", kind: "pri" }] });
   }
 
   function renderPantry() {

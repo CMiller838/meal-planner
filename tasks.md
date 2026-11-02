@@ -1015,6 +1015,8 @@ Spec: `.claude/specs/phase105.md` (planned batches via `place.freezeFrom`, cooke
 
 ## Phase 115: Browse cards and full-recipe Details sheet
 - Spec: `.claude/specs/phase115.md` [L]
+- [x] Tasks 1-7 built 2026-11-02 (cards, chips, MealSheet, Plan/Discover/Shopping callers, walk step, CLAUDE.md line); check.py 10/10.
+- [ ] Live: on the phone PWA, open Browse, tap Details on a meal, then Add to plan and pick a night: toast "Added <meal> to <date>" with Undo, and the sheet dock sits above the tab bar.
 
 ## Phase 116: Shopping aisle accordion
 - Spec: `.claude/specs/phase116.md` [M]

@@ -42,6 +42,7 @@
     <input type="search" id="library-search" class="search-input"
            placeholder="Search your library — name, meal type or ingredients (chicken rice)"
            aria-label="Search your library">
+    <div id="browse-chips" class="chip-row" role="group" aria-label="Filter dinners"></div>
     <div id="library-grid" class="card-grid"></div>
     <div id="library-foods" class="library-foods" hidden></div>
   </section>
@@ -70,6 +71,9 @@
 <div id="modal-overlay" class="modal-overlay hidden">
   <div id="modal-sheet" class="modal-sheet"></div>
 </div>
+<div id="cook-overlay" class="modal-overlay hidden" style="z-index:65;">
+  <div id="cook-sheet" class="modal-sheet"></div>
+</div>
 <div id="toast-root"></div>
 
 <script src="data.js"></script>
@@ -88,6 +92,8 @@
 <script src="plan-chat.js"></script>
 <script src="bar-chat.js"></script>
 <script src="ate-box.js"></script>
+<script src="meal-sheet.js"></script>
+<script src="cook-mode.js"></script>
 <script src="app.js"></script>
 <script>if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js");</script>
 </body>

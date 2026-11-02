@@ -28,39 +28,41 @@ for (const [vp, size] of Object.entries({ pc: { width: 1440, height: 900 }, phon
 
   await step('browse: library lists meals', async () => {
     await page.goto(`${base}/index.html`);
-    await page.waitForSelector('#library-grid .card');
-    if (await page.locator('#library-grid .card').count() < 3) throw new Error('fewer than 3 meal cards');
+    await page.waitForSelector('#library-grid .meal-card');
+    if (await page.locator('#library-grid .meal-card').count() < 3) throw new Error('fewer than 3 meal cards');
     await shot('browse');
   });
   await step('browse: search narrows the list', async () => {
-    const all = await page.locator('#library-grid .card').count();
+    const all = await page.locator('#library-grid .meal-card').count();
     await page.fill('#library-search', 'toastie');
     await page.waitForTimeout(300);
-    const some = await page.locator('#library-grid .card').count();
+    const some = await page.locator('#library-grid .meal-card').count();
     if (!(some >= 1 && some < all)) throw new Error(`search left ${some} of ${all} cards`);
     await page.fill('#library-search', '');
+    await page.evaluate(() => document.activeElement.blur()); // focused search hides the phone tab bar
   });
   await step('browse: a meal opens its sheet and closes', async () => {
-    await page.locator('#library-grid .card').first().click();
-    await page.waitForSelector('#modal-overlay:not(.hidden)');
+    await page.evaluate(() => document.querySelector('#library-grid .meal-card .mc-ph').click());
+    await page.waitForSelector('#meal-sheet-overlay:not(.hidden)');
     await shot('meal-sheet');
     await page.keyboard.press('Escape');
-    if (await page.locator('#modal-overlay:not(.hidden)').count()) await page.mouse.click(5, 5);
-    await page.waitForSelector('#modal-overlay.hidden', { state: 'attached' });
+    if (await page.locator('#meal-sheet-overlay:not(.hidden)').count()) await page.mouse.click(5, 5);
+    await page.waitForSelector('#meal-sheet-overlay.hidden', { state: 'attached' });
   });
   await step('phone polish (Phase 108): tab bar at the bottom with the active page, a sheet drags down to close, a short drag snaps back', async () => {
     if (page.viewportSize().width >= 640) return;
+    await page.waitForTimeout(500); // tab-bar show transition after the search blur
     const bar = await page.evaluate(() => { const n = document.querySelector('.nav-links'), r = n.getBoundingClientRect(); return { bottom: Math.round(r.bottom) === innerHeight, active: n.querySelector('a.active')?.textContent, pos: getComputedStyle(n).position }; });
     if (bar.pos !== 'fixed' || !bar.bottom || !/Browse/.test(bar.active)) throw new Error('tab bar: ' + JSON.stringify(bar));
-    await page.locator('#library-grid .card').first().click();
-    await page.waitForSelector('#modal-overlay:not(.hidden)');
+    await page.evaluate(() => document.querySelector('#library-grid .meal-card .mc-ph').click());
+    await page.waitForSelector('#meal-sheet-overlay:not(.hidden)');
     await page.waitForTimeout(400); // entry animation
-    const r = await page.locator('#modal-sheet').boundingBox();
+    const r = await page.locator('#meal-sheet').boundingBox();
     const dragBy = async (dy) => { await page.mouse.move(r.x + r.width / 2, r.y + 10); await page.mouse.down(); await page.mouse.move(r.x + r.width / 2, r.y + 10 + dy, { steps: 4 }); await page.mouse.up(); };
     await dragBy(40);
-    if (await page.locator('#modal-overlay.hidden').count()) throw new Error('a 40 px drag closed the sheet');
+    if (await page.locator('#meal-sheet-overlay.hidden').count()) throw new Error('a 40 px drag closed the sheet');
     await dragBy(160);
-    await page.waitForSelector('#modal-overlay.hidden', { state: 'attached' });
+    await page.waitForSelector('#meal-sheet-overlay.hidden', { state: 'attached' });
   });
   await step('app shell (Phase 114): icon tabs in order, bar hides on focus; PC pills and centred bar card', async () => {
     const info = await page.evaluate(() => { const n = document.querySelector('.nav-links'), cs = getComputedStyle(n), b = document.querySelector('.ate-bar')?.getBoundingClientRect();
@@ -519,14 +521,14 @@ for (const [vp, size] of Object.entries({ pc: { width: 1440, height: 900 }, phon
     await page.waitForSelector('#pwm-generate-btn');
     if (await page.locator('#also-row, #first-slot').count()) throw new Error('also-row / first-slot still present');
     await page.goto(`${base}/index.html`);
-    await page.waitForSelector('#library-grid .card');
+    await page.waitForSelector('#library-grid .meal-card');
     if (await page.locator('#library-filters').count()) throw new Error('library-filters still present');
     await page.evaluate(() => {
       const lib = JSON.parse(localStorage.getItem('mp_library') || 'null');
       if (lib) { lib[0].mealTypes = []; localStorage.setItem('mp_library', JSON.stringify(lib)); }
     });
     await page.reload();
-    await page.waitForSelector('#library-grid .card');
+    await page.waitForSelector('#library-grid .meal-card');
     if (!await page.locator('#library-grid .tag.not-planned').count()) throw new Error('no Not planned label');
   });
   // Phase 72: planning chat, /chat mocked by page.route (no Worker, no credential)
@@ -969,10 +971,10 @@ for (const [vp, size] of Object.entries({ pc: { width: 1440, height: 900 }, phon
   await step('browse: "chicken rice" needs both; a food Eat without grams asks for an amount, with grams logs; pantry/cooks untouched', async () => {
     await page.goto(`${base}/index.html`);
     await page.evaluate(() => { localStorage.setItem('mp_hermes_url', 'https://fake.test'); localStorage.setItem('mp_hermes_token', 't'); });
-    await page.reload(); await page.waitForSelector('#library-grid .card');
+    await page.reload(); await page.waitForSelector('#library-grid .meal-card');
     await page.fill('#library-search', 'chicken rice');
     await page.waitForTimeout(300);
-    const bad = await page.$$eval('#library-grid .card', cs => cs.length);
+    const bad = await page.$$eval('#library-grid .meal-card', cs => cs.length);
     const ok = await page.evaluate(async () => { const l = await MP.getLibrary(); return MP.filterMeals(l, 'chicken').filter(m => /rice/i.test(JSON.stringify(m))).length; });
     if (bad !== ok) throw new Error(`browse shows ${bad}, expected ${ok} meals with chicken and rice`);
     await page.fill('#library-search', 'chicken');
@@ -1027,7 +1029,7 @@ for (const [vp, size] of Object.entries({ pc: { width: 1440, height: 900 }, phon
     // drag: short springs back, right adds, left dismisses
     const drag = async (dx) => { const b = await page.locator('#fan-deck .fan-card.top').boundingBox(); const x = b.x + b.width / 2, y = b.y + b.height / 2; await page.mouse.move(x, y); await page.mouse.down(); await page.mouse.move(x + dx, y, { steps: 6 }); await page.mouse.up(); await settle(); };
     await drag(50);
-    if (await topName() !== 'Test meal 3' || await page.locator('#disc-overlay:not(.hidden)').count()) throw new Error('short drag changed state');
+    if (await topName() !== 'Test meal 3' || await page.locator('#meal-sheet-overlay:not(.hidden)').count()) throw new Error('short drag changed state');
     await drag(160);
     if (!await inLib('api-t3')) throw new Error('drag right did not add');
     await drag(-160);
@@ -1038,15 +1040,15 @@ for (const [vp, size] of Object.entries({ pc: { width: 1440, height: 900 }, phon
     // tap opens details, Esc closes and focus returns
     const b = await page.locator('#fan-deck .fan-card.top').boundingBox();
     await page.mouse.click(b.x + b.width / 2, b.y + b.height / 2);
-    await page.waitForSelector('#disc-overlay:not(.hidden)');
+    await page.waitForSelector('#meal-sheet-overlay:not(.hidden)');
     await shot('discover-sheet');
     await page.keyboard.press('Escape');
-    await page.waitForSelector('#disc-overlay.hidden', { state: 'attached' });
+    await page.waitForSelector('#meal-sheet-overlay.hidden', { state: 'attached' });
     if (!await page.evaluate(() => document.activeElement.classList.contains('top'))) throw new Error('focus did not return to the card');
     // keys
-    await page.keyboard.press('ArrowUp'); await page.waitForSelector('#disc-overlay:not(.hidden)');
+    await page.keyboard.press('ArrowUp'); await page.waitForSelector('#meal-sheet-overlay:not(.hidden)');
     await page.keyboard.press('Escape');
-    await page.keyboard.press('Enter'); await page.waitForSelector('#disc-overlay:not(.hidden)');
+    await page.keyboard.press('Enter'); await page.waitForSelector('#meal-sheet-overlay:not(.hidden)');
     await page.keyboard.press('Escape');
     await page.keyboard.press('ArrowRight'); await settle();
     if (!await inLib('api-t4')) throw new Error('ArrowRight did not add');
@@ -1055,8 +1057,8 @@ for (const [vp, size] of Object.entries({ pc: { width: 1440, height: 900 }, phon
     await page.keyboard.press('ArrowLeft'); await settle();
     if (!(await dismissed()).includes('api-t4')) throw new Error('ArrowLeft did not dismiss');
     // sheet Save for later lands in the pile
-    await page.click('#fan-details'); await page.waitForSelector('#disc-overlay:not(.hidden)');
-    await page.click('#disc-sheet [data-act="save"]'); await settle();
+    await page.click('#fan-details'); await page.waitForSelector('#meal-sheet-overlay:not(.hidden)');
+    await page.click('#meal-sheet [data-act="save"]'); await settle();
     if (!/Test meal 5/.test(await page.innerText('#saved-grid'))) throw new Error('not in the saved pile');
     // empty deck: bring back
     if (!/Bring back \d+ dismissed/.test(await page.innerText('#fan-deck'))) throw new Error('no bring-back button');
@@ -1066,6 +1068,126 @@ for (const [vp, size] of Object.entries({ pc: { width: 1440, height: 900 }, phon
     if (await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)) throw new Error('horizontal scroll');
     for (const th of ['light', 'dark']) { await page.evaluate(t => { document.documentElement.dataset.theme = t; }, th); await page.waitForTimeout(500); await shot('discover-' + th); }
     await page.evaluate(async () => { await MP.removeFromLibrary('api-t1'); await MP.removeFromLibrary('api-t3'); localStorage.removeItem('mp_saved_later'); sessionStorage.clear(); });
+  });
+  await step('phase 115: Browse cards + chips, shared Details sheet (ticks, variants, Add to plan + Undo, held night, Eat, Cook mode, Esc, gap notes)', async () => {
+    await page.goto(`${base}/index.html`);
+    await page.waitForSelector('#library-grid .meal-card');
+    const cards = () => page.locator('#library-grid .meal-card').count();
+    const c0 = await page.locator('#library-grid .meal-card').first();
+    // 1. card anatomy
+    if (!await c0.locator('.mc-ph').count() || !await c0.locator('.mc-meta').count() || !await c0.locator('[data-act="eat"]').count() || !await c0.locator('[data-act="details"]').count()) throw new Error('card anatomy');
+    if (!await page.locator('#library-grid .mc-cost').count()) throw new Error('no cost badge');
+    // 2. chips
+    const all = await cards();
+    const chip = (k) => page.evaluate((k) => document.querySelector(`[data-chip="${k}"]`).click(), k);
+    await chip('quick'); const q = await cards();
+    await chip('batch'); const qb = await cards();
+    if (!(q < all && qb < q)) throw new Error(`chips ${all} > ${q} > ${qb}`);
+    await chip('quick'); await chip('batch');
+    if (await cards() !== all) throw new Error('chips did not clear');
+    // 3. sheet anatomy: description above photo, ingredient checkboxes, numbered method
+    await page.evaluate(() => localStorage.removeItem('mp_pantry')); await page.reload(); await page.waitForSelector('#library-grid .meal-card');
+    await page.fill('#library-search', 'chorizo'); await page.evaluate(() => document.activeElement.blur());
+    await page.evaluate(() => document.querySelector('#library-grid .meal-card [data-act="details"]').click());
+    await page.waitForSelector('#meal-sheet-overlay:not(.hidden)');
+    const anat = await page.evaluate(() => { const d = document.querySelector('#meal-sheet .ms-desc'), p = document.querySelector('#meal-sheet .ms-photo'); return { order: !!(d && p && (d.compareDocumentPosition(p) & Node.DOCUMENT_POSITION_FOLLOWING)), boxes: document.querySelectorAll('#meal-sheet .ms-ings input[type=checkbox]').length, steps: document.querySelectorAll('#meal-sheet ol.ms-steps li').length }; });
+    if (!anat.order || anat.boxes < 2 || anat.steps < 1) throw new Error('sheet anatomy ' + JSON.stringify(anat));
+    // 4. ticking lowers "to buy"; pantry untouched
+    const buy = () => page.evaluate(() => +document.querySelector('#meal-sheet .ms-buy').textContent.match(/\d+/)[0]);
+    const pan = () => page.evaluate(() => localStorage.getItem('mp_pantry'));
+    const [b0, p0] = [await buy(), await pan()];
+    await page.evaluate(() => document.querySelector('#meal-sheet .ms-ings input[type=checkbox]').click());
+    if (await buy() !== b0 - 1 || await pan() !== p0) throw new Error('tick: buy ' + b0 + '->' + await buy());
+    // 5. variant changes the ingredient list
+    const ingTxt = () => page.innerText('#meal-sheet .ms-ings');
+    const i0 = await ingTxt();
+    await page.evaluate(() => document.querySelectorAll('#meal-sheet .ms-variants input')[1].click());
+    if (await ingTxt() === i0) throw new Error('variant did not change ingredients');
+    await page.evaluate(() => document.querySelectorAll('#meal-sheet .ms-variants input')[0].click());
+    await shot('browse-sheet');
+    await page.evaluate(() => localStorage.removeItem('mp_plan'));
+    await page.goto(`${base}/plan.html`); await page.waitForSelector('#plan-root .slot-card'); await page.waitForTimeout(300);
+    await page.goBack(); await page.waitForSelector('#library-grid .meal-card');
+    await page.evaluate(() => document.querySelector('#library-grid .meal-card [data-act="details"]').click());
+    await page.waitForSelector('#meal-sheet-overlay:not(.hidden)');
+    // seed: day 2 has a meal, day 3 is eaten (held)
+    await page.evaluate(() => {
+      const t = new Date().toLocaleDateString('sv');
+      const p = JSON.parse(localStorage.getItem('mp_plan')); p.startDate = t;
+      p.days.forEach((d) => { d.slots = {}; });
+      p.days[1].slots.dinner = { mealId: 'roast-chicken' };
+      p.days[2].slots.dinner = { mealId: 'roast-chicken', eatenAt: new Date().toISOString() };
+      localStorage.setItem('mp_plan', JSON.stringify(p));
+    });
+    // 6/8. Add to plan -> night picker (held disabled) -> night 2
+    await page.evaluate(() => document.querySelector('#meal-sheet [data-act="plan"]').click());
+    await page.waitForSelector('#meal-sheet .ms-night');
+    if (!await page.locator('#meal-sheet .ms-night[data-day="3"]:disabled').count()) throw new Error('held night not disabled');
+    await page.evaluate(() => document.querySelector('#meal-sheet .ms-night[data-day="2"]').click());
+    await page.waitForSelector('.toast');
+    const day2 = () => page.evaluate(() => JSON.parse(localStorage.getItem('mp_plan')).days[1].slots.dinner.mealId);
+    if (await day2() !== 'chorizo-pasta' || !/Added .* to /.test(await page.innerText('.toast'))) throw new Error('add to plan: ' + await day2());
+    // 7. Undo
+    await page.evaluate(() => [...document.querySelectorAll('.toast button')].find((b) => /Undo/.test(b.textContent)).click());
+    await page.waitForTimeout(200);
+    if (await day2() !== 'roast-chicken') throw new Error('undo did not restore day 2');
+    // 9. Eat logs one entry and the card shows Eaten today
+    await page.evaluate(() => localStorage.removeItem('mp_eatenLog'));
+    await page.evaluate(() => document.querySelector('#library-grid .meal-card [data-act="eat"]').click());
+    await page.waitForSelector('#meal-sheet .eat-log');
+    await page.evaluate(() => document.querySelector('#meal-sheet .eat-log').click());
+    await page.waitForSelector('#library-grid .mc-bd');
+    if (await page.evaluate(() => JSON.parse(localStorage.getItem('mp_eatenLog')).length) !== 1) throw new Error('eat did not log exactly one entry');
+    // 10/11. Cook mode opens #cook-overlay; Escape closes the sheet and focus returns to the opener
+    await page.evaluate(() => document.querySelector('#library-grid .meal-card [data-act="details"]').click());
+    await page.waitForSelector('#meal-sheet-overlay:not(.hidden)');
+    await page.evaluate(() => document.querySelector('#meal-sheet [data-act="cook"]').click());
+    await page.waitForSelector('#cook-overlay:not(.hidden)');
+    await page.evaluate(() => document.getElementById('cook-overlay').classList.add('hidden'));
+    await page.evaluate(() => { const b = document.querySelector('#library-grid .meal-card [data-act="details"]'); b.focus(); b.click(); });
+    await page.waitForSelector('#meal-sheet-overlay:not(.hidden)');
+    await page.keyboard.press('Escape');
+    await page.waitForSelector('#meal-sheet-overlay.hidden', { state: 'attached' });
+    if (!await page.evaluate(() => document.activeElement.dataset.act === 'details')) throw new Error('focus did not return to the opener');
+    // 15. gap notes for a meal with no description and no method
+    await page.evaluate(() => MP.addToLibrary({ id: 'walk-gap', name: 'Walk gap meal', servings: 1, mealTypes: ['dinner'], ingredients: [{ key: 'rice', label: 'Rice' }] }));
+    await page.reload(); await page.fill('#library-search', 'Walk gap'); await page.evaluate(() => document.activeElement.blur());
+    await page.evaluate(() => document.querySelector('#library-grid .meal-card [data-act="details"]').click());
+    await page.waitForSelector('#meal-sheet-overlay:not(.hidden)');
+    const gap = await page.innerText('#meal-sheet');
+    if (!/No description yet/.test(gap) || !/No method yet/.test(gap)) throw new Error('gap notes missing');
+    await page.keyboard.press('Escape');
+    await page.evaluate(() => MP.removeFromLibrary('walk-gap'));
+    // 16. no horizontal scroll, dock visible
+    await page.evaluate(() => document.querySelector('#library-grid .meal-card [data-act="details"]')?.click());
+    await page.reload(); await page.waitForSelector('#library-grid .meal-card');
+    await page.evaluate(() => document.querySelector('#library-grid .meal-card [data-act="details"]').click());
+    await page.waitForSelector('#meal-sheet-overlay:not(.hidden)'); await page.waitForTimeout(400);
+    const lay = await page.evaluate(() => { const d = document.querySelector('#meal-sheet .ms-dock').getBoundingClientRect(), n = document.querySelector('.nav-links').getBoundingClientRect(); return { hs: document.documentElement.scrollWidth > innerWidth, dockVisible: d.bottom <= innerHeight + 1 && d.height > 20, aboveTab: getComputedStyle(document.querySelector('.nav-links')).position !== 'fixed' || d.bottom <= n.top + 1 || +getComputedStyle(document.getElementById('meal-sheet-overlay')).zIndex > 30 }; });
+    if (lay.hs || !lay.dockVisible) throw new Error('layout ' + JSON.stringify(lay));
+    await page.keyboard.press('Escape');
+    // 12. Plan: Recipe button opens the same sheet with Cook mode / Eat / Swap; a variant pick sets variantId
+    await page.evaluate(() => { const p = JSON.parse(localStorage.getItem('mp_plan')); p.days[1].slots.dinner = { mealId: 'chorizo-pasta' }; localStorage.setItem('mp_plan', JSON.stringify(p)); });
+    await page.goto(`${base}/plan.html`); await page.waitForSelector('#plan-root .slot-card[data-day="2"]');
+    await page.click('#plan-root .slot-card[data-day="2"] .tc-h'); await page.click('#plan-root .slot-card[data-day="2"] [data-tn="details"]');
+    await page.click('.day-recipe-btn[data-slot="dinner"]');
+    await page.waitForSelector('#meal-sheet-overlay:not(.hidden)');
+    const acts = await page.evaluate(() => [...document.querySelectorAll('#meal-sheet .ms-dock [data-act]')].map((b) => b.dataset.act).join());
+    if (acts !== 'cook,eat,swap') throw new Error('plan dock ' + acts);
+    await page.evaluate(() => document.querySelectorAll('#meal-sheet .ms-variants input')[1].click());
+    const vid = await page.evaluate(() => JSON.parse(localStorage.getItem('mp_plan')).days[1].slots.dinner.variantId);
+    if (!vid) throw new Error('plan variant pick did not set variantId');
+    await page.keyboard.press('Escape');
+    // 13. Discover: tap on the top card opens the sheet with its three actions (covered in depth by the discover step)
+    // 14. Shopping use-it-up meal opens the same sheet
+    await page.goto(`${base}/shopping.html#pantry`);
+    await page.evaluate(() => localStorage.setItem('mp_pantry', JSON.stringify({ updatedAt: new Date().toISOString(), items: [{ name: 'cheese', qty: '200g', useBy: '2020-01-01' }] })));
+    await page.reload(); await page.waitForSelector('.useup-strip li.over');
+    await page.click('#useup-btn'); await page.waitForSelector('.modal-sheet [data-meal]');
+    await page.click('.modal-sheet [data-meal]');
+    await page.waitForSelector('#meal-sheet-overlay:not(.hidden)');
+    await page.keyboard.press('Escape');
+    await page.evaluate(() => localStorage.removeItem('mp_pantry'));
   });
   await step('no uncaught page errors during the walk', async () => { if (errs.length) throw new Error(errs[0]); });
   await ctx.close();

@@ -859,6 +859,19 @@
     });
   }
 
+  /** Phase 115: Browse chips AND together. quick | budget | batch | <nutrient tag name>. ctx = { tags (ingredient-nutrient-tags .tags), packData }. */
+  function chipFilter(meals, chips, ctx) {
+    if (!chips || !chips.length) return meals;
+    const c = ctx || {}, tags = c.tags || {};
+    const has = (meal, n) => (meal.ingredients || []).some((i) => { const l = (tags[i.key] || {})[n]; return l === "high" || l === "med"; });
+    const test = {
+      quick: (m) => { const t = m.totalMins || estMins(m); return t ? t <= 30 : m.prepEffort === "quick"; },
+      budget: (m) => !!(c.packData && MP.ShoppingList) && MP.ShoppingList.costTier(MP.ShoppingList.mealCost(m, c.packData).total, c.packData) === "cheap",
+      batch: (m) => isBatch(m),
+    };
+    return meals.filter((m) => chips.every((k) => (test[k] ? test[k](m) : has(m, k))));
+  }
+
   function getDismissed() {
     return new Set(JSON.parse(sessionStorage.getItem(SS_DISMISSED) || "[]"));
   }
@@ -977,6 +990,7 @@
   MP.ingredientsToText = ingredientsToText;
   MP.findSimilarName = findSimilarName;
   MP.filterMeals = filterMeals;
+  MP.chipFilter = chipFilter;
   MP.getDismissed = getDismissed;
   MP.dismiss = dismiss;
   MP.undismiss = undismiss;

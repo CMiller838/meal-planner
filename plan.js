@@ -1901,7 +1901,8 @@
     const t = e.target;
     if (!swapCtx || !document.getElementById("swap-deck") || document.getElementById("swap-overlay").classList.contains("hidden")) return;
     if (t && /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName)) return;
-    if (!document.getElementById("detail-overlay").classList.contains("hidden")) return;
+    const ms = document.getElementById("meal-sheet-overlay");
+    if (ms && !ms.classList.contains("hidden")) return;
     if (e.key === "ArrowRight") flyOff(1);
     else if (e.key === "ArrowLeft") flyOff(-1);
     else if (e.key === "Escape") closeSwapPicker();
@@ -1915,39 +1916,22 @@
       + (r.rating === "up" ? `<div class="rating-hint">ranked up: you liked this</div>` : "");
   }
 
-  function openDetail(meal, variantId, subs) {
-    const overlay = document.getElementById("detail-overlay");
-    const sheet = document.getElementById("detail-sheet");
-    const effMeal = MP.effectiveMeal(meal, variantId, subs);
-    const label = MP.variantLabel(meal, variantId);
-    const subsLabel = MP.subsLabel(subs);
-    sheet.innerHTML = `
-      <button class="close-btn" aria-label="Close">✕</button>
-      ${meal.image ? `<img src="${esc(meal.image)}" alt="${esc(meal.name)}">` : ""}
-      <h2>${esc(meal.name)}${label ? ` — ${esc(label)}` : ""}</h2>
-      ${subsLabel ? `<p class="muted subs-label">${esc(subsLabel)}</p>` : ""}
-      ${tagRowHtml(effMeal)}
-      <p>${esc(meal.description || "")}</p>
-      <h3>Ingredients</h3>
-      <ul class="ingredient-list">${ingredientListHtml(effMeal)}</ul>
-      <h3>Instructions</h3>
-      ${variantId && MP.methodOf(meal).steps.length ? `<p class="muted">Steps are for the base recipe.</p>` : ""}
-      ${MP.methodOf(meal).steps.length ? MP.methodHtml(meal) : `<p>${esc(effMeal.instructions || "")}</p>`}
-      ${MP.methodOf(meal).status === "drafted" ? `<p class="muted">Drafted by your assistant — accept it in Browse.</p>` : ""}
-      <div class="day-slot-actions">
-        <button class="ghost detail-cook-btn">Cook</button>
-        <button class="ghost detail-eat-btn">Eat this</button>
-      </div>
-    `;
-    sheet.querySelector(".close-btn").addEventListener("click", () => {
-      overlay.classList.add("hidden");
+  /** Phase 115: the shared MealSheet. A slot (day given) docks Cook mode, Eat and Swap; a swap-deck candidate only Cook mode and Eat. */
+  function openDetail(meal, variantId, subs, day) {
+    const effOf = (c) => MP.effectiveMeal(meal, c.variantId, subs);
+    MP.MealSheet.open(meal, {
+      variantId, subs,
+      tagsHtml: tagRowHtml(MP.effectiveMeal(meal, variantId, subs)),
+      onVariant: day ? (id) => setSlotVariant(day, "dinner", id) : undefined,
+      actions: [
+        { id: "cook", label: "Cook mode", kind: "pri", onClick: (c) => {
+          c.close();
+          MP.CookMode.open(meal, effOf(c), () => openEatSheet(effOf(c), null, null, c.variantId), c.variantId);
+        } },
+        { id: "eat", label: "Eat", onClick: (c) => openEatSheet(effOf(c), null, null, c.variantId) },
+        ...(day ? [{ id: "swap", label: "Swap", onClick: (c) => { c.close(); openSwapPicker(day, "dinner"); } }] : []),
+      ],
     });
-    sheet.querySelector(".detail-eat-btn").addEventListener("click", () => openEatSheet(effMeal, null, null, variantId));
-    sheet.querySelector(".detail-cook-btn").addEventListener("click", () => {
-      overlay.classList.add("hidden");
-      MP.CookMode.open(meal, effMeal, () => openEatSheet(effMeal, null, null, variantId), variantId);
-    });
-    overlay.classList.remove("hidden");
   }
 
   // ---- Expanded day view ----
@@ -2061,7 +2045,7 @@
     sheet.querySelectorAll(".day-recipe-btn").forEach((b) => {
       const meal = mealAt(day, b.dataset.slot);
       const slot = plan.days[day - 1].slots[b.dataset.slot];
-      if (meal) b.addEventListener("click", () => openDetail(meal, slot.variantId, slot.subs));
+      if (meal) b.addEventListener("click", () => openDetail(meal, slot.variantId, slot.subs, day));
     });
   }
 
@@ -3201,7 +3185,6 @@
     initChat(); // wired first: a later load error must not leave the Plan with Hermes button dead
     MP.enableSheetDrag($("day-sheet"), closeDayView);
     MP.enableSheetDrag($("swap-sheet"), closeSwapPicker);
-    MP.enableSheetDrag($("detail-sheet"), () => $("detail-overlay").classList.add("hidden"));
     MP.enableSheetDrag($("eat-sheet"), closeEatSheet);
     MP.enableSheetDrag($("cook-sheet"), () => $("cook-overlay").classList.add("hidden"));
     document.getElementById("day-overlay").addEventListener("click", (e) => {
@@ -3209,9 +3192,6 @@
     });
     document.getElementById("swap-overlay").addEventListener("click", (e) => {
       if (e.target.id === "swap-overlay") closeSwapPicker();
-    });
-    document.getElementById("detail-overlay").addEventListener("click", (e) => {
-      if (e.target.id === "detail-overlay") e.currentTarget.classList.add("hidden");
     });
     document.getElementById("eat-overlay").addEventListener("click", (e) => {
       if (e.target.id === "eat-overlay") closeEatSheet();
