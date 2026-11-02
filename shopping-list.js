@@ -226,6 +226,18 @@
     return order.filter((g) => g.lines.length);
   }
 
+  /** progress: counted lines (packs > 0; the caller passes lines already minus skipped) -> { n, g, cost, gotCost }. */
+  function progress(lines, isGot) {
+    const r = { n: 0, g: 0, cost: 0, gotCost: 0 };
+    (lines || []).forEach((l) => {
+      if (!(l.packs > 0)) return;
+      const c = Number(l.lineCost) || 0;
+      r.n++; r.cost += c;
+      if (isGot(l)) { r.g++; r.gotCost += c; }
+    });
+    return r;
+  }
+
   function mealCost(meal, packData) {
     let total = 0, estimated = false;
     const keys = [], parts = {};
@@ -671,5 +683,5 @@
     return out.sort((a, b) => b.saving - a.saving);
   }
 
-  MP.ShoppingList = { cheaperSwaps, bulkOptions, useUpItems, scaleMeal, scaleShortfall, mealsUsing, load, loadGroups, groupIndex, buildLists, parseQty, packsFor, normalizeKey, aisleFor, groupByAisle, lineId, planLineId, mergeLines, adhocView, adhocToLines, LINE_STATES, LINE_SOURCES, pantryIndex, pantryOverlap, hasEnough, isSkippedIngredient, cookable, quickPicks, remainingQty, eatPlan, priceFor, mealCost, costIndex, costTier, costBadgeHtml };
+  MP.ShoppingList = { cheaperSwaps, bulkOptions, useUpItems, scaleMeal, scaleShortfall, mealsUsing, load, loadGroups, groupIndex, buildLists, parseQty, packsFor, normalizeKey, aisleFor, groupByAisle, progress, lineId, planLineId, mergeLines, adhocView, adhocToLines, LINE_STATES, LINE_SOURCES, pantryIndex, pantryOverlap, hasEnough, isSkippedIngredient, cookable, quickPicks, remainingQty, eatPlan, priceFor, mealCost, costIndex, costTier, costBadgeHtml };
 })(typeof globalThis !== "undefined" ? globalThis : this);

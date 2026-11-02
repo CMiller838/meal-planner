@@ -1012,6 +1012,8 @@ Spec: `.claude/specs/phase105.md` (planned batches via `place.freezeFrom`, cooke
 
 ## Phase 116: Shopping aisle accordion
 - Spec: `.claude/specs/phase116.md` [M]
+- [x] Built 2026-11-02, tester PASS.
+- [ ] Live: on the phone PWA, tick every line in an aisle then Finish shop: card collapses, "Shop complete" toast with Undo, pantry unchanged.
 
 ## Phase 118: Plan with Hermes, wizard then chat
 - Spec: `.claude/specs/phase118a.md` [M] (wizard)

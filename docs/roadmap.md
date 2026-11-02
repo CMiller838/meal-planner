@@ -292,8 +292,9 @@ Goal: shell-a on every page: 5-tab bottom bar (Tonight, Browse, Discover, Shoppi
 
 Goal: browse-a photo cards plus ONE Details sheet used from Browse, Plan and Discover: short description on top, then photo, stats, the whole recipe (tickable ingredients, numbered method), variant picker, thumb dock (Add to plan, Eat, Cook mode). Reads `meal.description`/`instructions`; meals missing them show a gap note.
 
-## Phase 116: Shopping aisle accordion [M] — not started
+## Phase 116: Shopping aisle accordion [M] — built 2026-11-02, live checks pending
 
+Verified 2026-11-02: check.py 10/10 (new walk step a-h + dock-above-ate-bar assertion, test.html progress checks), tester PASS; PC + phone, both themes.
 Goal: shopping-a: aisle cards with progress and tick animation, pantry tab, week total vs budget dock, Finish shop. `buildLists` stays the one implementation.
 
 ## Phase 117: Cook mode, focus stack [L] — dropped (2026-11-01: Phase 79 cook mode already covers it; a web app cannot drive the phone Clock timers)

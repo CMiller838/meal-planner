@@ -123,6 +123,99 @@ for (const [vp, size] of Object.entries({ pc: { width: 1440, height: 900 }, phon
     await page.waitForSelector('#shopping-root .shop-line', { timeout: 10000 });
     await shot('shopping');
   });
+  await step('shopping accordion (Phase 116): cards, ticks, done collapse, dock budget, add/remove, Finish shop, #adhoc', async () => {
+    const msgs = [];
+    page.on('console', m => { if (m.type() === 'error') msgs.push(m.text()); });
+    const setBudget = b => page.evaluate(v => localStorage.setItem('mp_planPrefs', JSON.stringify({ updatedAt: new Date().toISOString(), budgetTarget: v })), b);
+    const load = async () => { await page.goto(`${base}/shopping.html`); await page.waitForSelector('.aisle-card .shop-line', { state: 'attached', timeout: 10000 }); };
+    const ticked = async () => parseInt((await page.innerText('.dock-ticked')).split(' ')[0], 10);
+    const trolley = async () => parseFloat(await page.innerText('.dock-tv'));
+    await page.goto(`${base}/shopping.html`); await setBudget(60); await load();
+    { const g = await page.evaluate(() => { const d = document.querySelector('#shop-dock').getBoundingClientRect(), b = document.querySelector('.ate-bar'); return { db: d.bottom, bt: b ? b.getBoundingClientRect().top : 1e9 }; });
+      if (g.db > g.bt + 1) throw new Error(`dock bottom ${g.db} overlaps ate bar top ${g.bt}`); }
+    // (a)
+    const cards = page.locator('#shopping-root .aisle-card');
+    if (await cards.count() < 2) throw new Error('expected several aisle cards');
+    for (const c of await cards.all()) {
+      if (!/^\d+\/\d+$/.test((await c.locator('.ah-count').innerText()).trim())) throw new Error('header lacks g/n');
+      if (!await c.locator('.ah-bar').count()) throw new Error('header lacks progress bar');
+    }
+    const first = page.locator('#shopping-root .shop-block').first().locator('.aisle-card').first();
+    if (await first.locator('.ah-btn').getAttribute('aria-expanded') !== 'true') throw new Error('first aisle not expanded');
+    if (await page.locator('.just-ticked, .aisle-card.just').count()) throw new Error('animation class on first paint');
+    // (b)
+    const pending = '.shop-line:not(.covered):not(.skipped):not(.ticked)';
+    const key = await first.getAttribute('data-aisle');
+    const card = () => page.locator(`.aisle-card[data-aisle="${key}"]`);
+    const g0 = parseInt((await card().locator('.ah-count').innerText()).split('/')[0], 10), t0 = await ticked(), v0 = await trolley();
+    await card().locator(pending).filter({ has: page.locator('.shop-price:not(:empty)') }).first().locator('input').click();
+    if (parseInt((await card().locator('.ah-count').innerText()).split('/')[0], 10) !== g0 + 1) throw new Error('aisle g did not rise');
+    if (await ticked() !== t0 + 1) throw new Error('dock ticked did not rise');
+    if (!(await trolley() > v0)) throw new Error('In trolley did not rise');
+    if (await page.locator('.shop-line.just-ticked').count() !== 1) throw new Error('tick animation class missing');
+    // (c)
+    while (await card().locator(pending).count()) {
+      await card().locator(pending).first().locator('input').click();
+    }
+    if (!await card().evaluate(e => e.classList.contains('done'))) throw new Error('card not .done');
+    if (!await page.locator('.aisle-card.just').count()) throw new Error('done bump class missing');
+    await page.waitForFunction(k => [...document.querySelectorAll('.aisle-card')].find(c => c.dataset.aisle === k).querySelector('.ah-btn').getAttribute('aria-expanded') === 'false', key, { timeout: 4000 });
+    await card().locator('.ah-btn').click();
+    if (await card().locator('.ah-btn').getAttribute('aria-expanded') !== 'true') throw new Error('expand failed');
+    await card().locator('.ah-btn').click();
+    if (await card().locator('.ah-btn').getAttribute('aria-expanded') !== 'false') throw new Error('collapse failed');
+    await shot('shopping-accordion');
+    // (d)
+    if (!await page.locator('.dock-budget').count() || !await page.locator('.dock-bar').count()) throw new Error('budget 60: dock budget text/bar missing');
+    await setBudget(0); await load();
+    if (await page.locator('.dock-budget, .dock-bar').count()) throw new Error('budget 0: dock budget should be absent');
+    if (await page.locator('.just-ticked, .aisle-card.just').count()) throw new Error('animation class after plain reload');
+    await setBudget(60); await load();
+    // (e)
+    await page.fill('#adhoc-name', 'bin bags'); await page.click('#adhoc-add-btn');
+    const row = page.locator('.aisle-card .shop-line', { hasText: 'bin bags' });
+    if (!await row.locator('.added-tag').count()) throw new Error('added row/tag missing');
+    await row.locator('[data-del]').click();
+    if (await row.count()) throw new Error('× did not remove the added row');
+    // (f)
+    await page.fill('#adhoc-name', 'bin bags'); await page.click('#adhoc-add-btn');
+    if (!await page.locator('#finish-shop').isDisabled()) throw new Error('Finish shop should start disabled');
+    for (let i = 0; i < 200; i++) {
+      const more = await page.evaluate(() => {
+        const el = document.querySelector('#shopping-root .shop-block:first-child .aisle-card .shop-line:not(.covered):not(.skipped):not(.ticked) input[type=checkbox]');
+        if (el) el.click();
+        return !!el;
+      });
+      if (!more) break;
+    }
+    if (await page.locator('#finish-shop').isDisabled()) throw new Error('Finish shop should enable when all ticked');
+    const pantry = () => page.evaluate(() => JSON.stringify(MP.Sync.localItems('pantry')));
+    const p0 = await pantry();
+    await page.click('#finish-shop');
+    await page.waitForSelector('.toast:has-text("Shop complete")');
+    if (await page.locator('.aisle-card .shop-line', { hasText: 'bin bags' }).count()) throw new Error('ticked ad-hoc line not deleted');
+    if (/pantry/i.test(await page.innerText('.toast'))) throw new Error('toast must not mention the pantry');
+    await page.click('.toast button:text("Undo")');
+    if (!await page.locator('.aisle-card .shop-line.ticked', { hasText: 'bin bags' }).count()) throw new Error('Undo did not restore the ad-hoc line as got');
+    if (await pantry() !== p0) throw new Error('Finish shop / Undo touched the pantry');
+    await page.locator('.aisle-card .shop-line', { hasText: 'bin bags' }).locator('[data-del]').click();
+    // (g)
+    await page.goto(`${base}/shopping.html#adhoc`);
+    await page.waitForSelector('#panel-planned:not(.hidden)');
+    if (await page.locator('#tab-adhoc').count()) throw new Error('#tab-adhoc should be gone');
+    // (h)
+    if (vp === 'phone') {
+      await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+      const r = await page.evaluate(() => {
+        const dock = document.getElementById('shop-dock').getBoundingClientRect(), tab = document.querySelector('.nav-links').getBoundingClientRect();
+        return { sw: document.documentElement.scrollWidth, iw: innerWidth, dockBottom: dock.bottom, tabTop: tab.top, dockTop: dock.top, formBottom: document.getElementById('adhoc-form').getBoundingClientRect().bottom };
+      });
+      if (r.sw > r.iw) throw new Error(`horizontal scroll ${r.sw} > ${r.iw}`);
+      if (r.dockBottom > r.tabTop + 1) throw new Error('dock overlaps the tab bar');
+      if (r.formBottom > r.dockTop + 1) throw new Error('dock covers the end of the list');
+    }
+    if (msgs.length) throw new Error('console errors: ' + msgs[0]);
+  });
   await step('eaten: seeded food log shows a measured row, Week toggle works', async () => {
     await page.goto(`${base}/eaten.html`);
     await page.evaluate(() => localStorage.setItem('mp_foodLog', JSON.stringify({ entries: [{ id: 'w1', kind: 'eat', name: 'Walk bar', when: new Date().toISOString(), nutrients: { protein_g: { value: 12, basis: 'label' }, sodium_mg: { value: 9999, basis: 'label' } } }] })));
@@ -659,7 +752,7 @@ for (const [vp, size] of Object.entries({ pc: { width: 1440, height: 900 }, phon
   await step('bar Ask on Shopping: a swapDay reply changes mp_plan in place (no reload), the list redraws, Undo restores', async () => {
     await page.goto(`${base}/plan.html`); await page.evaluate(() => localStorage.removeItem('mp_plan')); // fresh plan
     await seedPlan('plan.html'); await page.goto(`${base}/shopping.html`);
-    await page.waitForSelector('#shopping-root .shop-line, #shopping-root li', { timeout: 8000 });
+    await page.waitForSelector('#shopping-root .shop-line, #shopping-root li', { state: 'attached', timeout: 8000 });
     await page.waitForSelector('.ate-mode[data-mode="ask"]:not([hidden])');
     await page.evaluate(() => { window.__marker = 1; window.__live = 0; addEventListener('mp:plan-live', () => window.__live++); });
     const before = JSON.parse(await planLS());

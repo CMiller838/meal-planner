@@ -245,6 +245,19 @@
     check('parseQty("whole") == null', MP.ShoppingList.parseQty("whole") === null);
   }
 
+  // 10a. MP.ShoppingList.progress (Phase 116)
+  {
+    const P = MP.ShoppingList.progress, got = (l) => l.got;
+    const e = P([], got);
+    check("progress(empty) is all zero", e.n === 0 && e.g === 0 && e.cost === 0 && e.gotCost === 0);
+    const lines = [{ packs: 1, lineCost: 1.5, got: true }, { packs: 2, lineCost: 2.25 }, { packs: 0, lineCost: 0, got: true }];
+    const p = P(lines, got);
+    check("progress excludes covered (packs 0) lines", p.n === 2 && p.g === 1);
+    check("progress sums cost and gotCost", p.cost === 3.75 && p.gotCost === 1.5);
+    const all = P(lines.slice(0, 1), got);
+    check("progress all ticked: g == n", all.n === 1 && all.g === 1);
+  }
+
   // 10. MP.ShoppingList.packsFor
   {
     const gPack = { packSize: 500, unit: "g" };

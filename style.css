@@ -1156,3 +1156,58 @@ main { animation: m-enter var(--motion-base) ease-out both; }
 .pan-tick { width: 1.4rem; height: 1.4rem; flex: none; }
 .pan-qty { width: 5.5rem; font-size: .9rem; }
 .used-up .shop-name, .used-up .pan-qty { text-decoration: line-through; opacity: .55; }
+
+/* ---- Phase 116: shopping aisle accordion + dock (adapted from design-prototypes/ui-concepts/shopping-a.html) ---- */
+.aisle-card { border: 1px solid var(--border); border-radius: .9rem; background: var(--surface-alt); margin: .55rem 0; overflow: hidden; }
+.aisle-card .ah { margin: 0; font-size: inherit; }
+.ah-btn { display: grid; grid-template-columns: 1fr auto 1.5rem; grid-template-areas: "n c v" "b b b"; align-items: center; gap: .3rem .6rem; width: 100%; min-height: 44px;
+  padding: .55rem .8rem; font: inherit; text-align: left; color: var(--text); background: none; border: none; cursor: pointer; }
+.ah-name { grid-area: n; font-weight: 600; overflow-wrap: anywhere; }
+.ah-count { grid-area: c; color: var(--text-dim); font-size: .85rem; font-variant-numeric: tabular-nums; }
+.ah-bar { grid-area: b; height: 4px; border-radius: 999px; background: var(--border); overflow: hidden; }
+.ah-bar i { display: block; height: 100%; background: var(--accent); transform-origin: left; }
+.ah-chev { grid-area: v; width: .55rem; height: .55rem; justify-self: center; border-right: 2px solid var(--text-dim); border-bottom: 2px solid var(--text-dim); transform: rotate(45deg); transition: transform var(--motion-base) ease; }
+.aisle-card.open .ah-chev { transform: rotate(-135deg); }
+.ah-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.aisle-card.done .ah-count { color: var(--accent); }
+.ab { display: grid; grid-template-rows: 0fr; visibility: hidden; transition: grid-template-rows var(--motion-base) ease, visibility 0s var(--motion-base); }
+.aisle-card.open .ab { grid-template-rows: 1fr; visibility: visible; transition: grid-template-rows var(--motion-base) ease; }
+.ab-in { overflow: hidden; min-height: 0; padding: 0 .8rem; }
+.aisle-card .shop-line:last-child { border-bottom: none; }
+.shop-name, .shop-why { overflow-wrap: anywhere; }
+.added-tag { margin-left: .3rem; padding: .05rem .4rem; font-size: .68rem; border-radius: 999px; color: var(--accent); border: 1px solid var(--accent); vertical-align: middle; }
+/* tick: custom box, the check draws in, the row settles (only the row ticked this render animates) */
+.aisle-card .shop-line input[type="checkbox"] { appearance: none; -webkit-appearance: none; position: relative; width: 1.2rem; height: 1.2rem; margin: 0; border: 2px solid var(--border); border-radius: .35rem; background: var(--bg); cursor: pointer; transition: background var(--motion-base) ease, border-color var(--motion-base) ease; }
+.aisle-card .shop-line input[type="checkbox"]::after { content: ""; position: absolute; left: .3rem; top: .05rem; width: .3rem; height: .6rem; border-right: 2px solid var(--on-accent); border-bottom: 2px solid var(--on-accent); transform: rotate(45deg) scale(0); transition: transform var(--motion-base) var(--ease-lift, ease); }
+.aisle-card .shop-line input[type="checkbox"]:checked { background: var(--accent); border-color: var(--accent); }
+.aisle-card .shop-line input[type="checkbox"]:checked::after { transform: rotate(45deg) scale(1); }
+.aisle-card .shop-line input[type="checkbox"]:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.aisle-card .shop-line.just-ticked { animation: m-settle 260ms ease-out; }
+.aisle-card.just { animation: m-bump 420ms var(--ease-lift, ease); }
+@keyframes m-settle { 0% { transform: translateX(0); } 40% { transform: translateX(4px); } 100% { transform: translateX(0); } }
+@keyframes m-bump { 0% { transform: scale(1); } 40% { transform: scale(1.02); } 100% { transform: scale(1); } }
+
+.shop-dock { position: fixed; left: 0; right: 0; bottom: var(--dock-b, 0px); z-index: 39; width: min(720px, 100%); margin: 0 auto; box-sizing: border-box;
+  padding: .6rem .9rem; background: var(--surface); border: 1px solid var(--border); border-bottom: none; border-radius: 1rem 1rem 0 0; box-shadow: 0 -6px 16px var(--shadow); }
+.shop-dock[hidden] { display: none; }
+.dock-row { display: flex; align-items: center; justify-content: space-between; gap: .75rem; }
+.dock-main { min-width: 0; display: flex; flex-wrap: wrap; align-items: baseline; gap: .1rem .5rem; }
+.dock-total { font-size: 1.15rem; color: var(--accent); font-variant-numeric: tabular-nums; }
+.dock-budget, .dock-sub { color: var(--text-dim); font-size: .82rem; }
+.dock-bar { height: 5px; margin: .4rem 0 .25rem; border-radius: 999px; background: var(--border); overflow: hidden; }
+.dock-bar i { display: block; height: 100%; background: var(--accent); transform-origin: left; }
+.dock-bar.over i { background: var(--danger); }
+.shop-dock .btn:disabled { opacity: .5; cursor: not-allowed; }
+:root { --dock-h: 0px; --dock-b: 0px; }
+body.has-ate-bar { --dock-b: calc(5rem + env(safe-area-inset-bottom)); }
+@media (max-width: 639px) {
+  :root { --dock-b: calc(var(--tabbar-h) + env(safe-area-inset-bottom)); }
+  body.has-ate-bar { --dock-b: calc(var(--tabbar-h) + 5rem + env(safe-area-inset-bottom)); }
+}
+body.has-dock, body.has-dock.has-ate-bar { padding-bottom: calc(var(--dock-b) + var(--dock-h) + 1rem); }
+body.has-dock .toast, body.has-dock.has-ate-bar .toast { bottom: calc(var(--dock-b) + var(--dock-h) + .75rem); }
+body:has(.modal-overlay:not(.hidden)) .shop-dock, body.chat-open .shop-dock { display: none; }
+@media (prefers-reduced-motion: reduce) {
+  .ab, .aisle-card.open .ab, .ah-chev, .aisle-card .shop-line input[type="checkbox"], .aisle-card .shop-line input[type="checkbox"]::after { transition: none; }
+  .aisle-card .shop-line.just-ticked, .aisle-card.just { animation: none; }
+}

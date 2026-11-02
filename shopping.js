@@ -31,12 +31,36 @@
     return `${line.packs} × ${line.needed.value}${line.needed.unit}`;
   }
 
-  function lineHtml(plan, shopDay, line, states, showPrice) {
-    const state = (states.get(MP.ShoppingList.planLineId(plan, shopDay, line.key)) || {}).state;
+  const SL = () => MP.ShoppingList;
+  let plan = null, lists = null, wired = false;
+  const openMap = new Map(), doneSeen = new Map(); // aisle card key -> open / was-done (in memory only)
+  let justKey = null, justLine = null; // the card / row ticked by the user this render, for the one-off animations
+
+  // ---- Ad-hoc list: the x: lines of the shared shopping list (Phase 55), folded into the aisles (Phase 116) ----
+  const extras = () => MP.Sync.shoppingLines().filter((l) => l.id.startsWith("x:") && l.state !== "deleted");
+  const adhocLines = () => extras().map((l) => ({ adhoc: true, id: l.id, key: SL().normalizeKey(l.label), label: l.label, qty: l.qty, state: l.state, packs: 1, lineCost: 0, meals: [] }));
+  const lineIdOf = (shopDay, l) => (l.adhoc ? l.id : SL().planLineId(plan, shopDay, l.key));
+  const stateOf = (shopDay, l, states) => (l.adhoc ? l.state : (states.get(lineIdOf(shopDay, l)) || {}).state);
+  const counted = (shopDay, lines, states) => lines.filter((l) => stateOf(shopDay, l, states) !== "skipped");
+  const progressOf = (shopDay, lines, states) => SL().progress(counted(shopDay, lines, states), (l) => stateOf(shopDay, l, states) === "got");
+
+  function lineHtml(shopDay, line, states, showPrice) {
+    const state = stateOf(shopDay, line, states);
     const classes = ["shop-line"];
     if (state === "got") classes.push("ticked");
     if (state === "skipped") classes.push("skipped");
     if (line.packs === 0) classes.push("covered");
+    if (justLine && lineIdOf(shopDay, line) === justLine) classes.push("just-ticked");
+    if (line.adhoc) {
+      return `<li class="${classes.join(" ")}">
+      <label>
+        <input type="checkbox" data-id="${esc(line.id)}" ${state === "got" ? "checked" : ""}>
+        <span class="shop-qty">${esc(MP.qtyText(line.qty))}</span>
+        <span class="shop-name">${esc(line.label)} <span class="added-tag">added</span></span>
+      </label>
+      <button class="ghost shop-skip" data-del="${esc(line.id)}" aria-label="Remove ${esc(line.label)}">×</button>
+    </li>`;
+    }
     const meals = line.meals.map(esc).join(", ");
     return `<li class="${classes.join(" ")}">
       <label>
@@ -52,140 +76,213 @@
     </li>`;
   }
 
-  // lines grouped by aisle (store order), each group under a .shop-aisle sub-heading
-  function aisleHtml(plan, shopDay, lines, states, canSkip) {
-    return MP.ShoppingList.groupByAisle(lines, packData).map((g) => `<h4 class="shop-aisle">${esc(g.label)}</h4>
-        <ul class="shop-list">${g.lines.map((l) => lineHtml(plan, shopDay, l, states, canSkip)).join("")}</ul>`).join("");
+  // flat aisle sub-headings: the "Check you have these" / "Estimated" details keep this shape
+  function aisleHtml(shopDay, lines, states, canSkip) {
+    return SL().groupByAisle(lines, packData).map((g) => `<h4 class="shop-aisle">${esc(g.label)}</h4>
+        <ul class="shop-list">${g.lines.map((l) => lineHtml(shopDay, l, states, canSkip)).join("")}</ul>`).join("");
+  }
+
+  // Phase 116: one accordion card per aisle. Open state lives in openMap for the page session only.
+  function aisleCardHtml(shopDay, group, states, showPrice) {
+    const key = shopDay + ":" + group.id;
+    const pr = progressOf(shopDay, group.lines, states);
+    const done = pr.n > 0 && pr.g === pr.n;
+    if (!openMap.has(key)) openMap.set(key, !done);
+    const was = doneSeen.get(key);
+    let just = false;
+    if (done && was === false) {
+      if (justKey === key) {
+        just = true;
+        setTimeout(() => {
+          openMap.set(key, false);
+          const c = [...document.querySelectorAll(".aisle-card")].find((x) => x.dataset.aisle === key);
+          if (c) setOpen(c, false);
+        }, 900);
+      } else openMap.set(key, false); // completed from another device: collapse without the bump
+    } else if (!done && was) openMap.set(key, true);
+    doneSeen.set(key, done);
+    const open = openMap.get(key);
+    return `<section class="aisle-card${done ? " done" : ""}${just ? " just" : ""}${open ? " open" : ""}" data-aisle="${esc(key)}">
+      <h4 class="ah"><button type="button" class="ah-btn" aria-expanded="${open}">
+        <span class="ah-name">${esc(group.label)}</span><span class="ah-count">${pr.g}/${pr.n}</span>
+        <span class="ah-bar" aria-hidden="true"><i style="transform:scaleX(${pr.n ? pr.g / pr.n : 0})"></i></span><span class="ah-chev" aria-hidden="true"></span>
+      </button></h4>
+      <div class="ab"><div class="ab-in"><ul class="shop-list">${group.lines.map((l) => lineHtml(shopDay, l, states, showPrice)).join("")}</ul></div></div>
+    </section>`;
+  }
+
+  function setOpen(card, open) {
+    card.classList.toggle("open", open);
+    card.querySelector(".ah-btn").setAttribute("aria-expanded", String(open));
   }
 
   const isoPlus = (iso, n) => new Date(Date.parse(iso + "T00:00:00Z") + n * 864e5).toISOString().slice(0, 10);
   // Phase 68: a rolling plan names the cycle by its shop date; a fixed plan keeps "Shop day N"
-  function shopHeading(plan, shopDay) {
+  function shopHeading(shopDay) {
     return plan.shopAnchor && plan.startDate ? `Shop ${esc(isoPlus(plan.startDate, shopDay - 1))}` : `Shop day ${shopDay}`;
   }
   // a cycle whose shop date + 7 is already past (only before the next roll) is hidden for rolling plans
-  function cycleOver(plan, shopDay) {
+  function cycleOver(shopDay) {
     return !!plan.shopAnchor && plan.startDate && isoPlus(plan.startDate, shopDay + 6) <= new Date().toLocaleDateString("en-CA");
   }
 
   // Always-on checklist at the end of every shop: pack-sizes.json "essentials", unpriced, ticks sync like any plan line
-  function essentialsHtml(plan, shopDay, states) {
-    const names = (packData && packData.essentials) || [];
-    if (!names.length) return "";
-    const lines = names.map((n) => ({ key: "essential-" + MP.ShoppingList.normalizeKey(n), label: n, essential: true, packs: 1, meals: [] }));
-    return `<h4 class="shop-aisle">Essentials</h4>
-      <ul class="shop-list">${lines.map((l) => lineHtml(plan, shopDay, l, states, false)).join("")}</ul>`;
+  function essentialLines() {
+    return ((packData && packData.essentials) || []).map((n) => ({ key: "essential-" + SL().normalizeKey(n), label: n, essential: true, packs: 1, meals: [] }));
   }
 
-  function blockHtml(plan, list, states) {
+  function blockHtml(list, states, first) {
+    const lines = first ? list.lines.concat(adhocLines()) : list.lines;
+    const ess = essentialLines();
     return `<section class="shop-block">
-      <h3>${shopHeading(plan, list.shopDay)} <span class="shop-total">£${list.total.toFixed(2)}</span></h3>
-      ${aisleHtml(plan, list.shopDay, list.lines, states, true)}
+      <h3>${shopHeading(list.shopDay)} <span class="shop-total">£${list.total.toFixed(2)}</span></h3>
+      ${SL().groupByAisle(lines, packData).map((g) => aisleCardHtml(list.shopDay, g, states, true)).join("")}
       ${list.staples.length ? `<details class="shop-extra">
         <summary>Check you have these (${list.staples.length})</summary>
-        ${aisleHtml(plan, list.shopDay, list.staples, states, false)}
+        ${aisleHtml(list.shopDay, list.staples, states, false)}
       </details>` : ""}
       ${list.estimated.length ? `<details class="shop-extra">
         <summary>Estimated — category price, not exact (${list.estimated.length})</summary>
-        ${aisleHtml(plan, list.shopDay, list.estimated, states, true)}
+        ${aisleHtml(list.shopDay, list.estimated, states, true)}
       </details>` : ""}
-      ${essentialsHtml(plan, list.shopDay, states)}
+      ${ess.length ? aisleCardHtml(list.shopDay, { id: "essentials", label: "Essentials", lines: ess }, states, false) : ""}
     </section>`;
   }
 
-  let wired = false;
-  function render(plan, lists) {
+  // ---- Dock (Phase 116): total vs budget, trolley, Finish shop. Display only: the total is list.total. ----
+  let dockWanted = false, currentTab = "planned";
+  function applyDock() {
+    const dock = document.getElementById("shop-dock");
+    const show = dockWanted && currentTab === "planned";
+    dock.hidden = !show;
+    document.body.classList.toggle("has-dock", show);
+    document.documentElement.style.setProperty("--dock-h", show ? dock.offsetHeight + "px" : "0px");
+    placeDock();
+  }
+  // The "I ate" bar grows (hint, thread): sit the dock on its measured top edge, not a fixed guess.
+  function placeDock() {
+    const bar = document.querySelector(".ate-bar");
+    if (!bar) return;
+    document.body.style.setProperty("--dock-b", Math.max(0, Math.round(innerHeight - bar.getBoundingClientRect().top)) + "px");
+  }
+  window.addEventListener("resize", placeDock);
+  new MutationObserver(placeDock).observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ["hidden"] });
+
+  function drawDock(states, first) {
+    const dock = document.getElementById("shop-dock");
+    const lines = first ? first.lines.concat(adhocLines(), essentialLines()) : adhocLines();
+    const shopDay = first ? first.shopDay : 0;
+    dockWanted = lines.length > 0;
+    if (!dockWanted) { applyDock(); return; }
+    const pr = progressOf(shopDay, lines, states);
+    const budget = MP.PlanPrefs ? MP.PlanPrefs.get().budgetTarget : 0;
+    const total = first ? first.total : null;
+    const hasBudget = total != null && budget > 0, diff = budget - total;
+    dock.innerHTML = `<div class="dock-row"><div class="dock-main">
+        ${total != null ? `<b class="dock-total">£${total.toFixed(2)}</b>` : ""}
+        ${hasBudget ? `<span class="dock-budget">of £${budget.toFixed(0)} budget · ${diff >= 0 ? `£${diff.toFixed(2)} left` : `£${(-diff).toFixed(2)} over`}</span>` : ""}
+      </div><button type="button" id="finish-shop" class="btn"${pr.g === pr.n ? "" : " disabled"}>Finish shop</button></div>
+      ${hasBudget ? `<div class="dock-bar${diff < 0 ? " over" : ""}" aria-hidden="true"><i style="transform:scaleX(${Math.min(1, total / budget)})"></i></div>` : ""}
+      <div class="dock-sub">In trolley £<span class="dock-tv">${pr.gotCost.toFixed(2)}</span> · <span class="dock-ticked">${pr.g} of ${pr.n} ticked</span></div>`;
+    applyDock();
+  }
+
+  function toast(msg, label, onAction) {
+    const el = document.createElement("div");
+    el.className = "toast";
+    el.setAttribute("role", "status");
+    el.textContent = msg;
+    if (label) {
+      const b = document.createElement("button");
+      b.textContent = label;
+      b.addEventListener("click", () => { el.remove(); onAction(); });
+      el.appendChild(b);
+    }
+    document.body.appendChild(el);
+    setTimeout(() => el.remove(), 8000);
+  }
+
+  // wrap-up only: nothing here writes the pantry (Phase 119 replaces this with a review sheet)
+  function finishShop() {
+    const done = extras().filter((l) => l.state === "got");
+    done.forEach((l) => MP.Sync.setLine({ id: l.id, state: "deleted" }));
+    render();
+    toast("Shop complete", "Undo", () => { done.forEach((l) => MP.Sync.setLine({ id: l.id, state: "got" })); render(); });
+  }
+
+  function render() {
     const meta = document.getElementById("shopping-meta");
     const root = document.getElementById("shopping-root");
-    meta.textContent = plan.startDate
+    meta.textContent = plan && plan.startDate
       ? `From your plan starting ${plan.startDate} — prices are a hand-entered estimate`
       : "Prices are a hand-entered estimate";
     const open = [...root.querySelectorAll("details[open]")].map((d) => d.querySelector("summary").textContent);
     const states = new Map(MP.Sync.shoppingLines().map((l) => [l.id, l]));
-    root.innerHTML = Object.keys(lists).map(Number).sort((a, b) => a - b).filter((d) => !cycleOver(plan, d)).map((d) => blockHtml(plan, lists[d], states)).join("");
+    const shown = lists ? Object.keys(lists).map(Number).sort((a, b) => a - b).filter((d) => !cycleOver(d)) : [];
+    const adhoc = adhocLines();
+    if (shown.length) {
+      root.innerHTML = shown.map((d, i) => blockHtml(lists[d], states, i === 0)).join("");
+    } else {
+      root.innerHTML = (lists ? "" : `<p class="empty">No plan yet — <a href="plan.html">generate a 2-week plan</a> first.</p>`)
+        + (adhoc.length ? `<section class="shop-block">${SL().groupByAisle(adhoc, packData).map((g) => aisleCardHtml(0, g, states, false)).join("")}</section>` : "");
+    }
     root.querySelectorAll("details").forEach((d) => { if (open.includes(d.querySelector("summary").textContent)) d.open = true; });
+    drawDock(states, shown.length ? lists[shown[0]] : null);
+    justKey = justLine = null;
+  }
+
+  function wireList() {
     if (wired) return;
     wired = true;
-
-    const idOf = (el) => MP.ShoppingList.planLineId(plan, el.dataset.shop || el.dataset.skip, el.dataset.key);
+    const root = document.getElementById("shopping-root");
     root.addEventListener("change", (e) => {
       const input = e.target.closest('input[type="checkbox"]');
       if (!input) return;
-      MP.Sync.setLine({ id: idOf(input), state: input.checked ? "got" : "needed", source: "plan" });
-      if (input.checked) clearOut(input.dataset.key);
-      render(plan, lists);
+      const card = input.closest(".aisle-card");
+      justKey = card ? card.dataset.aisle : null;
+      if (input.dataset.id) {
+        justLine = input.checked ? input.dataset.id : null;
+        MP.Sync.setLine({ id: input.dataset.id, state: input.checked ? "got" : "needed" });
+        if (input.checked) clearOut(input.closest(".shop-line").querySelector(".shop-name").firstChild.textContent.trim());
+      } else {
+        const id = SL().planLineId(plan, input.dataset.shop, input.dataset.key);
+        justLine = input.checked ? id : null;
+        MP.Sync.setLine({ id, state: input.checked ? "got" : "needed", source: "plan" });
+        if (input.checked) clearOut(input.dataset.key);
+      }
+      render();
     });
     root.addEventListener("click", (e) => {
+      const h = e.target.closest(".ah-btn");
+      if (h) {
+        const card = h.closest(".aisle-card");
+        const open = !card.classList.contains("open");
+        openMap.set(card.dataset.aisle, open);
+        setOpen(card, open);
+        return;
+      }
+      const del = e.target.closest("[data-del]");
+      if (del) { MP.Sync.setLine({ id: del.dataset.del, state: "deleted" }); render(); return; }
       const b = e.target.closest("[data-skip]");
       if (!b) return;
       const skipped = b.closest(".shop-line").classList.contains("skipped");
-      MP.Sync.setLine({ id: idOf(b), state: skipped ? "needed" : "skipped", source: "plan" });
-      render(plan, lists);
+      MP.Sync.setLine({ id: SL().planLineId(plan, b.dataset.skip, b.dataset.key), state: skipped ? "needed" : "skipped", source: "plan" });
+      render();
+    });
+    document.getElementById("shop-dock").addEventListener("click", (e) => { if (e.target.closest("#finish-shop:not(:disabled)")) finishShop(); });
+    new ResizeObserver(() => { if (!document.getElementById("shop-dock").hidden) applyDock(); }).observe(document.getElementById("shop-dock"));
+    document.getElementById("adhoc-form").addEventListener("submit", (e) => {
+      e.preventDefault();
+      const name = document.getElementById("adhoc-name").value.trim().slice(0, 80);
+      if (!name) return;
+      const qty = document.getElementById("adhoc-qty").value.trim();
+      MP.Sync.setLine({ id: "x:" + SL().normalizeKey(name), state: "needed", source: "manual", label: name, ...(qty ? { qty } : {}) });
+      e.target.reset();
+      render();
     });
     // another device may have ticked lines while this tab was hidden
     document.addEventListener("visibilitychange", () => {
-      if (document.visibilityState === "visible") MP.Sync.fetchShoppingLines().then(() => { render(plan, lists); renderAdhoc(); });
-    });
-  }
-
-  // ---- Ad-hoc list: the x: lines of the shared shopping list (Phase 55) ----
-  const extras = () => MP.Sync.shoppingLines().filter((l) => l.id.startsWith("x:") && l.state !== "deleted");
-
-  function adhocLineHtml(l) {
-    return `<li class="shop-line${l.state === "got" ? " ticked" : ""}">
-      <label>
-        <input type="checkbox" data-id="${esc(l.id)}" ${l.state === "got" ? "checked" : ""}>
-        <span class="shop-qty">${esc(MP.qtyText(l.qty))}</span>
-        <span class="shop-name">${esc(l.label)}</span>
-      </label>
-      <button class="ghost shop-skip" data-del="${esc(l.id)}" aria-label="Remove ${esc(l.label)}">×</button>
-    </li>`;
-  }
-
-  function adhocHtml(items) {
-    const gotCount = items.filter((l) => l.state === "got").length;
-    return `<section class="shop-block adhoc">
-      ${items.length
-        ? `<ul class="shop-list">${items.map(adhocLineHtml).join("")}</ul>`
-        : `<p class="muted">Nothing on your ad-hoc list.</p>`}
-      ${gotCount ? `<button id="adhoc-clear-btn" class="ghost">Clear got (${gotCount})</button>` : ""}
-      <div class="adhoc-add">
-        <input type="text" id="adhoc-name" placeholder="Add an item" aria-label="Item name">
-        <input type="text" id="adhoc-qty" placeholder="qty (optional)" aria-label="Quantity">
-        <button id="adhoc-add-btn" class="ghost">Add</button>
-      </div>
-    </section>`;
-  }
-
-  function renderAdhoc() {
-    const root = document.getElementById("adhoc-root");
-    if (!root) return;
-    const items = extras();
-    root.innerHTML = adhocHtml(items);
-
-    root.querySelectorAll('input[type="checkbox"]').forEach((cb) => {
-      cb.addEventListener("change", () => {
-        MP.Sync.setLine({ id: cb.dataset.id, state: cb.checked ? "got" : "needed" });
-        if (cb.checked) clearOut(cb.closest(".shop-line").querySelector(".shop-name").textContent);
-        renderAdhoc();
-      });
-    });
-    root.querySelectorAll("[data-del]").forEach((b) => b.addEventListener("click", () => {
-      MP.Sync.setLine({ id: b.dataset.del, state: "deleted" });
-      renderAdhoc();
-    }));
-    const clear = root.querySelector("#adhoc-clear-btn");
-    if (clear) clear.addEventListener("click", () => {
-      items.filter((l) => l.state === "got").forEach((l) => MP.Sync.setLine({ id: l.id, state: "deleted" }));
-      renderAdhoc();
-    });
-
-    root.querySelector("#adhoc-add-btn").addEventListener("click", () => {
-      const name = root.querySelector("#adhoc-name").value.trim().slice(0, 80);
-      if (!name) return;
-      const qty = root.querySelector("#adhoc-qty").value.trim();
-      MP.Sync.setLine({ id: "x:" + MP.ShoppingList.normalizeKey(name), state: "needed", source: "manual", label: name, ...(qty ? { qty } : {}) });
-      renderAdhoc();
+      if (document.visibilityState === "visible") MP.Sync.fetchShoppingLines().then(render);
     });
   }
 
@@ -540,11 +637,13 @@
     document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeSheet(); });
   }
 
-  const TABS = ["planned", "adhoc", "pantry"];
+  const TABS = ["planned", "pantry"];
   const tabFromHash = () => { const h = location.hash.slice(1); return TABS.includes(h) ? h : "planned"; };
 
   // ponytail: no arrow-key roving tabindex; three tabs don't earn one, add it if a tab row ever grows
   function showTab(name) {
+    currentTab = name;
+    applyDock();
     for (const pairName of TABS) {
       const active = pairName === name;
       document.getElementById(`panel-${pairName}`).classList.toggle("hidden", !active);
@@ -569,26 +668,27 @@
     MP.initTheme();
     initTabs();
     initPantry();
-    renderAdhoc();
-    MP.Sync.fetchShoppingLines().then(() => renderAdhoc());
+    wireList();
     await renderLists();
     window.addEventListener("mp:plan-live", renderLists); // Phase 109: the docked bar changed the plan
   }
 
   async function renderLists() {
-    const plan = loadPlan();
-    const root = document.getElementById("shopping-root");
+    plan = loadPlan();
     if (!plan || !plan.days.some((d) => Object.values(d.slots).some((s) => s && s.mealId))) {
-      root.innerHTML = `<p class="empty">No plan yet — <a href="plan.html">generate a 2-week plan</a> first.</p>`;
+      plan = null; lists = null;
+      packData = packData || await MP.ShoppingList.load().catch(() => null);
+      render();
+      MP.Sync.fetchShoppingLines().then(render);
       return;
     }
     const [library, pack, pantry] = await Promise.all([MP.getLibrary(), MP.ShoppingList.load(), MP.Sync.fetchPantry()]);
     packData = pack;
     const mealsById = Object.fromEntries(library.map((m) => [m.id, m]));
-    const lists = MP.ShoppingList.buildLists(plan, mealsById, pack, pantry);
+    lists = MP.ShoppingList.buildLists(plan, mealsById, pack, pantry);
     migrateTicked(plan);
-    render(plan, lists);
-    MP.Sync.fetchShoppingLines().then(() => render(plan, lists));
+    render();
+    MP.Sync.fetchShoppingLines().then(render);
   }
 
   init();
