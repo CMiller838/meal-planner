@@ -887,6 +887,12 @@ assert.equal((await call("GET", "/today", "a")).body.water, 3); // /today untouc
   r = await call("GET", "/chat?session=s1&since=" + uid, "h");
   assert.deepEqual(r.body.messages.at(-1).edits.map((e) => e.type), ["place", "cap", "rate"]);
   assert.deepEqual(r.body.messages.at(-1).edits[1].weekdays, [1, 3]);
+  // Phase 120: options pass through, trimmed to 4, unknown fields and bad ones dropped
+  r = await call("POST", "/chat/reply", "h", { session: "s1", replyTo: uid, text: "Pick", ask: false, edits: [], options: [{ mealId: "m1", why: "quick", junk: 1 }, { mealId: "m2", variantId: "v" }, { create: { name: "Pie", ingredients: [{ name: "flour", qty: "1" }] } }, { nope: 1 }, { mealId: "m5" }] }, H);
+  assert.deepEqual([r.status, r.body.dropped], [200, 2]);
+  r = await call("GET", "/chat?session=s1&since=" + uid, "h");
+  assert.deepEqual(r.body.messages.at(-1).options.map((o) => o.kind + ":" + (o.mealId || o.meal.name)), ["library:m1", "library:m2", "create:Pie"]);
+  assert.equal(r.body.messages.at(-1).options[0].junk, undefined);
   // Phase 105: freeze and place.freezeFrom kept, a bad one dropped
   r = await call("POST", "/chat/reply", "h", { session: "s1", replyTo: uid, text: "Freeze", ask: false, edits: [{ type: "freeze", cookId: "c1", places: [{ day: 6, slot: "dinner" }] }, { type: "place", day: 6, slot: "dinner", mealId: "m1", freezeFrom: 1 }, { type: "place", day: 6, slot: "dinner", mealId: "m1", freezeFrom: 1, cookId: "c" }, { type: "freeze", cookId: "c1", places: [] }] }, H);
   assert.deepEqual([r.status, r.body.dropped], [200, 2]);

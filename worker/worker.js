@@ -1661,8 +1661,8 @@ export class ChatRoom {
     if (url.pathname === "/chat/reply") {
       if (!hermes) return json(403, "forbidden");
       if (body.session !== st.session || !st.messages.some((m) => m.id === body.replyTo && m.from === "user")) return json(409, { error: "stale session or replyTo" });
-      const { reply, dropped } = PlanChat.validateReply({ text: body.text, edits: body.edits, ask: body.ask }, PLAN_VOCAB);
-      const id = push({ from: "hermes", replyTo: body.replyTo, text: reply.text, edits: reply.edits, ask: reply.ask });
+      const { reply, dropped } = PlanChat.validateReply({ text: body.text, edits: body.edits, ask: body.ask, options: body.options }, PLAN_VOCAB);
+      const id = push({ from: "hermes", replyTo: body.replyTo, text: reply.text, edits: reply.edits, ask: reply.ask, options: reply.options });
       await save();
       return json(200, { id, dropped });
     }

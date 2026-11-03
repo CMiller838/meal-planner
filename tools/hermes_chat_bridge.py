@@ -11,6 +11,7 @@ itself and may propose new or changed meals (the user confirms those); the Worke
 import argparse
 import hashlib
 import json
+import os
 import re
 import shlex
 import subprocess
@@ -29,6 +30,41 @@ HISTORY = 30
 RESPONDER_TIMEOUT = 120
 SESSION_RESPONDER = "hermes chat -c {session} --create-if-missing -Q -q {prompt}"
 ONESHOT_RESPONDER = "hermes -z {prompt} chat"
+# Phase 120: Hermes's own local skills preloaded (`hermes chat -s a,b`) for build-mode turns only. Names are resolved against
+# `hermes skills list` once per run; one Hermes does not have is dropped with a log line, never an error.
+BUILD_SKILLS = ["meal-week-planning", "meal-idea-brainstorming", "next-meal", "nutrient-candidates", "micronutrient-estimates",
+                "meal-pantry-intake", "planner-write-rules", "meal-planner-bridge"]
+_SKILLS = []  # resolved once: [names]
+
+
+def build_skills(listing=None):
+    """BUILD_SKILLS that this Hermes has. listing = `hermes skills list` text (tests); None runs it. Failure -> [] (plain chat)."""
+    if _SKILLS and listing is None:
+        return _SKILLS[0]
+    if listing is None:
+        try:
+            r = subprocess.run(["hermes", "skills", "list", "--source", "local"], capture_output=True, text=True, timeout=30, env={**os.environ, "COLUMNS": "250"})
+            listing = r.stdout if r.returncode == 0 else ""
+        except (OSError, subprocess.TimeoutExpired):
+            listing = ""
+    have = set(re.findall(r"\u2502\s*([a-z0-9][a-z0-9-]*)\s*\u2502", listing))
+    keep = [n for n in BUILD_SKILLS if n in have]
+    for n in BUILD_SKILLS:
+        if n not in have:
+            print(f"build skill not found, skipped: {n}", file=sys.stderr)
+    if not _SKILLS:
+        _SKILLS.append(keep)
+    return keep
+
+
+def with_skills(argv, skills):
+    """Insert `-s a,b` right after the `chat` word of a responder argv; unchanged when there is none or no skills."""
+    if not skills or "chat" not in argv:
+        return argv
+    i = argv.index("chat") + 1
+    return argv[:i] + ["-s", ",".join(skills)] + argv[i:]
+
+
 FALLBACK = {"text": "Sorry, could you say that another way?", "edits": [], "ask": False}
 GIVE_UP = {"text": "I didn't follow, could you put it another way?", "edits": [], "ask": False}
 EDIT_TYPES = """Edit types (day is 1-14, slot is always "dinner"):
@@ -66,6 +102,16 @@ BAR_EDIT_TYPES = """Edit types (day is 1-14, slot is always "dinner"), applied a
 Nothing else is available here: no regenerating, budgets, new or changed meals, bulk, freezing or notes. For those say 'open Plan with me for that'."""
 
 
+BUILD_RULES = (
+    "BUILD MODE (brief.build is true): the plan starts empty and you build it with the user, one night at a time, starting at the first empty night in brief.plan."
+    " Each reply is ONE short line, then 2-4 options, one meal each, no paragraphs or lists in the prose. Put the options in the fenced block:"
+    " ```edits\\n{\"options\":[...]}\\n``` where an option is {\"mealId\":ID,\"why\":\"<=140 chars\"} for a library meal"
+    " (optionally \"variantId\":ID, or \"subs\":[sub entries as in the sub edit] for changed ingredients), or {\"create\":{mealCreate fields},\"why\":\"...\"} for a new meal outside the library"
+    " (the user approves it before it is saved). Explain a pick in `why`. The user taps Place on one: do not send place edits yourself."
+    " Shape each round by what is already placed (shared ingredients, leftovers, nutrient gaps). brief.budgetReminder is a weekly £ reminder only (0 = none):"
+    " mention it only when the running cost passes it, and never drop an option because of it.")
+
+
 def poll_interval(open_at, now=None):
     """1 s while a chat opened under 10 min ago, else 10 s (keeps the Worker under its free-tier request budget)."""
     if not open_at:
@@ -94,16 +140,22 @@ def parse_reply(out):
                 continue
             if isinstance(obj, dict) and ("text" in obj or "edits" in obj):
                 return {"text": str(obj.get("text", "")), "edits": obj.get("edits") if isinstance(obj.get("edits"), list) else [], "ask": obj.get("ask") is True}
-    edits = []
+    edits, options = [], []
     if blocks:
         try:
             got = json.loads(blocks[-1])
-            edits = got if isinstance(got, list) else []
+            if isinstance(got, dict):  # Phase 120: {"edits": [...], "options": [...]}
+                edits = got["edits"] if isinstance(got.get("edits"), list) else []
+                options = got["options"] if isinstance(got.get("options"), list) else []
+            else:
+                edits = got if isinstance(got, list) else []
         except ValueError:
             pass
     ask = bool(ASK.search(out))
     text = ASK.sub("", FENCE.sub("", out)).strip()
-    return {"text": text, "edits": edits, "ask": ask} if text or edits else dict(FALLBACK)
+    if not (text or edits or options):
+        return dict(FALLBACK)
+    return {"text": text, "edits": edits, "ask": ask, **({"options": options} if options else {})}
 
 
 def brief_of(messages):
@@ -167,15 +219,17 @@ def build_prompt(messages, context, opener=False, strict=False, brief=None, spen
         )
     if strict:
         lines.append("Your last edits were rejected: use only these types and fields exactly as listed.")
-    if opener:
+    if opener and brief and brief.get("build"):
+        lines.append("Open with one short line and offer options for the first empty night straight away.")
+    elif opener:
         lines.append("Open with one or two casual sentences and ask what's already cooked, what's left and what they have in, so you can plan around it."
             " If something in the plan clearly stands out (an expiring item, a gap) you may mention that one thing. Not a summary, not about budget.")
     if brief:
         lines.append("Briefing (from the app, read it every turn): " + json.dumps(brief, separators=(",", ":")))
         lines.append("brief.nutrition lists nutrients the user's logged eating has been short on and the dinner-share targets. When you choose a dinner because of one,"
                      " say so in your reply and put the nutrient in the place edit's `why`; if the pick is not nutrient-driven, omit `why`.")
-        if brief.get("walk"):
-            lines.append("When brief.walk is true the user is reviewing a generated plan night by night: reply in one short line and change only the nights they ask about.")
+        if brief.get("build"):
+            lines.append(BUILD_RULES)
         if spend:
             lines.append("Spend so far: " + json.dumps(spend, separators=(",", ":")))
     lines.append("Context: " + json.dumps(context or {}))
@@ -210,6 +264,8 @@ def ask(responder, session, messages, context, opener, brief, spend, strict=Fals
     """One reply. A session responder ({session} in its argv) resumes Hermes's own memory: only the new message goes
     (the briefing only when it changed); if that call fails, the full prompt with the last HISTORY lines goes to the one-shot responder."""
     kw = {"opener": opener, "strict": strict, "brief": brief, "spend": spend}
+    if brief and brief.get("build"):  # Phase 120: build turns preload Hermes's meal skills; other chats are unchanged
+        responder = with_skills(responder, build_skills())
     if any("{session}" in a for a in responder):
         h = hashlib.sha1(json.dumps(brief, sort_keys=True).encode()).hexdigest()
         known = session in SENT
@@ -219,6 +275,8 @@ def ask(responder, session, messages, context, opener, brief, spend, strict=Fals
             return parse_reply(out)
         SENT.pop(session, None)
         responder = shlex.split(ONESHOT_RESPONDER)
+        if brief and brief.get("build"):
+            responder = with_skills(responder, build_skills())
     out = run(responder, build_prompt(messages, context, **kw))
     return parse_reply(out) if out is not None else dict(FALLBACK)
 
@@ -250,7 +308,7 @@ def answer(base, token, responder, thread, msg):
     if got.get("dropped"):
         rep = ask(responder, *kw, strict=True)
         got = post(rep)
-        if got.get("dropped") and got["dropped"] >= len(rep["edits"]):
+        if got.get("dropped") and got["dropped"] >= len(rep["edits"]) + len(rep.get("options", [])):
             post(GIVE_UP)
 
 

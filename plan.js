@@ -65,23 +65,12 @@
     }
     const gen = MP.Generator.generatePlan(lib, tagsData.tags, tagsData.targets, shelfData, startOverride, budget, have, Object.assign({}, prefs, { loggedGaps: loggedGapsNow() }, override, { profile: MP.Nutrition.profileOf(MP.Sync.settings()) }), MP.Ratings.get(), locked,
       genOpts || (plan ? { days: plan.days.length } : undefined));
-    if (basePrefs.rolling !== false) gen.shopAnchor = genOpts && genOpts.shopWeekday != null ? MP.shopAnchorFor(gen.startDate, genOpts.shopWeekday) : gen.startDate; // Phase 68: a fresh plan starts a new shop cadence; rolls/rerolls read only its days
+    gen.shopAnchor = genOpts && genOpts.shopWeekday != null ? MP.shopAnchorFor(gen.startDate, genOpts.shopWeekday) : gen.startDate; // Phase 68: a fresh plan starts a new shop cadence; rolls/rerolls read only its days
     return gen;
   }
 
-  // Phase 68: roll the window to today. Runs on Plan open and on visible, before placements and drafts apply.
-  function rollIfDue() {
-    if (!plan || guidedActive || basePrefs.rolling === false) return false;
-    genOpts = { days: plan.days.length }; // a rolled plan keeps its length; day 1 is a whole day again
-    const res = MP.rollPlan(plan, new Date().toLocaleDateString("en-CA"), (locked, start) =>
-      generatePlan({ shopOffset: MP.ShelfLife.shopOffset({ startDate: start, shopAnchor: plan.shopAnchor || plan.startDate }) }, locked));
-    genOpts = undefined;
-    if (!res) return false;
-    plan = res.plan;
-    localStorage.removeItem(LS_UNDO); // its day numbers are stale
-    savePlan();
-    return true;
-  }
+    // Phase 120: plans are fixed blocks now; a stored `rolling: true` is ignored. Kept so the call sites read the same.
+  function rollIfDue() { return false; }
 
   // Phase 64: three candidate fortnights. Generation only; nothing saves until "Use this plan".
   const CANDIDATE_LABELS = { cheapest: "Cheapest", protein: "Highest protein", quickest: "Quickest" };
@@ -210,13 +199,13 @@
     return { gaps, orphans: MP.orphanDays(pl, c.byId), spare, shops };
   }
 
-  /** Phase 118b: the nights a walk visits. auto = why a night is a thread line, not a card (null = a card). Pure. */
-  function walkNights(pl, byId) {
-    if (!pl || !Array.isArray(pl.days)) return [];
-    return pl.days.map((d) => {
-      const s = (d && d.slots && d.slots.dinner) || {}, m = s.mealId && byId ? byId[s.mealId] : null;
-      return { day: d.day, auto: s.eatingOut ? "out" : s.fromCook ? "cook" : s.frozenFrom ? "frozen" : m && m.leftoverOf ? "leftover" : null };
-    });
+  /** Phase 120, pure: a build-chat option -> the edits one Place tap runs, one at a time (a `sub` needs the meal placed first).
+   *  A create option is [mealCreate, place] where the place's mealId is "" until the Add card has made the meal. */
+  function optionToEdits(o, day) {
+    if (!o) return [];
+    const at = { day, slot: "dinner" };
+    if (o.kind === "create") return [o.meal, { type: "place", ...at, mealId: "" }];
+    return [{ type: "place", ...at, mealId: o.mealId, ...(o.variantId ? { variantId: o.variantId } : {}) }, ...(o.subs ? [{ type: "sub", ...at, subs: o.subs }] : [])];
   }
 
   // Phase 89: dinner minutes of `day` against that weekday's cap. Leftover, frozen and eating-out dinners cost 0 min.
@@ -714,7 +703,7 @@
       })(),
       cooks, spares, shopDays: pk && pk.items ? Object.keys(MP.ShoppingList.buildLists(c.plan, mealsById, pk, null)).map(Number).sort((a, b) => a - b) : [],
       bulk: pk && pk.items ? MP.ShoppingList.bulkOptions(c.plan, mealsById, pk, sh) : [],
-      ...(c.walk ? { walk: true } : {}),
+      ...(c.build ? { build: true, budgetReminder: Number(c.build.budget) || 0 } : {}),
       ...(c.fridge ? { mode: "fridge", window: c.fridge.window, ...(c.fridge.fresh ? { newPlanFrom: MP.Generator.isoToday() } : {}) } : {}),
       meals,
       plan: c.plan.days.map((d) => ({ day: d.day, slots: Object.fromEntries(SLOT_TYPES.map((t) => { const x = d.slots[t]; return [t, x ? (x.eatingOut ? "out" : x.mealId || null) : null]; })) })),
@@ -1647,7 +1636,7 @@
     toast(`Swapped day ${day} and day ${moveToDay} ${slotType}`);
   }
 
-  // True while a chat (the walk or the Plan chat) holds a working copy of the plan: nothing saves until Save.
+  // True while a chat (the build chat or the Plan chat) holds a working copy of the plan: nothing saves until Save.
   let guidedActive = false;
 
   // ---- Swap picker ----
@@ -2539,7 +2528,7 @@
     renderPlacementBanner(e.detail);
   });
 
-  MP.Plan = { neighbour, cookNowFor, applyCheaperEdits, cheaperCandidates, fridgeWindow, fridgeHave, applyBulkEdits, applyFreezeEdits, applyChatEdits, applyMealEdits, applyRateEdits, chatBriefing, chatContext, tieFor, effectiveBudget, budgetSwaps, resetChatPrefs, reflow, snapshot, restore, planMetrics, whatIf, fixGap, wrapUp, walkNights, cookMinsFor, tickerFor, applyPlacements, openLeftoverCooks, logPortion, matchEatRequests, applyEatRequests };
+  MP.Plan = { neighbour, cookNowFor, applyCheaperEdits, cheaperCandidates, fridgeWindow, fridgeHave, applyBulkEdits, applyFreezeEdits, applyChatEdits, applyMealEdits, applyRateEdits, chatBriefing, chatContext, tieFor, effectiveBudget, budgetSwaps, resetChatPrefs, reflow, snapshot, restore, planMetrics, whatIf, fixGap, wrapUp, optionToEdits, cookMinsFor, tickerFor, applyPlacements, openLeftoverCooks, logPortion, matchEatRequests, applyEatRequests };
 
   // ---- Planning chat with Hermes (Phase 72) ----
   // The working plan is `plan` itself with guidedActive on (no savePlan runs); Exit restores the snapshot, Save commits.
@@ -2578,7 +2567,7 @@
       const dot = SLOT_TYPES.some((t) => changed.has(day + ":" + t));
       const dinnerName = dm ? dm.name : d.slots.dinner && d.slots.dinner.eatingOut ? outName(d.slots.dinner) : "–";
       const isBusy = (basePrefs.busyDays || []).includes(plan.startDate ? MP.Generator.weekdayOf(plan.startDate, day) : -1);
-      const st = chat.walk ? (chat.walk.done.has(day) ? " ok" : (walkNext() || {}).day === day ? " pend" : "") : "";
+      const st = chat.build ? (dm || (d.slots.dinner && d.slots.dinner.eatingOut) ? " ok" : day === chat.day ? " pend" : "") : "";
       tiles.push(`<button type="button" class="cw-tile cw-pill${day === chat.day ? " sel" : ""}${st}${cm.over ? " over-cap" : ""}" data-day="${day}" title="${esc(dinnerName)}">
         <b>${esc(dayShortOf(day))}</b>${isBusy ? `<i class="cw-busy" aria-label="Busy day"></i>` : ""}${dot ? `<i class="cw-dot" aria-label="Changed"></i>` : ""}</button>`);
       if (day < first || day > last) continue;
@@ -2595,16 +2584,8 @@
     const host = $("chat-week");
     host.innerHTML = `<div class="cw-strip">${tiles.join("")}</div><div class="cw-cols">${cols.join("")}</div>`;
     host.classList.toggle("staging", !!staged);
-    host.classList.toggle("walk", !!chat.walk);
     if (staged) host.querySelectorAll(".slot-card").forEach((el, i) => { el.style.animationDelay = Math.min(i * STAGE_STEP_MS, STAGE_MAX_MS) + "ms"; });
     host.querySelectorAll(".cw-tile").forEach((el) => el.addEventListener("click", () => {
-      if (chat.walk) {
-        const c = chat.walk.cards[el.dataset.day];
-        if (!c) return toast("not reached yet");
-        c.scrollIntoView({ block: "center", behavior: "smooth" });
-        c.classList.remove("flash"); void c.offsetWidth; c.classList.add("flash");
-        return;
-      }
       if (chat.cards && chat.cards.tie) chat.tieDone.add(chat.day);
       chat.day = +el.dataset.day; renderChatWeek();
     }));
@@ -2619,21 +2600,22 @@
       el.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); open(); } });
     });
     renderStrip();
+    paintOptions();
     renderTicker(flash);
     renderChatShop();
     renderChatStock();
     renderChatCards();
   }
 
-  /** Meter line under the pill strip: walk = nights done, plus the cost against the budget (bar turns over past it). Display-only. */
+  /** Meter line under the pill strip: build = nights placed, plus the cost against the budget reminder (bar turns over past it, never blocks). Display-only. */
   function renderStrip() {
     const el = $("chat-strip"), n = plan.days.length;
-    el.hidden = !chat.walk;
+    el.hidden = !chat.build;
     $("chat-sug").hidden = !!chat.offline;
-    if (!chat.walk) return;
-    const wc = tagsData ? planMetrics(plan).weekCost : [null], bud = effectiveBudget() * n / 7;
+    if (!chat.build) return;
+    const wc = tagsData ? planMetrics(plan).weekCost : [null], bud = (Number(chat.build.budget) || 0) * n / 7;
     const cost = wc.every((x) => x === null) ? null : wc.reduce((s, x) => s + (x || 0), 0), over = bud > 0 && cost !== null && cost > bud;
-    el.innerHTML = `<span>${chat.walk.done.size} of ${n} nights</span>${cost !== null ? `<span>£${cost.toFixed(2)}${bud > 0 ? ` of £${bud.toFixed(0)}` : ""}</span>` : ""}`
+    el.innerHTML = `<span>${plan.days.filter((d) => d.slots.dinner && (d.slots.dinner.mealId || d.slots.dinner.eatingOut)).length} of ${n} nights</span>${cost !== null && bud > 0 ? `<span>£${cost.toFixed(2)} of £${bud.toFixed(0)}</span>` : ""}`
       + (bud > 0 && cost !== null ? `<div class="meter-track"><div class="meter-bar${over ? " over" : ""}" style="width:${Math.min(100, Math.round(cost / bud * 100))}%"></div></div>` : "");
   }
 
@@ -2878,7 +2860,7 @@
   }
   function answerMeal(x, yes) {
     if (x.note) return answerNote(x, yes);
-    if (!yes) { chat.meals.splice(chat.meals.indexOf(x), 1); return renderChatMeals(); }
+    if (!yes) { chat.meals.splice(chat.meals.indexOf(x), 1); if (x.thenPlace) { x.thenPlace.card.dataset.state = "idle"; paintOption(x.thenPlace.card); } return renderChatMeals(); }
     if (x.freeze) { // Phase 105: the freeze moved real portions, so the row has no Undo
       const r = x.accept(); x.pending = false; x.text = r.froze ? `Froze ${r.froze} portion${r.froze === 1 ? "" : "s"}` : "Nothing frozen";
       r.notes.forEach((n) => toast(n));
@@ -2889,6 +2871,12 @@
     const res = applyMealEdits([x.edit]);
     x.pending = false;
     if (res.applied[0]) { x.text = res.applied[0].text; x.undo = res.applied[0].undo; } else x.text = res.refused[0] ? res.refused[0].why : "Meal not found";
+    if (x.thenPlace && res.applied[0]) { // Phase 120: a create option places the meal it just made
+      const { day, card } = x.thenPlace, made = library.find((m) => m.name.toLowerCase() === x.edit.name.toLowerCase());
+      const ch = made ? applyChatEdits([{ type: "place", day, slot: "dinner", mealId: made.id }], { focusDay: day, pending: [] }) : [];
+      if (made && ch.length) { card.dataset.state = "placed"; card.querySelector(".opt-place").textContent = "Placed"; card.querySelector(".opt-refusal").textContent = ""; renderChatMeals(); return afterPlace(made.name, day); }
+      card.dataset.state = "refused"; card.querySelector(".opt-refusal").textContent = ch.notes && ch.notes[0] || "Added to your library, but couldn't place it";
+    } else if (x.thenPlace) { x.thenPlace.card.dataset.state = "refused"; x.thenPlace.card.querySelector(".opt-refusal").textContent = "Not added"; }
     renderChatMeals(); renderPlan(); renderChatWeek();
   }
   function renderChatMeals() {
@@ -2967,6 +2955,7 @@
 
   function onChatReply(m) {
     const { reply } = MP.PlanChat.validateReply(m, { ...vocabAll, notes: MP.Sync.notes() }); // the app re-validates before applying anything
+    if (chat.build) reply.edits = reply.edits.filter((e) => !["reroll", "start", "busy", "noCook", "free", "chip", "budget"].includes(e.type)); // Phase 120: Hermes picks, the generator never fills
     if (reply.text) chatBubble("hermes", reply.text);
     chat.ask = !!reply.ask;
     if (chat.ask) chat.tieDone.add(chat.day); // a question from Hermes closes any open tie card for good (edits still apply)
@@ -3009,13 +2998,12 @@
       if (line) { const u = chatBubble("understood", "Understood: " + line); u.classList.add("chat-understood"); }
       changes.notes.forEach((n) => { toast(n); chatBubble("understood", n); });
       chat.changes = changes;
-      if (chat.walk) changes.forEach((c) => { if (c.slot === "dinner") walkReopen(c.day, c); });
       if (changes.length && !changes.some((c) => c.day === chat.day)) chat.day = changes[0].day;
       renderPlan();
     }
     renderChatDiff();
     renderChatWeek(chat.changes.length > 0, true);
-    if (chat.walk) walkStep();
+    if (chat.build) renderOptions(reply.options);
   }
 
   async function pollChat() {
@@ -3064,139 +3052,105 @@
   }
 
 
-  // ---- Night-by-night walk (Phase 118b) ----
-  // chat.walk = { done:Set<day>, passed:{day:Set<mealId>}, why:{day:string}, cards:{day:li} }. Cards are li.night-card in #chat-log;
-  // data-state: pending | rejecting | accepted | replaced. Every action guards on the state so a swipe racing a button fires once.
-  const walkLine = (text) => { const d = document.createElement("div"); d.className = "chat-bubble understood walk-line"; d.textContent = text; $("chat-log").appendChild(d); return d; };
-  const walkAutoText = { leftover: "leftovers", out: "eating out", cook: "from a cook", frozen: "from the freezer" };
+  // ---- Build chat options (Phase 120) ----
+  // Hermes offers 2-4 option cards per turn; Place runs the same hard checks as every chat place (MP.placeSlots via applyChatEdits).
+  // A card is a proposal only: a refused one shows why and cannot be placed; nothing is written until Place succeeds.
+  const optMeal = (o) => (o.kind === "create" ? null : mealsById[o.mealId]);
+  const optName = (o) => (o.kind === "create" ? o.meal.name : (optMeal(o) || {}).name || o.mealId);
 
-  function startWalk() {
-    const w = chat.walk;
-    ["chat-diff", "chat-diff-all", "chat-prev", "chat-next", "chat-day-title"].forEach((id) => { $(id).hidden = true; });
-    $("chat-keep-rest").hidden = false;
-    walkNights(plan, mealsById).forEach((n) => {
-      if (!n.auto) return;
-      w.done.add(n.day);
-      const s = plan.days[n.day - 1].slots.dinner, m = mealAt(n.day, "dinner");
-      walkLine(`${dayHeading(n.day)}: ${n.auto === "out" ? outName(s) : m ? m.name : "dinner"} (${walkAutoText[n.auto]})`);
-    });
-    walkStep();
+  /** "" when the option can go on `day`, else the refusal reason. Pure checks on a throwaway copy: no writes. */
+  function optionRefusal(o, day) {
+    const terms = MP.Sync.hardTerms();
+    if (o.kind === "create") {
+      const chk = MP.Exclusions.check(MP.mealFromEdit(o.meal, MP.knownKeys(tagsData && tagsData.tags, packData && packData.items)), terms);
+      return chk.ok ? "" : chk.reasons.join(", ");
+    }
+    const res = MP.placeSlots(plan, [{ day, slot: "dinner", mealId: o.mealId, ...(o.variantId ? { variantId: o.variantId } : {}) }], mealsById, { terms, ratings: MP.Ratings.get(), fridgeDays: ((shelfData || {}).cooked_leftovers || {}).fridgeDays, caps: basePrefs.timeCaps || {}, pending: pendingMealIds(), cooks: MP.Cooks.all(), shelfData });
+    return res.refused[0] ? res.refused[0].why : "";
   }
 
-  const walkNext = () => { const w = chat.walk; return walkNights(plan, mealsById).find((n) => !n.auto && !w.done.has(n.day)); };
-  const walkPending = () => Object.values(chat.walk.cards).filter((c) => c.dataset.state === "pending" || c.dataset.state === "rejecting");
-
-  /** Make sure the next undone night has a card; with none left, open the wrap-up (once per finish). */
-  function walkStep() {
-    if (!chat || !chat.walk) return;
-    const n = walkNext();
-    if (n) {
-      const cur = chat.walk.cards[n.day];
-      if (!cur || (cur.dataset.state !== "pending" && cur.dataset.state !== "rejecting")) walkCard(n.day);
-    } else if (!walkPending().length) renderWrap();
+  function paintOption(card) {
+    const o = card._opt, st = card.dataset.state;
+    if (st === "placed" || st === "waiting") return;
+    const why = optionRefusal(o, chat.day);
+    card.querySelector(".opt-refusal").textContent = why ? "Can't place: " + why : "";
+    card.querySelector(".opt-place").disabled = !!why;
+    card.dataset.state = why ? "refused" : "idle";
   }
+  const paintOptions = () => document.querySelectorAll("#chat-log .opt-card").forEach(paintOption);
 
-  function walkCard(day, change) {
-    const w = chat.walk, meal = mealAt(day, "dinner"), prev = w.cards[day];
-    if (prev && prev.dataset.state !== "replaced") walkRetire(prev);
-    if (change && change.why) w.why[day] = change.why; else if (change) delete w.why[day];
-    const li = document.createElement("li");
-    li.className = "night-card";
-    li.dataset.day = day; li.dataset.state = "pending";
-    const cm = cookMinsFor(day), mins = cm.mins ? `${cm.est ? "~" : ""}${cm.mins} min` : "";
-    li.innerHTML = `<h4>${esc(dayHeading(day))}</h4><div class="night-name">${meal ? esc(meal.name) : "Nothing planned"}</div>
-      <div class="night-meta">${esc(mins)} ${meal && packData && packData.items ? MP.ShoppingList.costBadgeHtml(meal, packData) : ""}</div>${meal ? tagRowHtml(meal) : ""}
-      ${w.why[day] ? `<small class="diff-because">Because: ${esc(w.why[day])}</small>` : ""}
-      <div class="night-actions"><button type="button" class="btn-secondary night-reject">Reject</button><button type="button" class="primary night-accept">Accept</button></div>`;
-    li.querySelector(".night-accept").addEventListener("click", () => walkAccept(li));
-    li.querySelector(".night-reject").addEventListener("click", () => walkReject(li));
-    if (meal) MP.makeSwipeable(li, { onSwipeRight: () => walkAccept(li), onSwipeLeft: () => walkReject(li), onTap: () => {} });
-    w.cards[day] = li;
-    $("chat-log").appendChild(li);
-    li.scrollIntoView({ block: "end" });
-    return li;
-  }
-
-  /** Mark a card as no longer actionable ("Replaced"). */
-  function walkRetire(li) {
-    li.dataset.state = "replaced";
-    li.querySelectorAll(".night-actions, .chat-reason, .night-status").forEach((x) => x.remove());
-    const t = document.createElement("small"); t.className = "night-status"; t.textContent = "Replaced"; li.appendChild(t);
-  }
-
-  function walkAccept(li, quiet) {
-    if (!chat || !chat.walk || li.dataset.state !== "pending") return;
-    const day = +li.dataset.day;
-    chat.walk.done.add(day);
-    li.dataset.state = "accepted";
-    li.querySelector(".night-actions").hidden = true;
-    const st = document.createElement("span");
-    st.className = "night-status"; st.textContent = "Accepted ";
-    const undo = document.createElement("button");
-    undo.type = "button"; undo.className = "btn-secondary night-undo"; undo.textContent = "Undo";
-    undo.addEventListener("click", () => walkUndo(li));
-    st.appendChild(undo);
-    li.appendChild(st);
-    if (!quiet) walkStep();
-    renderChatWeek();
-  }
-
-  function walkUndo(li) {
-    if (!chat || !chat.walk || li.dataset.state !== "accepted" || chat.walk.cards[li.dataset.day] !== li) return;
-    chat.walk.done.delete(+li.dataset.day);
-    walkPending().forEach((c) => { if (c !== li && c.dataset.state === "pending") { c.remove(); delete chat.walk.cards[c.dataset.day]; } });
-    li.dataset.state = "pending";
-    li.querySelector(".night-status").remove();
-    li.querySelector(".night-actions").hidden = false;
-    renderChatWeek();
-  }
-
-  function walkReject(li) {
-    if (!chat || !chat.walk || li.dataset.state !== "pending") return;
-    const w = chat.walk, day = +li.dataset.day, meal = mealAt(day, "dinner");
-    li.dataset.state = "rejecting";
-    li.querySelector(".night-actions").hidden = true;
-    const ch = chat.changes.find((c) => c.day === day && c.slot === "dinner" && !c.rejected);
-    const c = { after: { mealId: meal ? meal.id : null } };
-    if (ch) { setChange(ch, true); ch.askReason = false; } // revert Hermes's change first
-    li.appendChild(reasonForm(c, () => {
-      if (!chat || li.dataset.state !== "rejecting") return; // Hermes changed the night meanwhile: the form is gone
-      (w.passed[day] = w.passed[day] || new Set()).add(c.after.mealId);
-      if (ch) { walkRetire(li); walkCard(day); renderChatWeek(); return; } // the reverted meal is the new card
-      const next = candidatesFor(day, "dinner").find((m) => !w.passed[day].has(m.id));
-      if (!next) {
-        walkLine("No other dinners for this night");
-        li.querySelectorAll(".chat-reason").forEach((x) => x.remove());
-        li.dataset.state = "pending"; li.querySelector(".night-actions").hidden = false;
-        walkAccept(li);
-        return;
+  function renderOptions(options) {
+    if (!options || !options.length) return;
+    const list = document.createElement("div");
+    list.className = "opt-list";
+    options.forEach((o) => {
+      if (o.kind === "create") {
+        const why = optionRefusal(o, chat.day);
+        if (why) { chatBubble("understood", `Not offered: ${o.meal.name} (${why})`); return; }
       }
-      setSlotMeal(day, "dinner", next.id);
-      walkRetire(li);
-      walkCard(day);
-      renderPlan(); renderChatWeek();
-    }));
+      const m = optMeal(o), card = document.createElement("div");
+      card._opt = o; card.className = "opt-card";
+      const mins = m ? (m.totalMins || MP.estMins(m)) : o.meal.totalMins;
+      const extra = [o.kind === "create" ? "New meal" : "", o.variantId && m ? ((m.variants || []).find((v) => v.id === o.variantId) || {}).name : "", o.subs ? MP.subsLabel(o.subs) : "", mins ? `${m && !m.totalMins ? "~" : ""}${mins} min` : ""].filter(Boolean);
+      card.innerHTML = `<h4 class="opt-name"></h4><div class="opt-meta"></div>${m && packData && packData.items ? MP.ShoppingList.costBadgeHtml(m, packData) : ""}<p class="opt-why"></p><p class="opt-refusal" role="status"></p>
+        <button type="button" class="primary opt-place"></button>`;
+      card.querySelector(".opt-name").textContent = optName(o); // untrusted: textContent only
+      card.querySelector(".opt-meta").textContent = extra.join(" · ");
+      card.querySelector(".opt-why").textContent = o.why || "";
+      card.querySelector(".opt-place").textContent = o.kind === "create" ? "Add & place" : "Place";
+      card.querySelector(".opt-place").addEventListener("click", () => placeOption(card));
+      list.appendChild(card);
+      paintOption(card);
+    });
+    if (!list.children.length) return;
+    $("chat-log").appendChild(list);
+    list.scrollIntoView({ block: "end" });
   }
 
-  /** A Hermes change to a night reopens it: out of done, a fresh card with the change's reason. */
-  function walkReopen(day, change) {
-    chat.walk.done.delete(day);
-    walkCard(day, change);
+  const nextEmptyNight = () => (plan.days.find((d) => !(d.slots.dinner && (d.slots.dinner.mealId || d.slots.dinner.eatingOut))) || {}).day || 0;
+
+  /** After a successful place: move to the next empty night, tell Hermes (when idle), or open the wrap with every night full. */
+  function afterPlace(name, day) {
+    renderPlan();
+    const next = nextEmptyNight();
+    if (next) chat.day = next;
+    renderChatWeek(false, true);
+    if (!next) return renderWrap();
+    if (!chat.offline && chat.pending === 0) sendChat(`I picked ${name} for ${dayHeading(day)}. Offer options for ${dayHeading(next)}.`);
   }
 
-  function walkKeepRest() {
-    if (!chat || !chat.walk) return;
-    walkNights(plan, mealsById).forEach((n) => chat.walk.done.add(n.day));
-    walkPending().forEach((li) => { if (li.dataset.state === "pending") walkAccept(li, true); });
-    walkStep();
+  function placeOption(card) {
+    if (!chat || card.dataset.state === "placed" || card.dataset.state === "waiting") return;
+    const o = card._opt, day = chat.day;
+    const cur = mealAt(day, "dinner");
+    if (cur && !confirm(`Replace ${cur.name} on ${dayHeading(day)}?`)) return;
+    if (cur) MP.Plan.snapshot(plan);
+    const edits = optionToEdits(o, day);
+    if (o.kind === "create") { // the existing Add/No card first; answerMeal places once it is added
+      chat.meals.push({ edit: edits[0], pending: true, text: pendingText(edits[0]), thenPlace: { day, card } });
+      card.dataset.state = "waiting"; card.querySelector(".opt-place").disabled = true; card.querySelector(".opt-refusal").textContent = "Waiting for your Add";
+      return renderChatMeals();
+    }
+    const notes = [];
+    for (const e of edits) { // one at a time: a sub needs the meal in the slot first
+      const ch = applyChatEdits([e], { focusDay: day, pending: pendingMealIds(), fridge: chat.fridge ? { window: chat.fridge.window, have: fridgeHave(chat.stock) } : undefined });
+      notes.push(...ch.notes);
+      if (e.type === "place" && !ch.length && (mealAt(day, "dinner") || {}).id !== o.mealId) break;
+    }
+    const m = mealAt(day, "dinner");
+    if (!m || m.id !== o.mealId) { card.querySelector(".opt-refusal").textContent = notes[0] || "Couldn't place that"; return; }
+    notes.forEach((n) => { if (!/not placed/.test(n)) chatBubble("understood", n); });
+    card.dataset.state = "placed"; card.querySelector(".opt-place").disabled = true; card.querySelector(".opt-place").textContent = "Placed";
+    card.querySelector(".opt-refusal").textContent = "";
+    afterPlace(m.name, day);
   }
 
-  /** opts === true = the fridge path; { walk: true } = the night-by-night walk (Phase 118b): no redirect, works with Hermes off. */
+  /** opts === true = the fridge path; { build: { start, days, budget } } = the build chat (Phase 120): no redirect, works with Hermes off. */
   async function openChat(opts) {
     if (chat) return;
     if (!plan) return toast("The plan hasn't loaded yet. Reload the page and try again.");
     if (guidedActive) return toast("Finish or exit the current planning walkthrough first.");
-    const walk = !!(opts && opts.walk), fromFridge = opts;
+    const build = (opts && opts.build) || null, walk = !!build, fromFridge = opts;
     if (walk) guidedActive = true; // working copy from the first tick, before any await
     let offline = false;
     const goFallback = (msg) => {
@@ -3214,7 +3168,7 @@
     let r;
     if (!offline) {
       await MP.Sync.fetchNotes(); // so the brief and the dedupe see the latest Notes.md
-      try { r = await MP.PlanChat.call("POST", "/chat", { session, open: true, context: { ...chatContext(1), brief: chatBriefing({ fridge, walk }) } }); } catch (e) { if (!walk) return goFallback("Couldn't reach the Worker."); offline = true; }
+      try { r = await MP.PlanChat.call("POST", "/chat", { session, open: true, context: { ...chatContext(1), brief: chatBriefing({ fridge, build }) } }); } catch (e) { if (!walk) return goFallback("Couldn't reach the Worker."); offline = true; }
     }
     if (!offline && (!r.bridgeSeenAt || Date.now() - Date.parse(r.bridgeSeenAt) > CHAT_BRIDGE_FRESH_MS)) {
       MP.PlanChat.call("POST", "/chat", { session, close: true }).catch(() => {});
@@ -3222,7 +3176,7 @@
       offline = true;
     }
     chat = { session, snapshot: JSON.stringify(plan), day: 1, since: 0, mine: new Set(), pending: 0, deadline: 0, timer: null, changes: [], ask: true, tieDone: new Set(), tradeOff: {}, cards: {}, meals: [], stock: [], fridge, offline,
-      walk: walk ? { done: new Set(), passed: {}, why: {}, cards: {} } : null };
+      build };
     guidedActive = true; // working copy: no savePlan until Save
     $("chat-log").innerHTML = "";
     $("chat-diff").innerHTML = "";
@@ -3231,11 +3185,10 @@
     document.body.classList.add("chat-open");
     chat.base = planMetrics(JSON.parse(chat.snapshot));
     renderChatWeek();
-    if (walk) startWalk();
     if (offline) { // no Hermes: cards and Save still work
       $("chat-input").disabled = true; $("chat-send").disabled = true;
-      $("chat-input").placeholder = "Hermes is offline: accept or reject the cards, Save still works";
-      chatBubble("understood", "Hermes is offline: accept or reject the cards, Save still works.");
+      $("chat-input").placeholder = "Hermes is offline: tap a night to place a meal by hand";
+      chatBubble("understood", "Hermes is offline: tap a night to pick a meal by hand, Save still works.");
       return;
     }
     chat.pending = 1; // the opener reply to the open message
@@ -3260,7 +3213,7 @@
     if (!chat) return;
     const n = liveMealChanges().length;
     if (n && !chat.exitWarned) { chat.exitWarned = true; renderChatMeals(); return toast(`${n} meal change${n > 1 ? "s" : ""} stay in your library: Undo ${n > 1 ? "them" : "it"} first, or Exit again to keep.`); }
-    if (chat.walk) { // the generated plan was never saved: leave it behind with the page
+    if (chat.build) { // the build plan was never saved: leave it behind with the page
       closeChat();
       chat = null;
       location.href = "plan.html";
@@ -3292,6 +3245,7 @@
   }
 
   function saveChat() {
+    if (chat.build && !plan.days.some((d) => d.slots.dinner && d.slots.dinner.mealId)) return toast("Place at least one meal first");
     closeChat();
     chat = null;
     openLeftoverCooks(plan, library); // Phase 95: chat leftover places become Cooks records on Save only
@@ -3308,11 +3262,9 @@
     $("chat-accept-all").addEventListener("click", () => chat && chat.changes.forEach((c) => setChange(c, false)));
     $("chat-sug").addEventListener("click", (e) => {
       const b = e.target.closest("button"); if (!b || !chat || chat.offline) return;
-      const n = chat.walk && walkNext(); if (n) chat.day = n.day;
       sendChat(b.textContent);
     });
     $("chat-reject-all").addEventListener("click", () => chat && chat.changes.forEach((c) => setChange(c, true)));
-    if ($("chat-keep-rest")) $("chat-keep-rest").addEventListener("click", walkKeepRest);
     $("chat-fallback").addEventListener("click", () => { exitChat(); location.href = "plan-with-me.html"; });
     const step = (n) => { if (chat.cards && chat.cards.tie) chat.tieDone.add(chat.day); chat.day = Math.min(weekOf(plan.days.length) , Math.max(0, weekOf(chat.day) + n)) * 7 + 1; renderChatWeek(); };
     $("chat-prev").addEventListener("click", () => chat && step(-1));
@@ -3408,16 +3360,14 @@
     await MP.Sync.fetchRatings();
     await MP.Sync.fetchFoodLog();
     applyHints((JSON.parse(localStorage.getItem(LS_PLAN) || "null") || {}).startDate);
-    const guidedParam = new URLSearchParams(location.search).get("guided") === "1";
-    if (guidedParam) {
-      const start = new URLSearchParams(location.search).get("start");
-      if (/^\d{4}-\d{2}-\d{2}$/.test(start || "") && !isNaN(Date.parse(start)) && start >= new Date().toLocaleDateString("sv")) startOverride = start; // Phase 83: a past start is Phase 82's job
-      const q = new URLSearchParams(location.search), days = Number(q.get("days")), shop = q.get("shop");
-      genOpts = { days: days >= 1 && days <= 28 ? Math.floor(days) : 14, shopWeekday: /^[0-6]$/.test(shop || "") ? Number(shop) : null };
-      plan = generatePlan();
-      startOverride = genOpts = undefined;
-      mealsById = Object.fromEntries(library.map((m) => [m.id, m])); // renderPlan builds it, but the walk opens before any render
-      openChat({ walk: true });
+    const q = new URLSearchParams(location.search), buildParam = q.get("chat") === "1" && q.get("build") === "1";
+    if (buildParam) { // Phase 120: an empty fortnight frame, never saved until the chat's Save; the generator does not fill it
+      const today = new Date().toLocaleDateString("sv"), qs = q.get("start"), nd = Math.floor(Number(q.get("days")));
+      const start = /^\d{4}-\d{2}-\d{2}$/.test(qs || "") && !isNaN(Date.parse(qs)) && qs >= today ? qs : today; // a past start is clamped to today
+      const days = nd >= 1 && nd <= 28 ? nd : 14, budget = Math.max(0, Number(q.get("budget")) || 0);
+      plan = { startDate: start, shopAnchor: start, days: Array.from({ length: days }, (_, i) => ({ day: i + 1, slots: {} })), generatedAt: new Date().toISOString() };
+      mealsById = Object.fromEntries(library.map((m) => [m.id, m])); // renderPlan builds it, but the chat opens before any render
+      openChat({ build: { start, days, budget } });
     } else {
       plan = loadPlan();
       if (rollIfDue()) applyHints(plan.startDate);
@@ -3437,7 +3387,7 @@
       pullToday();
     });
 
-    if (new URLSearchParams(location.search).get("chat") === "1") openChat(new URLSearchParams(location.search).get("from") === "fridge");
+    if (!buildParam && new URLSearchParams(location.search).get("chat") === "1") openChat(new URLSearchParams(location.search).get("from") === "fridge");
   }
 
   // Guarded so this file can be included in test.html for pure-function

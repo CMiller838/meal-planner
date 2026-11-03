@@ -1,0 +1,254 @@
+<!doctype html>
+<html lang="en" data-theme="dark"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Plan with Hermes B: chat-first, week strip</title>
+<style>
+:root,[data-theme="dark"]{--bg:#1c1410;--bg-2:#26190f;--surface:#241a13;--surface-alt:#2c2018;--text:#f3e6d4;--text-dim:#c9b79f;--accent:#d4633b;--accent-2:#7a9a6b;--butter:#e8b74a;--danger:#ff6b4a;--border:#4a382b;--shadow:rgba(15,9,5,.45);--radius:18px;--on-accent:#fff;--on-butter:#3a2a10;--accent-hover:#b94f2c;--accent-glow:rgba(212,99,59,.5);--on-cork:#fff6ea;--scrim:rgba(0,0,0,.55);--motion-base:180ms;--motion-exit:120ms;--ease-lift:cubic-bezier(.2,.9,.3,1.4);--tabbar-h:3.6rem;--ph-l:34%}
+[data-theme="light"]{--bg:#6b4f3a;--bg-2:#7a5c44;--surface:#fdf6ec;--surface-alt:#f7ecda;--text:#2b1d14;--text-dim:#6b5847;--accent:#d4633b;--accent-2:#5c8a4c;--butter:#e8b74a;--danger:#c1421a;--border:#e3d3ba;--shadow:rgba(43,29,20,.18);--ph-l:62%}
+*{box-sizing:border-box}
+html{color-scheme:dark light;-webkit-tap-highlight-color:transparent}
+body{margin:0;background:linear-gradient(var(--bg),var(--bg-2)) fixed;color:var(--text);font:16px/1.4 "Segoe UI Rounded",Nunito,"Trebuchet MS",system-ui,sans-serif;transition:background .4s,color .4s;min-height:100dvh}
+h1,h2,h3,p,ul,ol{margin:0}ul,ol{padding:0;list-style:none}
+button,input,textarea,select{font:inherit;color:inherit}button{cursor:pointer}
+:focus-visible{outline:3px solid var(--butter);outline-offset:2px}
+[hidden]{display:none!important}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+.ic{width:1.4rem;height:1.4rem;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.ib{display:inline-grid;place-items:center;flex:none;color:var(--text);font-size:1.25rem;width:2.9rem;height:2.9rem;border-radius:50%;border:1px solid var(--border);background:var(--surface);transition:transform var(--motion-base),background var(--motion-base)}
+.ib:hover{transform:translateY(-1px)}.ib:active{transform:scale(.95)}
+.ib.pri{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
+.btn{min-height:44px;padding:.55rem 1rem;border-radius:.8rem;border:1px solid var(--border);background:var(--surface-alt);color:var(--text);font-weight:800;white-space:nowrap;display:inline-flex;align-items:center;justify-content:center;gap:.4rem;transition:transform var(--motion-base),background var(--motion-base),box-shadow var(--motion-base)}
+.btn:hover:not(:disabled){transform:translateY(-1px);box-shadow:0 4px 10px var(--shadow)}
+.btn:active:not(:disabled){transform:scale(.95)}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.btn.pri{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}.btn.pri:hover:not(:disabled){background:var(--accent-hover)}
+.btn.sm{padding:.3rem .8rem;font-size:.88rem}
+.btn.lg{min-height:56px;font-size:1.1rem;border-radius:1rem}
+.btn.ghost{background:transparent}
+.card{color:var(--text);background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:0 6px 16px var(--shadow)}
+.dim{color:var(--text-dim)}
+.chips{display:flex;flex-wrap:wrap;gap:.4rem}
+.chip{display:inline-block;padding:.12rem .55rem;border-radius:999px;font-size:.7rem;font-weight:800;text-transform:uppercase;letter-spacing:.04em;background:color-mix(in srgb,var(--accent-2) 22%,transparent);border:1px solid var(--accent-2)}
+.chip.busy{background:color-mix(in srgb,var(--butter) 25%,transparent);border-color:var(--butter)}
+button.tg{min-height:44px;padding:.3rem .9rem;border-radius:999px;border:1.5px solid var(--border);background:var(--surface-alt);font-weight:800;font-size:.9rem;transition:transform var(--motion-base),background var(--motion-base)}
+button.tg:active{transform:scale(.95)}
+button.tg[aria-pressed=true]{background:var(--butter);color:var(--on-butter);border-color:var(--butter)}
+.bd{display:inline-block;padding:.1rem .55rem;border-radius:999px;font-size:.75rem;font-weight:800;border:1.5px solid var(--border)}
+.bd.ok{border-color:var(--accent-2);background:color-mix(in srgb,var(--accent-2) 25%,transparent)}
+.bd.no{border-color:var(--danger);color:var(--danger)}
+.toast{position:fixed;width:max-content;left:50%;bottom:var(--toast-b,5.5rem);transform:translate(-50%,20px);opacity:0;pointer-events:none;z-index:80;display:flex;gap:.75rem;align-items:center;max-width:min(92vw,520px);background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:.8rem;padding:.5rem .6rem .5rem .9rem;box-shadow:0 8px 24px var(--shadow);transition:opacity var(--motion-base),transform var(--motion-base) var(--ease-lift)}
+.toast.on{opacity:1;transform:translate(-50%,0);pointer-events:auto}
+.ph{display:grid;place-items:center;background:linear-gradient(135deg,hsl(var(--h) 50% var(--ph-l)),hsl(calc(var(--h) + 35) 45% calc(var(--ph-l) - 10%)));color:var(--on-cork)}
+@keyframes rise{from{opacity:0;transform:translateY(8px)}}
+@keyframes pop{from{opacity:0;transform:scale(.92)}}
+@media(prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-property:opacity,background,color!important;transition-duration:.15s!important;scroll-behavior:auto!important}.btn:hover,.ib:hover{transform:none!important}}
+:root{--toast-b:6rem}
+@keyframes bounce{50%{transform:translateY(-4px);opacity:.6}}
+@keyframes fade{from{opacity:0}}
+@keyframes flash{from{background:var(--butter)}}
+.app{height:100dvh;display:flex;flex-direction:column;overflow:hidden;max-width:1200px;margin:0 auto}
+.hdr{display:flex;align-items:center;gap:.6rem;padding:.5rem .8rem;padding-top:max(.5rem,env(safe-area-inset-top));color:var(--on-cork)}
+.hdr h1{font-size:1.15rem;margin-right:auto;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+body:not(.building) :is([data-act=exit],[data-act=save],.meter){display:none!important}
+.meter{display:flex;flex-wrap:wrap;align-items:center;gap:.4rem .7rem;padding:.1rem .8rem .5rem;color:var(--on-cork);font-size:.9rem;font-weight:700}
+.bar{flex:1 1 60px;height:.5rem;border-radius:99px;background:color-mix(in srgb,var(--on-cork) 22%,transparent);overflow:hidden}
+.bar i{display:block;height:100%;width:0;border-radius:99px;background:var(--accent-2);transition:width .4s var(--ease-lift)}
+.cost{display:inline-flex;gap:.3rem;align-items:center;padding:.2rem .7rem;border-radius:999px;background:var(--surface);color:var(--text);border:1px solid var(--border);font-size:.85rem;transition:background .3s,color .3s}
+.cost.over{background:var(--butter);color:var(--on-butter);border-color:var(--butter)}
+.scr{flex:1;min-height:0;display:flex;flex-direction:column}
+#setup{overflow-y:auto;align-items:center;justify-content:center;padding:1rem}
+.setup{width:min(440px,100%);padding:1.4rem;display:grid;gap:1.1rem;animation:rise .35s var(--ease-lift) both}
+.setup h2{font-size:1.3rem}
+.fld{display:grid;gap:.35rem}.fld label{font-weight:800}.fld small{color:var(--text-dim)}
+.inp{min-height:48px;width:100%;border-radius:.8rem;border:1px solid var(--border);background:var(--surface-alt);padding:0 .9rem;font-size:16px}
+.step{display:flex;gap:.5rem;align-items:center}.step .inp{text-align:center;font-weight:800}
+.money{position:relative}.money span{position:absolute;left:.9rem;top:50%;transform:translateY(-50%);font-weight:800}.money .inp{padding-left:1.8rem}
+.err{color:var(--danger);font-size:.85rem;min-height:1.1em}
+.thread{flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;padding:.8rem;display:flex;flex-direction:column;gap:1rem;overscroll-behavior:contain}
+.turn{display:grid;gap:.6rem;animation:rise .25s ease-out both}
+.turn.seen,.turn.seen *{animation:none!important}
+.msg{max-width:88%;padding:.6rem .85rem;border-radius:1.1rem;justify-self:start}
+.msg.h{background:var(--surface);border:1px solid var(--border);border-bottom-left-radius:.3rem}
+.msg.u{justify-self:end;background:var(--accent);color:var(--on-accent);border-bottom-right-radius:.3rem}
+.dots{display:flex;gap:.3rem;padding:.7rem .85rem}.dots span{width:.5rem;height:.5rem;border-radius:50%;background:var(--text-dim);animation:bounce 1s infinite}.dots span:nth-child(2){animation-delay:.15s}.dots span:nth-child(3){animation-delay:.3s}
+.opts{display:grid;gap:.6rem}
+.mc{padding:.8rem .9rem;display:grid;gap:.4rem;animation:rise .3s var(--ease-lift) both;transition:opacity .25s,border-color .25s}
+.mc[data-st=placed]{border-color:var(--accent-2)}.mc[data-st=no]{opacity:.55}
+.mc h3{font-size:1.1rem}
+.mh{display:flex;gap:.5rem;align-items:center;flex-wrap:wrap;color:var(--text-dim);font-size:.88rem}
+.mh .dest{margin-left:auto;font-weight:800;color:var(--text)}
+.why{font-size:.92rem}
+.acts{display:flex;flex-wrap:wrap;gap:.4rem;align-items:center;min-height:44px}
+.acts .q,.acts .ok{flex:1 1 100%;font-weight:700;font-size:.92rem}
+.acts .ok{display:flex;gap:.4rem;align-items:center;flex:1;color:var(--accent-2)}
+.acts>.btn:not(.sm){flex:1}
+.chip.var{background:color-mix(in srgb,var(--butter) 25%,transparent);border-color:var(--butter)}
+.chip.new{background:color-mix(in srgb,var(--accent) 22%,transparent);border-color:var(--accent)}
+.cb{font-weight:800;font-size:.85rem;padding:.1rem .55rem;border-radius:999px;border:1.5px solid var(--border);color:var(--text)}
+.cb.c1{border-color:var(--accent-2)}.cb.c2{border-color:var(--butter)}.cb.c3{border-color:var(--accent)}
+.comp{display:flex;gap:.5rem;padding:.5rem .8rem calc(.5rem + env(safe-area-inset-bottom))}
+.comp input{flex:1;min-width:0;min-height:48px;border-radius:999px;border:1px solid var(--border);background:var(--surface);padding:0 1rem;font-size:16px}
+.sug{display:flex;gap:.4rem;overflow-x:auto;padding:.4rem .8rem;scrollbar-width:none}.sug button{flex:none}
+.ov{position:fixed;inset:0;background:var(--scrim);display:grid;place-items:center;z-index:90;padding:1rem;animation:fade .15s}
+.dlg{width:min(400px,100%);padding:1.2rem;display:grid;gap:.9rem;animation:pop .2s var(--ease-lift)}
+.dlg .acts{justify-content:flex-end}
+@media(max-width:480px){.hdr{gap:.4rem}.hdr .ib{width:2.5rem;height:2.5rem}.hdr h1{font-size:1rem}}
+.app{max-width:760px}
+.strip{display:flex;gap:.4rem;overflow-x:auto;padding:.2rem .8rem .6rem;scrollbar-width:none;scroll-snap-type:x proximity}
+.nc{flex:none;scroll-snap-align:center;min-width:4.4rem;max-width:5.2rem;min-height:60px;padding:.25rem .45rem;display:grid;gap:0;align-content:center;justify-items:center;border-radius:.8rem;border:1.5px dashed color-mix(in srgb,var(--on-cork) 55%,transparent);background:transparent;color:var(--on-cork);line-height:1.15;transition:transform var(--motion-base),background var(--motion-base),border-color var(--motion-base)}
+.nc:active{transform:scale(.95)}
+.nc small{font-size:.68rem;text-transform:uppercase;font-weight:800;opacity:.85}.nc b{font-size:1.05rem}
+.nc i{font-style:normal;font-size:.7rem;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.nc.f{border-style:solid;border-color:var(--accent-2);background:var(--surface);color:var(--text)}
+.nc.cur{border-color:var(--butter);box-shadow:0 0 0 3px color-mix(in srgb,var(--butter) 45%,transparent)}
+.nc.flash{animation:flash .9s ease-out}
+.chatw{flex:1;min-height:0;display:flex;flex-direction:column;background:color-mix(in srgb,var(--bg) 60%,transparent);border-top:1px solid color-mix(in srgb,var(--border) 70%,transparent)}
+@media(min-width:760px){.chatw{border:1px solid var(--border);border-radius:var(--radius) var(--radius) 0 0}}
+</style></head><body>
+
+<div class="app">
+<header class="hdr"><button class="ib" data-act="exit" aria-label="Exit without saving"><svg class="ic" aria-hidden="true"><use href="#i-x"/></svg></button><h1>Plan with Hermes</h1><button class="ib" data-act="theme" aria-label="Toggle dark or light theme">&#9680;</button><button class="btn pri" data-act="save">Save</button></header>
+<div class="meter"><span data-prog></span><div class="bar" data-pbar role="presentation"><i></i></div><span data-cost></span></div>
+
+<section id="setup" class="scr"></section>
+<section id="build" class="scr" hidden>
+<div class="strip" id="strip" role="group" aria-label="Nights, tap one to plan it"></div>
+<div class="chatw"><div class="thread" id="thread" aria-live="polite"></div>
+<div class="sug"><button type="button" class="tg" data-q="What should we start with?">What should we start with?</button><button type="button" class="tg" data-q="Something quick">Quick</button><button type="button" class="tg" data-q="Cheaper week">Cheaper</button><button type="button" class="tg" data-q="I fancy salmon">Salmon</button></div>
+<form class="comp" data-comp><input aria-label="Message Hermes" placeholder="Type a suggestion, e.g. I fancy salmon"><button class="ib pri" aria-label="Send">&#8594;</button></form></div>
+</section></div>
+
+<script>
+const $=(s,r=document)=>r.querySelector(s),$$=(s,r=document)=>[...r.querySelectorAll(s)];
+const el=(t,c,h)=>{const e=document.createElement(t);if(c)e.className=c;if(h!=null)e.innerHTML=h;return e};
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const ev=n=>document.dispatchEvent(new Event(n));
+document.body.insertAdjacentHTML('afterbegin',`<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></symbol><symbol id="i-send" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></symbol>
+<symbol id="i-check" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></symbol><symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol><symbol id="i-minus" viewBox="0 0 24 24"><path d="M5 12h14"/></symbol>
+<symbol id="i-chat" viewBox="0 0 24 24"><path d="M4 5h16v11H9l-5 4z"/></symbol><symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/></symbol></defs></svg><div class="toast" id="toast" role="status"></div>`);
+const ic=n=>`<svg class="ic" aria-hidden="true"><use href="#i-${n}"/></svg>`;
+function toast(t){const e=$('#toast');e.textContent=t;e.classList.add('on');clearTimeout(toast.t);toast.t=setTimeout(()=>e.classList.remove('on'),2200)}
+// ---- fake data: one entry per meal. ing drives "reuses the mince/rice" shaping.
+const M=[
+{id:'dal',name:'Lentil dal with rice',short:'dal',mins:30,cost:3.6,kind:'lib',why:'Uses your rice, boosts iron',ing:['lentils','rice','spinach']},
+{id:'chilli',name:'Beef chilli',short:'chilli',mins:45,cost:6.9,kind:'var',tag:'Variant: with sweet potato',why:'Sweet potato adds fibre and vitamin A',ing:['mince','sweet potato','beans','onion']},
+{id:'gnocchi',name:'Pesto gnocchi with peas',short:'gnocchi',mins:20,cost:4.8,kind:'new',why:'Fast midweek night, greens in one pan',ing:['gnocchi','peas','spinach']},
+{id:'pie',name:'Cottage pie',short:'cottage pie',mins:55,cost:6.1,kind:'lib',why:'Batch cooks, freezes well',ing:['mince','potato','carrot']},
+{id:'burrito',name:'Burrito bowls from the chilli',short:'burrito bowls',mins:15,cost:3.3,kind:'new',why:'Leftover-friendly, almost no new shopping',ing:['mince','rice','beans']},
+{id:'fajita',name:'Chicken fajita rice bowls',short:'fajitas',mins:30,cost:6.8,kind:'lib',why:'Protein-heavy, one tray',ing:['chicken','rice','pepper']},
+{id:'trayS',name:'Salmon and new potato traybake',short:'salmon traybake',mins:35,cost:9.2,kind:'lib',why:'Omega-3, one tray, little washing up',ing:['salmon','potato','broccoli']},
+{id:'teri',name:'Salmon teriyaki rice',short:'salmon teriyaki',mins:25,cost:8.4,kind:'new',why:'Quick, uses rice, omega-3',ing:['salmon','rice','broccoli']},
+{id:'cakes',name:'Salmon fishcakes',short:'fishcakes',mins:35,cost:7.1,kind:'var',tag:'Variant: with peas',why:'Uses leftover potato',ing:['salmon','potato','peas']},
+{id:'bol',name:'Spag bol',short:'spag bol',mins:35,cost:5.9,kind:'lib',why:'Family favourite, hides carrot',ing:['mince','pasta','tomato']},
+{id:'curry',name:'Coconut chickpea curry',short:'chickpea curry',mins:30,cost:4.2,kind:'lib',why:'Cheap, iron and fibre',ing:['chickpeas','rice','spinach']},
+{id:'bake',name:'Chicken pasta bake',short:'pasta bake',mins:40,cost:5.7,kind:'lib',why:'Reheats well for lunch',ing:['chicken','pasta','tomato']},
+{id:'stir',name:'Veg stir-fry noodles',short:'stir-fry',mins:20,cost:4.5,kind:'lib',why:'Quick, 3 veg in one pan',ing:['noodles','pepper','broccoli']},
+{id:'saus',name:'Sausage and mash',short:'sausage and mash',mins:35,cost:5.2,kind:'lib',why:'Easy comfort night',ing:['sausage','potato','peas']},
+{id:'tuna',name:'Tuna pasta salad',short:'tuna pasta',mins:15,cost:3.9,kind:'lib',why:'No-cook night, cheap protein',ing:['tuna','pasta','pepper']}];
+const TG={lib:'Library',var:'Variant',new:'New idea (draft)'};
+const S={nights:[],th:{},ctx:'all',target:null,last:null,seen:new Set(),warned:false};
+const day=i=>{const d=new Date(S.start);d.setDate(d.getDate()+i);return d};
+const dn=i=>day(i).toLocaleDateString('en-GB',{weekday:'short'}),dl=i=>dn(i)+' '+day(i).getDate();
+const spent=()=>S.nights.reduce((a,n)=>a+(n?n.cost:0),0),nFilled=()=>S.nights.filter(Boolean).length;
+const firstEmpty=()=>S.nights.findIndex(n=>!n);
+// ---- thread
+const mount=(box,ctx,scroller)=>{S.view={box,ctx,scroller:scroller||box};S.ctx=ctx;box.replaceChildren(...(S.th[ctx]||[]).map(mel));S.view.scroller.scrollTop=1e5};
+function add(ctx,m){(S.th[ctx]??=[]).push(m);if(S.view&&S.view.ctx===ctx){S.view.box.append(mel(m));const sc=S.view.scroller,t=mel(m);sc.scrollTo({top:m.opts?t.getBoundingClientRect().top-sc.getBoundingClientRect().top+sc.scrollTop-8:1e5,behavior:'smooth'})}}
+function mel(m){if(m.el)return m.el;const t=el('div','turn');
+ if(m.t=='ty')t.innerHTML='<div class="msg h dots" aria-label="Hermes is typing"><span></span><span></span><span></span></div>';
+ else{const b=el('div','msg '+m.t);b.textContent=m.text;t.append(b);if(m.opts){const u=el('div','opts');m.opts.forEach(o=>u.append(cardEl(o)));t.append(u)}}
+ setTimeout(()=>t.classList.add('seen'),700);return m.el=t}
+function hermes(ctx,text,opts){const t={t:'ty'};add(ctx,t);setTimeout(()=>{const a=S.th[ctx];a.splice(a.indexOf(t),1);t.el&&t.el.remove();add(ctx,{t:'h',text,opts})},700)}
+function greet(ctx){hermes(ctx,`${S.days} empty nights from ${dl(0)}. Ask for ideas, or tap a night to plan just that one.`)}
+// ---- Hermes brain (fake): shaped by what is already placed
+const STOP=new Set('what should we start with the and for fancy want something some have give ideas more week night nights tonight cook eat make can you please how about try like not'.split(' '));
+function round(raw,ctx){
+ const q=(raw||'').toLowerCase(),placed=S.nights.filter(Boolean),pids=new Set(placed.map(n=>n.id)),have=new Set(placed.flatMap(n=>n.ing));
+ const quick=/quick|fast/.test(q),cheap=/cheap|budget/.test(q);
+ const words=(q.match(/[a-z]+/g)||[]).filter(w=>w.length>2&&!STOP.has(w)&&!/quick|fast|cheap|budget/.test(w)).map(w=>w.replace(/(es|s)$/,''));
+ const txt=m=>(m.name+' '+m.ing.join(' ')).toLowerCase(),hit=m=>words.some(w=>txt(m).includes(w));
+ const hits=words.length?M.filter(hit).length:0,plain=!words.length&&!quick&&!cheap;
+ let pool=M.filter(m=>!pids.has(m.id)),picked;
+ if(plain&&!placed.length&&!S.seen.has('dal'))picked=['dal','chilli','gnocchi'].map(i=>M.find(m=>m.id==i));
+ else{const fresh=pool.filter(m=>!S.seen.has(m.id));if(plain&&fresh.length>=3)pool=fresh;
+  const sc=m=>m.ing.filter(x=>have.has(x)).length*2+(hit(m)?10:0)+(quick?(60-m.mins)/10:0)+(cheap?10-m.cost:0)+(plain&&S.seen.has(m.id)?-1:0);
+  let nw=0;picked=[...pool].sort((a,b)=>sc(b)-sc(a)).filter(m=>m.kind!='new'||nw++<1).slice(0,3)}
+ picked.forEach(m=>S.seen.add(m.id));
+ const opts=picked.map(m=>{const sh=m.ing.filter(x=>have.has(x)).slice(0,2),src=sh.length&&placed.find(n=>n.ing.includes(sh[0]));
+  return{...m,state:'idle',ctx,at:typeof ctx=='number'?ctx:null,why:sh.length?`Reuses the ${sh.join('/')} from ${src.short} on ${dn(src.at)}`:m.why}});
+ const L=S.last!=null&&S.nights[S.last],pre=S.target!=null&&!S.nights[S.target]?dl(S.target)+': ':(typeof ctx=='number'?dl(ctx)+': ':'');
+ let t;
+ if(words.length)t=hits?`${words[0][0].toUpperCase()+words[0].slice(1)} it is. Three ideas:`:`Nothing in the library says "${raw.trim().slice(0,30)}". Closest three:`;
+ else if(quick)t='Quickest first:';else if(cheap)t='Cheapest first:';
+ else if(L){const u=new Set(opts.flatMap(o=>o.ing)),sh=L.ing.filter(x=>u.has(x)).slice(0,2);t=sh.length?`Since you have ${L.short} on ${dn(S.last)}, how about these that reuse the ${sh.join('/')}?`:'Three more:'}
+ else t='Here are three to start with.';
+ return{text:pre+t,opts}}
+function send(ctx,text){text=text.trim();if(!text)return;add(ctx,{t:'u',text});const r=round(text,ctx);hermes(ctx,r.text,r.opts)}
+function setTarget(i,ctx){S.target=i;ev('mp-change');const n=S.nights[i],r=round('',ctx);
+ hermes(ctx,n?`${dl(i)} is ${n.short} now. Three alternatives:`:r.text,r.opts)}
+S.afterPlace=o=>{if(nFilled()==S.days)return hermes(o.ctx,'Every night is filled. Save when you are happy.');
+ const over=S.budget&&spent()>S.budget&&!S.warned;if(over)S.warned=true;const r=round('',o.ctx);hermes(o.ctx,(over?'That passes your reminder, no problem. ':'')+r.text,r.opts)};
+// ---- option cards
+const tier=c=>c<5?1:c<7?2:3,dst=o=>o.at!=null?o.at:(S.target!=null?S.target:firstEmpty());
+function cardEl(o){const c=el('article','mc card');o.el=c;paint(o);
+ c.addEventListener('click',e=>{const b=e.target.closest('[data-a]');if(b){act(o,b.dataset.a);paint(o);const f=$('.acts button',c);f&&f.focus()}});return c}
+function paint(o){const d=o.state=='idle'?dst(o):o.d,n=d>=0?S.nights[d]:null;let a;
+ if(o.state=='add')a=`<span class="q">Save "${esc(o.name)}" to your library as a draft?</span><button class="btn pri sm" data-a="add">Add</button><button class="btn sm" data-a="no">No</button>`;
+ else if(o.state=='rep')a=`<span class="q">Replace ${esc(n?n.short:'')} on ${dl(d)}?</span><button class="btn pri sm" data-a="rep">Replace</button><button class="btn sm" data-a="keep">Keep</button>`;
+ else if(o.state=='placed')a=`<span class="ok">${ic('check')} Placed on ${dl(o.d)}</span><button class="btn ghost sm" data-a="undo">Undo</button>`;
+ else if(o.state=='no')a='<span class="dim">Not added</span>';
+ else a=`<button class="btn pri" data-a="place" aria-label="Place ${esc(o.name)}${d>=0?' on '+dl(d):''}">Place</button>`;
+ o.el.dataset.st=o.state;
+ o.el.innerHTML=`<div class="mh"><span class="chip ${o.kind}">${esc(o.tag||TG[o.kind])}</span><span class="cb c${tier(o.cost)}" aria-label="Cost £${o.cost.toFixed(2)}">£${o.cost.toFixed(2)}</span><span>${ic('clock')}</span><span style="margin-left:-.3rem">${o.mins} min</span>${o.state=='idle'&&d>=0?`<span class="dest">to ${dl(d)}</span>`:''}</div><h3>${esc(o.name)}</h3><p class="why">${esc(o.why)}</p><div class="acts">${a}</div>`;
+ $$('.mh .ic',o.el).forEach(i=>i.style.cssText='width:1rem;height:1rem')}
+function go(o){const d=dst(o);if(d<0){hermes(o.ctx,'Every night is filled. Tap one to replace it.');return}o.d=d;if(S.nights[d])o.state='rep';else commit(o,d)}
+function commit(o,d){const old=S.nights[d];if(old&&old.opt){old.opt.state='idle';paint(old.opt)}
+ S.nights[d]={id:o.id,name:o.name,short:o.short,ing:o.ing,cost:o.cost,mins:o.mins,kind:o.kind,tag:o.tag,at:d,opt:o};
+ Object.assign(o,{state:'placed',d});S.last=d;S.target=null;S.placed=d;ev('mp-change');ev('mp-placed');S.afterPlace(o)}
+function act(o,a){
+ if(a=='place')o.kind=='new'?o.state='add':go(o);
+ else if(a=='add')go(o);else if(a=='no')o.state='no';else if(a=='keep')o.state='idle';
+ else if(a=='rep')commit(o,o.d);
+ else if(a=='undo'){S.nights[o.d]=null;o.state='idle';ev('mp-change')}}
+// ---- meters, dialogs, header actions
+function meters(){const s=spent(),b=S.budget,over=b&&s>b;
+ $$('[data-cost]').forEach(e=>{e.className='cost'+(over?' over':'');e.innerHTML=`<b>£${Math.round(s)}</b>`+(over?` of £${b} · £${Math.round(s-b)} over`:b?` of £${b} reminder`:' planned')});
+ $$('[data-prog]').forEach(e=>e.textContent=nFilled()+' of '+S.days+' nights');
+ $$('[data-pbar]').forEach(e=>e.firstElementChild.style.width=nFilled()/S.days*100+'%')}
+document.addEventListener('mp-change',()=>{meters();Object.values(S.th).flat().forEach(m=>(m.opts||[]).forEach(o=>o.state=='idle'&&o.el&&paint(o)))});
+function dlg(html,btns){const ov=el('div','ov'),d=el('div','dlg card');d.setAttribute('role','dialog');d.setAttribute('aria-modal','true');d.innerHTML=html+'<div class="acts"></div>';ov.append(d);
+ btns.forEach(([t,c,fn])=>{const b=el('button','btn '+c,t);b.onclick=()=>{ov.remove();fn&&fn()};$('.acts',d).append(b)});
+ ov.addEventListener('keydown',e=>e.key=='Escape'&&ov.remove());document.body.append(ov);$('.btn.pri',d).focus()}
+const wrap=()=>{const f=nFilled(),e=S.days-f,s=Math.round(spent()),b=S.budget;return`${f} of ${S.days} nights planned${e?`, ${e} left empty`:''}. £${s}${b?` of your £${b} reminder${s>b?` (£${s-b} over, only a reminder)`:''}`:' planned'}.`};
+document.addEventListener('click',e=>{
+ const a=e.target.closest('[data-act]'),q=e.target.closest('[data-q]');
+ if(q)send(S.ctx,q.dataset.q);
+ if(!a)return;const k=a.dataset.act;
+ if(k=='theme'){const t=document.documentElement.dataset.theme=='dark'?'light':'dark';document.documentElement.dataset.theme=t;sessionStorage.th=t}
+ if(k=='exit')dlg('<h2>Leave without saving?</h2><p>Nothing from this chat is kept.</p>',[['Stay',''],['Leave','pri',()=>location.reload()]]);
+ if(k=='save')dlg(`<h2>Save this plan?</h2><p>${wrap()}</p>`,[['Keep planning',''],['Save','pri',()=>dlg('<h2>Saved</h2><p>Hermes has your plan. Happy cooking.</p>',[['Done','pri',()=>location.reload()]])]])});
+document.addEventListener('submit',e=>{const f=e.target.closest('[data-comp]');if(!f)return;e.preventDefault();const i=$('input',f);send(S.ctx,i.value);i.value=''});
+if(sessionStorage.th)document.documentElement.dataset.theme=sessionStorage.th;
+// ---- setup screen (the only form: start date, days, budget reminder)
+const iso=d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+const tm=new Date();tm.setDate(tm.getDate()+1);
+$('#setup').innerHTML=`<form class="setup card" id="sf" novalidate><h2>Plan a block of dinners</h2>
+<div class="fld"><label for="sd">Start date</label><input class="inp" id="sd" type="date" min="${iso(new Date())}" value="${iso(tm)}"></div>
+<div class="fld"><label for="sn">Number of days</label><div class="step"><button type="button" class="ib" data-s="-1" aria-label="One fewer day">${ic('minus')}</button><input class="inp" id="sn" type="number" min="1" max="28" value="14" inputmode="numeric"><button type="button" class="ib" data-s="1" aria-label="One more day">${ic('plus')}</button></div><small>1 to 28 nights.</small></div>
+<div class="fld"><label for="sb">Budget reminder</label><div class="money"><span>£</span><input class="inp" id="sb" type="number" min="0" step="5" value="75" inputmode="decimal"></div><small>A reminder for Hermes, not a limit. Nothing is ever blocked.</small></div>
+<div class="err" id="se" role="alert"></div><button class="btn pri lg" type="submit">Continue</button></form>`;
+const clampN=()=>{const i=$('#sn');let v=Math.round(+i.value);const bad=!(v>=1&&v<=28);v=Math.min(28,Math.max(1,v||14));i.value=v;$('#se').textContent=bad?'Days must be 1 to 28, set to '+v+'.':'';return v};
+$('#sf').addEventListener('click',e=>{const b=e.target.closest('[data-s]');if(b){$('#sn').value=+$('#sn').value+ +b.dataset.s;clampN()}});
+$('#sn').addEventListener('change',clampN);
+$('#sf').addEventListener('submit',e=>{e.preventDefault();const n=clampN();let d=new Date($('#sd').value+'T12:00');const t=new Date();t.setHours(0,0,0,0);if(isNaN(d)||d<t)d=new Date();
+ S.start=d;S.days=n;S.budget=Math.max(0,+$('#sb').value||0);S.nights=Array(n).fill(null);
+ document.body.classList.add('building');$('#setup').hidden=true;$('#build').hidden=false;meters();ev('mp-start')});
+
+
+function paintStrip(){const cur=S.target!=null?S.target:firstEmpty();const s=$('#strip');
+ s.innerHTML=S.nights.map((n,i)=>`<button class="nc ${n?'f':''} ${i==cur?'cur':''} ${S.placed==i&&n?'flash':''}" data-i="${i}" aria-label="${dl(i)}, ${n?esc(n.name):'empty'}" aria-current="${i==cur}"><small>${dn(i)}</small><b>${day(i).getDate()}</b><i>${n?esc(n.short):'empty'}</i></button>`).join('');
+ const c=$('.cur',s);if(c)s.scrollTo({left:c.offsetLeft-s.clientWidth/2+c.offsetWidth/2,behavior:'smooth'});S.placed=null}
+document.addEventListener('mp-change',paintStrip);
+$('#strip').addEventListener('click',e=>{const b=e.target.closest('[data-i]');b&&setTarget(+b.dataset.i,'all')});
+document.addEventListener('mp-start',()=>{mount($('#thread'),'all');paintStrip();greet('all')});
+</script></body></html>

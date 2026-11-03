@@ -310,3 +310,7 @@ Goal: planchat-a's 5-step wizard with an added start-date step (feeds `opts.firs
 ## Phase 119: Finish shop review and Freezer drawer [M] — built 2026-11-02, live checks pending
 
 Goal: Finish shop opens one review sheet (prototype `stock-b.html`: two-column "this week | freezer" +/- steppers per ticked plan line, editable amount, Fridge/Freezer/Cupboard, use-by, "Rest after plan" chip, skipped lines left out) whose single Confirm writes the pantry in one batch with Undo; the Pantry tab gains an "In the freezer" group (weeks frozen, "use soon" from 8 weeks). Amounts come from the list (`bulk.freeze` prefills the split); the "Fill from order photo" button is a disabled stub for a later Hermes phase. Replaces Phase 116's wrap-up handler. This adds a second app-side pantry writer, so it updates the pantry invariants in CLAUDE.md. Requires Phase 116.
+
+## Phase 120: Plan with Hermes, build the fortnight in chat [L] — built 2026-11-03, live checks pending (check.py 10/10, walk.mjs PC+phone, tester PASS)
+
+Goal: replace the wizard + walk chat with a clean chat that starts from an empty fortnight (setup: start date, days, budget reminder). Hermes offers 2-4 option cards per turn (library meals, variants, new-meal drafts); the user picks and the rest is planned around the picks. Drops the rolling plan. Spec `.claude/specs/phase120.md`; UI is prototype A (`planbuild-a.html`); Hermes loads its meal skills in build chats. Requires Phase 118.

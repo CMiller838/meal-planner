@@ -124,7 +124,7 @@ Installable as a PWA on Android Chrome via `manifest.json` + `sw.js`.
 - **The docked "I ate" bar (Phase 102, `ate-box.js`) is a portion-eat / food-log writer only**: a library pick goes through `MP.eatMeal` (`logPortion` + `tickPlanEaten`, shared with Browse Eat), free text/recents through `postFoodLog` (the Worker parses and owns nutrients); it never writes the pantry or Cooks itself and never filters by exclusions.
 - **`mp_planUndo` (Phase 63) is a one-level snapshot of the plan taken just before a re-flow, not plan state**: `MP.Plan.restore` is its only reader. A re-flow (`MP.reflowPlan`, `data.js`) only regenerates freed slots and never writes the pantry; `ranOut` keys are dropped from the generator's `have` index for that call.
 - **`mp_planPrefs` is settings, not plan state** (Phase 23): it holds only
-  `{ updatedAt, busyDays, chips, budgetTarget, freezeBatches, repeatGap, rolling, timeCaps }` (Phase 88: `timeCaps` = `{weekday 0-6: minutes 5-240}`, every `PlanPrefs.save` caller passes it through), never a meal id or date.
+  `{ updatedAt, busyDays, chips, budgetTarget, freezeBatches, repeatGap, rolling, timeCaps }` (Phase 120: `rolling` is kept for old data, defaults `false` and nothing reads it; `rollIfDue` is a no-op) (Phase 88: `timeCaps` = `{weekday 0-6: minutes 5-240}`, every `PlanPrefs.save` caller passes it through), never a meal id or date.
   `budgetTarget` (Phase 27) is a plain £/week number where `0` means no
   target. Losing it degrades to today's behaviour (no busy days, no chips, no
   budget target). `MP.PlanPrefs`
@@ -133,7 +133,7 @@ Installable as a PWA on Android Chrome via `manifest.json` + `sw.js`.
   "Plan with me" setup screen — it only becomes preference-aware.
   `hermes-sync.js`'s `fetchPlanPrefs`/`pushPlanPrefs` (Phase 25) pull/push
   through `MP.PlanPrefs.get`/`save` and never touch `localStorage` directly.
-- **`guidedActive` is what keeps the walk chat (Phase 118b) and the Plan chat stateless on exit.** `plan.js`'s
+- **`guidedActive` is what keeps the build chat (Phase 120: `chat=1&build=1`, an empty fortnight frame, Hermes offers option cards, Place goes through `applyChatEdits`) and the Plan chat stateless on exit.** `plan.js`'s
   `setSlotMeal`/`setSlotVariant` only call `savePlan()` when it's `false` (`openChat` sets it); leaving the chat before Save
   leaves `mp_plan` untouched, and a walk Exit reloads `plan.html`. Don't add a second save path that bypasses the flag.
 - **Substitution groups (Phase 28) are data, not inline constants.**

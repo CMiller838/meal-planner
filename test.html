@@ -2144,11 +2144,11 @@
     check("weekdaysFromBusy round-trips", deepEqual(P.weekdaysFromBusy("2026-11-02", P.busyFromWeekdays("2026-11-02", 14, [2, 5])), [2, 5]));
 
     localStorage.removeItem(KEY);
-    check("get() with key absent -> empty default", deepEqual(P.get(), { busyDays: [], chips: [], freezeBatches: true, repeatGap: 0, rolling: true, timeCaps: {}, budgetTarget: 0 }));
+    check("get() with key absent -> empty default", deepEqual(P.get(), { busyDays: [], chips: [], freezeBatches: true, repeatGap: 0, rolling: false, timeCaps: {}, budgetTarget: 0 }));
 
     for (const bad of ["not json", "null", "[]", "3"]) {
       localStorage.setItem(KEY, bad);
-      check(`get() with ${JSON.stringify(bad)} -> empty default, no throw`, deepEqual(P.get(), { busyDays: [], chips: [], freezeBatches: true, repeatGap: 0, rolling: true, timeCaps: {}, budgetTarget: 0 }));
+      check(`get() with ${JSON.stringify(bad)} -> empty default, no throw`, deepEqual(P.get(), { busyDays: [], chips: [], freezeBatches: true, repeatGap: 0, rolling: false, timeCaps: {}, budgetTarget: 0 }));
     }
 
     localStorage.setItem(KEY, JSON.stringify({ busyDays: [0, 3, 29, "4", 3, 14], chips: ["comfort", 5, "no-spice", null] }));
@@ -2160,10 +2160,10 @@
     const saved = P.save([11, 2], ["comfort"]);
     check("save() sorts busyDays ascending", deepEqual(saved.busyDays, [2, 11]));
     check("save() stamps a parseable ISO updatedAt", !isNaN(new Date(saved.updatedAt).getTime()));
-    check("save() round-trips through get()", deepEqual(P.get(), { busyDays: [2, 11], chips: ["comfort"], freezeBatches: true, repeatGap: 0, rolling: true, timeCaps: {}, budgetTarget: 0 }));
+    check("save() round-trips through get()", deepEqual(P.get(), { busyDays: [2, 11], chips: ["comfort"], freezeBatches: true, repeatGap: 0, rolling: false, timeCaps: {}, budgetTarget: 0 }));
 
     const savedEmpty = P.save([], []);
-    check("save([], []) round-trips to the empty shape", deepEqual(P.get(), { busyDays: [], chips: [], freezeBatches: true, repeatGap: 0, rolling: true, timeCaps: {}, budgetTarget: 0 }));
+    check("save([], []) round-trips to the empty shape", deepEqual(P.get(), { busyDays: [], chips: [], freezeBatches: true, repeatGap: 0, rolling: false, timeCaps: {}, budgetTarget: 0 }));
     check("save([], []) has no busyDays/chips leak", deepEqual(savedEmpty.busyDays, []) && deepEqual(savedEmpty.chips, []));
     localStorage.removeItem(KEY);
 
@@ -2207,7 +2207,7 @@
 
     MP.PlanPrefs.save([0, "3", 29, 7, 7], ["comfort", 3, null]);
     check("pull coercion: hostile remote body round-trips to sane shape",
-      deepEqual(MP.PlanPrefs.get(), { busyDays: [7], chips: ["comfort"], freezeBatches: true, repeatGap: 0, rolling: true, timeCaps: {}, budgetTarget: 0 }));
+      deepEqual(MP.PlanPrefs.get(), { busyDays: [7], chips: ["comfort"], freezeBatches: true, repeatGap: 0, rolling: false, timeCaps: {}, budgetTarget: 0 }));
     localStorage.removeItem(KEY);
   }
 
@@ -2554,7 +2554,7 @@
 
       const saved = P.save([2], ["comfort"], 75);
       check("PlanPrefs.save(): round-trips budgetTarget 75 with busyDays/chips intact",
-        deepEqual(P.get(), { busyDays: [2], chips: ["comfort"], freezeBatches: true, repeatGap: 0, rolling: true, timeCaps: {}, budgetTarget: 75 }));
+        deepEqual(P.get(), { busyDays: [2], chips: ["comfort"], freezeBatches: true, repeatGap: 0, rolling: false, timeCaps: {}, budgetTarget: 75 }));
       check("PlanPrefs.save(): return value carries budgetTarget", saved.budgetTarget === 75);
 
       P.save([], [], undefined);
@@ -3555,7 +3555,7 @@
           && MP.Plan.applyFreezeEdits([{ type: "freeze", cookId: "z", places: [{ day: 9, slot: "dinner" }] }], { plan: pl, byId, cooks: [{ id: "z", mealId: "nofz", name: "nofz", portionsLeft: 2, storage: "fridge" }] }).refused.length === 1);
       } finally { localStorage.getItem = rg; localStorage.setItem = rs; }
     }
-    check("validateReply: garbage input -> empty reply", deepEqual(PC.validateReply("x", vocab), { reply: { text: "", edits: [], ask: false }, dropped: 0 }));
+    check("validateReply: garbage input -> empty reply", deepEqual(PC.validateReply("x", vocab), { reply: { text: "", edits: [], ask: false, options: [] }, dropped: 0 }));
     const o = PC.toOverride([{ type: "noCook", day: 7 }, { type: "chip", id: "comfort" }, { type: "budget", perWeek: 30, days: [2] }, { type: "reroll", day: 9, slot: "dinner" }, { type: "lock", day: 1, slot: "lunch" }], null, 5);
     check("toOverride: noCook -> busy day, chip defaults to focus day", deepEqual(o.chatPrefs.busyDays, [7]) && deepEqual(o.chatPrefs.chips, { 5: ["comfort"] }) && deepEqual(o.chatPrefs.budget, { 2: 30 }));
     check("toOverride: days, slot-only reroll and locks", deepEqual(o.days, [2, 5, 7, 9]) && o.slotOnly[9] === "dinner" && o.locks.length === 1);
@@ -3670,13 +3670,26 @@
     check("ticker: deltas equal planMetrics differences", Math.abs(tk.dCost - (now.weekCost[0] - baseM.weekCost[0])) < 1e-9 && tk.dGaps === now.weekGaps[0].length - baseM.weekGaps[0].length);
   }
 
-  // Phase 118b: walkNights
+  // Phase 120: validateReply options + optionToEdits
   {
-    const byId = { a: { id: "a" }, l: { id: "l", leftoverOf: "a" } };
-    const pl = { days: [{ day: 1, slots: { dinner: { mealId: "a" } } }, { day: 2, slots: { dinner: { mealId: "l" } } }, { day: 3, slots: { dinner: { eatingOut: true } } }, { day: 4, slots: { dinner: { mealId: "a", fromCook: "c1" } } }, { day: 5, slots: { dinner: { mealId: "a", frozenFrom: "x" } } }, { day: 6, slots: {} }] };
-    check("walkNights: leftover/out/cook/frozen are auto, plain and empty dinners are cards", JSON.stringify(MP.Plan.walkNights(pl, byId).map((n) => n.auto)) === '[null,"leftover","out","cook","frozen",null]');
-    check("walkNights: keeps day numbers", MP.Plan.walkNights(pl, byId).map((n) => n.day).join() === "1,2,3,4,5,6");
-    check("walkNights: null/malformed plan -> []", MP.Plan.walkNights(null, byId).length === 0 && MP.Plan.walkNights({}, byId).length === 0);
+    const vo = (options) => MP.PlanChat.validateReply({ text: "", edits: [], options }, {}, "2026-01-01");
+    const lib = { mealId: "m1", why: "quick", extra: 1 }, create = { create: { name: "Pie", ingredients: [{ name: "flour", qty: "1" }] }, why: "x".repeat(300) };
+    let r = vo([lib, { mealId: "m2", variantId: "v1" }, { mealId: "m3", subs: [{ from: "rice", to: "pasta", label: "Pasta" }] }, create]);
+    check("options: library, variant, subs and create kept, unknown field dropped", r.reply.options.length === 4 && r.reply.options[0].extra === undefined && r.reply.options[1].variantId === "v1" && r.reply.options[2].subs[0].to === "pasta" && r.reply.options[3].kind === "create" && r.dropped === 0);
+    check("options: why capped at 140", r.reply.options[3].why.length === 140);
+    check("options: the normalised shape re-validates unchanged (the app re-validates what the Worker stored)", JSON.stringify(vo(vo([lib, create]).reply.options).reply.options) === JSON.stringify(vo([lib, create]).reply.options));
+    r = vo([lib, lib, lib, lib, lib]);
+    check("options: a 5th is trimmed and counted", r.reply.options.length === 4 && r.dropped === 1);
+    r = vo([null, "x", { nope: 1 }, { mealId: "" }, { mealId: "m1", variantId: "" }, { mealId: "m1", subs: [] }, { create: { name: "", ingredients: [] } }, { create: "pie" }]);
+    check("options: invalid ones dropped", r.reply.options.length === 0 && r.dropped === 8);
+    check("options: absent or non-array -> []", vo(undefined).reply.options.length === 0 && vo("x").reply.options.length === 0);
+    const e = MP.Plan.optionToEdits;
+    check("optionToEdits: library -> one place", JSON.stringify(e({ kind: "library", mealId: "m1" }, 3)) === '[{"type":"place","day":3,"slot":"dinner","mealId":"m1"}]');
+    const v = e({ kind: "library", mealId: "m1", variantId: "v", subs: [{ from: "a", to: "b", label: "B" }] }, 2);
+    check("optionToEdits: variant on the place, subs as a second sub edit", v.length === 2 && v[0].variantId === "v" && v[1].type === "sub" && v[1].day === 2 && v[1].subs[0].to === "b");
+    const c = e({ kind: "create", meal: { type: "mealCreate", name: "Pie" } }, 5);
+    check("optionToEdits: create -> [mealCreate, place with the id still empty]", c.length === 2 && c[0].type === "mealCreate" && c[1].type === "place" && c[1].mealId === "" && c[1].day === 5);
+    check("optionToEdits: null -> []", e(null, 1).length === 0);
   }
 
   // Phase 73: gapScore, tieFor, budgetSwaps

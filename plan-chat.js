@@ -113,7 +113,24 @@
     reroll: (e) => isDay(e.day) && (e.slot === undefined || isSlot(e.slot)) && (e.slot === undefined ? { type: "reroll", day: e.day } : { type: "reroll", day: e.day, slot: e.slot }),
   };
 
-  /** raw reply -> { reply: { text, edits, ask }, dropped }. Unknown types and bad fields are dropped, never repaired. */
+  // Phase 120: Hermes's build-chat options (proposals only; the app's Place button runs the hard checks). Max 4, `why` <= 140.
+  const OPTIONS_MAX = 4;
+  function normOption(o) {
+    if (!o || typeof o !== "object" || Array.isArray(o)) return null;
+    const why = str(o.why, 140), tail = why ? { why } : {};
+    const src = o.create !== undefined ? o.create : o.kind === "create" ? o.meal : undefined; // the Worker stores the normalised shape; the app re-validates it
+    if (src !== undefined) {
+      const meal = src && typeof src === "object" && !Array.isArray(src) ? NORM.mealCreate(src) : null;
+      return meal ? { kind: "create", meal, ...tail } : null;
+    }
+    if (!mealId(o)) return null;
+    const out = { kind: "library", mealId: o.mealId };
+    if (o.variantId !== undefined) { const v = str(o.variantId, 80); if (!v) return null; out.variantId = v; }
+    if (o.subs !== undefined) { const s = NORM.sub({ day: 1, slot: "dinner", subs: o.subs }); if (!s) return null; out.subs = s.subs; }
+    return { ...out, ...tail };
+  }
+
+  /** raw reply -> { reply: { text, edits, ask, options }, dropped }. Unknown types and bad fields are dropped, never repaired. */
   function validateReply(raw, vocab, today) {
     const r = raw && typeof raw === "object" && !Array.isArray(raw) ? raw : {};
     const list = Array.isArray(r.edits) ? r.edits : [];
@@ -130,9 +147,11 @@
       const f = f0 && f0.type === "note" && (known.has(f0.text.toLowerCase()) || edits.filter((x) => x.type === "note").length >= NOTE_MAX) ? null : f0;
       if (f) { edits.push(f); if (f.type === "note") known.add(f.text.toLowerCase()); }
     }
+    const optList = Array.isArray(r.options) ? r.options : [];
+    const options = optList.slice(0, OPTIONS_MAX).map(normOption).filter(Boolean);
     return {
-      reply: { text: typeof r.text === "string" ? r.text.trim().slice(0, TEXT_MAX) : "", edits, ask: r.ask === true },
-      dropped: list.length - edits.length,
+      reply: { text: typeof r.text === "string" ? r.text.trim().slice(0, TEXT_MAX) : "", edits, ask: r.ask === true, options },
+      dropped: list.length - edits.length + optList.length - options.length,
     };
   }
 

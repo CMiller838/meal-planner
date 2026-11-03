@@ -1034,3 +1034,22 @@ Spec: `.claude/specs/phase105.md` (planned batches via `place.freezeFrom`, cooke
 ## Phase 119: Finish shop review and Freezer drawer
 - Spec: `.claude/specs/phase119.md` [M]
 - [ ] Live: On the phone PWA, tick a few shop lines, press Finish shop, split one item to the freezer, press Confirm, then open the Pantry tab: "In the freezer" group first with a "just frozen" chip; Undo restores the pantry.
+
+## Phase 120: Plan with Hermes, build the fortnight in chat
+- Spec: `.claude/specs/phase120.md` (UI = prototype A, `design-prototypes/ui-concepts/planbuild-a.html`).
+- [x] Bump `sw.js` `CACHE` (v117).
+- [x] `validateReply` normalises `options` (max 4, caps, kinds); `test.html` cases incl. invalid ones.
+- [x] `MP.Plan.optionToEdits` + `test.html` cases (library, variant, subs, create).
+- [x] `rollIfDue` no-op; checkbox and default removed; old `rolling: true` blob covered in `walk.mjs`.
+- [x] `BUILD_SKILLS` + `--skills` (`-s`) for build turns (exact names resolved with `hermes skills list --source local`; the spec's `micronutrient-estimation` is really `micronutrient-estimates`); test cases.
+- [x] `chatBriefing` adds `build` and `budgetReminder`; bridge prompt + parse `options`; `test_hermes_chat_bridge.py` cases.
+- [x] `POST /chat/reply` passes `options` through (`worker_test.mjs` case).
+- [x] Empty frame: `chat.build` + a frame plan of empty-slot days held in the chat only (`mp_plan` is written by Save); `walk.mjs` covers it.
+- [x] Setup screen: start date, days, budget only.
+- [x] Chat column + option cards (one meal per row, Place, refusal state).
+- [x] Fortnight view with the active night highlighted and the running cost against the budget reminder.
+- [x] In-thread wrap and Save reuse; 118b walk UI removed.
+- [x] `walk.mjs` steps for every Verification line; PC + 390 px.
+- [ ] Live: phone PWA chat with the real Hermes bridge (a build chat answering with the skills loaded and sensible options; if a skill's own text clashes with the `options` format, say so).
+- [ ] Live: on the phone PWA with the bridge running, open Plan with me, set start, nights and budget, Continue: Hermes answers with 2-4 option cards, Place moves to the next night, the progress bar and cost update, Save writes the plan.
+- [ ] Live: look at the build chat with option cards in the light theme and at PC width (the tester only saw the empty, offline state).

@@ -447,7 +447,7 @@ for (const [vp, size] of Object.entries({ pc: { width: 1440, height: 900 }, phon
     const saved = await page.evaluate(() => localStorage.getItem('mp_plan'));
     if (saved === before) throw new Error('Take did not change mp_plan');
   });
-  await step('phase 112: Tonight hero + dinner board (hero actions, chain labels, expand, cook gate, eaten, guided hides hero)', async () => {
+  await step('phase 112: Tonight hero + dinner board (hero actions, chain labels, expand, cook gate, eaten, build chat hides hero)', async () => {
     await page.goto(`${base}/plan.html`);
     await page.waitForSelector('#plan-root .slot-card');
     const setPlan = async (mut) => {
@@ -482,37 +482,10 @@ for (const [vp, size] of Object.entries({ pc: { width: 1440, height: 900 }, phon
     await setPlan(`delete p.startDate; p.days.forEach(d => { if (d.slots.dinner) d.slots.dinner.eatenAt = new Date().toISOString(); });`);
     if (!await page.locator('#tonight[hidden]').count()) throw new Error('hero shown with every night eaten');
     await page.evaluate(() => localStorage.removeItem('mp_plan'));
-    await page.goto(`${base}/plan.html?guided=1`);
-    await page.waitForSelector('#plan-chat:not([hidden]) .night-card');
-    if (!await page.locator('#tonight[hidden]').count()) throw new Error('hero visible in guided mode');
+    await page.goto(`${base}/plan.html?chat=1&build=1&days=7`);
+    await page.waitForSelector('#plan-chat:not([hidden])');
+    if (!await page.locator('#tonight[hidden]').count()) throw new Error('hero visible in the build chat');
     await page.evaluate(() => localStorage.removeItem('mp_plan'));
-  });
-  await step('phase 118a: wizard walks 6 steps, Back, busy weekday toggle saves [2,9], lands on guided=1 days=14, Review shows notes + More options', async () => {
-    await page.goto(`${base}/plan-with-me.html`);
-    await page.waitForSelector('#wiz-next');
-    if (!await page.locator('#wiz-prev').isHidden()) throw new Error('Back visible on step 1');
-    const next = await page.evaluate(() => { const d = new Date(); d.setDate(d.getDate() + ((8 - d.getDay()) % 7 || 7)); return d.toLocaleDateString('sv'); });
-    await page.fill('#start-date', next); await page.dispatchEvent('#start-date', 'change');
-    const w0 = await page.evaluate(() => document.getElementById('wiz-prog').style.width);
-    await page.click('#wiz-next');
-    const w1 = await page.evaluate(() => document.getElementById('wiz-prog').style.width);
-    if (parseFloat(w1) <= parseFloat(w0)) throw new Error('progress did not fill: ' + w0 + ' -> ' + w1);
-    await page.click('#wiz-prev');
-    if (await page.locator('.wiz-step[data-step="0"]').isHidden()) throw new Error('Back did not return to step 1');
-    await page.click('#wiz-next'); await page.click('#wiz-next');
-    await page.evaluate(() => document.querySelectorAll('#busy-grid .is-busy').forEach((b) => b.click()));
-    await page.click('#busy-grid [data-weekday="2"]');
-    for (let i = 0; i < 3; i++) await page.click('#wiz-next');
-    if (!await page.locator('#pwm-generate-btn').isVisible()) throw new Error('no Start planning on Review');
-    if (!await page.locator('#wiz-next').isHidden()) throw new Error('Next visible on Review');
-    await page.click('.customise summary');
-    if (!await page.locator('.customise #shop-day').isVisible()) throw new Error('More options lacks #shop-day');
-    if (await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)) throw new Error('horizontal scroll');
-    await shot('wizard-review');
-    await page.click('#pwm-generate-btn');
-    await page.waitForURL(/plan\.html\?guided=1.*days=14/, { timeout: 8000 });
-    const bd = await page.evaluate(() => JSON.parse(localStorage.getItem('mp_planPrefs')).busyDays);
-    if (JSON.stringify(bd) !== '[2,9]') throw new Error('busyDays ' + JSON.stringify(bd));
   });
   await step('phase 110: old-shape plan loads dinners only; one card per day; no first-slot / also-row / library-filters; Not planned label', async () => {
     await page.goto(`${base}/plan.html`);
@@ -562,7 +535,7 @@ for (const [vp, size] of Object.entries({ pc: { width: 1440, height: 900 }, phon
     const b = req.postDataJSON();
     if (b.open) {
       m.session = b.session; m.msgs = []; const id = ++m.seq;
-      m.msgs.push({ id, from: 'user', open: true, text: '' }, { id: ++m.seq, from: 'hermes', replyTo: id, text: 'What does the week look like?', edits: [], ask: false });
+      m.msgs.push({ id, from: 'user', open: true, text: '' }, { id: ++m.seq, from: 'hermes', replyTo: id, text: 'What does the week look like?', edits: [], ask: false, options: m.openOptions || [] });
       return ok({ session: b.session, bridgeSeenAt: new Date(Date.now() - m.bridgeAgeMs).toISOString() });
     }
     if (b.close) return ok({});
@@ -649,12 +622,6 @@ for (const [vp, size] of Object.entries({ pc: { width: 1440, height: 900 }, phon
     await page.click('#chat-exit');
     await page.waitForSelector('#plan-chat', { state: 'hidden' });
     if (await planLS() !== orig) throw new Error('note edits changed mp_plan');
-    await page.goto(`${base}/plan-with-me.html`);
-    await page.waitForSelector('#wiz-next');
-    for (let i = 0; i < 5; i++) await page.click('#wiz-next');
-    await page.waitForSelector('#notes-list li');
-    if (!/No fish/.test(await page.locator('#notes-list').innerText()) || !/waiting for Obsidian/.test(await page.locator('#notes-list').innerText())) throw new Error('Standing notes list: ' + await page.locator('#notes-list').innerText());
-    await shot('notes-list');
   });
   await step('chat: 5 places show 5 slot cards, a new meal waits on Add/No, Add then Undo, a place of a pending meal is refused (Phase 88)', async () => {
     const ids = ['roast-chicken', 'chilli-con-carne', 'chorizo-pasta', 'salmon-rice-broccoli', 'tuna-rice-veg'];
@@ -860,113 +827,114 @@ for (const [vp, size] of Object.entries({ pc: { width: 1440, height: 900 }, phon
     await page.click('#plan-chat-btn');
     await page.waitForURL(/plan-with-me\.html/, { timeout: 8000 });
   });
-  // Phase 118b: the night-by-night walk (guided=1 generates, then opens the chat as cards)
-  const walkOpen = async (hermes) => {
+  // Phase 120: the build chat (chat=1&build=1 opens an empty fortnight; Hermes offers option cards, Place fills a night)
+  const buildOpen = async (o = {}) => {
     await page.goto(`${base}/plan.html`);
     await page.waitForSelector('#plan-root .slot-card');
-    await page.evaluate((h) => { localStorage.removeItem('mp_ratings'); if (h) { localStorage.setItem('mp_hermes_url', 'https://fake.test'); localStorage.setItem('mp_hermes_token', 't'); } else { localStorage.removeItem('mp_hermes_url'); localStorage.removeItem('mp_hermes_token'); } }, hermes);
-    chatMock.reply = { text: 'ok', edits: [] };
-    await page.goto(`${base}/plan.html?guided=1`);
-    await page.waitForSelector('#plan-chat:not([hidden]) .night-card', { timeout: 10000 });
+    await page.evaluate(([h, ratings]) => { localStorage.removeItem('mp_ratings'); if (ratings) localStorage.setItem('mp_ratings', JSON.stringify(ratings)); if (h) { localStorage.setItem('mp_hermes_url', 'https://fake.test'); localStorage.setItem('mp_hermes_token', 't'); } else { localStorage.removeItem('mp_hermes_url'); localStorage.removeItem('mp_hermes_token'); } }, [o.hermes !== false, o.ratings || null]);
+    chatMock.bridgeAgeMs = 0;
+    chatMock.reply = o.reply || { text: 'Next.', edits: [], options: [] };
+    chatMock.openOptions = o.options || [];
+    await page.goto(`${base}/plan.html?chat=1&build=1&days=${o.days || 7}&budget=${o.budget ?? 40}`);
+    await page.waitForSelector('#plan-chat:not([hidden])', { timeout: 10000 });
+    if (o.options && o.options.length) await page.waitForSelector('.opt-card', { timeout: 10000 });
   };
-  const pend = '.night-card[data-state="pending"]';
-  await step('walk: no Hermes config: one pending card, pill per night, input disabled, URL stays, mp_plan unchanged', async () => {
-    const before = await planLS();
-    await walkOpen(false);
-    if (await page.locator(pend).count() !== 1) throw new Error('want exactly one pending card');
-    const days = await page.evaluate(() => 14);
-    if (await page.locator('#chat-week .cw-pill').count() !== days) throw new Error('pill count ' + await page.locator('#chat-week .cw-pill').count());
-    if (!await page.locator('#chat-input').isDisabled()) throw new Error('input not disabled');
-    if (!/plan\.html/.test(page.url())) throw new Error('left plan.html: ' + page.url());
-    if (await planLS() !== before) throw new Error('mp_plan changed on open');
+  const OPT3 = [{ mealId: 'roast-chicken', why: 'protein' }, { mealId: 'chilli-con-carne', why: 'iron' }, { mealId: 'chicken-fajitas' }];
+  await step('build: setup shows only start / nights / budget; Continue opens the build URL', async () => {
+    await page.goto(`${base}/plan-with-me.html`);
+    await page.waitForSelector('#start-date');
+    if (await page.locator('.wiz-step').count() !== 3) throw new Error('want 3 setup sections, got ' + await page.locator('.wiz-step').count());
+    if (await page.locator('#busy-grid, #rolling-plan, #chip-row, #wiz-next, #shop-day').count()) throw new Error('old wizard controls still present');
+    await page.click('[data-nights="7"]');
     if (await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)) throw new Error('horizontal scroll');
-    await shot('walk-open');
+    await shot('build-setup');
+    await page.click('#pwm-generate-btn');
+    await page.waitForURL(/plan\.html\?chat=1&build=1&start=\d{4}-\d\d-\d\d&days=7&budget=\d+/, { timeout: 8000 });
   });
-  await step('walk: Accept shows the next night card and pill 1 gets .ok', async () => {
-    await walkOpen(true);
-    const d1 = await page.getAttribute(pend, 'data-day');
-    await page.click(pend + ' .night-accept');
-    await page.waitForSelector(`.night-card[data-day="${d1}"][data-state="accepted"]`);
-    if (await page.locator(pend).count() !== 1) throw new Error('no next card');
-    if (await page.getAttribute(pend, 'data-day') === d1) throw new Error('same night again');
-    if (!await page.locator(`#chat-week .cw-pill[data-day="${d1}"].ok`).count()) throw new Error('pill lacks .ok');
+  await step('build: no Hermes config: empty fortnight, offline line, input disabled, mp_plan unchanged', async () => {
+    const before = await planLS();
+    await buildOpen({ hermes: false });
+    if (!await page.locator('#chat-input').isDisabled()) throw new Error('input not disabled');
+    if (!/offline/i.test(await page.textContent('#chat-log'))) throw new Error('no offline line');
+    if (await page.locator('#chat-week .cw-pill').count() !== 7) throw new Error('pill count ' + await page.locator('#chat-week .cw-pill').count());
+    if (!/0 of 7 nights/.test(await page.textContent('#chat-strip'))) throw new Error('strip: ' + await page.textContent('#chat-strip'));
+    if (await planLS() !== before) throw new Error('mp_plan changed on open');
   });
-  await step('walk: a leftover/out/cook night shows a line, not a card', async () => {
-    await walkOpen(true);
-    const lines = await page.locator('.walk-line').allTextContents();
-    const auto = lines.filter(t => /\((leftovers|eating out|from a cook|from the freezer)\)/.test(t));
-    // a fresh profile's generated plan may hold no batch cook (walkNights' auto kinds are unit-tested in test.html): then only the no-card-for-auto-night rule has nothing to show
-    const cardDays = await page.locator('.night-card').evaluateAll(els => els.map(e => +e.dataset.day));
-    if (cardDays.length !== 1) throw new Error('want one card at start');
-    await page.click('#chat-keep-rest');
-    await page.waitForSelector('#chat-wrap');
-    const pills = await page.locator('#chat-week .cw-pill.ok').count();
-    if (pills !== 14) throw new Error('keep the rest left pills not ok: ' + pills);
+  await step('build: 3 options render on separate lines; Place fills night 1, updates the strip and cost; Hermes is asked for the next night', async () => {
+    const before = await planLS();
+    await buildOpen({ options: OPT3, reply: { text: 'Night two.', edits: [], options: [{ mealId: 'chicken-fajitas', why: 'uses the chicken' }] } });
+    if (await page.locator('.opt-card').count() !== 3) throw new Error('want 3 cards, got ' + await page.locator('.opt-card').count());
+    const ys = await page.locator('.opt-card').evaluateAll(els => els.map(e => Math.round(e.getBoundingClientRect().top)));
+    if (new Set(ys).size !== 3) throw new Error('cards share a line: ' + ys);
+    if (!/protein/.test(await page.textContent('.opt-card .opt-why'))) throw new Error('why missing');
+    if (await planLS() !== before) throw new Error('mp_plan changed before Place');
+    await shot('build-options');
+    await page.click('.opt-card:nth-child(1) .opt-place');
+    await page.waitForSelector('#chat-week .cw-pill[data-day="1"].ok');
+    await page.waitForFunction(() => /1 of 7 nights/.test(document.getElementById('chat-strip').textContent));
+    if (!/£[\d.]+ of £40/.test(await page.textContent('#chat-strip'))) throw new Error('cost line: ' + await page.textContent('#chat-strip'));
+    if (await page.getAttribute('.opt-card:nth-child(1)', 'data-state') !== 'placed') throw new Error('card not marked placed');
+    await page.waitForFunction(() => document.querySelectorAll('.opt-card').length === 4, null, { timeout: 8000 }); // the next round arrived
+    if (await planLS() !== before) throw new Error('mp_plan written before Save');
+    await shot('build-placed');
   });
-  await step('walk: synthetic swipe right on the pending card = Accept', async () => {
-    await walkOpen(true);
-    const d1 = await page.getAttribute(pend, 'data-day');
-    const bb = await page.locator(pend + ' .night-name').boundingBox();
-    await page.mouse.move(bb.x + 10, bb.y + 5); await page.mouse.down(); await page.mouse.move(bb.x + 120, bb.y + 5, { steps: 6 }); await page.mouse.move(bb.x + 260, bb.y + 5, { steps: 6 }); await page.mouse.up();
-    await page.waitForSelector(`.night-card[data-day="${d1}"][data-state="accepted"]`, { timeout: 4000 });
+  await step('build: 5 options and unknown fields are trimmed; budget 0 hides the cost line', async () => {
+    await buildOpen({ budget: 0, options: [...OPT3, { mealId: 'roast-chicken', junk: 1 }, { mealId: 'chilli-con-carne' }] });
+    if (await page.locator('.opt-card').count() !== 4) throw new Error('want 4 cards, got ' + await page.locator('.opt-card').count());
+    await page.click('.opt-card:nth-child(1) .opt-place');
+    await page.waitForSelector('#chat-week .cw-pill[data-day="1"].ok');
+    if (/£/.test(await page.textContent('#chat-strip'))) throw new Error('cost shown with budget 0: ' + await page.textContent('#chat-strip'));
   });
-  await step('walk: Reject + "too fiddly" writes one down rating, new card for same night with another meal, old card Replaced', async () => {
-    await walkOpen(true);
-    const d1 = await page.getAttribute(pend, 'data-day'), name1 = await page.textContent(pend + ' .night-name');
-    await page.click(pend + ' .night-reject');
-    await page.click('.night-card[data-state="rejecting"] .chat-reason button:text("too fiddly")');
-    await page.waitForSelector(pend);
-    const rated = await page.evaluate(() => Object.values(JSON.parse(localStorage.getItem('mp_ratings') || '{}')).filter(r => r.rating === 'down' && r.note === 'too fiddly').length);
-    if (rated !== 1) throw new Error('ratings ' + rated);
-    if (await page.getAttribute(pend, 'data-day') !== d1) throw new Error('new card is a different night');
-    if (await page.textContent(pend + ' .night-name') === name1) throw new Error('same meal again');
-    if (!await page.locator(`.night-card[data-day="${d1}"][data-state="replaced"]`).count()) throw new Error('old card not Replaced');
-    await shot('walk-rejected');
+  await step('build: a never-rated option is refused with a reason (Place disabled); a mushroom create is dropped with a note', async () => {
+    await buildOpen({ ratings: { 'chilli-con-carne': { rating: 'down', never: true, at: new Date().toISOString() } },
+      options: [{ mealId: 'roast-chicken' }, { mealId: 'chilli-con-carne' }, { create: { name: 'Mushroom stroganoff', ingredients: [{ name: 'mushrooms', qty: '200 g' }] } }] });
+    if (await page.locator('.opt-card').count() !== 2) throw new Error('want 2 cards (the mushroom one dropped), got ' + await page.locator('.opt-card').count());
+    if (!await page.locator('.opt-card:nth-child(2) .opt-place').isDisabled()) throw new Error('never-rated Place enabled');
+    if (!/Can't place/.test(await page.textContent('.opt-card:nth-child(2) .opt-refusal'))) throw new Error('no refusal reason');
+    if (!/Not offered: Mushroom stroganoff/.test(await page.textContent('#chat-log'))) throw new Error('no thread note for the mushroom meal');
   });
-  await step('walk: Reject + Skip writes no rating', async () => {
-    await walkOpen(true);
-    await page.click(pend + ' .night-reject');
-    await page.click('.night-card[data-state="rejecting"] .chat-reason button:text("Skip")');
-    await page.waitForSelector(pend);
-    const n = await page.evaluate(() => Object.keys(JSON.parse(localStorage.getItem('mp_ratings') || '{}')).length);
-    if (n) throw new Error('Skip wrote ' + n + ' ratings');
+  await step('build: a create option shows the Add card first, then places; a filled night asks to replace', async () => {
+    await buildOpen({ options: [{ create: { name: 'Walk test pie', ingredients: [{ name: 'chicken breast', qty: '300 g' }] }, why: 'new' }, { mealId: 'roast-chicken' }] });
+    await page.click('.opt-card:nth-child(1) .opt-place');
+    await page.waitForSelector('#chat-meals .chat-meal-add');
+    if (await page.locator('#chat-week .cw-pill[data-day="1"].ok').count()) throw new Error('placed before the Add');
+    await page.click('#chat-meals .chat-meal-add');
+    await page.waitForSelector('#chat-week .cw-pill[data-day="1"].ok');
+    await page.click('#chat-week .cw-pill[data-day="1"]'); // back to the filled night: placing asks to replace
+    let asked = '';
+    page.once('dialog', d => { asked = d.message(); d.accept(); });
+    await page.click('.opt-card:nth-child(2) .opt-place');
+    await page.waitForFunction(() => document.querySelector('.opt-card:nth-child(2)').dataset.state === 'placed');
+    if (!/Replace/.test(asked)) throw new Error('no replace prompt: ' + asked);
+    await page.evaluate(async () => { const lib = await MP.getLibrary(); lib.filter(m => m.name === 'Walk test pie').forEach(m => MP.removeFromLibrary(m.id)); });
   });
-  await step('walk: tapping a pill flashes that night\'s card; an unreached night toasts', async () => {
-    await walkOpen(true);
-    const d1 = await page.getAttribute(pend, 'data-day');
-    await page.click(`#chat-week .cw-pill[data-day="${d1}"]`);
-    if (!await page.locator(`.night-card[data-day="${d1}"].flash`).count()) throw new Error('no flash');
-  });
-  await step('walk: Keep the rest -> wrap card; #wrap-save writes mp_plan and closes the chat', async () => {
-    await walkOpen(true);
-    await page.evaluate(() => localStorage.removeItem('mp_plan'));
-    await page.click('#chat-keep-rest');
-    await page.waitForSelector('#chat-wrap #wrap-save');
-    await shot('walk-wrap');
-    await page.click('#wrap-save');
-    await page.waitForSelector('#plan-chat', { state: 'hidden' });
-    if (!await planLS()) throw new Error('mp_plan not written');
-  });
-  await step('walk: Exit mid-walk returns to plan.html with mp_plan identical', async () => {
+  await step('build: Exit before Save leaves mp_plan untouched; Save writes the plan; a stored rolling: true never rolls', async () => {
     await page.goto(`${base}/plan.html`);
     await page.waitForSelector('#plan-root .slot-card');
-    await walkOpen(true);
+    await page.evaluate(() => { const p = JSON.parse(localStorage.getItem('mp_plan')); p.startDate = '2020-01-01'; localStorage.setItem('mp_plan', JSON.stringify(p)); localStorage.setItem('mp_planPrefs', JSON.stringify({ updatedAt: 'x', busyDays: [], chips: [], budgetTarget: 0, freezeBatches: true, repeatGap: 0, rolling: true, timeCaps: {} })); });
+    await page.reload(); await page.waitForSelector('#plan-root .slot-card');
+    const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('mp_plan')).startDate);
+    if (stored !== '2020-01-01') throw new Error('rolling: true rolled the plan to ' + stored);
     const before = await planLS();
-    await page.click(pend + ' .night-accept');
+    await buildOpen({ options: OPT3 });
+    await page.click('.opt-card:nth-child(1) .opt-place');
+    await page.waitForSelector('#chat-week .cw-pill[data-day="1"].ok');
     await page.click('#chat-exit');
     await page.waitForURL(/plan\.html$/, { timeout: 6000 });
     await page.waitForSelector('#plan-root .slot-card');
     if (await planLS() !== before) throw new Error('Exit changed mp_plan');
-  });
-  await step('walk: a Hermes place on an accepted night drops its .ok and appends a new card', async () => {
-    await walkOpen(true);
-    const d1 = await page.getAttribute(pend, 'data-day');
-    await page.click(pend + ' .night-accept');
-    await page.waitForSelector(`#chat-week .cw-pill[data-day="${d1}"].ok`);
-    chatMock.reply = { text: 'Swapped.', edits: [{ type: 'place', day: +d1, slot: 'dinner', mealId: 'chilli-con-carne', why: 'iron' }] };
-    await say('change that night');
-    await page.waitForSelector(`.night-card[data-day="${d1}"][data-state="pending"]`, { timeout: 8000 });
-    if (await page.locator(`#chat-week .cw-pill[data-day="${d1}"].ok`).count()) throw new Error('pill kept .ok');
+    await buildOpen({ days: 7, options: OPT3 });
+    await page.click('#chat-save');
+    await page.waitForSelector('#chat-wrap #wrap-save');
+    await shot('build-wrap');
+    await page.click('#chat-wrap #wrap-back');
+    await page.click('.opt-card:nth-child(1) .opt-place');
+    await page.waitForSelector('#chat-week .cw-pill[data-day="1"].ok');
+    await page.click('#chat-save'); await page.waitForSelector('#chat-wrap #wrap-save');
+    await page.click('#wrap-save');
+    await page.waitForSelector('#plan-chat', { state: 'hidden' });
+    const saved = await page.evaluate(() => { const p = JSON.parse(localStorage.getItem('mp_plan')); return [p.days.length, p.days.filter(d => d.slots.dinner && d.slots.dinner.mealId).length]; });
+    if (saved[0] !== 7 || saved[1] !== 1) throw new Error('saved plan ' + saved);
   });
   await step('tomorrow card: alternatives, pick changes only day+1, Keep locks, excluded pick refused, last day has no card', async () => {
     await page.goto(`${base}/plan.html`);

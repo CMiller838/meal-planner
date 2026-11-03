@@ -19,9 +19,9 @@
   const loadLib = () => Promise.resolve(MP.getLibrary()).then((l) => { lib = Array.isArray(l) ? l : []; return lib; }, () => lib);
   const byIdOf = (l) => Object.fromEntries(l.map((m) => [m.id, m]));
 
-  /** True while the Plan chat or a guided walkthrough owns the plan: the bar is Log-only then. */
+  /** True while the Plan chat or the build chat owns the plan: the bar is Log-only then. */
   function busy() {
-    return typeof document !== "undefined" && (document.body.classList.contains("chat-open") || /[?&]guided=1/.test(location.search));
+    return typeof document !== "undefined" && (document.body.classList.contains("chat-open") || /[?&]build=1/.test(location.search));
   }
 
   /** Read-only briefing: library (ids, names, slots, ingredient keys), the plan's slots, ratings, hard terms. No cooks/bulk/cheaper/fridge. */

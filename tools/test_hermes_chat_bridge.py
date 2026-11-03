@@ -37,8 +37,19 @@ assert '"meals":[{"id":"x"}]' in pb and "Spend so far" in pb and "Briefing" in p
 assert b.brief_of([{"open": True, "context": {"brief": {"a": 1}}}]) == {"a": 1} and b.brief_of([{"text": "x"}]) is None
 pr = b.build_prompt(msgs, {"day": 2}, brief={"a": 1}, resumed=True, send_brief=False)
 assert pr == 'Context: {"day": 2}\nUser: msg19' and "Briefing" in b.build_prompt(msgs, {}, brief={"a": 1}, resumed=True)
-# Phase 118b: the walk sentence rides only with brief.walk
-assert "brief.walk" in b.build_prompt([], {}, brief={"walk": True}) and "brief.walk" not in b.build_prompt([], {}, brief={"a": 1})
+# Phase 120: options parsed from the fenced block; the build rules ride only with brief.build
+ro = b.parse_reply('One quick one.\n```edits\n{"edits":[{"type":"busy","day":2}],"options":[{"mealId":"m1","why":"iron"}]}\n```')
+assert ro == {"text": "One quick one.", "edits": [{"type": "busy", "day": 2}], "ask": False, "options": [{"mealId": "m1", "why": "iron"}]}, ro
+assert b.parse_reply('x\n```edits\n{"options":[{"mealId":"m1"}]}\n```')["edits"] == [] and "options" not in b.parse_reply('x\n```edits\n[]\n```')
+assert b.parse_reply('```edits\n{"options":[{"mealId":"m1"}]}\n```')["options"] == [{"mealId": "m1"}]  # options alone, no prose
+assert "BUILD MODE" in b.build_prompt([], {}, brief={"build": True}) and "BUILD MODE" not in b.build_prompt([], {}, brief={"a": 1})
+assert "first empty night" in b.build_prompt([], {}, brief={"build": True}, opener=True)
+# skills: names resolved against the listing, a missing one dropped; -s only on build turns
+LIST = "\u2502 next-meal \u2502 nutrition \u2502 local \u2502\n\u2502 meal-week-planning   \u2502 nutrition \u2502 local \u2502\n"
+assert b.build_skills(LIST) == ["meal-week-planning", "next-meal"] and b.build_skills("") == []
+assert b.with_skills(["hermes", "chat", "-q", "{prompt}"], ["a", "b"]) == ["hermes", "chat", "-s", "a,b", "-q", "{prompt}"]
+assert b.with_skills(["echo", "{prompt}"], ["a"]) == ["echo", "{prompt}"] and b.with_skills(["hermes", "chat"], []) == ["hermes", "chat"]
+assert len(b.BUILD_SKILLS) == 8
 # Phase 111: the because rule rides with the briefing
 assert "brief.nutrition" in b.build_prompt([], {}, brief={"a": 1}) and "brief.nutrition" not in b.build_prompt([], {})
 
@@ -125,6 +136,14 @@ assert '"v":2' in calls[2][1] and "You are Hermes" not in calls[2][1] and "You a
 calls.clear(); b.SENT["mp-s1"] = "x"
 b.run = lambda responder, prompt, session=None: calls.append((session, prompt)) or (None if session else "ok")
 assert b.ask(sresp, "mp-s1", H1, {}, False, {"v": 1}, None)["text"] == "ok" and "You are Hermes" in calls[-1][1] and "mp-s1" not in b.SENT
+# Phase 120: -s rides only on build turns (skills stubbed)
+seen = []
+b.run = lambda responder, prompt, session=None: seen.append(responder) or "ok"
+b._SKILLS[:] = [["next-meal"]]
+b.ask(sresp, "mp-s3", H1, {}, True, {"build": True}, None)
+b.ask(sresp, "mp-s4", H1, {}, True, {"v": 1}, None)
+assert "-s" in seen[0] and "next-meal" in seen[0] and "-s" not in seen[1]
+b._SKILLS.clear()
 b.run = real_run
 srv.shutdown()
 print("hermes_chat_bridge: ok")
