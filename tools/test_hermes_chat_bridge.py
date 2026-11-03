@@ -145,5 +145,16 @@ b.ask(sresp, "mp-s4", H1, {}, True, {"v": 1}, None)
 assert "-s" in seen[0] and "next-meal" in seen[0] and "-s" not in seen[1]
 b._SKILLS.clear()
 b.run = real_run
+# a briefing too big for one argv entry goes through --query-file (hermes failed with "Invalid argument" otherwise)
+import subprocess as _sp
+caught = []
+class _R: returncode = 0; stdout = "ok"; stderr = ""
+_real_sp = _sp.run
+_sp.run = lambda argv, **kw: caught.append(list(argv)) or _R()
+big = "x" * 70000
+assert b.run(["hermes", "chat", "-q", "{prompt}"], big) == "ok"
+assert "--query-file" in caught[-1] and "-q" not in caught[-1] and big not in caught[-1]
+assert b.run(["hermes", "chat", "-q", "{prompt}"], "hi") == "ok" and caught[-1][-1] == "hi"
+_sp.run = _real_sp
 srv.shutdown()
 print("hermes_chat_bridge: ok")

@@ -1412,3 +1412,17 @@ body:has(.modal-overlay:not(.hidden)) .shop-dock, body.chat-open .shop-dock { di
 .opt-card[data-state="refused"] { opacity: .75; border-color: var(--danger); }
 .opt-card[data-state="placed"] { border-color: var(--accent-2); }
 @media (prefers-reduced-motion: reduce) { .opt-card, .diff-row, .chat-wrap-card { animation: none; } .opt-card .opt-place { transition: none; } }
+
+/* Phase 120: build chat, phone-clean (prototype A). Below 900 px only progress, the night pills and the chat show; the week columns return on PC. */
+.plan-chat.is-build .chat-stock, .plan-chat.is-build .chat-shop { display: none; }
+.plan-chat.is-build .chat-main { max-height: none; flex: 0 0 auto; overflow: visible; }
+.plan-chat.is-build .opt-card { grid-template-columns: minmax(0, 1fr) auto; column-gap: .6rem; align-items: center; }
+.plan-chat.is-build .opt-card > :is(.opt-meta, .opt-why, .opt-refusal, .cost-badge, [class*="cost"]) { grid-column: 1; }
+.plan-chat.is-build .opt-card .opt-place { grid-column: 2; grid-row: 1 / span 3; align-self: center; justify-self: end; }
+.plan-chat.is-build .opt-card :is(.cost-badge, [class*="cost"]) { display: inline-block; width: auto; justify-self: start; font-size: .75rem; padding: .1rem .5rem; }
+@media (max-width: 899px) {
+  .plan-chat.is-build .chat-day-nav, .plan-chat.is-build .chat-ticker, .plan-chat.is-build .cw-cols { display: none; }
+  .plan-chat.is-build { gap: .4rem; padding-top: max(.6rem, env(safe-area-inset-top)); }
+  .plan-chat.is-build .chat-head h2 { font-size: 1.05rem; }
+  .plan-chat.is-build .chat-sug { flex-wrap: wrap; overflow: visible; }
+}

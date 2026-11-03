@@ -15,6 +15,7 @@ import os
 import re
 import shlex
 import subprocess
+import tempfile
 import sys
 import time
 import urllib.error
@@ -249,11 +250,25 @@ def call(base, token, method, path, body=None):
 
 
 def run(responder, prompt, session=None):
+    # A big briefing (60k+ chars) overflows one argv entry ("Invalid argument"), so `-q {prompt}` becomes `--query-file <tmp>`.
+    qf = None
+    if len(prompt) > 20000 and "-q" in responder and responder[responder.index("-q") + 1] == "{prompt}":
+        qf = tempfile.NamedTemporaryFile("w", suffix=".txt", delete=False, encoding="utf-8")
+        qf.write(prompt); qf.close()
+        i = responder.index("-q")
+        responder = responder[:i] + ["--query-file", qf.name] + responder[i + 2:]
     argv = [a.replace("{prompt}", prompt).replace("{session}", session or "") for a in responder]
+    t0 = time.time()
     try:
         r = subprocess.run(argv, capture_output=True, text=True, timeout=RESPONDER_TIMEOUT)
-    except (OSError, subprocess.TimeoutExpired):
+    except (OSError, subprocess.TimeoutExpired) as e:
+        print(f"responder failed after {time.time() - t0:.0f}s: {type(e).__name__} (prompt {len(prompt)} chars)", file=sys.stderr, flush=True)
         return None
+    finally:
+        if qf:
+            os.unlink(qf.name)
+    if r.returncode != 0 or not r.stdout.strip():
+        print(f"responder rc={r.returncode} after {time.time() - t0:.0f}s, empty={not r.stdout.strip()}: {(r.stderr or '')[-300:]}", file=sys.stderr, flush=True)
     return r.stdout if r.returncode == 0 and r.stdout.strip() else None
 
 

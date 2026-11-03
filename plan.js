@@ -3182,6 +3182,8 @@
     $("chat-diff").innerHTML = "";
     $("chat-meals").innerHTML = "";
     $("plan-chat").hidden = false;
+    $("plan-chat").classList.toggle("is-build", !!chat.build); // Phase 120: phone shows only progress, nights and the chat
+    if (chat.build) $("chat-input").placeholder = "Ask Hermes for a meal…";
     document.body.classList.add("chat-open");
     chat.base = planMetrics(JSON.parse(chat.snapshot));
     renderChatWeek();
