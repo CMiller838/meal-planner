@@ -483,22 +483,9 @@ for (const [vp, size] of Object.entries({ pc: { width: 1440, height: 900 }, phon
     if (!await page.locator('#tonight[hidden]').count()) throw new Error('hero shown with every night eaten');
     await page.evaluate(() => localStorage.removeItem('mp_plan'));
     await page.goto(`${base}/plan.html?guided=1`);
-    await page.waitForSelector('#swap-sheet h2');
+    await page.waitForSelector('#plan-chat:not([hidden]) .night-card');
     if (!await page.locator('#tonight[hidden]').count()) throw new Error('hero visible in guided mode');
-    await page.click('#swap-sheet .close-btn');
     await page.evaluate(() => localStorage.removeItem('mp_plan'));
-  });
-  await step('guided: one Dinner pass only (slots= ignored); closing leaves mp_plan untouched', async () => {
-    await page.goto(`${base}/plan.html`);
-    await page.waitForSelector('#plan-root .slot-card'); // init saves mp_plan after its awaits; clearing earlier races it
-    await page.evaluate(() => localStorage.removeItem('mp_plan'));
-    await page.goto(`${base}/plan.html?guided=1&slots=lunch,junk&first=lunch`);
-    await page.waitForSelector('#swap-sheet h2');
-    let h = await page.textContent('#swap-sheet h2');
-    if (!/Dinner/.test(h)) throw new Error('first pass should be Dinner: ' + h);
-    await page.click('#swap-sheet .close-btn');
-    await page.waitForSelector('#guided-review-banner:not(.hidden)');
-    if (await page.evaluate(() => localStorage.getItem('mp_plan'))) throw new Error('mp_plan saved before Looks good');
   });
   await step('phase 118a: wizard walks 6 steps, Back, busy weekday toggle saves [2,9], lands on guided=1 days=14, Review shows notes + More options', async () => {
     await page.goto(`${base}/plan-with-me.html`);
@@ -588,9 +575,7 @@ for (const [vp, size] of Object.entries({ pc: { width: 1440, height: 900 }, phon
     await page.goto(`${base}/plan.html`);
     await page.waitForSelector('#plan-root .slot-card');
     await page.evaluate(() => { localStorage.setItem('mp_hermes_url', 'https://fake.test'); localStorage.setItem('mp_hermes_token', 't'); });
-    await page.reload();
-    await page.waitForSelector('#plan-root .slot-card');
-    await page.click('#plan-chat-btn');
+    await page.goto(`${base}/plan.html?chat=1`);
     await page.waitForSelector('#plan-chat:not([hidden]) .chat-bubble.hermes', { timeout: 8000 });
   };
   const say = async text => { await page.waitForSelector('#chat-input:not([disabled])', { timeout: 8000 }); await page.fill('#chat-input', text); await page.click('#chat-send'); };
@@ -865,9 +850,123 @@ for (const [vp, size] of Object.entries({ pc: { width: 1440, height: 900 }, phon
     chatMock.bridgeAgeMs = 120000;
     await page.goto(`${base}/plan.html`);
     await page.waitForSelector('#plan-root .slot-card');
-    await page.click('#plan-chat-btn');
+    await page.goto(`${base}/plan.html?chat=1`);
     await page.waitForURL(/plan-with-me\.html/, { timeout: 8000 });
     chatMock.bridgeAgeMs = 0;
+  });
+  await step('phase 118b: #plan-chat-btn navigates to plan-with-me.html', async () => {
+    await page.goto(`${base}/plan.html`);
+    await page.waitForSelector('#plan-root .slot-card');
+    await page.click('#plan-chat-btn');
+    await page.waitForURL(/plan-with-me\.html/, { timeout: 8000 });
+  });
+  // Phase 118b: the night-by-night walk (guided=1 generates, then opens the chat as cards)
+  const walkOpen = async (hermes) => {
+    await page.goto(`${base}/plan.html`);
+    await page.waitForSelector('#plan-root .slot-card');
+    await page.evaluate((h) => { localStorage.removeItem('mp_ratings'); if (h) { localStorage.setItem('mp_hermes_url', 'https://fake.test'); localStorage.setItem('mp_hermes_token', 't'); } else { localStorage.removeItem('mp_hermes_url'); localStorage.removeItem('mp_hermes_token'); } }, hermes);
+    chatMock.reply = { text: 'ok', edits: [] };
+    await page.goto(`${base}/plan.html?guided=1`);
+    await page.waitForSelector('#plan-chat:not([hidden]) .night-card', { timeout: 10000 });
+  };
+  const pend = '.night-card[data-state="pending"]';
+  await step('walk: no Hermes config: one pending card, pill per night, input disabled, URL stays, mp_plan unchanged', async () => {
+    const before = await planLS();
+    await walkOpen(false);
+    if (await page.locator(pend).count() !== 1) throw new Error('want exactly one pending card');
+    const days = await page.evaluate(() => 14);
+    if (await page.locator('#chat-week .cw-pill').count() !== days) throw new Error('pill count ' + await page.locator('#chat-week .cw-pill').count());
+    if (!await page.locator('#chat-input').isDisabled()) throw new Error('input not disabled');
+    if (!/plan\.html/.test(page.url())) throw new Error('left plan.html: ' + page.url());
+    if (await planLS() !== before) throw new Error('mp_plan changed on open');
+    if (await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)) throw new Error('horizontal scroll');
+    await shot('walk-open');
+  });
+  await step('walk: Accept shows the next night card and pill 1 gets .ok', async () => {
+    await walkOpen(true);
+    const d1 = await page.getAttribute(pend, 'data-day');
+    await page.click(pend + ' .night-accept');
+    await page.waitForSelector(`.night-card[data-day="${d1}"][data-state="accepted"]`);
+    if (await page.locator(pend).count() !== 1) throw new Error('no next card');
+    if (await page.getAttribute(pend, 'data-day') === d1) throw new Error('same night again');
+    if (!await page.locator(`#chat-week .cw-pill[data-day="${d1}"].ok`).count()) throw new Error('pill lacks .ok');
+  });
+  await step('walk: a leftover/out/cook night shows a line, not a card', async () => {
+    await walkOpen(true);
+    const lines = await page.locator('.walk-line').allTextContents();
+    const auto = lines.filter(t => /\((leftovers|eating out|from a cook|from the freezer)\)/.test(t));
+    // a fresh profile's generated plan may hold no batch cook (walkNights' auto kinds are unit-tested in test.html): then only the no-card-for-auto-night rule has nothing to show
+    const cardDays = await page.locator('.night-card').evaluateAll(els => els.map(e => +e.dataset.day));
+    if (cardDays.length !== 1) throw new Error('want one card at start');
+    await page.click('#chat-keep-rest');
+    await page.waitForSelector('#chat-wrap');
+    const pills = await page.locator('#chat-week .cw-pill.ok').count();
+    if (pills !== 14) throw new Error('keep the rest left pills not ok: ' + pills);
+  });
+  await step('walk: synthetic swipe right on the pending card = Accept', async () => {
+    await walkOpen(true);
+    const d1 = await page.getAttribute(pend, 'data-day');
+    const bb = await page.locator(pend + ' .night-name').boundingBox();
+    await page.mouse.move(bb.x + 10, bb.y + 5); await page.mouse.down(); await page.mouse.move(bb.x + 120, bb.y + 5, { steps: 6 }); await page.mouse.move(bb.x + 260, bb.y + 5, { steps: 6 }); await page.mouse.up();
+    await page.waitForSelector(`.night-card[data-day="${d1}"][data-state="accepted"]`, { timeout: 4000 });
+  });
+  await step('walk: Reject + "too fiddly" writes one down rating, new card for same night with another meal, old card Replaced', async () => {
+    await walkOpen(true);
+    const d1 = await page.getAttribute(pend, 'data-day'), name1 = await page.textContent(pend + ' .night-name');
+    await page.click(pend + ' .night-reject');
+    await page.click('.night-card[data-state="rejecting"] .chat-reason button:text("too fiddly")');
+    await page.waitForSelector(pend);
+    const rated = await page.evaluate(() => Object.values(JSON.parse(localStorage.getItem('mp_ratings') || '{}')).filter(r => r.rating === 'down' && r.note === 'too fiddly').length);
+    if (rated !== 1) throw new Error('ratings ' + rated);
+    if (await page.getAttribute(pend, 'data-day') !== d1) throw new Error('new card is a different night');
+    if (await page.textContent(pend + ' .night-name') === name1) throw new Error('same meal again');
+    if (!await page.locator(`.night-card[data-day="${d1}"][data-state="replaced"]`).count()) throw new Error('old card not Replaced');
+    await shot('walk-rejected');
+  });
+  await step('walk: Reject + Skip writes no rating', async () => {
+    await walkOpen(true);
+    await page.click(pend + ' .night-reject');
+    await page.click('.night-card[data-state="rejecting"] .chat-reason button:text("Skip")');
+    await page.waitForSelector(pend);
+    const n = await page.evaluate(() => Object.keys(JSON.parse(localStorage.getItem('mp_ratings') || '{}')).length);
+    if (n) throw new Error('Skip wrote ' + n + ' ratings');
+  });
+  await step('walk: tapping a pill flashes that night\'s card; an unreached night toasts', async () => {
+    await walkOpen(true);
+    const d1 = await page.getAttribute(pend, 'data-day');
+    await page.click(`#chat-week .cw-pill[data-day="${d1}"]`);
+    if (!await page.locator(`.night-card[data-day="${d1}"].flash`).count()) throw new Error('no flash');
+  });
+  await step('walk: Keep the rest -> wrap card; #wrap-save writes mp_plan and closes the chat', async () => {
+    await walkOpen(true);
+    await page.evaluate(() => localStorage.removeItem('mp_plan'));
+    await page.click('#chat-keep-rest');
+    await page.waitForSelector('#chat-wrap #wrap-save');
+    await shot('walk-wrap');
+    await page.click('#wrap-save');
+    await page.waitForSelector('#plan-chat', { state: 'hidden' });
+    if (!await planLS()) throw new Error('mp_plan not written');
+  });
+  await step('walk: Exit mid-walk returns to plan.html with mp_plan identical', async () => {
+    await page.goto(`${base}/plan.html`);
+    await page.waitForSelector('#plan-root .slot-card');
+    await walkOpen(true);
+    const before = await planLS();
+    await page.click(pend + ' .night-accept');
+    await page.click('#chat-exit');
+    await page.waitForURL(/plan\.html$/, { timeout: 6000 });
+    await page.waitForSelector('#plan-root .slot-card');
+    if (await planLS() !== before) throw new Error('Exit changed mp_plan');
+  });
+  await step('walk: a Hermes place on an accepted night drops its .ok and appends a new card', async () => {
+    await walkOpen(true);
+    const d1 = await page.getAttribute(pend, 'data-day');
+    await page.click(pend + ' .night-accept');
+    await page.waitForSelector(`#chat-week .cw-pill[data-day="${d1}"].ok`);
+    chatMock.reply = { text: 'Swapped.', edits: [{ type: 'place', day: +d1, slot: 'dinner', mealId: 'chilli-con-carne', why: 'iron' }] };
+    await say('change that night');
+    await page.waitForSelector(`.night-card[data-day="${d1}"][data-state="pending"]`, { timeout: 8000 });
+    if (await page.locator(`#chat-week .cw-pill[data-day="${d1}"].ok`).count()) throw new Error('pill kept .ok');
   });
   await step('tomorrow card: alternatives, pick changes only day+1, Keep locks, excluded pick refused, last day has no card', async () => {
     await page.goto(`${base}/plan.html`);

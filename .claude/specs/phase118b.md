@@ -93,11 +93,11 @@ decisions: see `.claude/specs/phase118a.md`.
 
 ## Tasks
 ### Logic (TDD)
-- [ ] 1. `test.html` `walkNights` cases (leftover / eatingOut / fromCook / frozenFrom auto, plain dinner null, null plan → `[]`); implement in `plan.js`, export on `MP.Plan`; bump `sw.js` `CACHE`.
-- [ ] 2. Walk mode: `openChat({ walk: true })` (offline allowed, `brief.walk`), walk state, Accept/Undo/Reject/Keep the rest, Hermes change reopens a night, walk Exit; `guided=1` branch; delete the guided walkthrough code and banner.
-- [ ] 3. Bridge prompt sentence + `test_hermes_chat_bridge.py` assertion that the prompt mentions `brief.walk`.
+- [x] 1. `test.html` `walkNights` cases (leftover / eatingOut / fromCook / frozenFrom auto, plain dinner null, null plan → `[]`); implement in `plan.js`, export on `MP.Plan`; bump `sw.js` `CACHE`.
+- [x] 2. Walk mode: `openChat({ walk: true })` (offline allowed, `brief.walk`), walk state, Accept/Undo/Reject/Keep the rest, Hermes change reopens a night, walk Exit; `guided=1` branch; delete the guided walkthrough code and banner.
+- [x] 3. Bridge prompt sentence + `test_hermes_chat_bridge.py` assertion that the prompt mentions `brief.walk`.
 ### UI
-- [ ] 4. `restyle-from-prototype` from `planchat-c.html`: night cards, pill strip + meter, suggestion pills, in-thread wrap card, diff rows as swipe cards (non-walk).
-- [ ] 5. `#plan-chat-btn` → `plan-with-me.html`.
-- [ ] 6. `walk.mjs`: each Verification assertion as its own check; `openChat` helper via `?chat=1`; drop the guided-deck step.
-- [ ] 7. `CLAUDE.md` `guidedActive` line.
+- [x] 4. `restyle-from-prototype` from `planchat-c.html`: night cards, pill strip + meter, suggestion pills, in-thread wrap card, diff rows as swipe cards (non-walk).
+- [x] 5. `#plan-chat-btn` → `plan-with-me.html`.
+- [x] 6. `walk.mjs`: each Verification assertion as its own check; `openChat` helper via `?chat=1`; drop the guided-deck step.
+- [x] 7. `CLAUDE.md` `guidedActive` line.

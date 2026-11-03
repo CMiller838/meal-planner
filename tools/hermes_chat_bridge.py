@@ -174,6 +174,8 @@ def build_prompt(messages, context, opener=False, strict=False, brief=None, spen
         lines.append("Briefing (from the app, read it every turn): " + json.dumps(brief, separators=(",", ":")))
         lines.append("brief.nutrition lists nutrients the user's logged eating has been short on and the dinner-share targets. When you choose a dinner because of one,"
                      " say so in your reply and put the nutrient in the place edit's `why`; if the pick is not nutrient-driven, omit `why`.")
+        if brief.get("walk"):
+            lines.append("When brief.walk is true the user is reviewing a generated plan night by night: reply in one short line and change only the nights they ask about.")
         if spend:
             lines.append("Spend so far: " + json.dumps(spend, separators=(",", ":")))
     lines.append("Context: " + json.dumps(context or {}))

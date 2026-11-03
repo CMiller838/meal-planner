@@ -3670,6 +3670,15 @@
     check("ticker: deltas equal planMetrics differences", Math.abs(tk.dCost - (now.weekCost[0] - baseM.weekCost[0])) < 1e-9 && tk.dGaps === now.weekGaps[0].length - baseM.weekGaps[0].length);
   }
 
+  // Phase 118b: walkNights
+  {
+    const byId = { a: { id: "a" }, l: { id: "l", leftoverOf: "a" } };
+    const pl = { days: [{ day: 1, slots: { dinner: { mealId: "a" } } }, { day: 2, slots: { dinner: { mealId: "l" } } }, { day: 3, slots: { dinner: { eatingOut: true } } }, { day: 4, slots: { dinner: { mealId: "a", fromCook: "c1" } } }, { day: 5, slots: { dinner: { mealId: "a", frozenFrom: "x" } } }, { day: 6, slots: {} }] };
+    check("walkNights: leftover/out/cook/frozen are auto, plain and empty dinners are cards", JSON.stringify(MP.Plan.walkNights(pl, byId).map((n) => n.auto)) === '[null,"leftover","out","cook","frozen",null]');
+    check("walkNights: keeps day numbers", MP.Plan.walkNights(pl, byId).map((n) => n.day).join() === "1,2,3,4,5,6");
+    check("walkNights: null/malformed plan -> []", MP.Plan.walkNights(null, byId).length === 0 && MP.Plan.walkNights({}, byId).length === 0);
+  }
+
   // Phase 73: gapScore, tieFor, budgetSwaps
   {
     const ironC = [

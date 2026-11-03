@@ -133,11 +133,9 @@ Installable as a PWA on Android Chrome via `manifest.json` + `sw.js`.
   "Plan with me" setup screen — it only becomes preference-aware.
   `hermes-sync.js`'s `fetchPlanPrefs`/`pushPlanPrefs` (Phase 25) pull/push
   through `MP.PlanPrefs.get`/`save` and never touch `localStorage` directly.
-- **`guidedActive` is what keeps the guided walkthrough/review (Phase 24)
-  stateless on exit.** `plan.js`'s `setSlotMeal`/`setSlotVariant` only call
-  `savePlan()` when it's `false`; abandoning the walkthrough or review step
-  before "Looks good" leaves `mp_plan` untouched. Don't add a second save
-  path that bypasses the flag.
+- **`guidedActive` is what keeps the walk chat (Phase 118b) and the Plan chat stateless on exit.** `plan.js`'s
+  `setSlotMeal`/`setSlotVariant` only call `savePlan()` when it's `false` (`openChat` sets it); leaving the chat before Save
+  leaves `mp_plan` untouched, and a walk Exit reloads `plan.html`. Don't add a second save path that bypasses the flag.
 - **Substitution groups (Phase 28) are data, not inline constants.**
   `substitution-groups.json` is the only source of swappable ingredient
   pairs — swaps never come from free-form matching. `generator.js`'s layer 4

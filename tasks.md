@@ -1026,6 +1026,8 @@ Spec: `.claude/specs/phase105.md` (planned batches via `place.freezeFrom`, cooke
 ## Phase 118: Plan with Hermes, wizard then chat
 - Spec: `.claude/specs/phase118a.md` [M] (wizard) — built 2026-11-02, check.py 10/10
 - Spec: `.claude/specs/phase118b.md` [L] (night-by-night chat)
+- [x] 118b Logic 1-3 built 2026-11-02 (walkNights, walk mode, bridge `brief.walk`, sw.js v114); UI 4-7 built 2026-11-03 (pill strip, suggestion pills, in-thread wrap, swipe diff cards, walk.mjs, CLAUDE.md)
+- [ ] Live: on the installed phone PWA, run Plan with me → Start planning, swipe a night card right (accept) and left (reject + reason), tap a pill, Keep the rest, Save
 - [ ] Live: 118a: on the phone PWA, open Plan with me, step through all 6 steps, Start planning lands on the guided plan; "I ate" bar stays visible.
 - [ ] Live: on the phone PWA, wizard → swipe through a week of night cards with the Hermes bridge running; type "quicker" on a busy night.
 

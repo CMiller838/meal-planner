@@ -37,6 +37,8 @@ assert '"meals":[{"id":"x"}]' in pb and "Spend so far" in pb and "Briefing" in p
 assert b.brief_of([{"open": True, "context": {"brief": {"a": 1}}}]) == {"a": 1} and b.brief_of([{"text": "x"}]) is None
 pr = b.build_prompt(msgs, {"day": 2}, brief={"a": 1}, resumed=True, send_brief=False)
 assert pr == 'Context: {"day": 2}\nUser: msg19' and "Briefing" in b.build_prompt(msgs, {}, brief={"a": 1}, resumed=True)
+# Phase 118b: the walk sentence rides only with brief.walk
+assert "brief.walk" in b.build_prompt([], {}, brief={"walk": True}) and "brief.walk" not in b.build_prompt([], {}, brief={"a": 1})
 # Phase 111: the because rule rides with the briefing
 assert "brief.nutrition" in b.build_prompt([], {}, brief={"a": 1}) and "brief.nutrition" not in b.build_prompt([], {})
 

@@ -301,7 +301,7 @@ Goal: shopping-a: aisle cards with progress and tick animation, pantry tab, week
 
 Goal: cook-c: previous/current/next step, timer ring, ingredients drawer, keep-awake chip, finish asks portion and leftovers through the existing `eatPortion`/Cooks paths (never the pantry from a portion-eat).
 
-## Phase 118: Plan with Hermes, wizard then chat [L] — blocked 2026-11-02: PIPELINE: FAIL ui walk: the Phase 119 pantry-freezer "9 wk chip missing" step fails on PC and phone, unrelated to the Logic changes; the walk-chat code itself h
+## Phase 118: Plan with Hermes, wizard then chat [L] — built 2026-11-03, live checks pending (118a wizard + 118b night-by-night chat; verified: check.py 10/10, walk.mjs PC+phone, tester PASS)
 
 Part 118a (wizard) built 2026-11-02, check.py 10/10; 118b pending.
 
