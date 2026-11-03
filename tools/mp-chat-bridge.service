@@ -1,0 +1,13 @@
+[Unit]
+Description=Meal Planner Hermes chat bridge
+After=network-online.target
+
+[Service]
+WorkingDirectory=/home/cody/~ProjectsAI/Meal_Planner
+ExecStart=/usr/bin/python3 tools/hermes_chat_bridge.py
+Environment=PATH=/home/cody/.local/bin:/usr/local/bin:/usr/bin:/bin
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=default.target
