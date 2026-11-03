@@ -50,13 +50,25 @@ window.MP = window.MP || {};
     localStorage.setItem(LS_TOKEN, (token || "").trim());
   }
 
+  /** Connection state: { ok, why, at }. Fires mp:hermes-status on change. */
+  const conn = { ok: null, why: "", at: 0 };
+  function setConn(ok, why) {
+    const changed = conn.ok !== ok || conn.why !== why;
+    conn.ok = ok; conn.why = why; conn.at = Date.now();
+    if (changed) window.dispatchEvent(new Event("mp:hermes-status"));
+  }
+
   async function req(method, path, body, extra) {
     const { url, token } = config();
-    const res = await fetch(url + path, {
-      method,
-      headers: { "X-Auth-Token": token, "Content-Type": "application/json", ...extra },
-      body: body === undefined ? undefined : JSON.stringify(body),
-    });
+    let res;
+    try {
+      res = await fetch(url + path, {
+        method,
+        headers: { "X-Auth-Token": token, "Content-Type": "application/json", ...extra },
+        body: body === undefined ? undefined : JSON.stringify(body),
+      });
+    } catch (e) { setConn(false, "offline"); throw e; }
+    setConn(res.ok, res.ok ? "" : res.status === 401 || res.status === 403 ? "bad token" : "server " + res.status);
     if (!res.ok) throw new Error(`${method} ${path} -> ${res.status}`);
     if (res.status === 204) return null;
     return res.json();
@@ -792,24 +804,34 @@ window.MP = window.MP || {};
 
   // ponytail: no debounce/retry — the inflight guard plus human-paced
   // triggers (save, resume) are enough. Queue/backoff is a FUTURE.md item.
+  function refresh() {
+    syncLibrary();
+    // Sequenced: syncPlacements rewrites mp_plan from localStorage, so an
+    // eat applied in parallel could be overwritten.
+    syncPlacements().then(syncEatRequests).then(fetchFoodLog).then(fetchPlanDraft);
+    pushPrefs();
+    flushShoppingLines();
+  }
+
   function start() {
     window.addEventListener("mp:library-saved", syncLibrary);
     window.addEventListener("mp:plan-saved", (e) => pushPlan(e.detail));
     document.addEventListener("visibilitychange", () => {
-      if (document.visibilityState !== "visible") return;
-      syncLibrary();
-      // Sequenced: syncPlacements rewrites mp_plan from localStorage, so an
-      // eat applied in parallel could be overwritten.
-      syncPlacements().then(syncEatRequests).then(fetchFoodLog).then(fetchPlanDraft);
-      pushPrefs();
-      flushShoppingLines();
+      if (document.visibilityState === "visible") refresh();
     });
-    syncLibrary();
-    syncPlacements().then(syncEatRequests).then(fetchFoodLog).then(fetchPlanDraft);
-    pushPrefs();
+    window.addEventListener("online", refresh);
+    refresh();
     pushCooks(MP.Cooks ? MP.Cooks.all() : []);
     flushOps();
-    flushShoppingLines();
+    // Keep it connected: while visible, re-sync every 60 s (every 10 s until the first success).
+    let fails = 0;
+    const tick = () => {
+      if (!config().enabled || document.visibilityState !== "visible") return;
+      const age = Date.now() - conn.at;
+      fails = conn.ok === false ? fails + 1 : 0;
+      if (conn.ok === false ? fails <= 6 || age > 55000 : age > 55000) { refresh(); flushOps(); }
+    };
+    setInterval(tick, 10000);
   }
 
   // ---- Product records (Phase 33a): whole-key GET/PUT, merged per record by MP.Products.merge ----
@@ -892,7 +914,7 @@ window.MP = window.MP || {};
   }
 
   MP.Sync = {
-    decide, needsPlan, config, saveConfig, syncLibrary, syncPlanFlag, ackPlanFlag,
+    decide, needsPlan, config, conn, saveConfig, syncLibrary, syncPlanFlag, ackPlanFlag,
     shoppingLines, setLine, fetchShoppingLines, flushShoppingLines,
     fetchItems, fetchPantry, localItems, writeLocalItems, queueOp, applyOps, flushOps,
     planMirror, pushPlan, fetchPlanMirror, pushPrefs, fetchPlanPrefs, fetchDayHints, fetchPlanDraft, ackPlanDraft, fetchRatings, fetchFoodLog, postFoodLog, removeFoodEntry, groupFoodLog, localFoodLog, fetchSettings, settings, fetchNotes, notes, proposeNote, unproposeNote, hardTerms, noteLibraryChange, fetchDrafts, deleteDraft, pushRating, pushPlanPrefs, newPlacements, newSince, syncPlacements, ackPlacements, syncEatRequests,

@@ -828,6 +828,12 @@
       off: "Not set up",
     };
 
+    window.addEventListener("mp:hermes-status", () => {
+      const c = MP.Sync.conn;
+      if (!MP.Sync.config().enabled || c.ok === null) return;
+      status.textContent = c.ok ? "Connected to Hermes" : c.why === "bad token" ? "Token rejected — re-enter it" : "Can't reach Hermes — retrying";
+    });
+
     document.getElementById("sync-save").addEventListener("click", async () => {
       MP.Sync.saveConfig(urlInput.value, tokenInput.value);
       status.textContent = "Syncing…";
