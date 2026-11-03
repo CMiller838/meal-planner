@@ -816,7 +816,10 @@
     const urlInput = document.getElementById("sync-url");
     const tokenInput = document.getElementById("sync-token");
     const cfg = MP.Sync.config();
-    urlInput.value = cfg.url;
+    urlInput.value = cfg.url || "https://meal-planner-bridge.cody-dev.workers.dev";
+    const badge = document.getElementById("sync-badge");
+    const setBadge = (t) => { badge.textContent = t; };
+    if (!cfg.enabled) document.getElementById("sync-settings").open = true; // not connected: show the form
     tokenInput.value = cfg.token;
     if (cfg.enabled) status.textContent = "Set up on this device"; // saved settings; the text below only changes on Save
 
@@ -831,6 +834,7 @@
     window.addEventListener("mp:hermes-status", () => {
       const c = MP.Sync.conn;
       if (!MP.Sync.config().enabled || c.ok === null) return;
+      setBadge(c.ok ? "✓ connected" : "✗ not connected");
       status.textContent = c.ok ? "Connected to Hermes" : c.why === "bad token" ? "Token rejected — re-enter it" : "Can't reach Hermes — retrying";
     });
 
